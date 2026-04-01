@@ -50,7 +50,7 @@
     "type": "git",
     "url": "git+https://github.com/ramiidv/arca-agro.git"
   },
-  "homepage": "https://github.com/ramiidv/arca-agro#readme",
+  "homepage": "https://arca-sdk.dev/agro",
   "bugs": {
     "url": "https://github.com/ramiidv/arca-agro/issues"
   },
