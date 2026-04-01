@@ -1,0 +1,71 @@
+{
+  "name": "@ramiidv/arca-agro",
+  "version": "0.1.0",
+  "description": "SDK para servicios agropecuarios de ARCA (ex AFIP) - WSCPE, WSCTG, WSLPG",
+  "author": "ramiidv",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "llms.txt"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "arca",
+    "afip",
+    "agro",
+    "granos",
+    "carta-de-porte",
+    "ctg",
+    "liquidacion",
+    "argentina",
+    "wscpe",
+    "wsctg",
+    "wslpg",
+    "soap",
+    "sdk",
+    "typescript"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ramiidv/arca-agro.git"
+  },
+  "homepage": "https://github.com/ramiidv/arca-agro#readme",
+  "bugs": {
+    "url": "https://github.com/ramiidv/arca-agro/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@ramiidv/arca-common": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
+  }
+}
