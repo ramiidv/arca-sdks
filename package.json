@@ -1,6 +1,6 @@
 {
   "name": "@ramiidv/arca-agro",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "SDK para servicios agropecuarios de ARCA (ex AFIP) - WSCPE, WSCTG, WSLPG",
   "author": "ramiidv",
   "license": "MIT",
