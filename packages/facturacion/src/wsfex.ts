@@ -22,7 +22,7 @@ import type {
   MensajeArca,
 } from './types.js';
 
-type R = Record<string, any>;
+type R = Record<string, unknown>;
 
 /** Error de WSFEX en `FEXErr` (código distinto de 0), o `undefined`. */
 function fexErr(result: R): WsfexErr | undefined {

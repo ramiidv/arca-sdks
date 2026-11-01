@@ -36,7 +36,7 @@ import type {
   CaeaSinMovItem,
 } from './types.js';
 
-type R = Record<string, any>;
+type R = Record<string, unknown>;
 
 /** Opciones de transporte de los clientes de bajo nivel (`WsfeClient`, `WsfexClient`). */
 export interface WsClientOptions {
