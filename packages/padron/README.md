@@ -89,7 +89,7 @@ interface ArcaPadronConfig extends ArcaBaseConfig {
 > **Persisti el Ticket de Acceso.** WSAA rechaza el login si ya hay un TA vigente para el
 > certificado y servicio. Sin `ticketStorage`, un reinicio del proceso te deja sin poder consultar
 > hasta que venza (hasta 12 horas, `ArcaTicketVigenteError`). Ver `TicketStorage` en
-> [`@ramiidv/arca-common`](https://github.com/ramiidv/arca-common).
+> [`@ramiidv/arca-common`](https://github.com/ramiidv/arca-sdks/tree/main/packages/common).
 
 Si usas tambien `@ramiidv/arca-facturacion` con el mismo certificado, comparti el cliente WSAA:
 
