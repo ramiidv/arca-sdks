@@ -88,3 +88,21 @@ export {
   Provincia,
   CondicionIva,
 } from './constants.js';
+
+// ---------------------------------------------------------------------------
+// Base de los SDKs
+// ---------------------------------------------------------------------------
+export {
+  ArcaSdkBase,
+  SoapServiceClient,
+  createWsaaClient,
+  transportOptions,
+  parseServerStatus,
+} from './service.js';
+export type {
+  ArcaSdkConfig,
+  EnvEndpoints,
+  ServiceTransport,
+  ServiceCallOptions,
+  SoapServiceClientConfig,
+} from './service.js';
