@@ -25,16 +25,14 @@ configuración, `wsaa`, `cuit`, `production`, `on`/`off`, `config.wsaa`,
 
 ## Pendientes operativos
 
-- [ ] Desplegar arca-sdk.dev (`../arca-sdk-web/landing`). Ya está
-      actualizado y compilado con las versiones nuevas, los links al
-      monorepo, `ArcaFacturacion` y Node 20.19+; falta `npx vercel deploy --prod`.
-- [ ] Mergear en arca-server (`../arca-server`) la branch `chore/sdks-nuevas-versiones`, que sube
-      todos los SDKs a estas versiones (typecheck, tests y build verificados) y
-      después redesplegar.
-- [ ] Archivar los 9 repos anteriores (`ramiidv/arca-common`,
-      `ramiidv/arca-facturacion`...) con un aviso en su README que apunte acá.
-- [ ] Opcional: `npm deprecate` de las versiones anteriores al monorepo, con un
-      mensaje que indique la versión nueva.
+- [x] Desplegar arca-sdk.dev (`../arca-sdk-web/landing`), 2026-11-01. Los
+      cambios de la landing siguen sin commitear en `ramiidv/arca-sdk-web`.
+- [x] Mergear en arca-server la branch `chore/sdks-nuevas-versiones` (PR #1).
+- [ ] Redesplegar arca-server con los SDKs nuevos.
+- [x] Archivar los 9 repos anteriores (`ramiidv/arca-common`,
+      `ramiidv/arca-facturacion`...) con un aviso en su README que apunta acá.
+- [x] `npm deprecate` de las versiones anteriores al monorepo (`<0.4.0`,
+      `<0.5.0` en common y padron, `<5.0.0` en facturacion).
 
 ## Próximos pasos técnicos
 
