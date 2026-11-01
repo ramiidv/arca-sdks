@@ -107,11 +107,16 @@ reporte); `npm run api:update` lo regenera. Las ramas que cambian la API
 
 ### 6. Mantenimiento
 
-- Evaluar TypeScript 7 (compilador nativo) y vitest 5. Hoy: TS 6 y vitest 3.2.
+- ~~Evaluar TypeScript 7 y vitest 5~~. Rama `chore/ts7-vitest5`: TypeScript
+  7.0.2 (build, typecheck y tests iguales; los `.js` emitidos no cambian y
+  en los `.d.ts` solo cambian las comillas) y vitest 4.1.12, que arregla las
+  3 vulnerabilidades de vitest 3 (`npm audit` limpio) y sigue soportando
+  Node 20. Vitest 5 exige Node >= 22.12: subirlo junto con el cambio de
+  `engines`.
 - Quitar los `any` que quedan (biome los marca como warnings, sobre todo en
   facturacion).
-- Cuando Node 20 deje de usarse en la práctica, subir `engines` a `>=22.12` y
-  sacar 20.19 de la matriz de CI.
+- Cuando Node 20 deje de usarse en la práctica, subir `engines` a `>=22.12`,
+  sacar 20.19 de la matriz de CI y pasar a vitest 5.
 
 ## Cómo publicar
 
