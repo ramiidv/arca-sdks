@@ -1,0 +1,129 @@
+# @ramiidv/arca-cdc
+
+> TypeScript SDK for ARCA (formerly AFIP) WSCDC web service - Constatacion de Comprobantes.
+> Verifies whether an invoice (own or third-party) was authorized by ARCA via CAE, CAI or CAEA.
+> All operations are read-only queries (safe to retry).
+
+Sources: official WSDL (https://wswhomo.afip.gov.ar/WSCDC/service.asmx?WSDL) and the WSCDC developer
+manual v0.4 (https://www.afip.gob.ar/ws/WSCDCV1/WSCDC-manual-desarrollador-v4.pdf).
+
+## Install
+
+```bash
+npm install @ramiidv/arca-cdc
+```
+
+Node.js >= 18, ESM only. Depends on `@ramiidv/arca-common` ^0.4.0.
+
+## Architecture
+
+- `ArcaCdc` - high-level class; handles WSAA auth (service id `wscdc`).
+- `CdcClient` - low-level client, one method per SOAP operation; caller passes `Auth`.
+- Transport: `afipSoapCall` from common with `qualified: true` (ASMX, elementFormDefault=qualified),
+  `soapActionFromMethod: true` (SOAPAction = `http://servicios1.afip.gob.ar/wscdc/<Method>`) and
+  `kind: 'consulta'`.
+- Namespace: `http://servicios1.afip.gob.ar/wscdc/`.
+
+## Quick start
+
+```typescript
+import fs from "node:fs";
+import { ArcaCdc } from "@ramiidv/arca-cdc";
+
+const cdc = new ArcaCdc({
+  cuit: 20123456786,
+  cert: fs.readFileSync("./cert.crt", "utf-8"),
+  key: fs.readFileSync("./key.key", "utf-8"),
+  production: false,
+});
+
+const r = await cdc.constatar({
+  CbteModo: "CAE",
+  CuitEmisor: 30712345671,
+  PtoVta: 1,
+  CbteTipo: 1,
+  CbteNro: 150,
+  CbteFch: "20260315",
+  ImpTotal: 12100,
+  CodAutorizacion: "73429843294823",
+  DocTipoReceptor: 80,
+  DocNroReceptor: 20123456786,
+});
+// r.Resultado: "A" | "R"; r.Observaciones; r.FchProceso; r.CmpResp; r.Events
+```
+
+## Configuration
+
+`ArcaCdcConfig extends ArcaBaseConfig`:
+`cuit` (number|string, check digit validated), `cert`, `key`, `production?`, `timeout?`, `retries?`,
+`retryDelayMs?`, `tokenTTLMinutes?`, `onEvent?`, `ticketStorage?`, `clockOffsetMs?`,
+`autoClockSkew?`, `loginErrorCooldownMs?`, `fetch?`, `legacyTls?` ('auto'|'never'|'always'),
+`endpoints?: { wscdc?: string; wsaa?: string }`.
+
+## Methods (all accept `opts?: { signal?: AbortSignal }`)
+
+- `constatar(input): Promise<ConstatarResult>` - ComprobanteConstatar.
+- `status(): Promise<ServerStatus>` - ComprobanteDummy, no auth.
+- `getModalidades(): Promise<{ Cod: string; Desc: string; FchDesde?: string; FchHasta?: string }[]>` - ComprobantesModalidadConsultar (Cod = CAE/CAI/CAEA).
+- `getTiposCbte(): Promise<{ Id: number; Desc: string }[]>` - ComprobantesTipoConsultar.
+- `getDocTipos(): Promise<{ Id: string; Desc: string }[]>` - DocumentosTipoConsultar.
+- `getTiposOpcionales(): Promise<{ Id: string; Desc: string }[]>` - OpcionalesTipoConsultar.
+- `clearAuthCache(): Promise<void>`.
+
+```typescript
+interface ConstatarInput {           // CmpReq (CmpDatos), sent in WSDL order
+  CbteModo: "CAE" | "CAI" | "CAEA";
+  CuitEmisor: number | string;
+  PtoVta: number;                    // 1..99998
+  CbteTipo: number;                  // 1..999
+  CbteNro: number;                   // 1..99999999
+  CbteFch: string | Date;            // YYYYMMDD | YYYY-MM-DD | Date
+  ImpTotal: number;                  // finite >= 0, rounded to 2 decimals
+  CodAutorizacion: string;           // 14 digits
+  DocTipoReceptor?: number | string; // both or neither
+  DocNroReceptor?: number | string;  // digits only
+  Opcionales?: { Id: string; Valor: string }[];
+}
+
+interface ConstatarResult {
+  Resultado: "A" | "R";
+  FchProceso: string;
+  CmpResp?: { CbteModo: string; CuitEmisor: string; PtoVta: number; CbteTipo: number; CbteNro: number;
+              CbteFch: string; ImpTotal: number; CodAutorizacion: string; DocTipoReceptor?: string;
+              DocNroReceptor?: string; Opcionales?: { Id: string; Valor: string }[] };
+  Observaciones: { Code: number; Msg: string }[];
+  Events: { Code: number; Msg: string }[];
+}
+```
+
+Semantics:
+- `A`: authorized (may include non-blocking observations, e.g. 200).
+- `R`: functional rejection, reasons in `Observaciones` (100, 102-118, 150-153).
+- ARCA `Errors` (format 1-10, auth 600-602, infrastructure 500-503) => throws `ArcaServiceError`
+  (ARCA also sets Resultado=R there, but the invoice was not actually checked).
+- Missing `Resultado`/`FchProceso` => `ArcaSoapError`.
+
+## Errors
+
+Exported: `ArcaError`, `ArcaAuthError`, `ArcaTicketVigenteError`, `ArcaSoapError`,
+`ArcaServiceError` (`errors: { code, msg, rawCode? }[]`), `ArcaValidationError`
+(`details: { field, message, value }[]`).
+
+## Endpoints
+
+| Environment | WSCDC |
+| --- | --- |
+| Testing | `https://wswhomo.afip.gov.ar/WSCDC/service.asmx` |
+| Production | `https://servicios1.afip.gov.ar/WSCDC/service.asmx` |
+
+Production negotiates 1024-bit DH; works thanks to common's legacy TLS fallback (`legacyTls: 'auto'`).
+`servicios1.arca.gob.ar` (listed in the manual) serves a certificate only valid for
+`servicios1.afip.gov.ar`.
+
+## Exports
+
+`ArcaCdc`, `CdcClient`, `WsaaClient`, `MemoryTicketStorage`, `FileTicketStorage`,
+`validateConstatarInput`, `WSCDC_ENDPOINTS`, `WSCDC_NAMESPACE`, `WSCDC_SERVICE_ID`, `CBTE_MODOS`,
+error classes and types (`ArcaCdcConfig`, `ConstatarInput`, `ConstatarResult`,
+`ComprobanteConstatado`, `CdcMensaje`, `ModalidadItem`, `TipoCbteItem`, `DocTipoItem`,
+`OpcionalTipoItem`, `CbteModo`, `Opcional`, `CdcAuth`, `CallOptions`, `TicketStorage`, ...).
