@@ -11,6 +11,9 @@ export const base64: () => Field;
 export const bool: () => Field;
 
 // @public
+export const choice: (schema: Schema) => Field;
+
+// @public
 export const cuit: (o?: {
     decodeAs?: 'number' | 'string';
 }) => Field;
@@ -53,6 +56,7 @@ export function encodeRequest(input: unknown, schema: Schema, context: string, e
 
 // @public (undocumented)
 export interface Field {
+    readonly choice?: boolean;
     readonly minItems?: number;
     // (undocumented)
     readonly optional?: boolean;
@@ -100,12 +104,13 @@ export type Schema = {
 // @public
 export const siNo: () => Field;
 
-// @public (undocumented)
+// @public
 export const str: (o?: {
     minLen?: number;
     maxLen?: number;
     values?: readonly string[];
     pattern?: RegExp;
+    patternMessage?: string;
 }) => Field;
 
 // @public
