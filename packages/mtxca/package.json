@@ -1,0 +1,70 @@
+{
+  "name": "@ramiidv/arca-mtxca",
+  "version": "0.3.0",
+  "description": "TypeScript SDK para el web service WSMTXCA de ARCA (ex AFIP) - Facturacion electronica con detalle de articulos",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "llms.txt",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run clean && npm run build && npm test"
+  },
+  "keywords": [
+    "arca",
+    "afip",
+    "wsmtxca",
+    "facturacion",
+    "factura-electronica",
+    "argentina",
+    "sdk",
+    "typescript",
+    "cae",
+    "caea",
+    "articulos",
+    "items",
+    "soap",
+    "invoice"
+  ],
+  "author": "ramiidv",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ramiidv/arca-mtxca.git"
+  },
+  "homepage": "https://arca-sdk.dev/mtxca",
+  "bugs": {
+    "url": "https://github.com/ramiidv/arca-mtxca/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@ramiidv/arca-common": "^0.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4"
+  }
+}
