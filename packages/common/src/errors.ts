@@ -30,7 +30,11 @@ export class ArcaError extends Error {
     this.name = 'ArcaError';
 
     const kinds: string[] = [];
-    for (let ctor: unknown = new.target; typeof ctor === 'function' && ctor !== Error; ctor = Object.getPrototypeOf(ctor)) {
+    for (
+      let ctor: unknown = new.target;
+      typeof ctor === 'function' && ctor !== Error;
+      ctor = Object.getPrototypeOf(ctor)
+    ) {
       const code = ownCode(ctor);
       if (code) kinds.push(code);
     }
@@ -127,9 +131,7 @@ export class ArcaSoapError extends ArcaError {
 
   constructor(message: string, statusCodeOrOptions?: number | ArcaSoapErrorOptions) {
     const opts: ArcaSoapErrorOptions =
-      typeof statusCodeOrOptions === 'number'
-        ? { statusCode: statusCodeOrOptions }
-        : (statusCodeOrOptions ?? {});
+      typeof statusCodeOrOptions === 'number' ? { statusCode: statusCodeOrOptions } : (statusCodeOrOptions ?? {});
     super(message, opts.cause !== undefined ? { cause: opts.cause } : undefined);
     this.name = 'ArcaSoapError';
     this.statusCode = opts.statusCode;

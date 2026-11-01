@@ -86,7 +86,13 @@ describe('constancia de inscripción (ex A5)', () => {
     });
     expect(p.monotributo?.actividadMonotributista?.idActividad).toBe('8');
     expect(p.impuestos).toEqual([
-      { idImpuesto: 20, descripcionImpuesto: 'MONOTRIBUTO', estadoImpuesto: 'AC', motivo: 'Recategorización', periodo: 201803 },
+      {
+        idImpuesto: 20,
+        descripcionImpuesto: 'MONOTRIBUTO',
+        estadoImpuesto: 'AC',
+        motivo: 'Recategorización',
+        periodo: 201803,
+      },
     ]);
   });
 
@@ -210,7 +216,13 @@ describe('A4, A10, A13 y A100 con respuestas reales (personaReturn)', () => {
   it('el signal global de la config cancela las consultas', async () => {
     const controller = new AbortController();
     const storage = new MemoryTicketStorage();
-    const client = new ArcaPadron({ cert: 'C', key: 'K', cuit: '20123456786', ticketStorage: storage, signal: controller.signal });
+    const client = new ArcaPadron({
+      cert: 'C',
+      key: 'K',
+      cuit: '20123456786',
+      ticketStorage: storage,
+      signal: controller.signal,
+    });
     await storage.set(client.wsaa.ticketKey('ws_sr_padron_a13'), {
       token: 'T',
       sign: 'S',

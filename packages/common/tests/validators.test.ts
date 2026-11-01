@@ -233,10 +233,7 @@ describe('validateFecha', () => {
 
 describe('validateFechaRango', () => {
   it('passes when fin > inicio', () => {
-    expect(() => validateFechaRango(
-      new Date('2026-01-01'),
-      new Date('2026-12-31'),
-    )).not.toThrow();
+    expect(() => validateFechaRango(new Date('2026-01-01'), new Date('2026-12-31'))).not.toThrow();
   });
 
   it('passes when fin is undefined', () => {
@@ -244,10 +241,7 @@ describe('validateFechaRango', () => {
   });
 
   it('throws when fin <= inicio', () => {
-    expect(() => validateFechaRango(
-      new Date('2026-06-01'),
-      new Date('2026-01-01'),
-    )).toThrow(ArcaValidationError);
+    expect(() => validateFechaRango(new Date('2026-06-01'), new Date('2026-01-01'))).toThrow(ArcaValidationError);
   });
 
   it('throws when fin equals inicio', () => {
@@ -315,7 +309,13 @@ describe('parseAfipDate (estricto)', () => {
   });
 
   it('formatDate(parseAfipDate(x)) === x en cualquier zona horaria', () => {
-    for (const tz of ['UTC', 'America/Argentina/Buenos_Aires', 'Asia/Tokyo', 'Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+    for (const tz of [
+      'UTC',
+      'America/Argentina/Buenos_Aires',
+      'Asia/Tokyo',
+      'Pacific/Kiritimati',
+      'Pacific/Pago_Pago',
+    ]) {
       withTZ(tz, () => {
         for (const x of ['20260315', '20240229', '20261231', '20260101']) {
           expect(formatDate(parseAfipDate(x)), `${tz} ${x}`).toBe(x);

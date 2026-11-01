@@ -1,4 +1,10 @@
-import { ArcaSoapError, ArcaServiceError, checkServiceErrors, ensureArray, extractServiceErrors } from '@ramiidv/arca-common';
+import {
+  ArcaSoapError,
+  ArcaServiceError,
+  checkServiceErrors,
+  ensureArray,
+  extractServiceErrors,
+} from '@ramiidv/arca-common';
 import type {
   CodigoDescripcion,
   Comprobante,
@@ -298,7 +304,8 @@ function parseMotivoRechazo(o: Obj, path: string): MotivoRechazo {
 export function parseComprobante(v: unknown, path: string): Comprobante {
   const o = obj(v, path);
   const tipoCodAuto = str(o, 'tipoCodAuto', path);
-  if (tipoCodAuto !== 'A' && tipoCodAuto !== 'E') invalidResponse(`${path}.tipoCodAuto`, `valor "${tipoCodAuto}" desconocido en`);
+  if (tipoCodAuto !== 'A' && tipoCodAuto !== 'E')
+    invalidResponse(`${path}.tipoCodAuto`, `valor "${tipoCodAuto}" desconocido en`);
   const asociado = o['idComprobanteAsociado'];
   const infoTransf = o['infoTransferencia'];
   return dropUndefined({
@@ -372,7 +379,9 @@ export function parseComprobante(v: unknown, path: string): Comprobante {
     opcionTransferencia: isAbsent(o['opcionTransferencia'])
       ? undefined
       : enumValue(o, 'opcionTransferencia', path, OpcionTransferencia),
-    infoTransferencia: isAbsent(infoTransf) ? undefined : parseInfoTransferencia(infoTransf, `${path}.infoTransferencia`),
+    infoTransferencia: isAbsent(infoTransf)
+      ? undefined
+      : parseInfoTransferencia(infoTransf, `${path}.infoTransferencia`),
   });
 }
 
@@ -382,5 +391,13 @@ function dropUndefined<T extends object>(o: T): T {
   return o;
 }
 
-export { items as parseItems, num as parseNum, optNum as parseOptNum, optStr as parseOptStr, siNo as parseSiNo, optSiNo as parseOptSiNo, str as parseStr };
+export {
+  items as parseItems,
+  num as parseNum,
+  optNum as parseOptNum,
+  optStr as parseOptStr,
+  siNo as parseSiNo,
+  optSiNo as parseOptSiNo,
+  str as parseStr,
+};
 export { invalidResponse };

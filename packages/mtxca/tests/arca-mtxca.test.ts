@@ -6,18 +6,35 @@ import type { ArcaMtxcaConfig } from '../src/types.js';
 import { facturaA, hangingFetch, mockFetch, soapResponse } from './helpers.js';
 
 function mtxca(fetchImpl: typeof fetch, extra: Partial<ArcaMtxcaConfig> = {}): ArcaMtxca {
-  const m = new ArcaMtxca({ cert: 'CERT', key: 'KEY', cuit: '20-12345678-6', fetch: fetchImpl, retryDelayMs: 1, ...extra });
-  vi.spyOn(m.wsaa, 'getAccessTicket').mockResolvedValue({ token: 'T', sign: 'S', expirationTime: '2099-01-01T00:00:00Z' });
+  const m = new ArcaMtxca({
+    cert: 'CERT',
+    key: 'KEY',
+    cuit: '20-12345678-6',
+    fetch: fetchImpl,
+    retryDelayMs: 1,
+    ...extra,
+  });
+  vi.spyOn(m.wsaa, 'getAccessTicket').mockResolvedValue({
+    token: 'T',
+    sign: 'S',
+    expirationTime: '2099-01-01T00:00:00Z',
+  });
   return m;
 }
 
-const ultimo = (n: number) => soapResponse('consultarUltimoComprobanteAutorizadoResponse', `<numeroComprobante>${n}</numeroComprobante>`);
-const sinComprobantes = soapResponse('consultarUltimoComprobanteAutorizadoResponse',
-  '<arrayErrores><codigoDescripcion><codigo>1502</codigo><descripcion>No existen comprobantes</descripcion></codigoDescripcion></arrayErrores>');
-const aprobado = (n: number) => soapResponse('autorizarComprobanteResponse',
-  `<resultado>A</resultado><comprobanteResponse><cuit>20123456786</cuit><codigoTipoComprobante>1</codigoTipoComprobante>` +
-  `<numeroPuntoVenta>4000</numeroPuntoVenta><numeroComprobante>${n}</numeroComprobante><fechaEmision>2026-11-01</fechaEmision>` +
-  `<CAE>76443051234567</CAE><fechaVencimientoCAE>2026-11-11</fechaVencimientoCAE></comprobanteResponse>`);
+const ultimo = (n: number) =>
+  soapResponse('consultarUltimoComprobanteAutorizadoResponse', `<numeroComprobante>${n}</numeroComprobante>`);
+const sinComprobantes = soapResponse(
+  'consultarUltimoComprobanteAutorizadoResponse',
+  '<arrayErrores><codigoDescripcion><codigo>1502</codigo><descripcion>No existen comprobantes</descripcion></codigoDescripcion></arrayErrores>',
+);
+const aprobado = (n: number) =>
+  soapResponse(
+    'autorizarComprobanteResponse',
+    `<resultado>A</resultado><comprobanteResponse><cuit>20123456786</cuit><codigoTipoComprobante>1</codigoTipoComprobante>` +
+      `<numeroPuntoVenta>4000</numeroPuntoVenta><numeroComprobante>${n}</numeroComprobante><fechaEmision>2026-11-01</fechaEmision>` +
+      `<CAE>76443051234567</CAE><fechaVencimientoCAE>2026-11-11</fechaVencimientoCAE></comprobanteResponse>`,
+  );
 
 function sinNumero() {
   const { numeroComprobante: _n, ...rest } = facturaA();
@@ -42,8 +59,13 @@ describe('ArcaMtxca', () => {
   });
 
   it('ultimoComprobante: 1502 (sin comprobantes) es 0; otros errores lanzan', async () => {
-    const m = mockFetch(sinComprobantes, soapResponse('consultarUltimoComprobanteAutorizadoResponse',
-      '<arrayErrores><codigoDescripcion><codigo>1501</codigo><descripcion>PV no habilitado</descripcion></codigoDescripcion></arrayErrores>'));
+    const m = mockFetch(
+      sinComprobantes,
+      soapResponse(
+        'consultarUltimoComprobanteAutorizadoResponse',
+        '<arrayErrores><codigoDescripcion><codigo>1501</codigo><descripcion>PV no habilitado</descripcion></codigoDescripcion></arrayErrores>',
+      ),
+    );
     const a = mtxca(m.fetch);
     expect(await a.ultimoComprobante(4000, 1)).toBe(0);
     await expect(a.ultimoComprobante(4000, 1)).rejects.toBeInstanceOf(ArcaServiceError);
@@ -80,7 +102,9 @@ describe('ArcaMtxca', () => {
 
   it('autorizar con timeout: 1 solo fetch de autorización y error uncertain', async () => {
     const h = hangingFetch();
-    const err = await mtxca(h.fetch, { timeout: 20, retries: 3 }).autorizar(facturaA()).catch((e) => e);
+    const err = await mtxca(h.fetch, { timeout: 20, retries: 3 })
+      .autorizar(facturaA())
+      .catch((e) => e);
     expect(err).toBeInstanceOf(ArcaSoapError);
     expect((err as ArcaSoapError).uncertain).toBe(true);
     expect(h.fn).toHaveBeenCalledTimes(1);
@@ -90,7 +114,9 @@ describe('ArcaMtxca', () => {
     const m = mockFetch(ultimo(1));
     const ctrl = new AbortController();
     ctrl.abort();
-    await expect(mtxca(m.fetch).ultimoComprobante(4000, 1, { signal: ctrl.signal })).rejects.toBeInstanceOf(ArcaSoapError);
+    await expect(mtxca(m.fetch).ultimoComprobante(4000, 1, { signal: ctrl.signal })).rejects.toBeInstanceOf(
+      ArcaSoapError,
+    );
     expect(m.fn).not.toHaveBeenCalled();
   });
 
@@ -105,7 +131,11 @@ describe('ArcaMtxca', () => {
     const m = mockFetch();
     const a = facturaA();
     await expect(
-      mtxca(m.fetch).informarComprobanteCAEA({ ...a, caea: '36434058476543', items: [{ ...a.items[0], cantidad: undefined }] }),
+      mtxca(m.fetch).informarComprobanteCAEA({
+        ...a,
+        caea: '36434058476543',
+        items: [{ ...a.items[0], cantidad: undefined }],
+      }),
     ).rejects.toBeInstanceOf(ArcaValidationError);
     expect(m.fn).not.toHaveBeenCalled();
   });

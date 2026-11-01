@@ -73,7 +73,8 @@ function impuesto(id: number, descripcion: string | undefined, estadoRaw: string
 }
 
 function impuestosDe(persona: PersonaA5 | PersonaA4): Impuesto[] {
-  if (esA5(persona)) return persona.impuestos.map((i) => impuesto(i.idImpuesto, i.descripcionImpuesto, i.estadoImpuesto));
+  if (esA5(persona))
+    return persona.impuestos.map((i) => impuesto(i.idImpuesto, i.descripcionImpuesto, i.estadoImpuesto));
   return (persona.impuesto ?? []).map((i) => impuesto(i.idImpuesto, i.descripcionImpuesto, i.estado));
 }
 
@@ -143,7 +144,10 @@ export function condicionIvaDesdePadron(persona: PersonaA5 | PersonaA4): Condici
   const monotributo = impuesto20 ? impuesto20.activo : categoria !== undefined;
   if (monotributo) {
     const desc = categoria ? ` (categoría ${categoria.id} - ${categoria.descripcion.trim()})` : '';
-    if (categoria && (CATEGORIAS_MONOTRIBUTO_SOCIAL.has(categoria.id) || /MONOTRIBUTO SOCIAL/i.test(categoria.descripcion))) {
+    if (
+      categoria &&
+      (CATEGORIAS_MONOTRIBUTO_SOCIAL.has(categoria.id) || /MONOTRIBUTO SOCIAL/i.test(categoria.descripcion))
+    ) {
       return { condicionIva: CondicionIva.MONOTRIBUTO_SOCIAL, motivo: `Monotributo social${desc}.${advertencia}` };
     }
     if (categoria && /PROMOVID/i.test(categoria.descripcion)) {
@@ -152,11 +156,17 @@ export function condicionIvaDesdePadron(persona: PersonaA5 | PersonaA4): Condici
         motivo: `Monotributo trabajador independiente promovido${desc}.${advertencia}`,
       };
     }
-    return { condicionIva: CondicionIva.MONOTRIBUTISTA, motivo: `Inscripto en monotributo (impuesto 20)${desc}.${advertencia}` };
+    return {
+      condicionIva: CondicionIva.MONOTRIBUTISTA,
+      motivo: `Inscripto en monotributo (impuesto 20)${desc}.${advertencia}`,
+    };
   }
 
   if (tiene((i) => i.id === ImpuestoId.IVA_RESPONSABLE_INSCRIPTO)) {
-    return { condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO, motivo: `Inscripto en IVA (impuesto 30).${advertencia}` };
+    return {
+      condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
+      motivo: `Inscripto en IVA (impuesto 30).${advertencia}`,
+    };
   }
 
   const ivaExento = impuestos.find((i) => i.id === ImpuestoId.IVA_RESPONSABLE_INSCRIPTO && esExento(i.estado));

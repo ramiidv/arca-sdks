@@ -15,27 +15,27 @@
  *
  * npm run test:integration
  */
-import { existsSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { beforeAll, describe, expect, it } from "vitest";
-import { FileTicketStorage } from "@ramiidv/arca-common";
-import type { ArcaEvent } from "@ramiidv/arca-common";
-import { Arca } from "../../src/arca.js";
-import { CbteTipo, CondicionIva, DocTipo, IvaTipo } from "../../src/constants.js";
-import type { FacturaResult } from "../../src/types.js";
+import { existsSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { FileTicketStorage } from '@ramiidv/arca-common';
+import type { ArcaEvent } from '@ramiidv/arca-common';
+import { Arca } from '../../src/arca.js';
+import { CbteTipo, CondicionIva, DocTipo, IvaTipo } from '../../src/constants.js';
+import type { FacturaResult } from '../../src/types.js';
 
 const env = process.env;
 const habilitado = Boolean(env.ARCA_TEST_CERT && env.ARCA_TEST_KEY && env.ARCA_TEST_CUIT);
 
 function pem(value: string): string {
-  return value.includes("-----BEGIN") ? value : readFileSync(value, "utf8");
+  return value.includes('-----BEGIN') ? value : readFileSync(value, 'utf8');
 }
 
-describe.skipIf(!habilitado)("integración ARCA homologación", { timeout: 120_000 }, () => {
+describe.skipIf(!habilitado)('integración ARCA homologación', { timeout: 120_000 }, () => {
   const ptoVta = Number(env.ARCA_TEST_PTO_VTA ?? 1);
   const cuitReceptor = Number(env.ARCA_TEST_CUIT_RECEPTOR ?? 20111111112);
-  const ticketsDir = env.ARCA_TEST_TICKETS_DIR ?? join(tmpdir(), "arca-test-tickets");
+  const ticketsDir = env.ARCA_TEST_TICKETS_DIR ?? join(tmpdir(), 'arca-test-tickets');
 
   const nuevaInstancia = (events: ArcaEvent[] = []) =>
     new Arca({
@@ -54,18 +54,18 @@ describe.skipIf(!habilitado)("integración ARCA homologación", { timeout: 120_0
     arca = nuevaInstancia();
   });
 
-  it("login con TA persistido: una segunda instancia reutiliza el ticket del storage", async () => {
+  it('login con TA persistido: una segunda instancia reutiliza el ticket del storage', async () => {
     await arca.ultimoComprobante(ptoVta, CbteTipo.FACTURA_B);
     expect(existsSync(ticketsDir)).toBe(true);
 
     const events: ArcaEvent[] = [];
     const otra = nuevaInstancia(events);
     await otra.ultimoComprobante(ptoVta, CbteTipo.FACTURA_B);
-    expect(events.some((e) => e.type === "auth:login")).toBe(false);
-    expect(events).toContainEqual({ type: "auth:cache-hit", service: "wsfe", source: "storage" });
+    expect(events.some((e) => e.type === 'auth:login')).toBe(false);
+    expect(events).toContainEqual({ type: 'auth:cache-hit', service: 'wsfe', source: 'storage' });
   });
 
-  it("factura B a consumidor final con precios finales", async () => {
+  it('factura B a consumidor final con precios finales', async () => {
     const cbteNro = (await arca.ultimoComprobante(ptoVta, CbteTipo.FACTURA_B)) + 1;
     const res = await arca.facturar({
       ptoVta,
@@ -82,7 +82,7 @@ describe.skipIf(!habilitado)("integración ARCA homologación", { timeout: 120_0
     expect(res.cbteNro).toBe(cbteNro);
   });
 
-  it("factura A a un CUIT", async () => {
+  it('factura A a un CUIT', async () => {
     facturaA = await arca.facturar({
       ptoVta,
       cbteTipo: CbteTipo.FACTURA_A,
@@ -94,7 +94,7 @@ describe.skipIf(!habilitado)("integración ARCA homologación", { timeout: 120_0
     expect(facturaA.aprobada).toBe(true);
   });
 
-  it("nota de crédito asociada a la factura A", async () => {
+  it('nota de crédito asociada a la factura A', async () => {
     const nc = await arca.notaCredito({
       ptoVta,
       docTipo: DocTipo.CUIT,
@@ -107,7 +107,7 @@ describe.skipIf(!habilitado)("integración ARCA homologación", { timeout: 120_0
     expect(nc.cbteTipo).toBe(CbteTipo.NOTA_CREDITO_A);
   });
 
-  it("recuperarComprobante sobre un número ya emitido → autorizado con el mismo CAE", async () => {
+  it('recuperarComprobante sobre un número ya emitido → autorizado con el mismo CAE', async () => {
     const r = await arca.recuperarComprobante({
       ptoVta,
       cbteTipo: CbteTipo.FACTURA_A,
@@ -115,13 +115,14 @@ describe.skipIf(!habilitado)("integración ARCA homologación", { timeout: 120_0
       importeTotal: facturaA.importes.total,
       docTipo: DocTipo.CUIT,
       docNro: cuitReceptor,
-      fecha: (facturaA.raw as { FeDetResp: { FECAEDetResponse: { CbteFch: string } } }).FeDetResp.FECAEDetResponse.CbteFch,
+      fecha: (facturaA.raw as { FeDetResp: { FECAEDetResponse: { CbteFch: string } } }).FeDetResp.FECAEDetResponse
+        .CbteFch,
     });
-    expect(r.estado).toBe("autorizado");
-    if (r.estado === "autorizado") expect(r.resultado.cae).toBe(facturaA.cae);
+    expect(r.estado).toBe('autorizado');
+    if (r.estado === 'autorizado') expect(r.resultado.cae).toBe(facturaA.cae);
   });
 
-  it("recuperarComprobante sobre el próximo número → no_emitido", async () => {
+  it('recuperarComprobante sobre el próximo número → no_emitido', async () => {
     const ultimo = await arca.ultimoComprobante(ptoVta, CbteTipo.FACTURA_A);
     const r = await arca.recuperarComprobante({
       ptoVta,
@@ -130,8 +131,8 @@ describe.skipIf(!habilitado)("integración ARCA homologación", { timeout: 120_0
       importeTotal: 1,
       docTipo: DocTipo.CONSUMIDOR_FINAL,
       docNro: 0,
-      fecha: "20260101",
+      fecha: '20260101',
     });
-    expect(r).toEqual({ estado: "no_emitido" });
+    expect(r).toEqual({ estado: 'no_emitido' });
   });
 });

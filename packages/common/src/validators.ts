@@ -82,11 +82,13 @@ export function validateCuit(cuit: string | number): string {
   if (digits[10] !== expectedCheck) {
     throw new ArcaValidationError(
       `CUIT inválido: "${cuit}". Dígito verificador incorrecto (esperado: ${expectedCheck}, recibido: ${digits[10]}).`,
-      [{
-        field: 'cuit',
-        message: `Dígito verificador incorrecto (esperado: ${expectedCheck}, recibido: ${digits[10]})`,
-        value: cuit,
-      }],
+      [
+        {
+          field: 'cuit',
+          message: `Dígito verificador incorrecto (esperado: ${expectedCheck}, recibido: ${digits[10]})`,
+          value: cuit,
+        },
+      ],
       'cuit',
     );
   }
@@ -143,11 +145,13 @@ export function validateCBU(cbu: string): string {
   if (b1[7] !== b1check) {
     throw new ArcaValidationError(
       `CBU inválido: "${cbu}". Dígito verificador del bloque 1 incorrecto.`,
-      [{
-        field: 'cbu',
-        message: `Dígito verificador del bloque 1 incorrecto (esperado: ${b1check}, recibido: ${b1[7]})`,
-        value: cbu,
-      }],
+      [
+        {
+          field: 'cbu',
+          message: `Dígito verificador del bloque 1 incorrecto (esperado: ${b1check}, recibido: ${b1[7]})`,
+          value: cbu,
+        },
+      ],
       'cbu',
     );
   }
@@ -162,11 +166,13 @@ export function validateCBU(cbu: string): string {
   if (b2[13] !== b2check) {
     throw new ArcaValidationError(
       `CBU inválido: "${cbu}". Dígito verificador del bloque 2 incorrecto.`,
-      [{
-        field: 'cbu',
-        message: `Dígito verificador del bloque 2 incorrecto (esperado: ${b2check}, recibido: ${b2[13]})`,
-        value: cbu,
-      }],
+      [
+        {
+          field: 'cbu',
+          message: `Dígito verificador del bloque 2 incorrecto (esperado: ${b2check}, recibido: ${b2[13]})`,
+          value: cbu,
+        },
+      ],
       'cbu',
     );
   }
@@ -322,11 +328,13 @@ export function validateFechaRango(fechaInicio: Date | string, fechaFin: Date | 
   if (fin.getTime() <= inicio.getTime()) {
     throw new ArcaValidationError(
       'La fecha de fin debe ser posterior a la fecha de inicio.',
-      [{
-        field: 'fechaFin',
-        message: `fechaFin (${fin.toISOString()}) debe ser posterior a fechaInicio (${inicio.toISOString()})`,
-        value: { fechaInicio, fechaFin },
-      }],
+      [
+        {
+          field: 'fechaFin',
+          message: `fechaFin (${fin.toISOString()}) debe ser posterior a fechaInicio (${inicio.toISOString()})`,
+          value: { fechaInicio, fechaFin },
+        },
+      ],
       'fechaFin',
     );
   }
@@ -362,10 +370,12 @@ export function collectErrorsWithPrefix(fn: () => void, errors: ValidationErrorD
     fn();
   } catch (e) {
     if (e instanceof ArcaValidationError) {
-      errors.push(...e.details.map(err => ({
-        ...err,
-        field: `${prefix}.${err.field}`,
-      })));
+      errors.push(
+        ...e.details.map((err) => ({
+          ...err,
+          field: `${prefix}.${err.field}`,
+        })),
+      );
       return;
     }
     throw e;

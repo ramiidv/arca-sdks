@@ -54,7 +54,10 @@ const COMPROBANTE_XML =
 describe('dummy', () => {
   it('envía Body vacío con SOAPAction y parsea dummyReturn', async () => {
     const fetch = mockFetch(
-      ok('dummy', '<dummyReturn><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></dummyReturn>'),
+      ok(
+        'dummy',
+        '<dummyReturn><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></dummyReturn>',
+      ),
     );
     const status = await client(fetch).dummy();
     expect(status).toEqual({ appserver: 'OK', dbserver: 'OK', authserver: 'OK' });
@@ -129,7 +132,10 @@ describe('obligación de recepción', () => {
 
   it('sin obligado ni errores es una respuesta inválida', async () => {
     const fetch = mockFetch(
-      ok('consultarMontoObligadoRecepcion', '<consultarMontoObligadoRecepcionReturn></consultarMontoObligadoRecepcionReturn>'),
+      ok(
+        'consultarMontoObligadoRecepcion',
+        '<consultarMontoObligadoRecepcionReturn></consultarMontoObligadoRecepcionReturn>',
+      ),
     );
     const err = await client(fetch)
       .consultarMontoObligadoRecepcion(AUTH, { cuitConsultada: 30712345671, fechaEmision: '2026-11-01' })
@@ -158,7 +164,9 @@ describe('errores de negocio', () => {
         '<consultarCtasCtesReturn><arrayErrores><codigoDescripcion><codigo>1001</codigo><descripcion>CUIT sin FCE</descripcion></codigoDescripcion></arrayErrores></consultarCtasCtesReturn>',
       ),
     );
-    const err = await client(fetch).consultarCtasCtes(AUTH, { rol: 'Receptor' }).catch((e) => e);
+    const err = await client(fetch)
+      .consultarCtasCtes(AUTH, { rol: 'Receptor' })
+      .catch((e) => e);
     expect(err).toBeInstanceOf(ArcaServiceError);
     expect(err.errors).toEqual([{ code: 1001, msg: 'CUIT sin FCE' }]);
   });
@@ -170,7 +178,9 @@ describe('errores de negocio', () => {
         '<consultarTiposRetencionesReturn><arrayErroresFormato><codigoDescripcionString><codigo>FMT01</codigo><descripcion>Formato inválido</descripcion></codigoDescripcionString></arrayErroresFormato></consultarTiposRetencionesReturn>',
       ),
     );
-    const err = await client(fetch).consultarTiposRetenciones(AUTH).catch((e) => e);
+    const err = await client(fetch)
+      .consultarTiposRetenciones(AUTH)
+      .catch((e) => e);
     expect(err).toBeInstanceOf(ArcaServiceError);
     expect(err.errors[0]).toMatchObject({ rawCode: 'FMT01', msg: 'Formato inválido' });
   });
@@ -270,7 +280,9 @@ describe('consultarCtasCtes', () => {
   });
 
   it('sin arrayInfosCtaCte → lista vacía', async () => {
-    const fetch = mockFetch(ok('consultarCtasCtes', '<consultarCtasCtesReturn><hayMas>N</hayMas></consultarCtasCtesReturn>'));
+    const fetch = mockFetch(
+      ok('consultarCtasCtes', '<consultarCtasCtesReturn><hayMas>N</hayMas></consultarCtasCtesReturn>'),
+    );
     const r = await client(fetch).consultarCtasCtes(AUTH, { rol: 'Emisor' });
     expect(r.ctasCtes).toEqual([]);
   });
@@ -279,7 +291,10 @@ describe('consultarCtasCtes', () => {
     const c = client(mockFetch());
     await expect(c.consultarCtasCtes(AUTH, { rol: 'Comprador' as never })).rejects.toThrow(ArcaValidationError);
     await expect(
-      c.consultarCtasCtes(AUTH, { rol: 'Emisor', fecha: { tipo: 'Emision', desde: '2026-10-31', hasta: '2026-10-01' } }),
+      c.consultarCtasCtes(AUTH, {
+        rol: 'Emisor',
+        fecha: { tipo: 'Emision', desde: '2026-10-31', hasta: '2026-10-01' },
+      }),
     ).rejects.toThrow(/hasta/);
   });
 });
@@ -312,7 +327,10 @@ describe('consultarComprobantes', () => {
 
   it('parsea ComprobanteType (1 y N)', async () => {
     const fetch = mockFetch(
-      ok('consultarComprobantes', `<consultarCmpReturn><arrayComprobantes>${COMPROBANTE_XML}</arrayComprobantes></consultarCmpReturn>`),
+      ok(
+        'consultarComprobantes',
+        `<consultarCmpReturn><arrayComprobantes>${COMPROBANTE_XML}</arrayComprobantes></consultarCmpReturn>`,
+      ),
       ok(
         'consultarComprobantes',
         `<consultarCmpReturn><arrayComprobantes>${COMPROBANTE_XML}${COMPROBANTE_XML}</arrayComprobantes><hayMas>N</hayMas></consultarCmpReturn>`,
@@ -345,7 +363,10 @@ describe('consultarComprobantes', () => {
   it('un campo obligatorio ausente lanza (no se inventa)', async () => {
     const sinEstado = COMPROBANTE_XML.replace(/<estado><estado>.*?<\/estado>/, '');
     const fetch = mockFetch(
-      ok('consultarComprobantes', `<consultarCmpReturn><arrayComprobantes>${sinEstado}</arrayComprobantes></consultarCmpReturn>`),
+      ok(
+        'consultarComprobantes',
+        `<consultarCmpReturn><arrayComprobantes>${sinEstado}</arrayComprobantes></consultarCmpReturn>`,
+      ),
     );
     await expect(client(fetch).consultarComprobantes(AUTH, { rol: 'Receptor' })).rejects.toThrow(/estado/);
   });
@@ -383,9 +404,9 @@ describe('consultarCtaCte', () => {
   it('idCtaCte debe tener exactamente uno de codCtaCte o idFactura', async () => {
     const c = client(mockFetch());
     await expect(c.consultarCtaCte(AUTH, {} as never)).rejects.toThrow(ArcaValidationError);
-    await expect(
-      c.consultarCtaCte(AUTH, { codCtaCte: 1, idFactura: ID_FACTURA } as never),
-    ).rejects.toThrow(/exactamente uno/);
+    await expect(c.consultarCtaCte(AUTH, { codCtaCte: 1, idFactura: ID_FACTURA } as never)).rejects.toThrow(
+      /exactamente uno/,
+    );
   });
 });
 
@@ -464,9 +485,14 @@ describe('emisiones', () => {
 
   it('rechazarFECred sin motivos o con texto corto no se envía', async () => {
     const c = client(mockFetch());
-    await expect(c.rechazarFECred(AUTH, { idCtaCte: { codCtaCte: 1 }, motivos: [] })).rejects.toThrow(ArcaValidationError);
+    await expect(c.rechazarFECred(AUTH, { idCtaCte: { codCtaCte: 1 }, motivos: [] })).rejects.toThrow(
+      ArcaValidationError,
+    );
     await expect(
-      c.rechazarFECred(AUTH, { idCtaCte: { codCtaCte: 1 }, motivos: [{ codMotivo: 1, descMotivo: 'ab', justificacion: 'abc' }] }),
+      c.rechazarFECred(AUTH, {
+        idCtaCte: { codCtaCte: 1 },
+        motivos: [{ codMotivo: 1, descMotivo: 'ab', justificacion: 'abc' }],
+      }),
     ).rejects.toThrow(/descMotivo/);
   });
 
@@ -550,7 +576,10 @@ describe('emisiones', () => {
   });
 
   it('una consulta sí se reintenta ante 503', async () => {
-    const fetch = mockFetch(xmlResponse('Service Unavailable', 503), ok('consultarCtasCtes', '<consultarCtasCtesReturn/>'));
+    const fetch = mockFetch(
+      xmlResponse('Service Unavailable', 503),
+      ok('consultarCtasCtes', '<consultarCtasCtesReturn/>'),
+    );
     await client(fetch, { retries: 1 }).consultarCtasCtes(AUTH, { rol: 'Emisor' });
     expect(fetch).toHaveBeenCalledTimes(2);
   });
@@ -597,10 +626,17 @@ describe('historial, remitos y parámetros', () => {
   });
 
   it('tipos: codigoDescripcionReturn/arrayCodigoDescripcion/codigoDescripcion (1 y N)', async () => {
-    const item = (c: number, d: string) => `<codigoDescripcion><codigo>${c}</codigo><descripcion>${d}</descripcion></codigoDescripcion>`;
+    const item = (c: number, d: string) =>
+      `<codigoDescripcion><codigo>${c}</codigo><descripcion>${d}</descripcion></codigoDescripcion>`;
     const fetch = mockFetch(
-      ok('consultarTiposFormasCancelacion', `<codigoDescripcionReturn><arrayCodigoDescripcion>${item(1, 'Efectivo')}</arrayCodigoDescripcion></codigoDescripcionReturn>`),
-      ok('consultarTiposAjustesOperacion', `<codigoDescripcionReturn><arrayCodigoDescripcion>${item(1, 'A')}${item(2, 'B')}</arrayCodigoDescripcion></codigoDescripcionReturn>`),
+      ok(
+        'consultarTiposFormasCancelacion',
+        `<codigoDescripcionReturn><arrayCodigoDescripcion>${item(1, 'Efectivo')}</arrayCodigoDescripcion></codigoDescripcionReturn>`,
+      ),
+      ok(
+        'consultarTiposAjustesOperacion',
+        `<codigoDescripcionReturn><arrayCodigoDescripcion>${item(1, 'A')}${item(2, 'B')}</arrayCodigoDescripcion></codigoDescripcionReturn>`,
+      ),
     );
     const c = client(fetch);
     expect(await c.consultarTiposFormasCancelacion(AUTH)).toEqual([{ codigo: 1, descripcion: 'Efectivo' }]);

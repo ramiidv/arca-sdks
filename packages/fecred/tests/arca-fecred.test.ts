@@ -24,7 +24,12 @@ describe('ArcaFecred', () => {
         ),
       ),
     );
-    const fecred = new ArcaFecred({ ...base, cuit: '20-12345678-6', wsaa, fetch: fetch as unknown as typeof globalThis.fetch });
+    const fecred = new ArcaFecred({
+      ...base,
+      cuit: '20-12345678-6',
+      wsaa,
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    });
     const r = await fecred.consultarObligadoRecepcion(30712345671);
     expect(r.obligado).toBe(true);
     expect(wsaa.getAccessTicket).toHaveBeenCalledWith('wsfecred', undefined);
@@ -40,26 +45,48 @@ describe('ArcaFecred', () => {
   it('valida los parámetros antes de pedir el ticket a WSAA', async () => {
     const wsaa = fakeWsaa();
     const fetch = mockFetch();
-    const fecred = new ArcaFecred({ ...base, cuit: 20123456786, wsaa, fetch: fetch as unknown as typeof globalThis.fetch });
-    await expect(fecred.consultarCtasCtes({ rol: 'Emisor', cuitContraparte: '123' })).rejects.toThrow(ArcaValidationError);
+    const fecred = new ArcaFecred({
+      ...base,
+      cuit: 20123456786,
+      wsaa,
+      fetch: fetch as unknown as typeof globalThis.fetch,
+    });
+    await expect(fecred.consultarCtasCtes({ rol: 'Emisor', cuitContraparte: '123' })).rejects.toThrow(
+      ArcaValidationError,
+    );
     expect(wsaa.getAccessTicket).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
   });
 
   it('producción y endpoints sobrescritos', async () => {
     const dummy = () =>
-      xmlResponse(soapResponse('dummy', '<dummyReturn><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></dummyReturn>'));
+      xmlResponse(
+        soapResponse(
+          'dummy',
+          '<dummyReturn><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></dummyReturn>',
+        ),
+      );
     const fetch = mockFetch(dummy(), dummy());
     const f = fetch as unknown as typeof globalThis.fetch;
     await new ArcaFecred({ ...base, cuit: 20123456786, production: true, fetch: f }).status();
-    await new ArcaFecred({ ...base, cuit: 20123456786, fetch: f, endpoints: { wsfecred: 'https://proxy.local/fecred' } }).status();
+    await new ArcaFecred({
+      ...base,
+      cuit: 20123456786,
+      fetch: f,
+      endpoints: { wsfecred: 'https://proxy.local/fecred' },
+    }).status();
     expect(fetch.mock.calls[0][0]).toBe(ENDPOINTS.wsfecred.production);
     expect(fetch.mock.calls[1][0]).toBe('https://proxy.local/fecred');
   });
 
   it('pasa el signal de CallOptions', async () => {
     const fetch = mockFetch(
-      xmlResponse(soapResponse('dummy', '<dummyReturn><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></dummyReturn>')),
+      xmlResponse(
+        soapResponse(
+          'dummy',
+          '<dummyReturn><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></dummyReturn>',
+        ),
+      ),
     );
     const ctrl = new AbortController();
     ctrl.abort();

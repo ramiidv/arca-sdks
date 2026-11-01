@@ -141,7 +141,13 @@ export function formatImporte(value: number, field = 'importe'): string {
   return rounded.toFixed(2);
 }
 
-function checkInteger(errors: ValidationErrorDetail[], field: string, value: unknown, min: number, max: number): number | undefined {
+function checkInteger(
+  errors: ValidationErrorDetail[],
+  field: string,
+  value: unknown,
+  min: number,
+  max: number,
+): number | undefined {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
     errors.push(detail(field, `debe ser un entero entre ${min} y ${max}`, value));
     return undefined;
@@ -201,7 +207,12 @@ export function toCuitNumber(cuit: string | number, field = 'cuit'): number {
     return Number(validateCuit(cuit));
   } catch (e) {
     if (e instanceof ArcaValidationError) {
-      throw new ArcaValidationError(e.message, e.details.map((d) => ({ ...d, field })), field, { cause: e });
+      throw new ArcaValidationError(
+        e.message,
+        e.details.map((d) => ({ ...d, field })),
+        field,
+        { cause: e },
+      );
     }
     throw e;
   }
@@ -228,8 +239,16 @@ export function buildCertificadoRequest(params: EmitirCertificadoParams): Certif
 
   // Obligatorios del XSD
   for (const f of [
-    'regimen', 'fechaRetencion', 'imposibilidadRetencion', 'importeRetencion', 'importeBaseCalculo',
-    'regimenExclusion', 'tipoComprobante', 'fechaComprobante', 'importeComprobante', 'cuitRetenido',
+    'regimen',
+    'fechaRetencion',
+    'imposibilidadRetencion',
+    'importeRetencion',
+    'importeBaseCalculo',
+    'regimenExclusion',
+    'tipoComprobante',
+    'fechaComprobante',
+    'importeComprobante',
+    'cuitRetenido',
   ] as const) {
     req(f);
   }
@@ -250,7 +269,9 @@ export function buildCertificadoRequest(params: EmitirCertificadoParams): Certif
   }
 
   const imposibilidadRetencion =
-    p.imposibilidadRetencion === undefined ? undefined : checkBoolean(errors, 'imposibilidadRetencion', p.imposibilidadRetencion);
+    p.imposibilidadRetencion === undefined
+      ? undefined
+      : checkBoolean(errors, 'imposibilidadRetencion', p.imposibilidadRetencion);
   const motivoNoRetencion = checkText(errors, 'motivoNoRetencion', p.motivoNoRetencion, 30);
   if (imposibilidadRetencion === true) {
     required(errors, 'motivoNoRetencion', p.motivoNoRetencion, 'cuando imposibilidadRetencion es true');
@@ -311,17 +332,28 @@ export function buildCertificadoRequest(params: EmitirCertificadoParams): Certif
   if (tipoComprobante === TipoComprobante.NOTA_CREDITO) {
     required(errors, 'motivoEmisionNotaCredito', p.motivoEmisionNotaCredito, 'para una nota de crédito (tipo 3)');
   } else if (tipoComprobante !== undefined) {
-    forbidden(errors, 'motivoEmisionNotaCredito', p.motivoEmisionNotaCredito, `para el tipoComprobante ${tipoComprobante}`);
+    forbidden(
+      errors,
+      'motivoEmisionNotaCredito',
+      p.motivoEmisionNotaCredito,
+      `para el tipoComprobante ${tipoComprobante}`,
+    );
   }
 
   const cuitRetenido =
-    p.cuitRetenido === undefined ? undefined : collect(errors, 'cuitRetenido', () => toCuitNumber(p.cuitRetenido, 'cuitRetenido'));
+    p.cuitRetenido === undefined
+      ? undefined
+      : collect(errors, 'cuitRetenido', () => toCuitNumber(p.cuitRetenido, 'cuitRetenido'));
 
   const numeroCertificadoOriginal = checkText(errors, 'numeroCertificadoOriginal', p.numeroCertificadoOriginal, 25);
   const fechaRetencionCertificadoOriginal = date('fechaRetencionCertificadoOriginal');
   const importeCertificadoOriginal = importe('importeCertificadoOriginal');
   if (tipoComprobante !== undefined) {
-    const original = ['numeroCertificadoOriginal', 'fechaRetencionCertificadoOriginal', 'importeCertificadoOriginal'] as const;
+    const original = [
+      'numeroCertificadoOriginal',
+      'fechaRetencionCertificadoOriginal',
+      'importeCertificadoOriginal',
+    ] as const;
     const when = `para el tipoComprobante ${tipoComprobante}`;
     for (const f of original) {
       if (TIPOS_CON_CERTIFICADO_ORIGINAL.includes(tipoComprobante)) required(errors, f, p[f], when);
@@ -330,7 +362,13 @@ export function buildCertificadoRequest(params: EmitirCertificadoParams): Certif
   }
 
   if (Object.hasOwn(p, 'motivoAnulacion')) {
-    errors.push(detail('motivoAnulacion', 'no se debe enviar en emitir (usar anularCertificado)', (p as { motivoAnulacion?: unknown }).motivoAnulacion));
+    errors.push(
+      detail(
+        'motivoAnulacion',
+        'no se debe enviar en emitir (usar anularCertificado)',
+        (p as { motivoAnulacion?: unknown }).motivoAnulacion,
+      ),
+    );
   }
 
   throwIfErrors(errors, 'Certificado');

@@ -106,8 +106,7 @@ export class WsaaClient {
   constructor(config: WsaaClientConfig) {
     this.#cert = config.cert;
     this.#key = config.key;
-    this.endpoint = config.endpoint
-      ?? (config.production ? WSAA_ENDPOINTS.production : WSAA_ENDPOINTS.testing);
+    this.endpoint = config.endpoint ?? (config.production ? WSAA_ENDPOINTS.production : WSAA_ENDPOINTS.testing);
     this.tokenTTLMinutes = config.tokenTTLMinutes ?? DEFAULT_TOKEN_TTL_MINUTES;
     this.onEvent = config.onEvent;
     this.storage = config.ticketStorage;
@@ -319,10 +318,7 @@ export class WsaaClient {
     const traXml = this.createTRA(service);
     const cms = this.signTRA(traXml);
 
-    const bodyContent =
-      `<loginCms xmlns="${WSAA_NAMESPACE}">` +
-      `<in0>${cms}</in0>` +
-      `</loginCms>`;
+    const bodyContent = `<loginCms xmlns="${WSAA_NAMESPACE}">` + `<in0>${cms}</in0>` + `</loginCms>`;
 
     const parsed = await soapCall(this.endpoint, bodyContent, {
       ...this.soapOpts,
@@ -418,8 +414,7 @@ export class WsaaClient {
     const ticket = normalizeAccessTicket({
       token,
       sign,
-      expirationTime: header?.['expirationTime']
-        ?? new Date(this.now().getTime() + this.tokenTTLMinutes * 60_000),
+      expirationTime: header?.['expirationTime'] ?? new Date(this.now().getTime() + this.tokenTTLMinutes * 60_000),
       generationTime: header?.['generationTime'],
     });
     if (!ticket) {
@@ -437,9 +432,7 @@ export class WsaaClient {
     // azar evita colisiones entre TRAs generados en el mismo segundo.
     const uniqueId = randomInt(1, 0x1_0000_0000);
     const generationTime = new Date(now.getTime() - TRA_GENERATION_OFFSET_MS).toISOString();
-    const expirationTime = new Date(
-      now.getTime() + this.tokenTTLMinutes * 60_000,
-    ).toISOString();
+    const expirationTime = new Date(now.getTime() + this.tokenTTLMinutes * 60_000).toISOString();
 
     const tra = {
       loginTicketRequest: {

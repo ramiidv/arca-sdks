@@ -33,7 +33,8 @@ describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => 
       nombre: 'A4 getPersona',
       svc: 'a4',
       method: 'getPersona',
-      inner: '<personaReturn><persona><idPersona>20111111112</idPersona><tipoPersona>FISICA</tipoPersona></persona></personaReturn>',
+      inner:
+        '<personaReturn><persona><idPersona>20111111112</idPersona><tipoPersona>FISICA</tipoPersona></persona></personaReturn>',
       run: (p) => p.getPersona('20-11111111-2'),
       campos: { idPersona: '20111111112' },
     },
@@ -41,7 +42,8 @@ describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => 
       nombre: 'A10 getPersona',
       svc: 'a10',
       method: 'getPersona',
-      inner: '<personaReturn><persona><idPersona>20111111112</idPersona><tipoPersona>FISICA</tipoPersona></persona></personaReturn>',
+      inner:
+        '<personaReturn><persona><idPersona>20111111112</idPersona><tipoPersona>FISICA</tipoPersona></persona></personaReturn>',
       run: (p) => p.getPersonaBasic(20111111112),
       campos: { idPersona: '20111111112' },
     },
@@ -49,7 +51,8 @@ describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => 
       nombre: 'A13 getPersonaV2',
       svc: 'a13',
       method: 'getPersonaV2',
-      inner: '<personaReturn><persona><idPersona>20111111112</idPersona><tipoPersona>FISICA</tipoPersona></persona></personaReturn>',
+      inner:
+        '<personaReturn><persona><idPersona>20111111112</idPersona><tipoPersona>FISICA</tipoPersona></persona></personaReturn>',
       run: (p) => p.getPersonaA13V2('20111111112'),
       campos: { idPersona: '20111111112' },
     },
@@ -74,7 +77,8 @@ describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => 
       nombre: 'A100 getParameterCollectionByName',
       svc: 'a100',
       method: 'getParameterCollectionByName',
-      inner: '<parameterCollectionReturn><parameterCollection><name>SUPA.E_PROVINCIA</name></parameterCollection></parameterCollectionReturn>',
+      inner:
+        '<parameterCollectionReturn><parameterCollection><name>SUPA.E_PROVINCIA</name></parameterCollection></parameterCollectionReturn>',
       run: (p) => p.getParametros('SUPA.E_PROVINCIA'),
       campos: { collectionName: 'SUPA.E_PROVINCIA' },
     },
@@ -105,10 +109,16 @@ describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => 
   it('dummy sin auth', async () => {
     const client = await padron();
     const cap = mockFetch(
-      respuesta(ENDPOINTS.a4.namespace, 'dummy', '<return><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></return>'),
+      respuesta(
+        ENDPOINTS.a4.namespace,
+        'dummy',
+        '<return><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></return>',
+      ),
     );
     expect(await client.a4.dummy()).toEqual({ appserver: 'OK', authserver: 'OK', dbserver: 'OK' });
-    expect(cap.bodies[0]).toMatch(/<ser:dummy xmlns:ser="http:\/\/a4\.soap\.ws\.server\.puc\.sr\/"\s*(\/>|><\/ser:dummy>)/);
+    expect(cap.bodies[0]).toMatch(
+      /<ser:dummy xmlns:ser="http:\/\/a4\.soap\.ws\.server\.puc\.sr\/"\s*(\/>|><\/ser:dummy>)/,
+    );
   });
 
   it('valida la CUIT localmente (dígito verificador) sin llamar a ARCA', async () => {
@@ -158,7 +168,9 @@ describe('Faults de negocio → ArcaPadronServiceError', () => {
     const e = err as ArcaPadronServiceError;
     expect(e.reason).toBe('inexistente');
     expect(e.code).toBe('ARCA_PADRON_SERVICE_ERROR');
-    expect(e.errors).toEqual([{ code: 0, msg: 'La Clave (CUIT/CUIL) consultada es inexistente', rawCode: 'soap:Server' }]);
+    expect(e.errors).toEqual([
+      { code: 0, msg: 'La Clave (CUIT/CUIL) consultada es inexistente', rawCode: 'soap:Server' },
+    ]);
     expect(e.cause).toBeInstanceOf(ArcaSoapError);
     expect(cap.fn).toHaveBeenCalledTimes(1);
   });
@@ -194,7 +206,13 @@ describe('Faults de negocio → ArcaPadronServiceError', () => {
 
   it('personaReturn sin persona → ArcaPadronError (A4, A10, A13)', async () => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a4.namespace, 'getPersona', '<personaReturn><metadata><servidor>x</servidor></metadata></personaReturn>'));
+    mockFetch(
+      respuesta(
+        ENDPOINTS.a4.namespace,
+        'getPersona',
+        '<personaReturn><metadata><servidor>x</servidor></metadata></personaReturn>',
+      ),
+    );
     await expect(client.getPersona('20111111112')).rejects.toBeInstanceOf(ArcaPadronError);
     await expect(client.getPersonaBasic('20111111112')).rejects.toBeInstanceOf(ArcaPadronError);
     await expect(client.getPersonaA13('20111111112')).rejects.toBeInstanceOf(ArcaPadronError);
@@ -202,7 +220,13 @@ describe('Faults de negocio → ArcaPadronServiceError', () => {
 
   it('constancia sin datosGenerales ni errorConstancia → ArcaPadronError', async () => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a5.namespace, 'getPersona_v2', '<personaReturn><metadata><servidor>x</servidor></metadata></personaReturn>'));
+    mockFetch(
+      respuesta(
+        ENDPOINTS.a5.namespace,
+        'getPersona_v2',
+        '<personaReturn><metadata><servidor>x</servidor></metadata></personaReturn>',
+      ),
+    );
     await expect(client.getConstanciaInscripcion('20111111112')).rejects.toBeInstanceOf(ArcaPadronError);
   });
 });
@@ -251,7 +275,12 @@ describe('constancia de inscripción: respuestas realistas', () => {
     mockFetch(respuesta(ENDPOINTS.a5.namespace, 'getPersona_v2', CONSTANCIA_COMPLETA));
     const p = await client.getConstanciaInscripcion('20164755100');
     expect(p.caracterizacion).toEqual([
-      { idCaracterizacion: 17, descripcionCaracterizacion: 'IVA ANUAL AGROPECUARIO', periodo: 19010101, fechaSolicitud: 20030316 },
+      {
+        idCaracterizacion: 17,
+        descripcionCaracterizacion: 'IVA ANUAL AGROPECUARIO',
+        periodo: 19010101,
+        fechaSolicitud: 20030316,
+      },
       {
         idCaracterizacion: 639,
         descripcionCaracterizacion: 'GANANCIAS SIMPLIFICADA LEY 27.779',
@@ -404,7 +433,10 @@ describe('A4: respuestas realistas', () => {
 
   it('xs:string con decimales o exponente se preservan; los numéricos del WSDL siguen siendo number', async () => {
     const client = await padron();
-    const xml = personaA4(imp4(30, 'ACTIVO'), '<mesCierre>12</mesCierre><porcentajeCapitalNacional>10.50</porcentajeCapitalNacional>')
+    const xml = personaA4(
+      imp4(30, 'ACTIVO'),
+      '<mesCierre>12</mesCierre><porcentajeCapitalNacional>10.50</porcentajeCapitalNacional>',
+    )
       .replace('<datoAdicional>12</datoAdicional>', '<datoAdicional>1.50</datoAdicional>')
       .replace('<numeroInscripcion>12345</numeroInscripcion>', '<numeroInscripcion>1E3</numeroInscripcion>');
     mockFetch(respuesta(ENDPOINTS.a4.namespace, 'getPersona', xml));
@@ -414,7 +446,14 @@ describe('A4: respuestas realistas', () => {
     expect(p.mesCierre).toBe(12);
     expect(p.porcentajeCapitalNacional).toBe(10.5);
     expect(p.impuesto).toEqual([
-      { idImpuesto: 30, descripcionImpuesto: 'IVA', estado: 'ACTIVO', periodo: 200611, diaPeriodo: undefined, ffInscripcion: undefined },
+      {
+        idImpuesto: 30,
+        descripcionImpuesto: 'IVA',
+        estado: 'ACTIVO',
+        periodo: 200611,
+        diaPeriodo: undefined,
+        ffInscripcion: undefined,
+      },
     ]);
   });
 
@@ -558,8 +597,10 @@ describe('A100', () => {
       respuesta(
         ENDPOINTS.a100.namespace,
         'getParameterCollectionByName',
-        coleccion('<parameterList><attributeList><name>ALICUOTA</name><value>10.50</value></attributeList>' +
-          '<description>ALICUOTA GENERAL</description><id>007</id></parameterList>'),
+        coleccion(
+          '<parameterList><attributeList><name>ALICUOTA</name><value>10.50</value></attributeList>' +
+            '<description>ALICUOTA GENERAL</description><id>007</id></parameterList>',
+        ),
       ),
     );
     expect(await client.getParametros('SUPA.X')).toEqual([

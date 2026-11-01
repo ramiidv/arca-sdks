@@ -46,18 +46,20 @@ const res = await mtxca.autorizar({
   codigoMoneda: Moneda.PESOS,
   cotizacionMoneda: 1,
   codigoConcepto: Concepto.PRODUCTOS,
-  items: [{
-    unidadesMtx: 1,
-    codigoMtx: '7790001000012',
-    codigo: 'P0001',
-    descripcion: 'Producto de ejemplo',
-    cantidad: 1,
-    codigoUnidadMedida: 7,
-    precioUnitario: 100, // clase A: sin IVA
-    codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
-    importeIVA: 21,
-    importeItem: 121, // con IVA incluido
-  }],
+  items: [
+    {
+      unidadesMtx: 1,
+      codigoMtx: '7790001000012',
+      codigo: 'P0001',
+      descripcion: 'Producto de ejemplo',
+      cantidad: 1,
+      codigoUnidadMedida: 7,
+      precioUnitario: 100, // clase A: sin IVA
+      codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
+      importeIVA: 21,
+      importeItem: 121, // con IVA incluido
+    },
+  ],
   subtotalesIVA: [{ codigo: CodigoCondicionIVA.IVA_21, importe: 21 }],
 });
 
@@ -74,25 +76,25 @@ if (res.resultado === 'R') {
 
 `ArcaMtxcaConfig` extiende `ArcaBaseConfig` de `@ramiidv/arca-common`:
 
-| Opción | Descripción |
-| --- | --- |
-| `cert`, `key` | Certificado y clave privada PEM. |
-| `cuit` | CUIT representada (número o string, con o sin guiones). Se valida el dígito verificador. |
-| `production` | `false` (default) = homologación. |
-| `endpoint` | URL de WSMTXCA. Si se indica, ignora `production`. |
-| `wsaaEndpoint` | URL de WSAA. Si se indica, ignora `production` para el login. |
-| `timeout`, `retries`, `retryDelayMs` | Transporte. `retries` solo aplica a consultas. |
-| `ticketStorage` | Storage persistente de tickets WSAA (recomendado en producción). |
-| `tokenTTLMinutes`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs` | Opciones de WSAA. |
-| `fetch`, `legacyTls` | `fetch` propio (proxy, tests) y transporte TLS legacy. |
-| `onEvent` | Callback de eventos (`auth:*`, `request:*`). |
+| Opción                                                                      | Descripción                                                                              |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `cert`, `key`                                                               | Certificado y clave privada PEM.                                                         |
+| `cuit`                                                                      | CUIT representada (número o string, con o sin guiones). Se valida el dígito verificador. |
+| `production`                                                                | `false` (default) = homologación.                                                        |
+| `endpoint`                                                                  | URL de WSMTXCA. Si se indica, ignora `production`.                                       |
+| `wsaaEndpoint`                                                              | URL de WSAA. Si se indica, ignora `production` para el login.                            |
+| `timeout`, `retries`, `retryDelayMs`                                        | Transporte. `retries` solo aplica a consultas.                                           |
+| `ticketStorage`                                                             | Storage persistente de tickets WSAA (recomendado en producción).                         |
+| `tokenTTLMinutes`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs` | Opciones de WSAA.                                                                        |
+| `fetch`, `legacyTls`                                                        | `fetch` propio (proxy, tests) y transporte TLS legacy.                                   |
+| `onEvent`                                                                   | Callback de eventos (`auth:*`, `request:*`).                                             |
 
 Endpoints (manual WSMTXCA):
 
-| Entorno | URL |
-| --- | --- |
-| Homologación | `https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService` |
-| Producción | `https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService` |
+| Entorno      | URL                                                               |
+| ------------ | ----------------------------------------------------------------- |
+| Homologación | `https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService`       |
+| Producción   | `https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService` |
 
 Todos los métodos aceptan un último parámetro `opts?: CallOptions` con `signal` para cancelar.
 
@@ -125,15 +127,15 @@ subtotalesIVA: [{ codigo: 5, importe: 18.9 }],
 
 ## Resultado de una autorización y manejo de errores
 
-| Situación | Qué pasa |
-| --- | --- |
-| Datos inválidos localmente | `ArcaValidationError` (no se hace ningún request). |
-| ARCA aprueba | `{ resultado: 'A', comprobante: { cae, fechaVencimientoCAE, ... } }` |
-| ARCA aprueba con observaciones | `{ resultado: 'O', comprobante, observaciones }` |
-| ARCA rechaza | `{ resultado: 'R', errores }` — **no lanza**; revisá `resultado`. |
-| Consulta con `arrayErrores` | `ArcaServiceError` con `errors[]` (`code`, `msg`). |
-| Fault SOAP, HTTP, red, timeout | `ArcaSoapError` (`uncertain`, `faultString`, `statusCode`). |
-| Login WSAA | `ArcaAuthError` / `ArcaTicketVigenteError`. |
+| Situación                      | Qué pasa                                                             |
+| ------------------------------ | -------------------------------------------------------------------- |
+| Datos inválidos localmente     | `ArcaValidationError` (no se hace ningún request).                   |
+| ARCA aprueba                   | `{ resultado: 'A', comprobante: { cae, fechaVencimientoCAE, ... } }` |
+| ARCA aprueba con observaciones | `{ resultado: 'O', comprobante, observaciones }`                     |
+| ARCA rechaza                   | `{ resultado: 'R', errores }` — **no lanza**; revisá `resultado`.    |
+| Consulta con `arrayErrores`    | `ArcaServiceError` con `errors[]` (`code`, `msg`).                   |
+| Fault SOAP, HTTP, red, timeout | `ArcaSoapError` (`uncertain`, `faultString`, `statusCode`).          |
+| Login WSAA                     | `ArcaAuthError` / `ArcaTicketVigenteError`.                          |
 
 `ultimoComprobante()` devuelve 0 solo ante el error 1502 de ARCA ("no hay comprobantes para ese punto de venta y tipo"); cualquier otro error lanza.
 
@@ -169,44 +171,44 @@ Las solicitudes de un mismo punto de venta y tipo deben ser secuenciales (ARCA r
 
 ### Comprobantes con CAE
 
-| Método | Operación WSMTXCA |
-| --- | --- |
-| `autorizar(req, opts?)` | `autorizarComprobante` (número automático si se omite) |
-| `autorizarAjusteIVA(req, opts?)` | `autorizarAjusteIVA` (solo valida el XSD: tiene reglas propias) |
-| `ultimoComprobante(ptoVta, cbteTipo, opts?)` | `consultarUltimoComprobanteAutorizado` |
-| `siguienteComprobante(ptoVta, cbteTipo, opts?)` | último + 1 |
+| Método                                                   | Operación WSMTXCA                                                  |
+| -------------------------------------------------------- | ------------------------------------------------------------------ |
+| `autorizar(req, opts?)`                                  | `autorizarComprobante` (número automático si se omite)             |
+| `autorizarAjusteIVA(req, opts?)`                         | `autorizarAjusteIVA` (solo valida el XSD: tiene reglas propias)    |
+| `ultimoComprobante(ptoVta, cbteTipo, opts?)`             | `consultarUltimoComprobanteAutorizado`                             |
+| `siguienteComprobante(ptoVta, cbteTipo, opts?)`          | último + 1                                                         |
 | `consultarComprobante(cbteTipo, ptoVta, cbteNro, opts?)` | `consultarComprobante` → `{ comprobante, observaciones, evento? }` |
 
 ### CAEA
 
-| Método | Operación WSMTXCA |
-| --- | --- |
-| `solicitarCAEA(periodo, orden, opts?)` | `solicitarCAEA` (`periodo` AAAAMM, `orden` 1 o 2) |
-| `consultarCAEA(caea, opts?)` | `consultarCAEA` |
-| `consultarCAEAEntreFechas(desde, hasta, opts?)` | `consultarCAEAEntreFechas` |
-| `informarComprobanteCAEA(comp, opts?)` | `informarComprobanteCAEA` (`comp.caea` = CAEA usado) |
-| `informarAjusteIVACAEA(comp, opts?)` | `informarAjusteIVACAEA` |
-| `informarCAEANoUtilizado(caea, opts?)` | `informarCAEANoUtilizado` |
-| `informarCAEANoUtilizadoPtoVta(caea, ptoVta, opts?)` | `informarCAEANoUtilizadoPtoVta` |
-| `consultarPtosVtaCAEANoInformados(caea, opts?)` | `consultarPtosVtaCAEANoInformados` |
+| Método                                               | Operación WSMTXCA                                    |
+| ---------------------------------------------------- | ---------------------------------------------------- |
+| `solicitarCAEA(periodo, orden, opts?)`               | `solicitarCAEA` (`periodo` AAAAMM, `orden` 1 o 2)    |
+| `consultarCAEA(caea, opts?)`                         | `consultarCAEA`                                      |
+| `consultarCAEAEntreFechas(desde, hasta, opts?)`      | `consultarCAEAEntreFechas`                           |
+| `informarComprobanteCAEA(comp, opts?)`               | `informarComprobanteCAEA` (`comp.caea` = CAEA usado) |
+| `informarAjusteIVACAEA(comp, opts?)`                 | `informarAjusteIVACAEA`                              |
+| `informarCAEANoUtilizado(caea, opts?)`               | `informarCAEANoUtilizado`                            |
+| `informarCAEANoUtilizadoPtoVta(caea, ptoVta, opts?)` | `informarCAEANoUtilizadoPtoVta`                      |
+| `consultarPtosVtaCAEANoInformados(caea, opts?)`      | `consultarPtosVtaCAEANoInformados`                   |
 
 ### Parámetros y estado
 
-| Método | Operación | Devuelve |
-| --- | --- | --- |
-| `status()` | `dummy` (sin auth) | `{ appserver, dbserver, authserver }` |
-| `getTiposComprobante()` | `consultarTiposComprobante` | `CodigoDescripcion[]` |
-| `getTiposDocumento()` | `consultarTiposDocumento` | `CodigoDescripcion[]` |
-| `getAlicuotasIVA()` | `consultarAlicuotasIVA` | `CodigoDescripcion[]` |
-| `getCondicionesIVA()` | `consultarCondicionesIVA` | `CodigoDescripcion[]` |
-| `getCondicionesIVAReceptor(cbteTipo)` | `consultarCondicionesIVAReceptor` | `CodigoDescripcion[]` |
-| `getMonedas()` | `consultarMonedas` | `{ codigo: string, descripcion }[]` |
-| `getCotizacionMoneda(codigo, fecha?)` | `consultarCotizacionMoneda` | `{ codigoMoneda, fechaCotizacion, cotizacion: number \| null }` |
-| `getUnidadesMedida()` | `consultarUnidadesMedida` | `CodigoDescripcion[]` |
-| `getTiposTributo()` | `consultarTiposTributo` | `CodigoDescripcion[]` |
-| `getTiposDatosAdicionales()` | `consultarTiposDatosAdicionales` | `CodigoDescripcion[]` |
-| `getActividadesVigentes()` | `consultarActividadesVigentes` | `{ codigo, orden, descripcion }[]` |
-| `getPuntosVenta()` / `getPuntosVentaCAE()` / `getPuntosVentaCAEA()` | `consultarPuntosVenta*` | `{ numeroPuntoVenta, bloqueado, fechaBaja? }[]` |
+| Método                                                              | Operación                         | Devuelve                                                        |
+| ------------------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------- |
+| `status()`                                                          | `dummy` (sin auth)                | `{ appserver, dbserver, authserver }`                           |
+| `getTiposComprobante()`                                             | `consultarTiposComprobante`       | `CodigoDescripcion[]`                                           |
+| `getTiposDocumento()`                                               | `consultarTiposDocumento`         | `CodigoDescripcion[]`                                           |
+| `getAlicuotasIVA()`                                                 | `consultarAlicuotasIVA`           | `CodigoDescripcion[]`                                           |
+| `getCondicionesIVA()`                                               | `consultarCondicionesIVA`         | `CodigoDescripcion[]`                                           |
+| `getCondicionesIVAReceptor(cbteTipo)`                               | `consultarCondicionesIVAReceptor` | `CodigoDescripcion[]`                                           |
+| `getMonedas()`                                                      | `consultarMonedas`                | `{ codigo: string, descripcion }[]`                             |
+| `getCotizacionMoneda(codigo, fecha?)`                               | `consultarCotizacionMoneda`       | `{ codigoMoneda, fechaCotizacion, cotizacion: number \| null }` |
+| `getUnidadesMedida()`                                               | `consultarUnidadesMedida`         | `CodigoDescripcion[]`                                           |
+| `getTiposTributo()`                                                 | `consultarTiposTributo`           | `CodigoDescripcion[]`                                           |
+| `getTiposDatosAdicionales()`                                        | `consultarTiposDatosAdicionales`  | `CodigoDescripcion[]`                                           |
+| `getActividadesVigentes()`                                          | `consultarActividadesVigentes`    | `{ codigo, orden, descripcion }[]`                              |
+| `getPuntosVenta()` / `getPuntosVentaCAE()` / `getPuntosVentaCAEA()` | `consultarPuntosVenta*`           | `{ numeroPuntoVenta, bloqueado, fechaBaja? }[]`                 |
 
 `getCotizacionMoneda` usa la fecha de hoy si no se indica; `cotizacion` es `null` cuando ARCA no tiene cotización (responde sin valor y sin error).
 

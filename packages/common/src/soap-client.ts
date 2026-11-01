@@ -200,7 +200,9 @@ function extractFault(parsed: Record<string, unknown>): { faultCode?: string; fa
   return faultFromBody(soapBody(parsed));
 }
 
-function faultFromBody(body: Record<string, unknown> | undefined): { faultCode?: string; faultString: string } | undefined {
+function faultFromBody(
+  body: Record<string, unknown> | undefined,
+): { faultCode?: string; faultString: string } | undefined {
   const fault = localValue(body, 'Fault');
   if (fault === undefined || fault === null) return undefined;
   if (typeof fault !== 'object') return { faultString: String(fault) || 'SOAP Fault desconocido' };
@@ -387,8 +389,7 @@ export async function soapCall(
   /** Envía el request por `fetch` o por el transporte legacy, con fallback ante DH chico. */
   async function send(signal: AbortSignal): Promise<TransportResponse> {
     const useLegacy =
-      injectedFetch === undefined &&
-      (legacyTls === 'always' || (legacyTls === 'auto' && legacyTlsHosts.has(host)));
+      injectedFetch === undefined && (legacyTls === 'always' || (legacyTls === 'auto' && legacyTlsHosts.has(host)));
     if (useLegacy) return sendLegacy(signal);
 
     const doFetch = injectedFetch ?? globalThis.fetch;
@@ -509,10 +510,11 @@ export async function soapCall(
       if (!parsed || !soapBody(parsed)) {
         // 2xx sin Envelope SOAP (ej: página HTML de mantenimiento de un proxy):
         // error de transporte, reintentable en consultas.
-        return new ArcaSoapError(
-          `Respuesta inválida de ${methodName}: HTTP ${response.status} sin SOAP Envelope`,
-          { statusCode: response.status, responseDate, uncertain: true },
-        );
+        return new ArcaSoapError(`Respuesta inválida de ${methodName}: HTTP ${response.status} sin SOAP Envelope`, {
+          statusCode: response.status,
+          responseDate,
+          uncertain: true,
+        });
       }
 
       safeEmit(onEvent, { type: 'request:end', endpoint, method: methodName, durationMs: Date.now() - startTime });
@@ -624,7 +626,9 @@ export async function afipSoapCall(
   let soapAction = opts?.soapAction;
   if (soapAction === undefined) {
     soapAction = opts?.soapActionFromMethod
-      ? namespace.endsWith('/') ? `${namespace}${method}` : `${namespace}/${method}`
+      ? namespace.endsWith('/')
+        ? `${namespace}${method}`
+        : `${namespace}/${method}`
       : '';
   }
 
@@ -651,8 +655,7 @@ export function extractMethodResult(
   method: string,
   options?: ExtractMethodResultOptions,
 ): Record<string, unknown> {
-  const invalid = (msg: string) =>
-    new ArcaSoapError(`Respuesta SOAP inválida: ${msg}`, { uncertain: true });
+  const invalid = (msg: string) => new ArcaSoapError(`Respuesta SOAP inválida: ${msg}`, { uncertain: true });
 
   const envelope = localValue(parsed, 'Envelope');
   if (envelope === undefined || envelope === null || typeof envelope !== 'object') throw invalid('falta Envelope');
@@ -767,10 +770,7 @@ export function extractServiceErrors(result: Record<string, unknown>): ServiceEr
  * Lanza ArcaServiceError si algún error tiene un código distinto de 0 (o un
  * código no numérico). Ver `extractServiceErrors` para los formatos soportados.
  */
-export function checkServiceErrors(
-  result: Record<string, unknown>,
-  serviceName: string,
-): void {
+export function checkServiceErrors(result: Record<string, unknown>, serviceName: string): void {
   const errors = extractServiceErrors(result);
   if (errors.some((e) => e.code !== 0 || e.rawCode !== undefined)) {
     throw new ArcaServiceError(

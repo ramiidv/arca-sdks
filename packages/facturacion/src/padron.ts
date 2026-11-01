@@ -1,20 +1,16 @@
-import { afipSoapCall as unqualifiedSoapCall, ensureArray as toArray } from "@ramiidv/arca-common";
-import type { CallOptions, LegacyTlsMode } from "@ramiidv/arca-common";
-import {
-  ENDPOINTS,
-  PADRON_A5_NAMESPACE,
-  PADRON_A13_NAMESPACE,
-} from "./constants.js";
-import type { WsfeAuth, Contribuyente, ArcaEvent } from "./types.js";
+import { afipSoapCall as unqualifiedSoapCall, ensureArray as toArray } from '@ramiidv/arca-common';
+import type { CallOptions, LegacyTlsMode } from '@ramiidv/arca-common';
+import { ENDPOINTS, PADRON_A5_NAMESPACE, PADRON_A13_NAMESPACE } from './constants.js';
+import type { WsfeAuth, Contribuyente, ArcaEvent } from './types.js';
 
 type R = Record<string, any>;
 
 function nombreDe(p: R): string {
   if (p.razonSocial) return String(p.razonSocial);
-  return [p.apellido, p.nombre].filter(Boolean).join(" ");
+  return [p.apellido, p.nombre].filter(Boolean).join(' ');
 }
 
-function domicilio(d: R | undefined): Contribuyente["domicilioFiscal"] {
+function domicilio(d: R | undefined): Contribuyente['domicilioFiscal'] {
   if (!d) return undefined;
   const str = (v: unknown) => (v === undefined || v === null ? undefined : String(v));
   return {
@@ -29,13 +25,13 @@ function domicilio(d: R | undefined): Contribuyente["domicilioFiscal"] {
 export function parsePersonaA13(result: R): Contribuyente {
   const persona: R = result.persona ?? result;
   const domicilios = toArray<R>(persona.domicilio);
-  const fiscal = domicilios.find((d) => d.tipoDomicilio === "FISCAL") ?? domicilios[0];
+  const fiscal = domicilios.find((d) => d.tipoDomicilio === 'FISCAL') ?? domicilios[0];
 
   return {
     cuit: Number(persona.idPersona ?? 0),
     nombre: nombreDe(persona),
-    tipoPersona: persona.tipoPersona ?? "",
-    estadoClave: persona.estadoClave ?? "",
+    tipoPersona: persona.tipoPersona ?? '',
+    estadoClave: persona.estadoClave ?? '',
     domicilioFiscal: domicilio(fiscal),
     raw: persona,
   };
@@ -50,15 +46,15 @@ export function parsePersonaA5(result: R): Contribuyente {
     ...toArray<R>(result.datosMonotributo?.impuesto),
   ].map((i) => ({
     id: Number(i.idImpuesto ?? 0),
-    descripcion: String(i.descripcionImpuesto ?? ""),
-    estado: String(i.estadoImpuesto ?? i.estado ?? ""),
+    descripcion: String(i.descripcionImpuesto ?? ''),
+    estado: String(i.estadoImpuesto ?? i.estado ?? ''),
   }));
 
   return {
     cuit: Number(generales.idPersona ?? error?.idPersona ?? 0),
     nombre: nombreDe(Object.keys(generales).length > 0 ? generales : (error ?? {})),
-    tipoPersona: generales.tipoPersona ?? "",
-    estadoClave: generales.estadoClave ?? "",
+    tipoPersona: generales.tipoPersona ?? '',
+    estadoClave: generales.estadoClave ?? '',
     domicilioFiscal: domicilio(generales.domicilioFiscal),
     impuestos,
     raw: result,
@@ -95,7 +91,7 @@ export class PadronClient {
       fetch?: typeof fetch;
       legacyTls?: LegacyTlsMode;
       endpoints?: { padronA5?: string; padronA13?: string };
-    } = {}
+    } = {},
   ) {
     this.production = production;
     this.endpoints = opts.endpoints ?? {};
@@ -122,7 +118,7 @@ export class PadronClient {
     method: string,
     auth: WsfeAuth,
     cuit: number,
-    opts?: CallOptions
+    opts?: CallOptions,
   ): Promise<Record<string, unknown>> {
     return unqualifiedSoapCall(
       endpoint,
@@ -134,7 +130,7 @@ export class PadronClient {
         cuitRepresentada: auth.Cuit,
         idPersona: cuit,
       },
-      { ...this.soapOpts, signal: opts?.signal }
+      { ...this.soapOpts, signal: opts?.signal },
     );
   }
 
@@ -142,14 +138,10 @@ export class PadronClient {
    * Consulta datos de un contribuyente usando el padrón A13.
    * Requiere cert con acceso a `ws_sr_padron_a13`.
    */
-  async getPersonaA13(
-    auth: WsfeAuth,
-    cuit: number,
-    opts?: CallOptions
-  ): Promise<Contribuyente> {
-    const endpoint = this.endpoints.padronA13 ??
-      (this.production ? ENDPOINTS.padronA13.production : ENDPOINTS.padronA13.testing);
-    const result = await this.getPersona(endpoint, PADRON_A13_NAMESPACE, "getPersona", auth, cuit, opts);
+  async getPersonaA13(auth: WsfeAuth, cuit: number, opts?: CallOptions): Promise<Contribuyente> {
+    const endpoint =
+      this.endpoints.padronA13 ?? (this.production ? ENDPOINTS.padronA13.production : ENDPOINTS.padronA13.testing);
+    const result = await this.getPersona(endpoint, PADRON_A13_NAMESPACE, 'getPersona', auth, cuit, opts);
     return parsePersonaA13(result);
   }
 
@@ -158,14 +150,10 @@ export class PadronClient {
    * con domicilio fiscal e impuestos. Requiere cert con acceso a
    * `ws_sr_constancia_inscripcion`.
    */
-  async getPersonaA5(
-    auth: WsfeAuth,
-    cuit: number,
-    opts?: CallOptions
-  ): Promise<Contribuyente> {
-    const endpoint = this.endpoints.padronA5 ??
-      (this.production ? ENDPOINTS.padronA5.production : ENDPOINTS.padronA5.testing);
-    const result = await this.getPersona(endpoint, PADRON_A5_NAMESPACE, "getPersona_v2", auth, cuit, opts);
+  async getPersonaA5(auth: WsfeAuth, cuit: number, opts?: CallOptions): Promise<Contribuyente> {
+    const endpoint =
+      this.endpoints.padronA5 ?? (this.production ? ENDPOINTS.padronA5.production : ENDPOINTS.padronA5.testing);
+    const result = await this.getPersona(endpoint, PADRON_A5_NAMESPACE, 'getPersona_v2', auth, cuit, opts);
     return parsePersonaA5(result);
   }
 }

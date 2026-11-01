@@ -5,14 +5,14 @@
  * Al proveer `servicio`, el concepto se auto-detecta como SERVICIOS.
  */
 
-import fs from "fs";
-import { Arca, CbteTipo, CondicionIva, DocTipo, IvaTipo } from "@ramiidv/arca-facturacion";
+import fs from 'fs';
+import { Arca, CbteTipo, CondicionIva, DocTipo, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {
   const arca = new Arca({
     cuit: 20123456786,
-    cert: fs.readFileSync("./certs/certificado.crt", "utf-8"),
-    key: fs.readFileSync("./certs/clave.key", "utf-8"),
+    cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+    key: fs.readFileSync('./certs/clave.key', 'utf-8'),
     production: false,
   });
 
@@ -27,9 +27,9 @@ async function main() {
       { neto: 10000, iva: IvaTipo.IVA_10_5 },
     ],
     servicio: {
-      desde: new Date("2026-03-01"),
-      hasta: new Date("2026-03-31"),
-      vtoPago: new Date("2026-04-15"),
+      desde: new Date('2026-03-01'),
+      hasta: new Date('2026-03-31'),
+      vtoPago: new Date('2026-04-15'),
     },
   });
 

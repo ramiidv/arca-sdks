@@ -38,10 +38,18 @@ function presente(v: unknown): boolean {
   return v !== undefined && v !== null && v !== '';
 }
 
-function requerido(r: RegistroRelacionLaboral, campos: (keyof RegistroRelacionLaboral)[], errores: ValidationErrorDetail[]): void {
+function requerido(
+  r: RegistroRelacionLaboral,
+  campos: (keyof RegistroRelacionLaboral)[],
+  errores: ValidationErrorDetail[],
+): void {
   for (const c of campos) {
     if (!presente(r[c])) {
-      errores.push({ field: c, message: `El campo "${c}" es obligatorio para el movimiento ${r.movimiento}`, value: r[c] });
+      errores.push({
+        field: c,
+        message: `El campo "${c}" es obligatorio para el movimiento ${r.movimiento}`,
+        value: r[c],
+      });
     }
   }
 }
@@ -58,16 +66,22 @@ function requerido(r: RegistroRelacionLaboral, campos: (keyof RegistroRelacionLa
  *
  * El servicio de ARCA aplica sus propias validaciones al importar el archivo.
  */
-export const CAMPOS_OBLIGATORIOS: Readonly<Record<RegistroRelacionLaboral['movimiento'], readonly (keyof RegistroRelacionLaboral)[]>> =
-  Object.freeze({
-    AT: Object.freeze(['cuil', 'fechaInicio', 'modalidadContrato', 'obraSocial', 'sucursal'] as const),
-    BT: Object.freeze(['cuil', 'fechaFin'] as const),
-    MR: Object.freeze(['cuil'] as const),
-    NA: Object.freeze(['cuil'] as const),
-    NB: Object.freeze(['cuil'] as const),
-  });
+export const CAMPOS_OBLIGATORIOS: Readonly<
+  Record<RegistroRelacionLaboral['movimiento'], readonly (keyof RegistroRelacionLaboral)[]>
+> = Object.freeze({
+  AT: Object.freeze(['cuil', 'fechaInicio', 'modalidadContrato', 'obraSocial', 'sucursal'] as const),
+  BT: Object.freeze(['cuil', 'fechaFin'] as const),
+  MR: Object.freeze(['cuil'] as const),
+  NA: Object.freeze(['cuil'] as const),
+  NB: Object.freeze(['cuil'] as const),
+});
 
-function enRango(r: RegistroRelacionLaboral, campo: 'rectificacion' | 'marcaCovidTipoContratoCCG', validos: readonly number[], errores: ValidationErrorDetail[]): void {
+function enRango(
+  r: RegistroRelacionLaboral,
+  campo: 'rectificacion' | 'marcaCovidTipoContratoCCG',
+  validos: readonly number[],
+  errores: ValidationErrorDetail[],
+): void {
   const v = r[campo];
   if (!presente(v)) return;
   const n = Number(v);
@@ -111,7 +125,11 @@ export function validateRegistro(registro: RegistroRelacionLaboral, opciones?: O
     const ini = fechaComparable(registro.fechaInicio!);
     const fin = fechaComparable(registro.fechaFin!);
     if (ini && fin && fin < ini) {
-      errores.push({ field: 'fechaFin', message: `fechaFin (${fin}) es anterior a fechaInicio (${ini})`, value: registro.fechaFin });
+      errores.push({
+        field: 'fechaFin',
+        message: `fechaFin (${fin}) es anterior a fechaInicio (${ini})`,
+        value: registro.fechaFin,
+      });
     }
   }
 

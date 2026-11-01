@@ -55,7 +55,10 @@ const FAULT_REASONS: Array<[RegExp, PadronErrorReason]> = [
   [/es inexistente|no existe persona/i, 'inexistente'],
   [/se encuentra inactiva/i, 'inactiva'],
   [/id de la persona no es v[aá]lido/i, 'id_invalido'],
-  [/no autorizado|falta token|debe enviar la cuit representada|no le permite actuar en representaci[oó]n/i, 'no_autorizado'],
+  [
+    /no autorizado|falta token|debe enviar la cuit representada|no le permite actuar en representaci[oó]n/i,
+    'no_autorizado',
+  ],
 ];
 
 /** Motivo de un mensaje de error de negocio de Padrón, o `undefined` si no es uno conocido. */

@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  ArcaServiceError,
-  ArcaSoapError,
-  ArcaValidationError,
-  CdcClient,
-  WSCDC_ENDPOINTS,
-} from '../src/index.js';
+import { ArcaServiceError, ArcaSoapError, ArcaValidationError, CdcClient, WSCDC_ENDPOINTS } from '../src/index.js';
 import type { ConstatarInput } from '../src/index.js';
 import { asmxResponse, childOrder, CUIT, makeCdc, mockFetch, NS, requestBody } from './helpers.js';
 
@@ -31,7 +25,10 @@ const CMP_RESP =
 describe('ComprobanteConstatar', () => {
   it('envía Auth + CmpReq calificados en el namespace del WSDL, en orden y con SOAPAction', async () => {
     const { fetch, requests } = mockFetch(
-      asmxResponse('ComprobanteConstatar', `${CMP_RESP}<Resultado>A</Resultado><FchProceso>20261101120000</FchProceso>`),
+      asmxResponse(
+        'ComprobanteConstatar',
+        `${CMP_RESP}<Resultado>A</Resultado><FchProceso>20261101120000</FchProceso>`,
+      ),
     );
     await makeCdc(fetch).constatar(input);
 
@@ -163,9 +160,13 @@ describe('ComprobanteConstatar', () => {
           '<Errors><Err><Code>600</Code><Msg>ValidacionDeToken: Error al verificar hash</Msg></Err></Errors>',
       ),
     );
-    const err = await makeCdc(fetch).constatar(input).catch((e: unknown) => e);
+    const err = await makeCdc(fetch)
+      .constatar(input)
+      .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ArcaServiceError);
-    expect((err as ArcaServiceError).errors).toEqual([{ code: 600, msg: 'ValidacionDeToken: Error al verificar hash' }]);
+    expect((err as ArcaServiceError).errors).toEqual([
+      { code: 600, msg: 'ValidacionDeToken: Error al verificar hash' },
+    ]);
   });
 
   it('solo Errors (sin Resultado) lanza ArcaServiceError con todos los errores', async () => {
@@ -176,7 +177,9 @@ describe('ComprobanteConstatar', () => {
           '<Err><Code>10</Code><Msg>CodAutorizacion invalido</Msg></Err></Errors>',
       ),
     );
-    const err = (await makeCdc(fetch).constatar(input).catch((e: unknown) => e)) as ArcaServiceError;
+    const err = (await makeCdc(fetch)
+      .constatar(input)
+      .catch((e: unknown) => e)) as ArcaServiceError;
     expect(err).toBeInstanceOf(ArcaServiceError);
     expect(err.errors.map((e) => e.code)).toEqual([2, 10]);
   });
@@ -261,7 +264,10 @@ describe('ComprobantesModalidadConsultar', () => {
 
   it('Errors lanza ArcaServiceError (nunca lista vacía)', async () => {
     const { fetch } = mockFetch(
-      asmxResponse('ComprobantesModalidadConsultar', '<Errors><Err><Code>600</Code><Msg>Token invalido</Msg></Err></Errors>'),
+      asmxResponse(
+        'ComprobantesModalidadConsultar',
+        '<Errors><Err><Code>600</Code><Msg>Token invalido</Msg></Err></Errors>',
+      ),
     );
     await expect(makeCdc(fetch).getModalidades()).rejects.toBeInstanceOf(ArcaServiceError);
   });
@@ -270,7 +276,10 @@ describe('ComprobantesModalidadConsultar', () => {
 describe('Tablas de parámetros', () => {
   it('ComprobantesTipoConsultar: 1 y N tipos (Id numérico)', async () => {
     const { fetch, requests } = mockFetch(
-      asmxResponse('ComprobantesTipoConsultar', '<ResultGet><CbteTipo><Id>1</Id><Desc>Factura A</Desc></CbteTipo></ResultGet>'),
+      asmxResponse(
+        'ComprobantesTipoConsultar',
+        '<ResultGet><CbteTipo><Id>1</Id><Desc>Factura A</Desc></CbteTipo></ResultGet>',
+      ),
       asmxResponse(
         'ComprobantesTipoConsultar',
         '<ResultGet><CbteTipo><Id>1</Id><Desc>Factura A</Desc></CbteTipo><CbteTipo><Id>6</Id><Desc>Factura B</Desc></CbteTipo></ResultGet>',
@@ -304,7 +313,10 @@ describe('Tablas de parámetros', () => {
 
   it('OpcionalesTipoConsultar: 1 y N, envía Auth y SOAPAction', async () => {
     const { fetch, requests } = mockFetch(
-      asmxResponse('OpcionalesTipoConsultar', '<ResultGet><OpcionalTipo><Id>01</Id><Desc>Uno</Desc></OpcionalTipo></ResultGet>'),
+      asmxResponse(
+        'OpcionalesTipoConsultar',
+        '<ResultGet><OpcionalTipo><Id>01</Id><Desc>Uno</Desc></OpcionalTipo></ResultGet>',
+      ),
       asmxResponse(
         'OpcionalesTipoConsultar',
         '<ResultGet><OpcionalTipo><Id>01</Id><Desc>Uno</Desc></OpcionalTipo><OpcionalTipo><Id>2</Id><Desc>Dos</Desc></OpcionalTipo></ResultGet>',
@@ -330,7 +342,9 @@ describe('Tablas de parámetros', () => {
     const { fetch } = mockFetch(
       asmxResponse('ComprobantesTipoConsultar', '<Errors><Err><Code>500</Code><Msg>Error interno</Msg></Err></Errors>'),
     );
-    await expect(makeCdc(fetch).getTiposCbte()).rejects.toMatchObject({ errors: [{ code: 500, msg: 'Error interno' }] });
+    await expect(makeCdc(fetch).getTiposCbte()).rejects.toMatchObject({
+      errors: [{ code: 500, msg: 'Error interno' }],
+    });
   });
 });
 

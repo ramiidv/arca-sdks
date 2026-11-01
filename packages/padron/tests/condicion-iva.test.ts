@@ -74,7 +74,9 @@ describe('condicionIvaDesdePadron (constancia de inscripción)', () => {
 
   it('impuesto 30 exento: abreviatura EX o palabras EXENTO / EXENTO EN TRAMITE', () => {
     for (const estado of ['EX', 'EXENTO', 'EXENTO EN TRAMITE', 'Exento en trámite']) {
-      expect(condicionIvaDesdePadron(a5({ impuestos: [imp(30, 'IVA', estado)] })).condicionIva).toBe(CondicionIva.EXENTO);
+      expect(condicionIvaDesdePadron(a5({ impuestos: [imp(30, 'IVA', estado)] })).condicionIva).toBe(
+        CondicionIva.EXENTO,
+      );
     }
   });
 
@@ -113,7 +115,11 @@ describe('condicionIvaDesdePadron (constancia de inscripción)', () => {
     const r = condicionIvaDesdePadron(
       a5({
         impuestos: [imp(20, 'MONOTRIBUTO')],
-        monotributo: { impuestos: [imp(20, 'MONOTRIBUTO')], actividades: [], categoria: { idCategoria, descripcionCategoria } },
+        monotributo: {
+          impuestos: [imp(20, 'MONOTRIBUTO')],
+          actividades: [],
+          categoria: { idCategoria, descripcionCategoria },
+        },
       }),
     );
     expect(r.condicionIva).toBe(esperado);
@@ -144,7 +150,9 @@ describe('condicionIvaDesdePadron (A4)', () => {
     const r = condicionIvaDesdePadron(
       a4({
         impuesto: [{ idImpuesto: 20, descripcionImpuesto: 'MONOTRIBUTO', estado: 'ACTIVO' }],
-        categoria: [{ idCategoria: 36, descripcionCategoria: 'B LOCACIONES DE SERVICIO', idImpuesto: 20, estado: 'ACTIVO' }],
+        categoria: [
+          { idCategoria: 36, descripcionCategoria: 'B LOCACIONES DE SERVICIO', idImpuesto: 20, estado: 'ACTIVO' },
+        ],
       }),
     );
     expect(r.condicionIva).toBe(CondicionIva.MONOTRIBUTISTA);

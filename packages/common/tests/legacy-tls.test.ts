@@ -68,7 +68,9 @@ describe('soapCall: fallback TLS legacy', () => {
       status: 500,
       statusText: 'Internal Server Error',
       headers: { date: 'Thu, 29 Oct 2026 15:00:00 GMT' },
-      body: soapEnvelope('<soap:Fault xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><faultcode>soap:Server</faultcode><faultstring>boom</faultstring></soap:Fault>'),
+      body: soapEnvelope(
+        '<soap:Fault xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><faultcode>soap:Server</faultcode><faultstring>boom</faultstring></soap:Fault>',
+      ),
     });
     const err = await soapCall(URL, '<x/>').catch((e) => e);
     expect(err).toBeInstanceOf(ArcaSoapError);

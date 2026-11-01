@@ -120,7 +120,8 @@ function encodeScalar(v: unknown, s: Scalar, path: string, errors: ValidationErr
     return undefined;
   };
   const checkRange = (n: number, min?: number, max?: number, minExclusive?: boolean) => {
-    if (min !== undefined && (minExclusive ? n <= min : n < min)) return fail(`debe ser ${minExclusive ? 'mayor a' : 'mayor o igual a'} ${min}`);
+    if (min !== undefined && (minExclusive ? n <= min : n < min))
+      return fail(`debe ser ${minExclusive ? 'mayor a' : 'mayor o igual a'} ${min}`);
     if (max !== undefined && n > max) return fail(`debe ser menor o igual a ${max}`);
     return n;
   };
@@ -138,7 +139,8 @@ function encodeScalar(v: unknown, s: Scalar, path: string, errors: ValidationErr
     }
     case 'id': {
       const str = typeof v === 'number' && Number.isSafeInteger(v) ? String(v) : v;
-      if (typeof str !== 'string' || !/^\d{1,18}$/.test(str) || /^0+$/.test(str)) return fail('debe ser un número positivo (string o number)');
+      if (typeof str !== 'string' || !/^\d{1,18}$/.test(str) || /^0+$/.test(str))
+        return fail('debe ser un número positivo (string o number)');
       return str;
     }
     case 'dec': {
@@ -277,7 +279,8 @@ function decodeScalar(raw: unknown, s: Scalar, path: string): unknown {
     case 'cuit': {
       if (v === '') return undefined;
       const n = Number(v);
-      if (!Number.isFinite(n)) throw new ArcaAgroResponseError(`Respuesta inválida: ${path} no es numérico (${String(v)})`);
+      if (!Number.isFinite(n))
+        throw new ArcaAgroResponseError(`Respuesta inválida: ${path} no es numérico (${String(v)})`);
       return n;
     }
     case 'bool':

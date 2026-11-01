@@ -47,12 +47,20 @@ export function hangingFetch() {
   return { fetch: fn as unknown as typeof fetch, fn };
 }
 
-export function client(fetchImpl: typeof fetch, extra: Partial<ConstructorParameters<typeof MtxcaClient>[0]> = {}): MtxcaClient {
+export function client(
+  fetchImpl: typeof fetch,
+  extra: Partial<ConstructorParameters<typeof MtxcaClient>[0]> = {},
+): MtxcaClient {
   return new MtxcaClient({ endpoint: ENDPOINT, fetch: fetchImpl, retryDelayMs: 1, ...extra });
 }
 
 /** Elemento del request dentro del Body (con su prefijo `ser:`), parseado. */
-export function requestBody(captured: Captured): { name: string; ns: unknown; content: Record<string, unknown>; raw: string } {
+export function requestBody(captured: Captured): {
+  name: string;
+  ns: unknown;
+  content: Record<string, unknown>;
+  raw: string;
+} {
   const parsed = parseXml(captured.body) as Record<string, any>;
   const body = parsed['soapenv:Envelope']['soapenv:Body'] as Record<string, any>;
   const name = Object.keys(body)[0];

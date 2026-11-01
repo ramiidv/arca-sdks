@@ -224,7 +224,10 @@ export function formasCancelacionParam(
 }
 
 /** `ArrayConfirmarNotasType`. */
-export function confirmarNotasParam(value: ConfirmarNotaDCInput[] | undefined, field = 'confirmarNotasDC'): Xml | undefined {
+export function confirmarNotasParam(
+  value: ConfirmarNotaDCInput[] | undefined,
+  field = 'confirmarNotasDC',
+): Xml | undefined {
   const notas = arrayParam<ConfirmarNotaDCInput>(value, field, false);
   if (!notas) return undefined;
   return {
@@ -272,7 +275,8 @@ export function ctaAgenteParam(value: CuentaEnAgenteInput | undefined, field = '
     out.razonSocialAgente = nonEmptyParam(value.razonSocialAgente, `${field}.razonSocialAgente`);
   }
   out.idCuenta = textParam(value.idCuenta, `${field}.idCuenta`, 3, 20);
-  if (value.denominacion !== undefined) out.denominacion = textParam(value.denominacion, `${field}.denominacion`, 3, 250);
+  if (value.denominacion !== undefined)
+    out.denominacion = textParam(value.denominacion, `${field}.denominacion`, 3, 250);
   return out;
 }
 

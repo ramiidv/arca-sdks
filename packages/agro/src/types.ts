@@ -40,6 +40,4 @@ export interface CodigoDescripcion {
 }
 
 /** Resultado de `serverStatus()` para un servicio. */
-export type AgroServiceStatus =
-  | { ok: true; status: ServerStatus }
-  | { ok: false; error: Error };
+export type AgroServiceStatus = { ok: true; status: ServerStatus } | { ok: false; error: Error };

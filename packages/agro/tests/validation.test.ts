@@ -6,7 +6,19 @@ import {
   validateAutorizarCPEFerroviaria,
   validateLiquidacion,
 } from '../src/index.js';
-import { formatDateTimeAR, encodeRequest, decodeResponse, dec, int, id, list, str, opt, obj, must } from '../src/schema.js';
+import {
+  formatDateTimeAR,
+  encodeRequest,
+  decodeResponse,
+  dec,
+  int,
+  id,
+  list,
+  str,
+  opt,
+  obj,
+  must,
+} from '../src/schema.js';
 import { ArcaAgroResponseError } from '../src/errors.js';
 
 describe('schema: encode', () => {
@@ -51,7 +63,11 @@ describe('schema: encode', () => {
 
 describe('schema: decode', () => {
   it('xs:string queda string aunque parezca número; listas ausentes → []', () => {
-    const r = decodeResponse<Record<string, unknown>>({ codigo: 1, n: '42', l: undefined }, { codigo: str(), n: int(), l: list(str(), 0) }, 'r');
+    const r = decodeResponse<Record<string, unknown>>(
+      { codigo: 1, n: '42', l: undefined },
+      { codigo: str(), n: int(), l: list(str(), 0) },
+      'r',
+    );
     expect(r).toEqual({ codigo: '1', n: 42, l: [] });
   });
 
@@ -76,7 +92,9 @@ describe('validadores exportados', () => {
   it('validateLiquidacion y validateAjusteUnificado', () => {
     expect(() => validateLiquidacion({ liquidacion: {} } as never)).toThrow(ArcaValidationError);
     expect(() =>
-      validateAjusteUnificado({ ajusteBase: { ptoEmision: 1, nroOrden: 1, coeAjustado: '1', codLocalidad: 1, codProv: 1 } }),
+      validateAjusteUnificado({
+        ajusteBase: { ptoEmision: 1, nroOrden: 1, coeAjustado: '1', codLocalidad: 1, codProv: 1 },
+      }),
     ).toThrow(/ajusteCredito/);
   });
 });

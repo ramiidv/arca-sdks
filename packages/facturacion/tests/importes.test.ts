@@ -1,17 +1,19 @@
-import { describe, expect, it } from "vitest";
-import { ArcaValidationError } from "@ramiidv/arca-common";
-import { armarComprobante, calcularTotales } from "../src/facturacion.js";
-import { CbteTipo, IvaTipo } from "../src/constants.js";
-import type { InvoiceDetail, LineItem } from "../src/types.js";
+import { describe, expect, it } from 'vitest';
+import { ArcaValidationError } from '@ramiidv/arca-common';
+import { armarComprobante, calcularTotales } from '../src/facturacion.js';
+import { CbteTipo, IvaTipo } from '../src/constants.js';
+import type { InvoiceDetail, LineItem } from '../src/types.js';
 
 const cents = (n: number) => Math.round(n * 100);
 
 /** Invariante: BaseImp + Importe de cada alícuota + exento + no gravado + tributos = ImpTotal, al centavo. */
 function sumaExacta(d: InvoiceDetail): boolean {
   const alicuotas = (d.Iva ?? []).reduce((a, i) => a + cents(i.BaseImp) + cents(i.Importe), 0);
-  return alicuotas + cents(d.ImpOpEx) + cents(d.ImpTotConc) + cents(d.ImpTrib) === cents(d.ImpTotal) &&
+  return (
+    alicuotas + cents(d.ImpOpEx) + cents(d.ImpTotConc) + cents(d.ImpTrib) === cents(d.ImpTotal) &&
     (d.Iva ?? []).reduce((a, i) => a + cents(i.BaseImp), 0) === cents(d.ImpNeto) &&
-    (d.Iva ?? []).reduce((a, i) => a + cents(i.Importe), 0) === cents(d.ImpIVA);
+    (d.Iva ?? []).reduce((a, i) => a + cents(i.Importe), 0) === cents(d.ImpIVA)
+  );
 }
 
 function armar(items: LineItem[], extra: Record<string, unknown> = {}) {
@@ -19,21 +21,21 @@ function armar(items: LineItem[], extra: Record<string, unknown> = {}) {
     ptoVta: 1,
     cbteTipo: CbteTipo.FACTURA_B,
     cbteNro: 1,
-    fecha: "20261030",
+    fecha: '20261030',
     items,
     ...extra,
   });
 }
 
-describe("precios con IVA incluido", () => {
-  it("un solo ítem de $1 al 21%", () => {
+describe('precios con IVA incluido', () => {
+  it('un solo ítem de $1 al 21%', () => {
     const { request } = armar([{ total: 1, iva: IvaTipo.IVA_21 }]);
     expect(request.ImpTotal).toBe(1);
     expect(request.Iva).toEqual([{ Id: IvaTipo.IVA_21, BaseImp: 0.83, Importe: 0.17 }]);
     expect(sumaExacta(request)).toBe(true);
   });
 
-  it("mezcla de 21% y 10,5%", () => {
+  it('mezcla de 21% y 10,5%', () => {
     const { request } = armar([
       { total: 1210, iva: IvaTipo.IVA_21 },
       { total: 99.99, iva: IvaTipo.IVA_21 },
@@ -47,12 +49,8 @@ describe("precios con IVA incluido", () => {
     expect(sumaExacta(request)).toBe(true);
   });
 
-  it("exentos y no gravados con total: total = neto", () => {
-    const { request } = armar([
-      { total: 121, iva: IvaTipo.IVA_21 },
-      { total: 50.5, exento: true },
-      { total: 10 },
-    ]);
+  it('exentos y no gravados con total: total = neto', () => {
+    const { request } = armar([{ total: 121, iva: IvaTipo.IVA_21 }, { total: 50.5, exento: true }, { total: 10 }]);
     expect(request.ImpOpEx).toBe(50.5);
     expect(request.ImpTotConc).toBe(10);
     expect(request.ImpNeto).toBe(100);
@@ -61,7 +59,7 @@ describe("precios con IVA incluido", () => {
     expect(sumaExacta(request)).toBe(true);
   });
 
-  it("se pueden mezclar items con neto y con total", () => {
+  it('se pueden mezclar items con neto y con total', () => {
     const { request } = armar([
       { neto: 100, iva: IvaTipo.IVA_21 },
       { total: 121, iva: IvaTipo.IVA_21 },
@@ -70,12 +68,12 @@ describe("precios con IVA incluido", () => {
     expect(request.ImpTotal).toBe(242);
   });
 
-  it("tipo C con total: todo va a ImpNeto", () => {
+  it('tipo C con total: todo va a ImpNeto', () => {
     const { request } = armarComprobante({
       ptoVta: 1,
       cbteTipo: CbteTipo.FACTURA_C,
       cbteNro: 1,
-      fecha: "20261030",
+      fecha: '20261030',
       items: [{ total: 1500.5 }],
     });
     expect(request.ImpNeto).toBe(1500.5);
@@ -85,14 +83,14 @@ describe("precios con IVA incluido", () => {
   });
 });
 
-describe("descuento global", () => {
-  it("se prorratea en proporción al total de cada grupo", () => {
+describe('descuento global', () => {
+  it('se prorratea en proporción al total de cada grupo', () => {
     const { request, importes } = armar(
       [
         { total: 1210, iva: IvaTipo.IVA_21 },
         { total: 500, exento: true },
       ],
-      { descuentoGlobal: 171 }
+      { descuentoGlobal: 171 },
     );
     // 1210/1710 * 171 = 121 ; 500/1710 * 171 = 50
     expect(request.ImpTotal).toBe(1539);
@@ -102,32 +100,32 @@ describe("descuento global", () => {
     expect(sumaExacta(request)).toBe(true);
   });
 
-  it("un descuento que deja centavos impares: el resto va al grupo de mayor base", () => {
+  it('un descuento que deja centavos impares: el resto va al grupo de mayor base', () => {
     const { request } = armar(
       [
         { total: 100, iva: IvaTipo.IVA_21 },
         { total: 100, iva: IvaTipo.IVA_10_5 },
         { total: 100.01, exento: true },
       ],
-      { descuentoGlobal: 0.01 * 7 }
+      { descuentoGlobal: 0.01 * 7 },
     );
     expect(request.ImpTotal).toBe(299.94);
     expect(sumaExacta(request)).toBe(true);
   });
 
-  it("no afecta los tributos", () => {
+  it('no afecta los tributos', () => {
     const { request } = armar([{ total: 121, iva: IvaTipo.IVA_21 }], {
       descuentoGlobal: 21,
-      tributos: [{ Id: 99, Desc: "Otro", BaseImp: 100, Alic: 0, Importe: 3.33 }],
+      tributos: [{ Id: 99, Desc: 'Otro', BaseImp: 100, Alic: 0, Importe: 3.33 }],
     });
     expect(request.ImpTrib).toBe(3.33);
     expect(request.ImpTotal).toBe(103.33);
     expect(sumaExacta(request)).toBe(true);
   });
 
-  it("con muchos ítems e importes irregulares la suma siempre es exacta", () => {
+  it('con muchos ítems e importes irregulares la suma siempre es exacta', () => {
     let seed = 42;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const tasas = [IvaTipo.IVA_21, IvaTipo.IVA_10_5, IvaTipo.IVA_27, IvaTipo.IVA_5, IvaTipo.IVA_2_5, IvaTipo.IVA_0];
     for (let caso = 0; caso < 200; caso++) {
       const items: LineItem[] = Array.from({ length: 1 + Math.floor(rnd() * 8) }, () => {
@@ -147,25 +145,27 @@ describe("descuento global", () => {
   });
 });
 
-describe("validación de items y descuento", () => {
-  it("neto y total son mutuamente excluyentes", () => {
+describe('validación de items y descuento', () => {
+  it('neto y total son mutuamente excluyentes', () => {
     expect(() => armar([{ neto: 100, total: 121, iva: IvaTipo.IVA_21 } as unknown as LineItem])).toThrow(
-      ArcaValidationError
+      ArcaValidationError,
     );
   });
 
-  it("requiere neto o total", () => {
+  it('requiere neto o total', () => {
     expect(() => armar([{ iva: IvaTipo.IVA_21 } as unknown as LineItem])).toThrow(/neto o .*total es requerido/);
   });
 
-  it("el descuento no puede superar el total ni ser negativo", () => {
-    expect(() => armar([{ total: 100, iva: IvaTipo.IVA_21 }], { descuentoGlobal: 100.01 })).toThrow(ArcaValidationError);
+  it('el descuento no puede superar el total ni ser negativo', () => {
+    expect(() => armar([{ total: 100, iva: IvaTipo.IVA_21 }], { descuentoGlobal: 100.01 })).toThrow(
+      ArcaValidationError,
+    );
     expect(() => armar([{ total: 100, iva: IvaTipo.IVA_21 }], { descuentoGlobal: -1 })).toThrow(ArcaValidationError);
   });
 });
 
-describe("armarComprobante", () => {
-  it("es puro, no usa la red, y devuelve el intento", () => {
+describe('armarComprobante', () => {
+  it('es puro, no usa la red, y devuelve el intento', () => {
     const { request, importes, intento } = armar([{ total: 1210, iva: IvaTipo.IVA_21 }], { cbteNro: 77 });
     expect(request.CbteDesde).toBe(77);
     expect(request.CondicionIVAReceptorId).toBe(5);
@@ -177,56 +177,56 @@ describe("armarComprobante", () => {
       importeTotal: 1210,
       docTipo: 99,
       docNro: 0,
-      fecha: "20261030",
+      fecha: '20261030',
     });
     expect(JSON.parse(JSON.stringify(intento))).toEqual(intento);
   });
 
-  it("valida (ej: cbteNro inválido)", () => {
+  it('valida (ej: cbteNro inválido)', () => {
     expect(() => armar([{ total: 1, iva: IvaTipo.IVA_21 }], { cbteNro: 0 })).toThrow(ArcaValidationError);
   });
 });
 
-describe("regresiones", () => {
-  it("el resto del prorrateo nunca deja un grupo negativo", () => {
+describe('regresiones', () => {
+  it('el resto del prorrateo nunca deja un grupo negativo', () => {
     const { importes, iva } = calcularTotales(
       [
         { total: 0.01, iva: IvaTipo.IVA_21 },
         { total: 0.01, iva: IvaTipo.IVA_10_5 },
         { total: 0.01, exento: true },
       ],
-      { descuentoGlobal: 0.02 }
+      { descuentoGlobal: 0.02 },
     );
     expect(iva.every((a) => a.BaseImp >= 0 && a.Importe >= 0)).toBe(true);
     expect(importes.exento).toBeGreaterThanOrEqual(0);
     expect(importes.total).toBe(0.01);
   });
 
-  it("un descuento igual al total deja todo en cero", () => {
+  it('un descuento igual al total deja todo en cero', () => {
     const { importes } = calcularTotales(
       [
         { neto: 33.33, iva: IvaTipo.IVA_21 },
         { total: 10, exento: true },
       ],
-      { descuentoGlobal: 50.33 }
+      { descuentoGlobal: 50.33 },
     );
     expect(importes.total).toBe(0);
     expect(importes.neto).toBe(0);
     expect(importes.iva).toBe(0);
   });
 
-  it("el descuento se valida al centavo contra el total calculado", () => {
+  it('el descuento se valida al centavo contra el total calculado', () => {
     // 33.33 + IVA 21% = 40.33 (IVA redondeado a 7.00)
     expect(() => calcularTotales([{ neto: 33.33, iva: IvaTipo.IVA_21 }], { descuentoGlobal: 40.34 })).toThrow(
-      /no puede superar el total de los items \(40.33\)/
+      /no puede superar el total de los items \(40.33\)/,
     );
   });
 
-  it("los importes con 3 decimales se redondean bien (1.005 → 1.01)", () => {
+  it('los importes con 3 decimales se redondean bien (1.005 → 1.01)', () => {
     expect(calcularTotales([{ total: 1.005, exento: true }]).importes.total).toBe(1.01);
   });
 
-  it("calcularTotales standalone valida los items", () => {
+  it('calcularTotales standalone valida los items', () => {
     expect(() => calcularTotales([{ total: -1, iva: IvaTipo.IVA_21 }])).toThrow(ArcaValidationError);
     expect(() => calcularTotales([{ neto: 100, iva: 999 }])).toThrow(ArcaValidationError);
   });

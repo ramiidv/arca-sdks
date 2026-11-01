@@ -31,7 +31,9 @@ describe('validateConstatarInput', () => {
   });
 
   it('acepta CAI y CAEA, CUIT con guiones, fecha ISO y Date', () => {
-    expect(fieldsOf({ ...validInput, CbteModo: 'CAI', CuitEmisor: '30-71234567-1', CbteFch: '2026-03-15' })).toEqual([]);
+    expect(fieldsOf({ ...validInput, CbteModo: 'CAI', CuitEmisor: '30-71234567-1', CbteFch: '2026-03-15' })).toEqual(
+      [],
+    );
     expect(fieldsOf({ ...validInput, CbteModo: 'CAEA', CbteFch: new Date('2026-03-15T15:00:00Z') })).toEqual([]);
   });
 

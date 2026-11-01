@@ -17,7 +17,10 @@ async function main() {
 
   console.log('Tipos de comprobante:', await mtxca.getTiposComprobante());
   console.log('Condiciones de IVA (ítems):', await mtxca.getCondicionesIVA());
-  console.log('Condiciones de IVA del receptor (Factura B):', await mtxca.getCondicionesIVAReceptor(CbteTipo.FACTURA_B));
+  console.log(
+    'Condiciones de IVA del receptor (Factura B):',
+    await mtxca.getCondicionesIVAReceptor(CbteTipo.FACTURA_B),
+  );
   console.log('Unidades de medida:', await mtxca.getUnidadesMedida());
   console.log('Tipos de tributo:', await mtxca.getTiposTributo());
   console.log('Monedas:', await mtxca.getMonedas());
@@ -25,13 +28,19 @@ async function main() {
   console.log('Puntos de venta CAE:', await mtxca.getPuntosVentaCAE());
 
   const cot = await mtxca.getCotizacionMoneda(Moneda.DOLARES);
-  console.log(cot.cotizacion === null ? `Sin cotización para ${cot.fechaCotizacion}` : `Dólar ${cot.fechaCotizacion}: ${cot.cotizacion}`);
+  console.log(
+    cot.cotizacion === null
+      ? `Sin cotización para ${cot.fechaCotizacion}`
+      : `Dólar ${cot.fechaCotizacion}: ${cot.cotizacion}`,
+  );
 
   const ultimo = await mtxca.ultimoComprobante(4000, CbteTipo.FACTURA_A);
   console.log('Último Factura A:', ultimo);
   if (ultimo > 0) {
     const { comprobante } = await mtxca.consultarComprobante(CbteTipo.FACTURA_A, 4000, ultimo);
-    console.log(`Comprobante ${comprobante.numeroComprobante}: total ${comprobante.importeTotal}, ${comprobante.items.length} ítems`);
+    console.log(
+      `Comprobante ${comprobante.numeroComprobante}: total ${comprobante.importeTotal}, ${comprobante.items.length} ítems`,
+    );
   }
 
   // CAEA de la quincena actual
@@ -45,7 +54,10 @@ async function main() {
     if (e instanceof ArcaServiceError) {
       console.error('CAEA rechazado:', e.errors);
       const otorgados = await mtxca.consultarCAEAEntreFechas(new Date(hoy.getFullYear(), hoy.getMonth(), 1), hoy);
-      console.log('CAEAs ya otorgados:', otorgados.map((c) => c.caea));
+      console.log(
+        'CAEAs ya otorgados:',
+        otorgados.map((c) => c.caea),
+      );
     } else {
       throw e;
     }

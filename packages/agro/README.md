@@ -72,7 +72,7 @@ const cpe = await agro.cpe.autorizarCPEAutomotor({
 
 cpe.cabecera.nroCTG; // '010100012345' (string)
 cpe.cabecera.estado; // 'AC'
-cpe.pdf;             // constancia en base64
+cpe.pdf; // constancia en base64
 ```
 
 > **`siguienteNroOrden` no es atómico.** Hace `consultarUltNroOrden + 1`: dos procesos que lo llamen a la vez obtienen el mismo número y ARCA rechaza la segunda autorización. Si emitís en paralelo para la misma sucursal y tipo, serializá las emisiones o llevá tu propio contador.
@@ -83,16 +83,36 @@ cpe.pdf;             // constancia en base64
 const cartaPorte = { tipoCPE: TIPO_CPE.AUTOMOTOR, sucursal: 1, nroOrden: 15 };
 
 await agro.cpe.confirmarArriboCPE({ cuitSolicitante, cartaPorte });
-await agro.cpe.confirmacionDefinitivaCPEAutomotor({ cuitSolicitante, cartaPorte, pesoBrutoDescarga: 41900, pesoTaraDescarga: 12000 });
+await agro.cpe.confirmacionDefinitivaCPEAutomotor({
+  cuitSolicitante,
+  cartaPorte,
+  pesoBrutoDescarga: 41900,
+  pesoTaraDescarga: 12000,
+});
 await agro.cpe.descargadoDestinoCPE({ cuitSolicitante, cartaPorte });
 await agro.cpe.rechazoCPE({ cuitSolicitante, cartaPorte, rechazoMotivo: 2, rechazoObservaciones: 'Humedad' });
 await agro.cpe.anularCPE({ cartaPorte, anulacionMotivo: 3, anulacionObservaciones: 'Error de carga' });
-await agro.cpe.editarCPEAutomotor({ nroCTG, cuitDestinatario, cuitChofer, cuitTransportista, destino, pesoBruto, codGrano });
+await agro.cpe.editarCPEAutomotor({
+  nroCTG,
+  cuitDestinatario,
+  cuitChofer,
+  cuitTransportista,
+  destino,
+  pesoBruto,
+  codGrano,
+});
 await agro.cpe.editarCPEConfirmadaAutomotor({ nroCTG, intervinientes: { cuitCorredorVentaPrimaria } });
-await agro.cpe.nuevoDestinoDestinatarioCPEAutomotor({ cartaPorte, destino, transporte: { fechaHoraPartida, kmRecorrer } });
+await agro.cpe.nuevoDestinoDestinatarioCPEAutomotor({
+  cartaPorte,
+  destino,
+  transporte: { fechaHoraPartida, kmRecorrer },
+});
 await agro.cpe.regresoOrigenCPEAutomotor({ cartaPorte, transporte: { fechaHoraPartida, kmRecorrer } });
 await agro.cpe.desvioCPEAutomotor({ cuitSolicitante, cartaPorte, destino, transporte });
-await agro.cpe.informarContingencia({ cartaPorte, contingencia: { concepto: 'C', descripcion: 'Desperfecto mecánico' } });
+await agro.cpe.informarContingencia({
+  cartaPorte,
+  contingencia: { concepto: 'C', descripcion: 'Desperfecto mecánico' },
+});
 await agro.cpe.cerrarContingenciaCPE({ cartaPorte, concepto: 'A' });
 
 const detalle = await agro.cpe.consultarCPEAutomotor({ nroCTG: '010100012345' }); // o { cartaPorte }
@@ -107,8 +127,12 @@ Las operaciones que modifican una CPE devuelven `CPEResultado` (`{ cabecera?, pd
 ### Consultas y paramétricas
 
 ```ts
-await agro.cpe.consultarUltNroOrden(1, TIPO_CPE.AUTOMOTOR);  // número; si ARCA no lo devuelve, lanza
-await agro.cpe.consultarCPEPorDestino({ planta: 1938, fechaPartidaDesde: '2026-11-01', fechaPartidaHasta: '2026-11-07' });
+await agro.cpe.consultarUltNroOrden(1, TIPO_CPE.AUTOMOTOR); // número; si ARCA no lo devuelve, lanza
+await agro.cpe.consultarCPEPorDestino({
+  planta: 1938,
+  fechaPartidaDesde: '2026-11-01',
+  fechaPartidaHasta: '2026-11-07',
+});
 await agro.cpe.consultarCPEPPendientesDeResolucion({ perfil: 'D', planta: 1938 });
 await agro.cpe.consultarProvincias();
 await agro.cpe.consultarLocalidadesPorProvincia(12);
@@ -159,7 +183,7 @@ const { autorizacion, eventos } = await agro.lpg.liquidacionAutorizar({
   retenciones: [{ codigoConcepto: 'RG', baseCalculo: 7500000, alicuota: 2 }],
 });
 
-autorizacion.coe;             // '330100012345' (string)
+autorizacion.coe; // '330100012345' (string)
 autorizacion.totalNetoAPagar; // number
 ```
 
@@ -203,13 +227,13 @@ Liquidación secundaria (`lsg*`), anticipos (`lpgAutorizarAnticipo`, `lpgCancela
 
 ## Errores
 
-| Error | Cuándo |
-|-------|--------|
-| `ArcaValidationError` | Datos inválidos, antes de llamar a ARCA: campo obligatorio faltante, campo desconocido, CUIT con dígito verificador incorrecto, `NaN`/`Infinity`, rangos y largos del XSD, fechas. `details[]` trae cada campo con su ruta (ej: `transporte.dominio[0]`). |
-| `ArcaAgroServiceError` (extiende `ArcaServiceError`) | ARCA rechazó la operación: `errores.error[]` (y en WSLPG también `erroresFormato.error[]`). `errors[]`, `service`, `method` y `response` (el nodo completo devuelto). |
-| `ArcaSoapError` | Red, timeout, HTTP o SOAP Fault. `uncertain` indica si ARCA pudo haber procesado el request. |
-| `ArcaAgroResponseError` | La respuesta no trae un dato imprescindible (ej: `nroCTG` al autorizar, `coe` al liquidar, `nroOrden` al consultar el último). `uncertain` es `true` en emisiones. |
-| `ArcaAuthError` / `ArcaTicketVigenteError` | Errores de WSAA. |
+| Error                                                | Cuándo                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ArcaValidationError`                                | Datos inválidos, antes de llamar a ARCA: campo obligatorio faltante, campo desconocido, CUIT con dígito verificador incorrecto, `NaN`/`Infinity`, rangos y largos del XSD, fechas. `details[]` trae cada campo con su ruta (ej: `transporte.dominio[0]`). |
+| `ArcaAgroServiceError` (extiende `ArcaServiceError`) | ARCA rechazó la operación: `errores.error[]` (y en WSLPG también `erroresFormato.error[]`). `errors[]`, `service`, `method` y `response` (el nodo completo devuelto).                                                                                     |
+| `ArcaSoapError`                                      | Red, timeout, HTTP o SOAP Fault. `uncertain` indica si ARCA pudo haber procesado el request.                                                                                                                                                              |
+| `ArcaAgroResponseError`                              | La respuesta no trae un dato imprescindible (ej: `nroCTG` al autorizar, `coe` al liquidar, `nroOrden` al consultar el último). `uncertain` es `true` en emisiones.                                                                                        |
+| `ArcaAuthError` / `ArcaTicketVigenteError`           | Errores de WSAA.                                                                                                                                                                                                                                          |
 
 Los montos se redondean a los decimales del XSD (`fractionDigits`). Las fechas `xsd:date` aceptan `Date` o `AAAAMMDD`/`AAAA-MM-DD`; las `xsd:dateTime` aceptan `Date` (se envía en hora de Argentina, `-03:00`) o un string ISO-8601.
 
@@ -269,31 +293,31 @@ También se puede pasar `onEvent` en la configuración. Los errores de los handl
 
 `ArcaAgroConfig` extiende `ArcaBaseConfig` de `@ramiidv/arca-common`.
 
-| Opción | Tipo | Default | Descripción |
-|--------|------|---------|-------------|
-| `cuit` | `number \| string` | **requerido** | CUIT representada (con o sin guiones) |
-| `cert` / `key` | `string` | **requerido** | Certificado y clave privada PEM |
-| `production` | `boolean` | `false` | Entorno de producción |
-| `timeout` | `number` | `30000` | Timeout HTTP (ms) |
-| `retries` | `number` | `1` | Reintentos de consultas (las emisiones nunca se reintentan) |
-| `retryDelayMs` | `number` | `1000` | Delay base entre reintentos (ms) |
-| `tokenTTLMinutes` | `number` | `720` | Vida del ticket WSAA |
-| `ticketStorage` | `TicketStorage` | memoria | Persistencia del ticket WSAA (recomendado en producción) |
-| `clockOffsetMs` / `autoClockSkew` | | `0` / `true` | Desfase de reloj con ARCA |
-| `loginErrorCooldownMs` | `number` | `60000` | Espera tras un login WSAA fallido |
-| `fetch` | `typeof fetch` | global | `fetch` propio (proxy, tests) |
-| `legacyTls` | `'auto' \| 'never' \| 'always'` | `'auto'` | Transporte TLS legacy |
-| `endpoints` | `{ cpe?, lpg?, wsaa? }` | oficiales | Endpoints propios |
-| `onEvent` | `function` | | Callback de eventos |
+| Opción                            | Tipo                            | Default       | Descripción                                                 |
+| --------------------------------- | ------------------------------- | ------------- | ----------------------------------------------------------- |
+| `cuit`                            | `number \| string`              | **requerido** | CUIT representada (con o sin guiones)                       |
+| `cert` / `key`                    | `string`                        | **requerido** | Certificado y clave privada PEM                             |
+| `production`                      | `boolean`                       | `false`       | Entorno de producción                                       |
+| `timeout`                         | `number`                        | `30000`       | Timeout HTTP (ms)                                           |
+| `retries`                         | `number`                        | `1`           | Reintentos de consultas (las emisiones nunca se reintentan) |
+| `retryDelayMs`                    | `number`                        | `1000`        | Delay base entre reintentos (ms)                            |
+| `tokenTTLMinutes`                 | `number`                        | `720`         | Vida del ticket WSAA                                        |
+| `ticketStorage`                   | `TicketStorage`                 | memoria       | Persistencia del ticket WSAA (recomendado en producción)    |
+| `clockOffsetMs` / `autoClockSkew` |                                 | `0` / `true`  | Desfase de reloj con ARCA                                   |
+| `loginErrorCooldownMs`            | `number`                        | `60000`       | Espera tras un login WSAA fallido                           |
+| `fetch`                           | `typeof fetch`                  | global        | `fetch` propio (proxy, tests)                               |
+| `legacyTls`                       | `'auto' \| 'never' \| 'always'` | `'auto'`      | Transporte TLS legacy                                       |
+| `endpoints`                       | `{ cpe?, lpg?, wsaa? }`         | oficiales     | Endpoints propios                                           |
+| `onEvent`                         | `function`                      |               | Callback de eventos                                         |
 
 `clearAuthCache()` (async) invalida los tickets de WSCPE y WSLPG.
 
 ## Endpoints
 
-| Servicio | Homologación | Producción |
-|----------|-------------|------------|
-| WSCPE | `https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap` | `https://cpea-ws.afip.gob.ar/wscpe/services/soap` |
-| WSLPG | `https://fwshomo.afip.gov.ar/wslpg/LpgService` | `https://serviciosjava.afip.gob.ar/wslpg/LpgService` |
+| Servicio | Homologación                                            | Producción                                           |
+| -------- | ------------------------------------------------------- | ---------------------------------------------------- |
+| WSCPE    | `https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap` | `https://cpea-ws.afip.gob.ar/wscpe/services/soap`    |
+| WSLPG    | `https://fwshomo.afip.gov.ar/wslpg/LpgService`          | `https://serviciosjava.afip.gob.ar/wslpg/LpgService` |
 
 Namespaces: WSCPE `https://serviciosjava.afip.gob.ar/wscpe/`, WSLPG `http://serviciosjava.afip.gob.ar/wslpg/`.
 

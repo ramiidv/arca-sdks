@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { arcaDePrueba, mockArcaFetch } from "./helpers.js";
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { arcaDePrueba, mockArcaFetch } from './helpers.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -74,12 +74,12 @@ const A5_RESPONSE = `<?xml version="1.0" encoding="UTF-8"?>
   </soap:Body>
 </soap:Envelope>`;
 
-const xml = (body: string) => new Response(body, { headers: { "content-type": "text/xml" } });
+const xml = (body: string) => new Response(body, { headers: { 'content-type': 'text/xml' } });
 
-describe("padrón en arca-facturacion (issue #1)", () => {
-  it("A13: request con parámetros sin namespace y respuesta con prefijo", async () => {
+describe('padrón en arca-facturacion (issue #1)', () => {
+  it('A13: request con parámetros sin namespace y respuesta con prefijo', async () => {
     const arca = await arcaDePrueba();
-    const mock = mockArcaFetch({ "": xml(A13_RESPONSE) });
+    const mock = mockArcaFetch({ '': xml(A13_RESPONSE) });
 
     const persona = await arca.consultarCuit(20111111112);
 
@@ -89,42 +89,42 @@ describe("padrón en arca-facturacion (issue #1)", () => {
     expect(body).not.toMatch(/<getPersona xmlns=/);
     // Orden según el WSDL: token, sign, cuitRepresentada, idPersona.
     expect(body).toMatch(
-      /<token>TOKEN<\/token>\s*<sign>SIGN<\/sign>\s*<cuitRepresentada>20123456786<\/cuitRepresentada>\s*<idPersona>20111111112<\/idPersona>/
+      /<token>TOKEN<\/token>\s*<sign>SIGN<\/sign>\s*<cuitRepresentada>20123456786<\/cuitRepresentada>\s*<idPersona>20111111112<\/idPersona>/,
     );
 
     expect(persona).toMatchObject({
       cuit: 20111111112,
-      nombre: "PEREZ JUAN",
-      tipoPersona: "FISICA",
-      estadoClave: "ACTIVO",
-      domicilioFiscal: { direccion: "AV SCALABRINI ORTIZ 500", codPostal: "1414", tipoDomicilio: "FISCAL" },
+      nombre: 'PEREZ JUAN',
+      tipoPersona: 'FISICA',
+      estadoClave: 'ACTIVO',
+      domicilioFiscal: { direccion: 'AV SCALABRINI ORTIZ 500', codPostal: '1414', tipoDomicilio: 'FISCAL' },
     });
   });
 
-  it("constancia de inscripción (ex A5): getPersona_v2 con impuestos y domicilio fiscal", async () => {
+  it('constancia de inscripción (ex A5): getPersona_v2 con impuestos y domicilio fiscal', async () => {
     const arca = await arcaDePrueba();
-    const mock = mockArcaFetch({ "": xml(A5_RESPONSE) });
+    const mock = mockArcaFetch({ '': xml(A5_RESPONSE) });
 
     const persona = await arca.consultarCuitDetalle(30712345674);
 
     expect(mock.calls[0].body).toContain('<ser:getPersona_v2 xmlns:ser="http://a5.soap.ws.server.puc.sr/">');
     expect(persona).toMatchObject({
       cuit: 30712345674,
-      nombre: "RESTO SA",
-      tipoPersona: "JURIDICA",
-      domicilioFiscal: { direccion: "SAN MARTIN 100", localidad: "CORDOBA" },
+      nombre: 'RESTO SA',
+      tipoPersona: 'JURIDICA',
+      domicilioFiscal: { direccion: 'SAN MARTIN 100', localidad: 'CORDOBA' },
       impuestos: [
-        { id: 10, descripcion: "GANANCIAS SOCIEDADES", estado: "AC" },
-        { id: 30, descripcion: "IVA", estado: "AC" },
+        { id: 10, descripcion: 'GANANCIAS SOCIEDADES', estado: 'AC' },
+        { id: 30, descripcion: 'IVA', estado: 'AC' },
       ],
     });
   });
 
-  it("usa el servicio ws_sr_constancia_inscripcion para el detalle", async () => {
+  it('usa el servicio ws_sr_constancia_inscripcion para el detalle', async () => {
     const arca = await arcaDePrueba();
-    mockArcaFetch({ "": xml(A5_RESPONSE) });
-    const spy = vi.spyOn(arca.wsaa, "getAccessTicket");
+    mockArcaFetch({ '': xml(A5_RESPONSE) });
+    const spy = vi.spyOn(arca.wsaa, 'getAccessTicket');
     await arca.consultarCuitDetalle(30712345674);
-    expect(spy).toHaveBeenCalledWith("ws_sr_constancia_inscripcion", expect.anything());
+    expect(spy).toHaveBeenCalledWith('ws_sr_constancia_inscripcion', expect.anything());
   });
 });

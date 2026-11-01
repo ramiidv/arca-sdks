@@ -60,8 +60,7 @@ describe('WsaaClient: ticketStorage', () => {
   it('acepta tickets con fechas como Date o epoch (storages legacy)', async () => {
     const wsaa = client({
       ticketStorage: {
-        get: async () =>
-          ({ token: 'T', sign: 's', expirationTime: Date.now() + HOUR }) as never,
+        get: async () => ({ token: 'T', sign: 's', expirationTime: Date.now() + HOUR }) as never,
         set: async () => {},
       },
     });
@@ -221,7 +220,10 @@ describe('FileTicketStorage', () => {
 
 describe('WsaaClient: regresiones', () => {
   const alreadyAuth = () =>
-    xmlResponse(soapFault('ns1:coe.alreadyAuthenticated', 'El CEE ya posee un TA valido para el acceso al WSN solicitado'), 500);
+    xmlResponse(
+      soapFault('ns1:coe.alreadyAuthenticated', 'El CEE ya posee un TA valido para el acceso al WSN solicitado'),
+      500,
+    );
 
   it('en los 2 minutos previos al vencimiento usa el ticket vigente si WSAA no permite renovarlo', async () => {
     const storage = new MemoryTicketStorage();
@@ -256,7 +258,9 @@ describe('WsaaClient: regresiones', () => {
     const controller = new AbortController();
     controller.abort();
     mockFetch(xmlResponse(loginResponse('T1', new Date(Date.now() + 12 * HOUR))));
-    const err = await client().getAccessTicket('wsfe', { signal: controller.signal }).catch((e) => e);
+    const err = await client()
+      .getAccessTicket('wsfe', { signal: controller.signal })
+      .catch((e) => e);
     expect(err).toBeInstanceOf(ArcaSoapError);
     expect(err).toMatchObject({ aborted: true, uncertain: false });
   });
@@ -305,7 +309,8 @@ describe('WsaaClient: secretos', () => {
 });
 
 describe('WsaaClient: cooldown tras login fallido', () => {
-  const certFault = () => xmlResponse(soapFault('ns1:cms.cert.untrusted', 'Certificado no emitido por AC de confianza'), 500);
+  const certFault = () =>
+    xmlResponse(soapFault('ns1:cms.cert.untrusted', 'Certificado no emitido por AC de confianza'), 500);
 
   it('rechaza sin llamar a WSAA durante loginErrorCooldownMs, con cause', async () => {
     const fetch = mockFetch(certFault());
@@ -392,9 +397,13 @@ describe('WsaaClient: errores de reloj', () => {
   it('xml.expirationTime.expired sí es desfase de reloj', async () => {
     const serverNow = new Date(Date.now() + 14 * HOUR);
     const fetch = mockFetch(
-      xmlResponse(soapFault('ns1:xml.expirationTime.expired', 'expirationTime posee una fecha anterior a la actual'), 500, {
-        date: serverNow.toUTCString(),
-      }),
+      xmlResponse(
+        soapFault('ns1:xml.expirationTime.expired', 'expirationTime posee una fecha anterior a la actual'),
+        500,
+        {
+          date: serverNow.toUTCString(),
+        },
+      ),
       xmlResponse(loginResponse('T1', new Date(serverNow.getTime() + 12 * HOUR))),
     );
     expect((await client().getAccessTicket('wsfe')).token).toBe('T1');

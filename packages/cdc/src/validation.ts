@@ -6,13 +6,7 @@ import type { ConstatarInput } from './types.js';
 /** Máximo de `ImpTotal`: 13 enteros y 2 decimales (manual WSCDC, error 7). */
 const IMP_TOTAL_MAX = 1e13;
 
-function intInRange(
-  errors: ValidationErrorDetail[],
-  field: string,
-  value: unknown,
-  min: number,
-  max: number,
-): void {
+function intInRange(errors: ValidationErrorDetail[], field: string, value: unknown, min: number, max: number): void {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
     errors.push({ field, message: `${field} debe ser un entero entre ${min} y ${max}`, value });
   }
@@ -51,7 +45,11 @@ export function buildCmpReq(input: ConstatarInput): Record<string, unknown> {
       cuitEmisor = validateCuit(input.CuitEmisor);
     } catch (e) {
       if (e instanceof ArcaValidationError) {
-        throw new ArcaValidationError(e.message, e.details.map((d) => ({ ...d, field: 'CuitEmisor' })), 'CuitEmisor');
+        throw new ArcaValidationError(
+          e.message,
+          e.details.map((d) => ({ ...d, field: 'CuitEmisor' })),
+          'CuitEmisor',
+        );
       }
       throw e;
     }
@@ -91,7 +89,11 @@ export function buildCmpReq(input: ConstatarInput): Record<string, unknown> {
     });
   }
   if (docTipo !== undefined && !/^\d{1,2}$/.test(docTipo)) {
-    errors.push({ field: 'DocTipoReceptor', message: 'DocTipoReceptor debe ser numérico de hasta 2 dígitos', value: input.DocTipoReceptor });
+    errors.push({
+      field: 'DocTipoReceptor',
+      message: 'DocTipoReceptor debe ser numérico de hasta 2 dígitos',
+      value: input.DocTipoReceptor,
+    });
   }
   if (docNro !== undefined && !/^\d{1,20}$/.test(docNro)) {
     errors.push({
@@ -106,7 +108,10 @@ export function buildCmpReq(input: ConstatarInput): Record<string, unknown> {
         validateCuit(docNro);
       } catch (e) {
         if (e instanceof ArcaValidationError) {
-          throw new ArcaValidationError(e.message, e.details.map((d) => ({ ...d, field: 'DocNroReceptor' })));
+          throw new ArcaValidationError(
+            e.message,
+            e.details.map((d) => ({ ...d, field: 'DocNroReceptor' })),
+          );
         }
         throw e;
       }
@@ -115,7 +120,11 @@ export function buildCmpReq(input: ConstatarInput): Record<string, unknown> {
 
   if (input.Opcionales !== undefined) {
     if (!Array.isArray(input.Opcionales) || input.Opcionales.length === 0) {
-      errors.push({ field: 'Opcionales', message: 'Opcionales, si se informa, debe tener al menos un Opcional', value: input.Opcionales });
+      errors.push({
+        field: 'Opcionales',
+        message: 'Opcionales, si se informa, debe tener al menos un Opcional',
+        value: input.Opcionales,
+      });
     } else {
       const seen = new Set<string>();
       input.Opcionales.forEach((op, i) => {
@@ -129,7 +138,11 @@ export function buildCmpReq(input: ConstatarInput): Record<string, unknown> {
         }
         const valor = op?.Valor;
         if (typeof valor !== 'string' || valor.length < 1 || valor.length > 250) {
-          errors.push({ field: `Opcionales[${i}].Valor`, message: 'Valor debe tener de 1 a 250 caracteres', value: valor });
+          errors.push({
+            field: `Opcionales[${i}].Valor`,
+            message: 'Valor debe tener de 1 a 250 caracteres',
+            value: valor,
+          });
         }
       });
     }

@@ -60,7 +60,13 @@ describe('validateRegistro', () => {
 
   it('informa todos los errores (formato + negocio) juntos', () => {
     const e = capturar(() =>
-      validateRegistro({ ...alta('20123456787'), movimiento: 'AT', obraSocial: '1234567', retribucion: NaN, rectificacion: 6 }),
+      validateRegistro({
+        ...alta('20123456787'),
+        movimiento: 'AT',
+        obraSocial: '1234567',
+        retribucion: NaN,
+        rectificacion: 6,
+      }),
     ) as ArcaValidationError;
     const campos = e.details.map((d) => d.field);
     expect(campos).toEqual(expect.arrayContaining(['obraSocial', 'retribucion', 'cuil', 'rectificacion']));
@@ -73,8 +79,12 @@ describe('validateRegistro', () => {
 
   it('rectificación 00-05 y marca 0-9', () => {
     expect(() => validateRegistro({ movimiento: 'MR', cuil: '20123456786', rectificacion: 5 })).not.toThrow();
-    expect(() => validateRegistro({ movimiento: 'MR', cuil: '20123456786', rectificacion: '06' })).toThrow(/rectificacion/);
-    expect(() => validateRegistro({ movimiento: 'MR', cuil: '20123456786', marcaCovidTipoContratoCCG: 9 })).not.toThrow();
+    expect(() => validateRegistro({ movimiento: 'MR', cuil: '20123456786', rectificacion: '06' })).toThrow(
+      /rectificacion/,
+    );
+    expect(() =>
+      validateRegistro({ movimiento: 'MR', cuil: '20123456786', marcaCovidTipoContratoCCG: 9 }),
+    ).not.toThrow();
   });
 
   it('no-objeto: error claro', () => {
@@ -131,7 +141,9 @@ describe('ArcaEmpleados', () => {
       expect((e as Error).message).toMatch(/objeto/);
       expect((e as Error).message).not.toMatch(/Cannot read properties/);
     }
-    expect(capturar(() => sr.novedad(undefined as unknown as RegistroRelacionLaboral))).toBeInstanceOf(ArcaValidationError);
+    expect(capturar(() => sr.novedad(undefined as unknown as RegistroRelacionLaboral))).toBeInstanceOf(
+      ArcaValidationError,
+    );
     expect(() => sr.novedad({ movimiento: 'ZZ' } as unknown as RegistroRelacionLaboral)).toThrow(/movimiento inválido/);
     // reglas de negocio no se aplican...
     sr.alta({ cuil: '20123456787' });
@@ -145,7 +157,9 @@ describe('ArcaEmpleados', () => {
   });
 
   it('rechaza un movimiento distinto al del método', () => {
-    expect(() => new ArcaEmpleados().alta({ ...alta(), movimiento: 'BT' } as AltaRelacionLaboral)).toThrow(/movimiento/);
+    expect(() => new ArcaEmpleados().alta({ ...alta(), movimiento: 'BT' } as AltaRelacionLaboral)).toThrow(
+      /movimiento/,
+    );
   });
 
   it('operaciones masivas atómicas', () => {
@@ -182,7 +196,9 @@ describe('ArcaEmpleados', () => {
   });
 
   it('masivas: rechaza no-arrays', () => {
-    expect(() => new ArcaEmpleados().altasMasivas(undefined as unknown as AltaRelacionLaboral[])).toThrow(ArcaValidationError);
+    expect(() => new ArcaEmpleados().altasMasivas(undefined as unknown as AltaRelacionLaboral[])).toThrow(
+      ArcaValidationError,
+    );
   });
 
   it('registros no expone datos mutables', () => {

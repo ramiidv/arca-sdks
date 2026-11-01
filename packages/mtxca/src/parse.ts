@@ -82,7 +82,10 @@ export class ResponseReader {
   }
 
   codigoDescripcion(cd: R, path: string): CodigoDescripcion {
-    return { codigo: this.num(cd, 'codigo', `${path}.codigo`), descripcion: this.str(cd, 'descripcion', `${path}.descripcion`) };
+    return {
+      codigo: this.num(cd, 'codigo', `${path}.codigo`),
+      descripcion: this.str(cd, 'descripcion', `${path}.descripcion`),
+    };
   }
 
   evento(result: R): CodigoDescripcion | undefined {

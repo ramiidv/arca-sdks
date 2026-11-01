@@ -1,4 +1,4 @@
-import { ensureArray, formatDate, normalizeCuit } from "@ramiidv/arca-common";
+import { ensureArray, formatDate, normalizeCuit } from '@ramiidv/arca-common';
 import {
   IVA_RATES,
   Concepto,
@@ -7,9 +7,9 @@ import {
   Moneda,
   isTipoC,
   WSFE_NUMERO_NO_CORRESPONDE,
-} from "./constants.js";
-import { ArcaWSFEError } from "./errors.js";
-import { fail, validateFacturarOpts, validateItems } from "./validation.js";
+} from './constants.js';
+import { ArcaWSFEError } from './errors.js';
+import { fail, validateFacturarOpts, validateItems } from './validation.js';
 import type {
   LineItem,
   FacturarOpts,
@@ -25,7 +25,7 @@ import type {
   ComprobanteAsociado,
   MensajeArca,
   Tributo,
-} from "./types.js";
+} from './types.js';
 
 /**
  * Pasa un importe a centavos enteros. Desplaza la coma en la representación
@@ -33,11 +33,11 @@ import type {
  */
 function toCents(n: number): number {
   const s = String(n);
-  return s.includes("e") ? Math.round(n * 100) : Math.round(Number(`${s}e2`));
+  return s.includes('e') ? Math.round(n * 100) : Math.round(Number(`${s}e2`));
 }
 
 const optString = (v: unknown): string | undefined =>
-  v === undefined || v === null || v === "" ? undefined : String(v);
+  v === undefined || v === null || v === '' ? undefined : String(v);
 
 function fromCents(c: number): number {
   return c / 100;
@@ -73,8 +73,8 @@ let fechaHoraFormatter: Intl.DateTimeFormat | undefined;
  *
  * @throws ArcaValidationError si el valor no es válido.
  */
-export function formatFechaHora(value: Date | string, field = "fechaHora"): string {
-  if (typeof value === "string") {
+export function formatFechaHora(value: Date | string, field = 'fechaHora'): string {
+  if (typeof value === 'string') {
     const m = /^(\d{8})(\d{2})(\d{2})(\d{2})$/.exec(value);
     if (!m) fail(field, `${field} debe tener formato yyyymmddhhmmss`, value);
     try {
@@ -82,26 +82,27 @@ export function formatFechaHora(value: Date | string, field = "fechaHora"): stri
     } catch {
       fail(field, `${field}: la fecha no existe`, value);
     }
-    if (Number(m[2]) > 23 || Number(m[3]) > 59 || Number(m[4]) > 59) fail(field, `${field}: la hora no es válida`, value);
+    if (Number(m[2]) > 23 || Number(m[3]) > 59 || Number(m[4]) > 59)
+      fail(field, `${field}: la hora no es válida`, value);
     return value;
   }
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) fail(field, `${field} no es una fecha válida`, value);
-  fechaHoraFormatter ??= new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Argentina/Buenos_Aires",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
+  fechaHoraFormatter ??= new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
   });
   const parts = fechaHoraFormatter.formatToParts(value);
-  const part = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? "";
-  return `${part("year")}${part("month")}${part("day")}${part("hour")}${part("minute")}${part("second")}`;
+  const part = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? '';
+  return `${part('year')}${part('month')}${part('day')}${part('hour')}${part('minute')}${part('second')}`;
 }
 
-type BucketKey = number | "exento" | "noGravado" | "tipoC";
+type BucketKey = number | 'exento' | 'noGravado' | 'tipoC';
 
 interface Bucket {
   key: BucketKey;
@@ -114,9 +115,7 @@ interface Bucket {
 }
 
 function itemAmountCents(item: LineItem): { neto: number; total: number } {
-  return item.total !== undefined
-    ? { neto: 0, total: toCents(item.total) }
-    : { neto: toCents(item.neto), total: 0 };
+  return item.total !== undefined ? { neto: 0, total: toCents(item.total) } : { neto: toCents(item.neto), total: 0 };
 }
 
 /**
@@ -145,7 +144,7 @@ function itemAmountCents(item: LineItem): { neto: number; total: number } {
  */
 export function calcularTotales(
   items: LineItem[],
-  opts?: { tributos?: { Importe: number }[]; tipoC?: boolean; descuentoGlobal?: number }
+  opts?: { tributos?: { Importe: number }[]; tipoC?: boolean; descuentoGlobal?: number },
 ): { importes: Importes; iva: AlicuotaIva[] } {
   validateItems(items, opts?.descuentoGlobal);
   const tipoC = opts?.tipoC ?? false;
@@ -164,13 +163,13 @@ export function calcularTotales(
     const { neto, total } = itemAmountCents(item);
     let bucket: Bucket;
     if (tipoC) {
-      bucket = bucketFor("tipoC", 0);
+      bucket = bucketFor('tipoC', 0);
     } else if (item.exento) {
-      bucket = bucketFor("exento", 0);
+      bucket = bucketFor('exento', 0);
     } else if (item.iva !== undefined) {
       bucket = bucketFor(item.iva, rateBasisPoints(item.iva));
     } else {
-      bucket = bucketFor("noGravado", 0);
+      bucket = bucketFor('noGravado', 0);
     }
     bucket.netoCents += neto;
     bucket.totalCents += total;
@@ -190,9 +189,9 @@ export function calcularTotales(
   const totalItemsCents = finals.reduce((a, b) => a + b, 0);
   if (descuentoCents > totalItemsCents) {
     fail(
-      "descuentoGlobal",
+      'descuentoGlobal',
       `descuentoGlobal (${fromCents(descuentoCents)}) no puede superar el total de los items (${fromCents(totalItemsCents)})`,
-      opts?.descuentoGlobal
+      opts?.descuentoGlobal,
     );
   }
   const shares = prorratear(descuentoCents, finals, basesPrevias);
@@ -215,11 +214,11 @@ export function calcularTotales(
       iva = finals[i] - base;
     }
 
-    if (b.key === "tipoC") {
+    if (b.key === 'tipoC') {
       impNeto += base;
-    } else if (b.key === "exento") {
+    } else if (b.key === 'exento') {
       impOpEx += base;
-    } else if (b.key === "noGravado") {
+    } else if (b.key === 'noGravado') {
       impTotConc += base;
     } else {
       impNeto += base;
@@ -293,11 +292,10 @@ function prorratear(monto: number, pesos: number[], bases: number[]): number[] {
 export function buildInvoiceDetail(
   opts: FacturarOpts,
   cbteNum: number,
-  ahora: Date = new Date()
+  ahora: Date = new Date(),
 ): { detail: InvoiceDetail; importes: Importes } {
   const esServicio = opts.servicio !== undefined;
-  const concepto =
-    opts.concepto ?? (esServicio ? Concepto.SERVICIOS : Concepto.PRODUCTOS);
+  const concepto = opts.concepto ?? (esServicio ? Concepto.SERVICIOS : Concepto.PRODUCTOS);
   const tipoC = isTipoC(opts.cbteTipo);
 
   const { importes, iva: ivaArray } = calcularTotales(opts.items, {
@@ -354,7 +352,7 @@ export function buildInvoiceDetail(
 
   if (opts.tributos && opts.tributos.length > 0) {
     detail.Tributos = opts.tributos.map(
-      (t): Tributo => ({ ...t, BaseImp: redondear2(t.BaseImp), Importe: redondear2(t.Importe) })
+      (t): Tributo => ({ ...t, BaseImp: redondear2(t.BaseImp), Importe: redondear2(t.Importe) }),
     );
   }
 
@@ -366,7 +364,7 @@ export function buildInvoiceDetail(
         Nro: c.nro,
         ...(c.cuit !== undefined && { Cuit: normalizeCuit(c.cuit) }),
         ...(c.fecha !== undefined && { CbteFch: formatDate(c.fecha) }),
-      })
+      }),
     );
   }
 
@@ -399,10 +397,7 @@ export function buildInvoiceDetail(
  * });
  * ```
  */
-export function armarComprobante(
-  opts: FacturarOpts & { cbteNro: number },
-  ctx?: { ahora?: Date }
-): ComprobanteArmado {
+export function armarComprobante(opts: FacturarOpts & { cbteNro: number }, ctx?: { ahora?: Date }): ComprobanteArmado {
   validateFacturarOpts(opts);
   const { detail, importes } = buildInvoiceDetail(opts, opts.cbteNro, ctx?.ahora);
   return {
@@ -413,11 +408,7 @@ export function armarComprobante(
 }
 
 /** Arma el `IntentoComprobante` de un detalle ya armado (ej: uno persistido). */
-export function intentoDesdeComprobante(
-  ptoVta: number,
-  cbteTipo: number,
-  detail: InvoiceDetail
-): IntentoComprobante {
+export function intentoDesdeComprobante(ptoVta: number, cbteTipo: number, detail: InvoiceDetail): IntentoComprobante {
   return {
     ptoVta,
     cbteTipo,
@@ -434,14 +425,11 @@ export function intentoDesdeComprobante(
  * Coincide si son iguales DocTipo, DocNro, CbteFch e ImpTotal (con tolerancia
  * de 0,01) y el comprobante está aprobado.
  */
-export function coincideConIntento(
-  consulta: FECompConsultarResult,
-  intento: IntentoComprobante
-): boolean {
+export function coincideConIntento(consulta: FECompConsultarResult, intento: IntentoComprobante): boolean {
   const r = consulta.ResultGet;
   if (!r) return false;
   return (
-    (r.Resultado === undefined || r.Resultado === "A") &&
+    (r.Resultado === undefined || r.Resultado === 'A') &&
     Math.abs(Number(r.ImpTotal) - intento.importeTotal) <= 0.01 + 1e-9 &&
     Number(r.DocTipo) === Number(intento.docTipo) &&
     Number(r.DocNro) === Number(intento.docNro) &&
@@ -452,11 +440,11 @@ export function coincideConIntento(
 /** Normaliza los `Events.Evt` de una respuesta de WSFEv1. */
 export function eventosWsfe(result: { Events?: unknown } | undefined): MensajeArca[] {
   const events = (result as { Events?: { Evt?: WsError | WsError[] } } | undefined)?.Events;
-  return ensureArray(events?.Evt).map((e) => ({ code: Number(e.Code), msg: String(e.Msg ?? "") }));
+  return ensureArray(events?.Evt).map((e) => ({ code: Number(e.Code), msg: String(e.Msg ?? '') }));
 }
 
 function parseObservaciones(obs?: { Obs: WsError | WsError[] }): MensajeArca[] {
-  return ensureArray(obs?.Obs).map((o) => ({ code: Number(o.Code), msg: String(o.Msg ?? "") }));
+  return ensureArray(obs?.Obs).map((o) => ({ code: Number(o.Code), msg: String(o.Msg ?? '') }));
 }
 
 /**
@@ -468,11 +456,11 @@ function parseObservaciones(obs?: { Obs: WsError | WsError[] }): MensajeArca[] {
 export function parseFacturaResult(
   result: FECAESolicitarResult,
   importes: Importes,
-  enviado?: { moneda?: string; cotizacion?: number; tipoCodAut?: "E" | "A" }
+  enviado?: { moneda?: string; cotizacion?: number; tipoCodAut?: 'E' | 'A' },
 ): FacturaResult {
   const det = ensureArray(result.FeDetResp.FECAEDetResponse)[0];
-  if (!det) throw new TypeError("Respuesta sin FECAEDetResponse");
-  const aprobada = det.Resultado === "A";
+  if (!det) throw new TypeError('Respuesta sin FECAEDetResponse');
+  const aprobada = det.Resultado === 'A';
 
   return {
     aprobada,
@@ -490,7 +478,7 @@ export function parseFacturaResult(
     docNro: det.DocNro === undefined ? undefined : Number(det.DocNro),
     moneda: enviado?.moneda,
     cotizacion: enviado?.cotizacion,
-    tipoCodAut: enviado?.tipoCodAut ?? (det.CAEA !== undefined ? "A" : "E"),
+    tipoCodAut: enviado?.tipoCodAut ?? (det.CAEA !== undefined ? 'A' : 'E'),
     raw: result,
   };
 }
@@ -501,7 +489,7 @@ export function parseFacturaResult(
  */
 export function facturaResultDesdeConsulta(consulta: FECompConsultarResult): FacturaResult {
   const r = consulta.ResultGet;
-  const aprobada = r.Resultado === undefined || r.Resultado === "A";
+  const aprobada = r.Resultado === undefined || r.Resultado === 'A';
   return {
     aprobada,
     cae: aprobada ? optString(r.CodAutorizacion) : undefined,
@@ -524,7 +512,7 @@ export function facturaResultDesdeConsulta(consulta: FECompConsultarResult): Fac
     docNro: Number(r.DocNro),
     moneda: optString(r.MonId),
     cotizacion: r.MonCotiz === undefined || r.MonCotiz === null ? undefined : Number(r.MonCotiz),
-    tipoCodAut: r.EmisionTipo === "CAEA" ? "A" : "E",
+    tipoCodAut: r.EmisionTipo === 'CAEA' ? 'A' : 'E',
     raw: consulta,
   };
 }
@@ -537,14 +525,17 @@ export function facturaResultDesdeConsulta(consulta: FECompConsultarResult): Fac
  * como posible número ya usado.
  */
 function esRechazoPorFecha(msg: string): boolean {
-  const m = msg.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const m = msg
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
   const mencionaNumero = /\bnumero\b|\bnro\b|cbtedesde|proximo a autorizar/.test(m);
   const mencionaFecha = /\bfecha\b|cbtefch/.test(m);
   return mencionaFecha && !mencionaNumero;
 }
 
 function es10016PorNumero(e: { code: number | string; msg: string }): boolean {
-  return Number(e.code) === WSFE_NUMERO_NO_CORRESPONDE && !esRechazoPorFecha(String(e.msg ?? ""));
+  return Number(e.code) === WSFE_NUMERO_NO_CORRESPONDE && !esRechazoPorFecha(String(e.msg ?? ''));
 }
 
 /**
@@ -565,10 +556,5 @@ export function requiereRecuperacion(resultadoOError: FacturaResult | unknown): 
     return resultadoOError.errors.some(es10016PorNumero);
   }
   const r = resultadoOError as Partial<FacturaResult> | null;
-  return (
-    !!r &&
-    r.aprobada === false &&
-    Array.isArray(r.observaciones) &&
-    r.observaciones.some(es10016PorNumero)
-  );
+  return !!r && r.aprobada === false && Array.isArray(r.observaciones) && r.observaciones.some(es10016PorNumero);
 }

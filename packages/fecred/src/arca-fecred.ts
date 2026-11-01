@@ -91,8 +91,7 @@ export class ArcaFecred {
       });
 
     this.fecred = new FecredClient({
-      endpoint:
-        config.endpoints?.wsfecred ?? (production ? ENDPOINTS.wsfecred.production : ENDPOINTS.wsfecred.testing),
+      endpoint: config.endpoints?.wsfecred ?? (production ? ENDPOINTS.wsfecred.production : ENDPOINTS.wsfecred.testing),
       namespace: ENDPOINTS.wsfecred.namespace,
       soapOptions: {
         timeout: config.timeout,
@@ -146,10 +145,7 @@ export class ArcaFecred {
   }
 
   /** Comprobantes FCE (paginado: ver `hayMas` / `nroPagina`). */
-  consultarComprobantes(
-    params: ConsultarComprobantesParams,
-    opts?: CallOptions,
-  ): Promise<ConsultarComprobantesResult> {
+  consultarComprobantes(params: ConsultarComprobantesParams, opts?: CallOptions): Promise<ConsultarComprobantesResult> {
     return this.fecred.consultarComprobantes(this.auth(opts), params, opts);
   }
 
@@ -162,10 +158,7 @@ export class ArcaFecred {
   }
 
   /** Historial de estados de una cuenta corriente. */
-  consultarHistorialEstadosCtaCte(
-    idCtaCte: IdCtaCteInput,
-    opts?: CallOptions,
-  ): Promise<HistorialEstadosCtaCteResult> {
+  consultarHistorialEstadosCtaCte(idCtaCte: IdCtaCteInput, opts?: CallOptions): Promise<HistorialEstadosCtaCteResult> {
     return this.fecred.consultarHistorialEstadosCtaCte(this.auth(opts), idCtaCte, opts);
   }
 

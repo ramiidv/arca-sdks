@@ -5,7 +5,9 @@ import { ArcaSoapError } from '../src/errors.js';
 import { mockFetch, soapEnvelope, soapFault, xmlResponse } from './helpers.js';
 
 const URL = 'https://example.test/ws';
-const OK = soapEnvelope('<ns2:dummyResponse xmlns:ns2="http://x/"><return><appserver>OK</appserver></return></ns2:dummyResponse>');
+const OK = soapEnvelope(
+  '<ns2:dummyResponse xmlns:ns2="http://x/"><return><appserver>OK</appserver></return></ns2:dummyResponse>',
+);
 
 function networkError(code: string): TypeError {
   return new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) });
@@ -265,7 +267,11 @@ describe('afipSoapCall: opciones', () => {
 
   it('qualified: el wrapper declara el namespace por defecto', async () => {
     const fetch = mockFetch(
-      xmlResponse(soapEnvelope(`<FEDummyResponse xmlns="${NS}"><FEDummyResult><AppServer>OK</AppServer></FEDummyResult></FEDummyResponse>`)),
+      xmlResponse(
+        soapEnvelope(
+          `<FEDummyResponse xmlns="${NS}"><FEDummyResult><AppServer>OK</AppServer></FEDummyResult></FEDummyResponse>`,
+        ),
+      ),
     );
     const result = await afipSoapCall(URL, NS, 'FEDummy', { Auth: { Token: 't' } }, { qualified: true });
     expect(sentBody(fetch)).toContain(`<FEDummy xmlns="${NS}">`);
@@ -279,7 +285,13 @@ describe('afipSoapCall: opciones', () => {
     expect(sentHeaders(fetch).SOAPAction).toBe(`"${NS}FEDummy"`);
 
     fetch = mockFetch(xmlResponse(soapEnvelope('<dummyResponse/>')));
-    await afipSoapCall(URL, 'http://impl.service.wsmtxca.afip.gov.ar/service', 'dummy', {}, { soapActionFromMethod: true });
+    await afipSoapCall(
+      URL,
+      'http://impl.service.wsmtxca.afip.gov.ar/service',
+      'dummy',
+      {},
+      { soapActionFromMethod: true },
+    );
     expect(sentHeaders(fetch).SOAPAction).toBe('"http://impl.service.wsmtxca.afip.gov.ar/service/dummy"');
 
     fetch = mockFetch(xmlResponse(soapEnvelope('<dummyResponse/>')));
@@ -292,18 +304,32 @@ describe('afipSoapCall: opciones', () => {
   });
 
   it('requestElement: null envía el Body vacío; requestElement/responseElement personalizados', async () => {
-    let fetch = mockFetch(xmlResponse(soapEnvelope('<ns2:dummyResponse xmlns:ns2="x"><return><appserver>OK</appserver></return></ns2:dummyResponse>')));
+    let fetch = mockFetch(
+      xmlResponse(
+        soapEnvelope('<ns2:dummyResponse xmlns:ns2="x"><return><appserver>OK</appserver></return></ns2:dummyResponse>'),
+      ),
+    );
     const r1 = await afipSoapCall(URL, NS, 'dummy', {}, { requestElement: null });
     expect(sentBody(fetch)).toContain('<soapenv:Body></soapenv:Body>');
     expect(r1).toEqual({ appserver: 'OK' });
 
     fetch = mockFetch(
-      xmlResponse(soapEnvelope('<ns2:consultarResp xmlns:ns2="x"><consultarReturn><a>1</a></consultarReturn></ns2:consultarResp>')),
+      xmlResponse(
+        soapEnvelope(
+          '<ns2:consultarResp xmlns:ns2="x"><consultarReturn><a>1</a></consultarReturn></ns2:consultarResp>',
+        ),
+      ),
     );
-    const r2 = await afipSoapCall(URL, NS, 'consultar', { p: 1 }, {
-      requestElement: 'consultarReq',
-      responseElement: 'consultarResp',
-    });
+    const r2 = await afipSoapCall(
+      URL,
+      NS,
+      'consultar',
+      { p: 1 },
+      {
+        requestElement: 'consultarReq',
+        responseElement: 'consultarResp',
+      },
+    );
     expect(sentBody(fetch)).toContain(`<ser:consultarReq xmlns:ser="${NS}">`);
     expect(r2).toEqual({ a: 1 });
   });
@@ -332,7 +358,9 @@ describe('extractMethodResult', () => {
   });
 
   it('devuelve la misma forma con o sin prefijos', () => {
-    const xml = soapEnvelope('<ns2:getPersonaResponse xmlns:ns2="x"><ns2:return><a>1</a></ns2:return></ns2:getPersonaResponse>');
+    const xml = soapEnvelope(
+      '<ns2:getPersonaResponse xmlns:ns2="x"><ns2:return><a>1</a></ns2:return></ns2:getPersonaResponse>',
+    );
     expect(extractMethodResult(parseXml(xml), 'getPersona')).toEqual({ a: 1 });
     expect(extractMethodResult(parseXml(soapEnvelope('<dummyResponse/>')), 'dummy')).toEqual({});
   });
@@ -359,7 +387,14 @@ describe('getNestedValue', () => {
 
 describe('checkServiceErrors / extractServiceErrors', () => {
   it('WSFE: Errors.Err[]', () => {
-    const result = { Errors: { Err: [{ Code: 600, Msg: 'ValidacionDeToken' }, { Code: 601, Msg: 'CUIT' }] } };
+    const result = {
+      Errors: {
+        Err: [
+          { Code: 600, Msg: 'ValidacionDeToken' },
+          { Code: 601, Msg: 'CUIT' },
+        ],
+      },
+    };
     expect(extractServiceErrors(result)).toEqual([
       { code: 600, msg: 'ValidacionDeToken' },
       { code: 601, msg: 'CUIT' },
@@ -368,7 +403,14 @@ describe('checkServiceErrors / extractServiceErrors', () => {
   });
 
   it('lanza si cualquier error (no solo el primero) tiene código distinto de 0', () => {
-    const result = { Errors: { Err: [{ Code: 0, Msg: 'ok' }, { Code: 10, Msg: 'mal' }] } };
+    const result = {
+      Errors: {
+        Err: [
+          { Code: 0, Msg: 'ok' },
+          { Code: 10, Msg: 'mal' },
+        ],
+      },
+    };
     expect(() => checkServiceErrors(result, 'X')).toThrow(ArcaServiceError);
     expect(() => checkServiceErrors({ Errors: { Err: { Code: 0, Msg: 'ok' } } }, 'X')).not.toThrow();
   });
@@ -380,7 +422,12 @@ describe('checkServiceErrors / extractServiceErrors', () => {
 
   it('servicios Java: arrayErrores y arrayErroresFormato', () => {
     const result = {
-      arrayErrores: { codigoDescripcion: [{ codigo: 101, descripcion: 'uno' }, { codigo: 102, descripcion: 'dos' }] },
+      arrayErrores: {
+        codigoDescripcion: [
+          { codigo: 101, descripcion: 'uno' },
+          { codigo: 102, descripcion: 'dos' },
+        ],
+      },
       arrayErroresFormato: { codigoDescripcion: { codigo: 5, descripcion: 'formato' } },
     };
     expect(extractServiceErrors(result)).toEqual([
@@ -435,7 +482,14 @@ describe('checkServiceErrors / extractServiceErrors', () => {
   });
 
   it('WSCPE / WSLPG: errores.error[]', () => {
-    const result = { errores: { error: [{ codigo: 'CPE-1', descripcion: 'Patente inválida' }, { codigo: '12', descripcion: 'x' }] } };
+    const result = {
+      errores: {
+        error: [
+          { codigo: 'CPE-1', descripcion: 'Patente inválida' },
+          { codigo: '12', descripcion: 'x' },
+        ],
+      },
+    };
     const errors = extractServiceErrors(result);
     expect(errors).toEqual([
       { code: 0, msg: 'Patente inválida', rawCode: 'CPE-1' },
@@ -454,7 +508,9 @@ describe('checkServiceErrors / extractServiceErrors', () => {
   });
 
   it('un código no numérico lanza aunque code sea 0', () => {
-    expect(() => checkServiceErrors({ errores: { error: { codigo: 'ABC', descripcion: 'x' } } }, 'X')).toThrow(ArcaServiceError);
+    expect(() => checkServiceErrors({ errores: { error: { codigo: 'ABC', descripcion: 'x' } } }, 'X')).toThrow(
+      ArcaServiceError,
+    );
   });
 
   it('sin errores no lanza y devuelve []', () => {

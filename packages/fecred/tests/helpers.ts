@@ -48,7 +48,8 @@ export function sentRequest(fetch: ReturnType<typeof mockFetch>, n = 0) {
   const headers = init.headers as Record<string, string>;
   const xml = String(init.body);
   const env = parseXml(xml) as Record<string, any>;
-  const envelope = env['soapenv:Envelope'] ?? env['soap:Envelope'] ?? Object.values(env).find((v) => typeof v === 'object');
+  const envelope =
+    env['soapenv:Envelope'] ?? env['soap:Envelope'] ?? Object.values(env).find((v) => typeof v === 'object');
   const bodyKey = Object.keys(envelope).find((k) => k.endsWith('Body'))!;
   return { soapAction: headers['SOAPAction'], xml, body: envelope[bodyKey] as Record<string, any> };
 }

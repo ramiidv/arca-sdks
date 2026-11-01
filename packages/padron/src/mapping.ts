@@ -51,7 +51,9 @@ export const record = (v: unknown): SoapRecord | undefined =>
 
 /** Lista de valores simples repetidos (ej: `claveInactivaAsociada`, `error`), sin los nil. */
 export const strings = (v: unknown): string[] =>
-  ensureArray(v).map(optString).filter((s): s is string => s !== undefined);
+  ensureArray(v)
+    .map(optString)
+    .filter((s): s is string => s !== undefined);
 
 function missing(field: string): ArcaPadronError {
   return new ArcaPadronError(`Respuesta inválida de ARCA: falta ${field}`);
@@ -94,7 +96,10 @@ export function requirePersona(result: SoapRecord, method: string): SoapRecord {
 export function mapDependencia(v: unknown): DependenciaA4 | undefined {
   const d = record(v);
   if (!d) return undefined;
-  return { idDependencia: optNumber(d['idDependencia']), descripcionDependencia: optString(d['descripcionDependencia']) };
+  return {
+    idDependencia: optNumber(d['idDependencia']),
+    descripcionDependencia: optString(d['descripcionDependencia']),
+  };
 }
 
 /** `domicilio` de A4/A10/constancia (todos `xs:string` salvo `idProvincia`). */

@@ -1,12 +1,7 @@
 import { ArcaValidationError, validateCuit } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
 import { roundTo, toXsdDate, toXsdDateTime } from './format.js';
-import type {
-  FechaInput,
-  MtxcaComprobanteCAE,
-  MtxcaComprobanteCAEA,
-  MtxcaItem,
-} from './types.js';
+import type { FechaInput, MtxcaComprobanteCAE, MtxcaComprobanteCAEA, MtxcaItem } from './types.js';
 
 type R = Record<string, unknown>;
 
@@ -66,7 +61,14 @@ export class XsdFields {
     return this.decimalValue(field, value, required, 6, 0, DECIMAL_MAX);
   }
 
-  decimalValue(field: string, value: unknown, required: boolean, decimals: number, min: number, max: number): string | undefined {
+  decimalValue(
+    field: string,
+    value: unknown,
+    required: boolean,
+    decimals: number,
+    min: number,
+    max: number,
+  ): string | undefined {
     if (this.missing(field, value, required)) return undefined;
     if (typeof value !== 'number' || !Number.isFinite(value)) {
       return this.fail(field, 'debe ser un número finito', value);
@@ -197,14 +199,13 @@ function buildItem(f: XsdFields, item: MtxcaItem, i: number): R {
  *
  * @throws ArcaValidationError con todos los errores encontrados.
  */
-export function buildComprobante(
-  input: MtxcaComprobanteCAE | MtxcaComprobanteCAEA,
-  mode: 'cae' | 'caea',
-): R {
+export function buildComprobante(input: MtxcaComprobanteCAE | MtxcaComprobanteCAEA, mode: 'cae' | 'caea'): R {
   if (input === null || typeof input !== 'object') {
-    throw new ArcaValidationError('El comprobante es obligatorio', [
-      { field: 'comprobante', message: 'es obligatorio', value: input },
-    ], 'comprobante');
+    throw new ArcaValidationError(
+      'El comprobante es obligatorio',
+      [{ field: 'comprobante', message: 'es obligatorio', value: input }],
+      'comprobante',
+    );
   }
   const f = new XsdFields();
   const c = input as MtxcaComprobanteCAEA;
@@ -238,7 +239,11 @@ export function buildComprobante(
   } else {
     put(out, 'cotizacionMoneda', f.decimalValue('cotizacionMoneda', c.cotizacionMoneda, false, 6, 0, 9999.999999));
   }
-  if (c.cancelaEnMismaMonedaExtranjera !== undefined && c.cancelaEnMismaMonedaExtranjera !== 'S' && c.cancelaEnMismaMonedaExtranjera !== 'N') {
+  if (
+    c.cancelaEnMismaMonedaExtranjera !== undefined &&
+    c.cancelaEnMismaMonedaExtranjera !== 'S' &&
+    c.cancelaEnMismaMonedaExtranjera !== 'N'
+  ) {
     f.fail('cancelaEnMismaMonedaExtranjera', 'debe ser "S" o "N"', c.cancelaEnMismaMonedaExtranjera);
   }
   put(out, 'cancelaEnMismaMonedaExtranjera', c.cancelaEnMismaMonedaExtranjera);

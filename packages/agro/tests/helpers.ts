@@ -82,9 +82,11 @@ export function envelope(element: string, ns: string, inner: string): string {
   );
 }
 
-export const cpeResp = (element: string, respuesta: string) => envelope(element, CPE_NS, `<respuesta>${respuesta}</respuesta>`);
+export const cpeResp = (element: string, respuesta: string) =>
+  envelope(element, CPE_NS, `<respuesta>${respuesta}</respuesta>`);
 
-export const lpgResp = (element: string, ret: string, inner: string) => envelope(element, LPG_NS, `<${ret}>${inner}</${ret}>`);
+export const lpgResp = (element: string, ret: string, inner: string) =>
+  envelope(element, LPG_NS, `<${ret}>${inner}</${ret}>`);
 
 export const soapFault = (msg: string) =>
   `<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body><S:Fault><faultcode>S:Server</faultcode><faultstring>${msg}</faultstring></S:Fault></S:Body></S:Envelope>`;

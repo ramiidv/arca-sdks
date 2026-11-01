@@ -54,7 +54,13 @@ export class PadronA5Client extends BasePadronClient {
     if (!Array.isArray(cuits) || cuits.length === 0 || cuits.length > MAX_PERSONA_LIST) {
       throw new ArcaValidationError(
         `getPersonaList_v2 acepta entre 1 y ${MAX_PERSONA_LIST} CUITs (recibió ${Array.isArray(cuits) ? cuits.length : 0})`,
-        [{ field: 'cuits', message: `Entre 1 y ${MAX_PERSONA_LIST} CUITs`, value: Array.isArray(cuits) ? cuits.length : cuits }],
+        [
+          {
+            field: 'cuits',
+            message: `Entre 1 y ${MAX_PERSONA_LIST} CUITs`,
+            value: Array.isArray(cuits) ? cuits.length : cuits,
+          },
+        ],
         'cuits',
       );
     }

@@ -47,17 +47,19 @@ async function main() {
       codigoMoneda: Moneda.PESOS,
       cotizacionMoneda: 1,
       codigoConcepto: Concepto.PRODUCTOS,
-      items: [{
-        unidadesMtx: 1,
-        codigoMtx: '7790001000012',
-        descripcion: 'Producto',
-        cantidad: 1,
-        codigoUnidadMedida: 7,
-        precioUnitario: 100,
-        codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
-        importeIVA: 21,
-        importeItem: 121,
-      }],
+      items: [
+        {
+          unidadesMtx: 1,
+          codigoMtx: '7790001000012',
+          descripcion: 'Producto',
+          cantidad: 1,
+          codigoUnidadMedida: 7,
+          precioUnitario: 100,
+          codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
+          importeIVA: 21,
+          importeItem: 121,
+        },
+      ],
       subtotalesIVA: [{ codigo: CodigoCondicionIVA.IVA_21, importe: 21 }],
     });
 
@@ -72,8 +74,13 @@ async function main() {
     } else if (e instanceof ArcaServiceError) {
       for (const err of e.errors) console.error(`Error de ARCA [${err.code}] ${err.msg}`);
     } else if (e instanceof ArcaSoapError) {
-      console.error(`Error SOAP/HTTP: ${e.message}`, { uncertain: e.uncertain, fault: e.faultString, status: e.statusCode });
-      if (e.uncertain) console.error('El comprobante pudo haberse autorizado: verificá con ultimoComprobante/consultarComprobante.');
+      console.error(`Error SOAP/HTTP: ${e.message}`, {
+        uncertain: e.uncertain,
+        fault: e.faultString,
+        status: e.statusCode,
+      });
+      if (e.uncertain)
+        console.error('El comprobante pudo haberse autorizado: verificá con ultimoComprobante/consultarComprobante.');
     } else if (e instanceof ArcaTicketVigenteError) {
       console.error('Hay un ticket WSAA vigente que no está en el storage; esperá a que venza.');
     } else if (e instanceof ArcaAuthError) {

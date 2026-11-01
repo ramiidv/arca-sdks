@@ -1,8 +1,8 @@
-import { CondicionIva } from "@ramiidv/arca-common";
-import { CbteTipo } from "./constants.js";
-import { fail } from "./validation.js";
+import { CondicionIva } from '@ramiidv/arca-common';
+import { CbteTipo } from './constants.js';
+import { fail } from './validation.js';
 
-export type ClaseComprobante = "factura" | "nota_credito" | "nota_debito";
+export type ClaseComprobante = 'factura' | 'nota_credito' | 'nota_debito';
 
 /*
  * Fuentes:
@@ -42,7 +42,7 @@ const EMISORES_CLASE_C = new Set<number>([
   CondicionIva.EXENTO,
 ]);
 
-const POR_CLASE: Record<"A" | "B" | "C", Record<ClaseComprobante, CbteTipo>> = {
+const POR_CLASE: Record<'A' | 'B' | 'C', Record<ClaseComprobante, CbteTipo>> = {
   A: { factura: CbteTipo.FACTURA_A, nota_credito: CbteTipo.NOTA_CREDITO_A, nota_debito: CbteTipo.NOTA_DEBITO_A },
   B: { factura: CbteTipo.FACTURA_B, nota_credito: CbteTipo.NOTA_CREDITO_B, nota_debito: CbteTipo.NOTA_DEBITO_B },
   C: { factura: CbteTipo.FACTURA_C, nota_credito: CbteTipo.NOTA_CREDITO_C, nota_debito: CbteTipo.NOTA_DEBITO_C },
@@ -67,22 +67,22 @@ const POR_CLASE: Record<"A" | "B" | "C", Record<ClaseComprobante, CbteTipo>> = {
 export function resolverCbteTipo(
   emisor: CondicionIva,
   receptor: CondicionIva,
-  clase: ClaseComprobante = "factura"
+  clase: ClaseComprobante = 'factura',
 ): CbteTipo {
-  if (!(clase in POR_CLASE.A)) fail("clase", `clase de comprobante desconocida: ${clase}`, clase);
+  if (!(clase in POR_CLASE.A)) fail('clase', `clase de comprobante desconocida: ${clase}`, clase);
 
   if (EMISORES_CLASE_C.has(emisor)) return POR_CLASE.C[clase];
 
   if (emisor !== CondicionIva.RESPONSABLE_INSCRIPTO) {
     fail(
-      "emisor",
+      'emisor',
       `la condición frente al IVA ${emisor} no puede emitir comprobantes A, B ni C ` +
-        "(solo Responsable Inscripto, Monotributista o Exento)",
-      emisor
+        '(solo Responsable Inscripto, Monotributista o Exento)',
+      emisor,
     );
   }
 
   if (RECEPTORES_CLASE_A.has(receptor)) return POR_CLASE.A[clase];
   if (RECEPTORES_CLASE_B.has(receptor)) return POR_CLASE.B[clase];
-  return fail("receptor", `condición frente al IVA del receptor desconocida: ${receptor}`, receptor);
+  return fail('receptor', `condición frente al IVA del receptor desconocida: ${receptor}`, receptor);
 }

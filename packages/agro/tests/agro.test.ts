@@ -4,7 +4,11 @@ import type { ArcaEvent, TicketStorage } from '../src/index.js';
 import { CPE_NS, LPG_NS, cpeResp, http503, lpgResp, setup, ticketStorage } from './helpers.js';
 
 const CPE_DUMMY = cpeResp('DummyResp', '<appserver>Ok</appserver><authserver>Ok</authserver><dbserver>Ok</dbserver>');
-const LPG_DUMMY = lpgResp('dummyResp', 'return', '<appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver>');
+const LPG_DUMMY = lpgResp(
+  'dummyResp',
+  'return',
+  '<appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver>',
+);
 
 describe('ArcaAgro', () => {
   it('rechaza un CUIT con dígito verificador inválido', () => {

@@ -43,7 +43,9 @@ describe('transporte: sin fetch propio y parseNumbers: false', () => {
 
   it("A100 con legacyTls: 'always' pasa la opción tal cual y sin fetch", async () => {
     const client = await padron({ legacyTls: 'always' });
-    spy.mockResolvedValueOnce({ parameterCollection: { name: 'SUPA.X', parameterList: { description: 'X', id: '007' } } });
+    spy.mockResolvedValueOnce({
+      parameterCollection: { name: 'SUPA.X', parameterList: { description: 'X', id: '007' } },
+    });
     expect(await client.getParametros('SUPA.X')).toEqual([{ id: '007', descripcion: 'X', atributos: undefined }]);
     const opts = spy.mock.calls[0][4];
     expect(opts?.legacyTls).toBe('always');
@@ -61,7 +63,13 @@ describe('transporte: sin fetch propio y parseNumbers: false', () => {
 
   it('el resto de los servicios (BasePadronClient.call) también pide parseNumbers: false', async () => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a10.namespace, 'getPersona', '<personaReturn><persona><idPersona>20000000516</idPersona><tipoPersona>FISICA</tipoPersona></persona></personaReturn>'));
+    mockFetch(
+      respuesta(
+        ENDPOINTS.a10.namespace,
+        'getPersona',
+        '<personaReturn><persona><idPersona>20000000516</idPersona><tipoPersona>FISICA</tipoPersona></persona></personaReturn>',
+      ),
+    );
     await client.getPersonaBasic('20000000516');
     expect(spy.mock.calls.at(-1)?.[4]?.parseNumbers).toBe(false);
   });

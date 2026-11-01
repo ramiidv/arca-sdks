@@ -52,16 +52,16 @@ SDK no las trae: valida solo que cada código sea numérico/alfanumérico y entr
 
 ### API
 
-| Método | Movimiento | Descripción |
-| --- | --- | --- |
-| `alta(datos)` | `AT` | Alta de relación laboral |
-| `baja(datos)` | `BT` | Baja (la fecha de baja va en `fechaFin`) |
-| `modificacion(datos)` | `MR` | Modificación |
-| `novedad({ movimiento, ...datos })` | `AT`/`BT`/`MR`/`NA`/`NB` | Cualquier código; única vía para `NA` y `NB` |
-| `altasMasivas([...])`, `bajasMasivas([...])`, `modificacionesMasivas([...])`, `novedadesMasivas([...])` | | **Atómicas**: validan todo y, si algo falla, no agregan nada |
-| `generar()` | | `{ contenido, lineas, encoding, buffer, resumen }` |
-| `registros` | | Copia de los registros agregados (modificarla no afecta al builder) |
-| `cantidad`, `resumen()`, `limpiar()` | | |
+| Método                                                                                                  | Movimiento               | Descripción                                                         |
+| ------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------- |
+| `alta(datos)`                                                                                           | `AT`                     | Alta de relación laboral                                            |
+| `baja(datos)`                                                                                           | `BT`                     | Baja (la fecha de baja va en `fechaFin`)                            |
+| `modificacion(datos)`                                                                                   | `MR`                     | Modificación                                                        |
+| `novedad({ movimiento, ...datos })`                                                                     | `AT`/`BT`/`MR`/`NA`/`NB` | Cualquier código; única vía para `NA` y `NB`                        |
+| `altasMasivas([...])`, `bajasMasivas([...])`, `modificacionesMasivas([...])`, `novedadesMasivas([...])` |                          | **Atómicas**: validan todo y, si algo falla, no agregan nada        |
+| `generar()`                                                                                             |                          | `{ contenido, lineas, encoding, buffer, resumen }`                  |
+| `registros`                                                                                             |                          | Copia de los registros agregados (modificarla no afecta al builder) |
+| `cantidad`, `resumen()`, `limpiar()`                                                                    |                          |                                                                     |
 
 Cada registro se valida y se serializa **al agregarlo**: si falla, se lanza el error y no se agrega.
 
@@ -75,11 +75,11 @@ Funciones sueltas (uso avanzado): `serializarRegistro`, `serializarArchivo`, `co
 new ArcaEmpleados({
   strict: true, // default
   serializacion: {
-    eol: '\r\n',              // o '\n'
-    eolFinal: true,           // fin de línea después del último registro
-    encoding: 'latin1',       // o 'ascii'
+    eol: '\r\n', // o '\n'
+    eolFinal: true, // fin de línea después del último registro
+    encoding: 'latin1', // o 'ascii'
     noRepresentables: 'error', // o 'transliterar' (quita diacríticos: Ñ→N, Ú→U)
-    numericoVacio: 'ceros',   // o 'espacios'
+    numericoVacio: 'ceros', // o 'espacios'
   },
 });
 ```
@@ -95,30 +95,30 @@ new ArcaEmpleados({
 
 Un único tipo de registro, `01`, de 130 posiciones. Tabla transcripta del manual (pág. 24):
 
-| Pos. | Campo (propiedad) | Tipo | Long. | Formato |
-| --- | --- | --- | --- | --- |
-| 1-2 | Tipo de registro | N | 2 | `01` |
-| 3-4 | Código de movimiento (`movimiento`) | A | 2 | `AT`, `BT`, `MR`, `NA`, `NB` |
-| 5-15 | CUIL del empleado (`cuil`) | N | 11 | |
-| 16 | Marca de trabajador agropecuario (`trabajadorAgropecuario`) | A | 1 | |
-| 17-19 | Modalidad de contrato (`modalidadContrato`) | N | 3 | |
-| 20-29 | Fecha de inicio de rel. laboral (`fechaInicio`) | A | 10 | `AAAA/MM/DD` |
-| 30-39 | Fecha de fin de rel. laboral (`fechaFin`) | A | 10 | `AAAA/MM/DD` |
-| 40-45 | Código obra social (`obraSocial`) | N | 6 | |
-| 46-47 | Situación de revista (`situacionRevista`) | N | 2 | |
-| 48-57 | Fecha recepción telegrama de renuncia (`fechaTelegramaRenuncia`) | A | 10 | `AAAA/MM/DD` |
-| 58-72 | Retribución pactada (`retribucion`) | N | 15 | |
-| 73 | Modalidad de liquidación (`modalidadLiquidacion`) | N | 1 | |
-| 74-78 | Sucursal – domicilio de desempeño (`sucursal`) | N | 5 | |
-| 79-84 | Actividad en el domicilio de desempeño (`actividad`) | N | 6 | |
-| 85-88 | Puesto desempeñado (`puesto`) | A | 4 | |
-| 89-90 | Rectificación (`rectificacion`) | N | 2 | `00`–`05` |
-| 91-100 | Convenio colectivo de trabajo (`cct`) | A | 10 | |
-| 101-106 | Categoría profesional (`categoriaProfesional`) | N | 6 | |
-| 107-109 | Tipo de servicio (`tipoServicio`) | N | 3 | |
-| 110-119 | Fecha de suspensión servicios temporarios (`fechaSuspensionServiciosTemporarios`) | A | 10 | `AAAA/MM/DD` |
-| 120-129 | Número formulario agropecuario (`numeroFormularioAgropecuario`) | N | 10 | |
-| 130 | Marca licencia COVID / tipo de contrato CCG (`marcaCovidTipoContratoCCG`) | N | 1 | `0`–`9` |
+| Pos.    | Campo (propiedad)                                                                 | Tipo | Long. | Formato                      |
+| ------- | --------------------------------------------------------------------------------- | ---- | ----- | ---------------------------- |
+| 1-2     | Tipo de registro                                                                  | N    | 2     | `01`                         |
+| 3-4     | Código de movimiento (`movimiento`)                                               | A    | 2     | `AT`, `BT`, `MR`, `NA`, `NB` |
+| 5-15    | CUIL del empleado (`cuil`)                                                        | N    | 11    |                              |
+| 16      | Marca de trabajador agropecuario (`trabajadorAgropecuario`)                       | A    | 1     |                              |
+| 17-19   | Modalidad de contrato (`modalidadContrato`)                                       | N    | 3     |                              |
+| 20-29   | Fecha de inicio de rel. laboral (`fechaInicio`)                                   | A    | 10    | `AAAA/MM/DD`                 |
+| 30-39   | Fecha de fin de rel. laboral (`fechaFin`)                                         | A    | 10    | `AAAA/MM/DD`                 |
+| 40-45   | Código obra social (`obraSocial`)                                                 | N    | 6     |                              |
+| 46-47   | Situación de revista (`situacionRevista`)                                         | N    | 2     |                              |
+| 48-57   | Fecha recepción telegrama de renuncia (`fechaTelegramaRenuncia`)                  | A    | 10    | `AAAA/MM/DD`                 |
+| 58-72   | Retribución pactada (`retribucion`)                                               | N    | 15    |                              |
+| 73      | Modalidad de liquidación (`modalidadLiquidacion`)                                 | N    | 1     |                              |
+| 74-78   | Sucursal – domicilio de desempeño (`sucursal`)                                    | N    | 5     |                              |
+| 79-84   | Actividad en el domicilio de desempeño (`actividad`)                              | N    | 6     |                              |
+| 85-88   | Puesto desempeñado (`puesto`)                                                     | A    | 4     |                              |
+| 89-90   | Rectificación (`rectificacion`)                                                   | N    | 2     | `00`–`05`                    |
+| 91-100  | Convenio colectivo de trabajo (`cct`)                                             | A    | 10    |                              |
+| 101-106 | Categoría profesional (`categoriaProfesional`)                                    | N    | 6     |                              |
+| 107-109 | Tipo de servicio (`tipoServicio`)                                                 | N    | 3     |                              |
+| 110-119 | Fecha de suspensión servicios temporarios (`fechaSuspensionServiciosTemporarios`) | A    | 10    | `AAAA/MM/DD`                 |
+| 120-129 | Número formulario agropecuario (`numeroFormularioAgropecuario`)                   | N    | 10    |                              |
+| 130     | Marca licencia COVID / tipo de contrato CCG (`marcaCovidTipoContratoCCG`)         | N    | 1     | `0`–`9`                      |
 
 ### Qué es oficial y qué es convención
 
@@ -131,18 +131,18 @@ modalidad de contratación, obra social y fecha de fin si el contrato es a plazo
 **Convención no documentada por ARCA** (la habitual en los diseños de registro de ARCA; configurable
 donde se indica):
 
-| Tema | Lo que hace el SDK | Configurable |
-| --- | --- | --- |
-| Numéricos | Ceros a la izquierda | — |
-| Numérico no informado | Ceros (salvo rectificación y marca 130, siempre `0`) | `numericoVacio: 'espacios'` |
-| Alfanuméricos | Espacios a la derecha; sin cambiar mayúsculas | — |
-| Fecha no informada | 10 espacios | — |
-| Retribución | 2 decimales implícitos, sin separador: `1500.5` → `000000000150050`. Más de 2 decimales es error (no se redondea) | — |
-| Codificación | ISO-8859-1 (`Buffer` en latin1, 1 byte por caracter) | `encoding: 'ascii'` |
-| Caracteres no representables | Error | `noRepresentables: 'transliterar'` |
-| Fin de línea | CRLF, también después del último registro | `eol`, `eolFinal` |
-| Fechas `Date` | Se toma la fecha calendario de Argentina (`America/Argentina/Buenos_Aires`) | Pasá un string `AAAA-MM-DD` para fijarla literal |
-| Marca de trabajador agropecuario | Se escribe el caracter que pases (el manual no dice cuál) | — |
+| Tema                             | Lo que hace el SDK                                                                                                | Configurable                                     |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Numéricos                        | Ceros a la izquierda                                                                                              | —                                                |
+| Numérico no informado            | Ceros (salvo rectificación y marca 130, siempre `0`)                                                              | `numericoVacio: 'espacios'`                      |
+| Alfanuméricos                    | Espacios a la derecha; sin cambiar mayúsculas                                                                     | —                                                |
+| Fecha no informada               | 10 espacios                                                                                                       | —                                                |
+| Retribución                      | 2 decimales implícitos, sin separador: `1500.5` → `000000000150050`. Más de 2 decimales es error (no se redondea) | —                                                |
+| Codificación                     | ISO-8859-1 (`Buffer` en latin1, 1 byte por caracter)                                                              | `encoding: 'ascii'`                              |
+| Caracteres no representables     | Error                                                                                                             | `noRepresentables: 'transliterar'`               |
+| Fin de línea                     | CRLF, también después del último registro                                                                         | `eol`, `eolFinal`                                |
+| Fechas `Date`                    | Se toma la fecha calendario de Argentina (`America/Argentina/Buenos_Aires`)                                       | Pasá un string `AAAA-MM-DD` para fijarla literal |
+| Marca de trabajador agropecuario | Se escribe el caracter que pases (el manual no dice cuál)                                                         | —                                                |
 
 **No verificado / no documentado:**
 
@@ -161,11 +161,11 @@ representable lanzan `ArcaSerializationError`.
 
 ## Errores
 
-| Clase | Cuándo |
-| --- | --- |
+| Clase                             | Cuándo                                                                                                                                                                                                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ArcaValidationError` (de common) | Reglas de negocio, datos que no son un objeto, movimiento inválido, `generar()` sin registros. `details[]` por campo; en las operaciones masivas el campo es `"[i].campo"` y `cause` es el error original (o un `AggregateError` con uno por registro). |
-| `ArcaSerializationError` | Un valor no se puede escribir en el formato. `field`, `desde`, `hasta`, `value`, `indice` (en `serializarArchivo`), `cause`. |
-| `ArcaEmpleadosError` | Base de los errores propios (acepta `{ cause }`). |
+| `ArcaSerializationError`          | Un valor no se puede escribir en el formato. `field`, `desde`, `hasta`, `value`, `indice` (en `serializarArchivo`), `cause`.                                                                                                                            |
+| `ArcaEmpleadosError`              | Base de los errores propios (acepta `{ cause }`).                                                                                                                                                                                                       |
 
 ## Licencia
 

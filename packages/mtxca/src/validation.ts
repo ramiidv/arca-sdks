@@ -60,17 +60,24 @@ function throwIfErrors(errors: ValidationErrorDetail[], what: string): void {
  */
 function validarItemEstructura(item: MtxcaItem, i: number, cbteTipo: number, errors: ValidationErrorDetail[]): void {
   const p = `items[${i}]`;
-  const add = (field: string, message: string, value: unknown) => errors.push({ field: `${p}.${field}`, message, value });
+  const add = (field: string, message: string, value: unknown) =>
+    errors.push({ field: `${p}.${field}`, message, value });
   const sinCantidad = esUnidadSinCantidad(item);
 
   if (!sinCantidad) {
-    if (item.unidadesMtx === undefined) add('unidadesMtx', 'es obligatorio salvo unidad de medida 97 o 99 (500)', item.unidadesMtx);
-    if (item.codigoMtx === undefined) add('codigoMtx', 'es obligatorio salvo unidad de medida 97 o 99 (503)', item.codigoMtx);
-    if (item.cantidad === undefined) add('cantidad', 'es obligatoria salvo unidad de medida 97 o 99 (507)', item.cantidad);
-    if (item.precioUnitario === undefined) add('precioUnitario', 'es obligatorio salvo unidad de medida 97 o 99 (509)', item.precioUnitario);
+    if (item.unidadesMtx === undefined)
+      add('unidadesMtx', 'es obligatorio salvo unidad de medida 97 o 99 (500)', item.unidadesMtx);
+    if (item.codigoMtx === undefined)
+      add('codigoMtx', 'es obligatorio salvo unidad de medida 97 o 99 (503)', item.codigoMtx);
+    if (item.cantidad === undefined)
+      add('cantidad', 'es obligatoria salvo unidad de medida 97 o 99 (507)', item.cantidad);
+    if (item.precioUnitario === undefined)
+      add('precioUnitario', 'es obligatorio salvo unidad de medida 97 o 99 (509)', item.precioUnitario);
   } else {
-    if (item.cantidad !== undefined) add('cantidad', 'no corresponde con unidad de medida 97 o 99 (507)', item.cantidad);
-    if (item.precioUnitario !== undefined) add('precioUnitario', 'no corresponde con unidad de medida 97 o 99 (509)', item.precioUnitario);
+    if (item.cantidad !== undefined)
+      add('cantidad', 'no corresponde con unidad de medida 97 o 99 (507)', item.cantidad);
+    if (item.precioUnitario !== undefined)
+      add('precioUnitario', 'no corresponde con unidad de medida 97 o 99 (509)', item.precioUnitario);
     if (item.importeBonificacion !== undefined) {
       add('importeBonificacion', 'no corresponde con unidad de medida 97 o 99 (510)', item.importeBonificacion);
     }
@@ -104,7 +111,10 @@ export function validateComprobanteCAEA(c: MtxcaComprobanteBase): void {
   const errors: ValidationErrorDetail[] = [];
   itemsDe(c).forEach((item, i) => validarItemEstructura(item, i, c.codigoTipoComprobante, errors));
   if ((c.codigoTipoDocumento === undefined) !== (c.numeroDocumento === undefined)) {
-    errors.push({ field: 'numeroDocumento', message: 'codigoTipoDocumento y numeroDocumento se informan juntos (707)' });
+    errors.push({
+      field: 'numeroDocumento',
+      message: 'codigoTipoDocumento y numeroDocumento se informan juntos (707)',
+    });
   }
   throwIfErrors(errors, 'Comprobante CAEA inválido');
 }
@@ -134,8 +144,10 @@ export function validateComprobanteCAE(c: MtxcaComprobanteBase): void {
     add('numeroDocumento', 'codigoTipoDocumento y numeroDocumento se informan juntos (108)');
   }
   if (RECEPTOR_CUIT.has(tipo)) {
-    if (c.codigoTipoDocumento === undefined) add('codigoTipoDocumento', `es obligatorio para el tipo de comprobante ${tipo} (128)`);
-    else if (c.codigoTipoDocumento !== 80) add('codigoTipoDocumento', `debe ser 80 (CUIT) para el tipo de comprobante ${tipo} (129)`, c.codigoTipoDocumento);
+    if (c.codigoTipoDocumento === undefined)
+      add('codigoTipoDocumento', `es obligatorio para el tipo de comprobante ${tipo} (128)`);
+    else if (c.codigoTipoDocumento !== 80)
+      add('codigoTipoDocumento', `debe ser 80 (CUIT) para el tipo de comprobante ${tipo} (129)`, c.codigoTipoDocumento);
   }
 
   const servicios = c.codigoConcepto === 2 || c.codigoConcepto === 3;
@@ -165,15 +177,18 @@ export function validateComprobanteCAE(c: MtxcaComprobanteBase): void {
   }
 
   if (c.codigoMoneda === 'PES') {
-    if (c.cotizacionMoneda !== undefined && c.cotizacionMoneda !== 1) add('cotizacionMoneda', 'debe ser 1 si codigoMoneda es PES (120)', c.cotizacionMoneda);
-    if (c.cancelaEnMismaMonedaExtranjera === 'S') add('cancelaEnMismaMonedaExtranjera', 'no corresponde con codigoMoneda PES (169)', 'S');
+    if (c.cotizacionMoneda !== undefined && c.cotizacionMoneda !== 1)
+      add('cotizacionMoneda', 'debe ser 1 si codigoMoneda es PES (120)', c.cotizacionMoneda);
+    if (c.cancelaEnMismaMonedaExtranjera === 'S')
+      add('cancelaEnMismaMonedaExtranjera', 'no corresponde con codigoMoneda PES (169)', 'S');
   }
   if (c.cotizacionMoneda === undefined && c.cancelaEnMismaMonedaExtranjera !== 'S') {
     add('cotizacionMoneda', 'es obligatoria salvo cancelaEnMismaMonedaExtranjera = "S" (194)');
   }
 
   (c.otrosTributos ?? []).forEach((t, i) => {
-    if (t?.codigo === 99 && !t.descripcion) add(`otrosTributos[${i}].descripcion`, 'es obligatoria si codigo es 99 (301)');
+    if (t?.codigo === 99 && !t.descripcion)
+      add(`otrosTributos[${i}].descripcion`, 'es obligatoria si codigo es 99 (301)');
   });
 
   // --- Ítems ---------------------------------------------------------------
@@ -187,7 +202,11 @@ export function validateComprobanteCAE(c: MtxcaComprobanteBase): void {
     const importeIVA = imp(item.importeIVA);
 
     if (alic === undefined) {
-      add(`${p}.codigoCondicionIVA`, `condición de IVA ${item.codigoCondicionIVA} desconocida (consultá getCondicionesIVA())`, item.codigoCondicionIVA);
+      add(
+        `${p}.codigoCondicionIVA`,
+        `condición de IVA ${item.codigoCondicionIVA} desconocida (consultá getCondicionesIVA())`,
+        item.codigoCondicionIVA,
+      );
       ivaItem.push(0);
       return;
     }
@@ -210,11 +229,20 @@ export function validateComprobanteCAE(c: MtxcaComprobanteBase): void {
     // Bonificación <= precio * cantidad (511).
     const bruto = dec(item.precioUnitario) * dec(item.cantidad);
     if (item.importeBonificacion !== undefined && dec(item.importeBonificacion) > bruto + 1e-9) {
-      add(`${p}.importeBonificacion`, 'debe ser menor o igual a precioUnitario * cantidad (511)', item.importeBonificacion);
+      add(
+        `${p}.importeBonificacion`,
+        'debe ser menor o igual a precioUnitario * cantidad (511)',
+        item.importeBonificacion,
+      );
     }
 
     // Unidad 99: tiene que haber otro ítem con la misma condición de IVA (513).
-    if (u === BONIFICACION && !items.some((o) => o !== item && o.codigoCondicionIVA === item.codigoCondicionIVA && o.codigoUnidadMedida !== BONIFICACION)) {
+    if (
+      u === BONIFICACION &&
+      !items.some(
+        (o) => o !== item && o.codigoCondicionIVA === item.codigoCondicionIVA && o.codigoUnidadMedida !== BONIFICACION,
+      )
+    ) {
       add(`${p}.codigoUnidadMedida`, 'una bonificación (99) requiere otro ítem con la misma condición de IVA (513)', u);
     }
 
@@ -225,29 +253,53 @@ export function validateComprobanteCAE(c: MtxcaComprobanteBase): void {
       if (u === SENA || u === BONIFICACION) {
         const esperado = importeItem - importeItem / (1 + alic);
         if (!dentroDelMargen(importeIVA, esperado)) {
-          add(`${p}.importeIVA`, `debe ser importeItem - importeItem / (1 + alícuota) = ${fmt(esperado)} (515)`, item.importeIVA);
+          add(
+            `${p}.importeIVA`,
+            `debe ser importeItem - importeItem / (1 + alícuota) = ${fmt(esperado)} (515)`,
+            item.importeIVA,
+          );
         }
       } else if (item.cantidad !== undefined && item.precioUnitario !== undefined) {
         const ivaEsperado = signo * base * alic;
         const itemEsperado = signo * base * (1 + alic);
         if (!dentroDelMargen(importeIVA, ivaEsperado)) {
-          add(`${p}.importeIVA`, `debe ser (precioUnitario * cantidad - importeBonificacion) * alícuota = ${fmt(ivaEsperado)} (515)`, item.importeIVA);
+          add(
+            `${p}.importeIVA`,
+            `debe ser (precioUnitario * cantidad - importeBonificacion) * alícuota = ${fmt(ivaEsperado)} (515)`,
+            item.importeIVA,
+          );
         }
         if (!dentroDelMargen(importeItem, itemEsperado)) {
-          add(`${p}.importeItem`, `debe ser (precioUnitario * cantidad - importeBonificacion) * (1 + alícuota) = ${fmt(itemEsperado)} (519)`, item.importeItem);
+          add(
+            `${p}.importeItem`,
+            `debe ser (precioUnitario * cantidad - importeBonificacion) * (1 + alícuota) = ${fmt(itemEsperado)} (519)`,
+            item.importeItem,
+          );
         }
       }
-    } else if (ITEM_SIN_IVA.has(tipo) && u !== SENA && u !== BONIFICACION && item.cantidad !== undefined && item.precioUnitario !== undefined) {
+    } else if (
+      ITEM_SIN_IVA.has(tipo) &&
+      u !== SENA &&
+      u !== BONIFICACION &&
+      item.cantidad !== undefined &&
+      item.precioUnitario !== undefined
+    ) {
       const itemEsperado = signo * base;
       if (!dentroDelMargen(importeItem, itemEsperado)) {
-        add(`${p}.importeItem`, `debe ser precioUnitario (con IVA) * cantidad - importeBonificacion = ${fmt(itemEsperado)} (519)`, item.importeItem);
+        add(
+          `${p}.importeItem`,
+          `debe ser precioUnitario (con IVA) * cantidad - importeBonificacion = ${fmt(itemEsperado)} (519)`,
+          item.importeItem,
+        );
       }
     }
   });
 
   // --- Subtotales de IVA (127, 400-405) -----------------------------------
   const subtotales = c.subtotalesIVA ?? [];
-  const codigosConIVA = new Set(items.filter((i) => CON_SUBTOTAL.has(i.codigoCondicionIVA)).map((i) => i.codigoCondicionIVA));
+  const codigosConIVA = new Set(
+    items.filter((i) => CON_SUBTOTAL.has(i.codigoCondicionIVA)).map((i) => i.codigoCondicionIVA),
+  );
   const vistos = new Set<number>();
   subtotales.forEach((s, i) => {
     const p = `subtotalesIVA[${i}]`;
@@ -261,10 +313,16 @@ export function validateComprobanteCAE(c: MtxcaComprobanteBase): void {
       add(`${p}.codigo`, `no hay ítems con condición de IVA ${s.codigo} (403)`, s.codigo);
       return;
     }
-    const delCodigo = items.map((it, k) => (it.codigoCondicionIVA === s.codigo ? ivaItem[k] : undefined)).filter((v): v is number => v !== undefined);
+    const delCodigo = items
+      .map((it, k) => (it.codigoCondicionIVA === s.codigo ? ivaItem[k] : undefined))
+      .filter((v): v is number => v !== undefined);
     const esperado = sum(delCodigo);
     if (!dentroDelMargen(imp(s.importe), esperado, delCodigo.length)) {
-      add(`${p}.importe`, `debe ser la suma del IVA de los ítems con condición ${s.codigo} = ${fmt(esperado)} (401)`, s.importe);
+      add(
+        `${p}.importe`,
+        `debe ser la suma del IVA de los ítems con condición ${s.codigo} = ${fmt(esperado)} (401)`,
+        s.importe,
+      );
     }
   });
   for (const codigo of codigosConIVA) {
@@ -274,41 +332,70 @@ export function validateComprobanteCAE(c: MtxcaComprobanteBase): void {
   if (totalIVA < 0) add('subtotalesIVA', 'la suma de los subtotales de IVA no puede ser negativa (405)');
 
   // --- Totales (110-116) ----------------------------------------------------
-  const porCondicion = (pred: (cond: number) => boolean) => items.map((it, k) => ({ it, k })).filter(({ it }) => pred(it.codigoCondicionIVA));
+  const porCondicion = (pred: (cond: number) => boolean) =>
+    items.map((it, k) => ({ it, k })).filter(({ it }) => pred(it.codigoCondicionIVA));
   if (CLASE_A.has(tipo) || CLASE_B.has(tipo)) {
     const gravados = porCondicion((x) => GRAVADAS.has(x));
     const gravadoEsperado = sum(gravados.map(({ it, k }) => imp(it.importeItem) - ivaItem[k]));
     if (!dentroDelMargen(imp(c.importeGravado), gravadoEsperado, gravados.length)) {
-      add('importeGravado', `debe ser la suma de importeItem sin IVA de los ítems gravados = ${fmt(gravadoEsperado)} (110)`, c.importeGravado);
+      add(
+        'importeGravado',
+        `debe ser la suma de importeItem sin IVA de los ítems gravados = ${fmt(gravadoEsperado)} (110)`,
+        c.importeGravado,
+      );
     }
   }
   const noGravados = porCondicion((x) => x === 1);
   const noGravadoEsperado = sum(noGravados.map(({ it }) => imp(it.importeItem)));
   if (!dentroDelMargen(imp(c.importeNoGravado), noGravadoEsperado, noGravados.length)) {
-    add('importeNoGravado', `debe ser la suma de importeItem de los ítems no gravados = ${fmt(noGravadoEsperado)} (111)`, c.importeNoGravado);
+    add(
+      'importeNoGravado',
+      `debe ser la suma de importeItem de los ítems no gravados = ${fmt(noGravadoEsperado)} (111)`,
+      c.importeNoGravado,
+    );
   }
   const exentos = porCondicion((x) => x === 2);
   const exentoEsperado = sum(exentos.map(({ it }) => imp(it.importeItem)));
   if (!dentroDelMargen(imp(c.importeExento), exentoEsperado, exentos.length)) {
-    add('importeExento', `debe ser la suma de importeItem de los ítems exentos = ${fmt(exentoEsperado)} (112)`, c.importeExento);
+    add(
+      'importeExento',
+      `debe ser la suma de importeItem de los ítems exentos = ${fmt(exentoEsperado)} (112)`,
+      c.importeExento,
+    );
   }
   const subtotalEsperado = imp(c.importeGravado) + imp(c.importeNoGravado) + imp(c.importeExento);
   if (!dentroDelMargen(imp(c.importeSubtotal), subtotalEsperado)) {
-    add('importeSubtotal', `debe ser importeGravado + importeNoGravado + importeExento = ${fmt(subtotalEsperado)} (113)`, c.importeSubtotal);
+    add(
+      'importeSubtotal',
+      `debe ser importeGravado + importeNoGravado + importeExento = ${fmt(subtotalEsperado)} (113)`,
+      c.importeSubtotal,
+    );
   }
   const tributos = c.otrosTributos ?? [];
   const tributosEsperado = sum(tributos.map((t) => imp(t?.importe)));
   if (!dentroDelMargen(imp(c.importeOtrosTributos), tributosEsperado, tributos.length)) {
-    add('importeOtrosTributos', `debe ser la suma de otrosTributos[].importe = ${fmt(tributosEsperado)} (114)`, c.importeOtrosTributos);
+    add(
+      'importeOtrosTributos',
+      `debe ser la suma de otrosTributos[].importe = ${fmt(tributosEsperado)} (114)`,
+      c.importeOtrosTributos,
+    );
   }
   const total = imp(c.importeTotal);
   const totalPorSubtotales = imp(c.importeSubtotal) + imp(c.importeOtrosTributos) + totalIVA;
   if (!dentroDelMargen(total, totalPorSubtotales)) {
-    add('importeTotal', `debe ser importeSubtotal + importeOtrosTributos + subtotales de IVA = ${fmt(totalPorSubtotales)} (115)`, c.importeTotal);
+    add(
+      'importeTotal',
+      `debe ser importeSubtotal + importeOtrosTributos + subtotales de IVA = ${fmt(totalPorSubtotales)} (115)`,
+      c.importeTotal,
+    );
   }
   const totalPorItems = imp(c.importeOtrosTributos) + sum(items.map((it) => imp(it.importeItem)));
   if (!dentroDelMargen(total, totalPorItems, items.length)) {
-    add('importeTotal', `debe ser importeOtrosTributos + suma de importeItem = ${fmt(totalPorItems)} (116)`, c.importeTotal);
+    add(
+      'importeTotal',
+      `debe ser importeOtrosTributos + suma de importeItem = ${fmt(totalPorItems)} (116)`,
+      c.importeTotal,
+    );
   }
 
   throwIfErrors(errors, 'Comprobante inválido');

@@ -11,8 +11,8 @@
  *    con el mismo número es seguro) o conflicto.
  */
 
-import fs from "fs";
-import { formatDate } from "@ramiidv/arca-common";
+import fs from 'fs';
+import { formatDate } from '@ramiidv/arca-common';
 import {
   Arca,
   ArcaResultadoIncierto,
@@ -21,16 +21,16 @@ import {
   FileTicketStorage,
   IvaTipo,
   requiereRecuperacion,
-} from "@ramiidv/arca-facturacion";
-import type { FacturarOpts, IntentoComprobante } from "@ramiidv/arca-facturacion";
+} from '@ramiidv/arca-facturacion';
+import type { FacturarOpts, IntentoComprobante } from '@ramiidv/arca-facturacion';
 
 const arca = new Arca({
   cuit: 20123456786,
-  cert: fs.readFileSync("./certs/certificado.crt", "utf-8"),
-  key: fs.readFileSync("./certs/clave.key", "utf-8"),
+  cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: fs.readFileSync('./certs/clave.key', 'utf-8'),
   production: false,
   // Sin storage, un reinicio deja sin poder loguearse hasta que venza el TA anterior.
-  ticketStorage: new FileTicketStorage("./.arca-tickets"),
+  ticketStorage: new FileTicketStorage('./.arca-tickets'),
 });
 
 /** Simula la persistencia del worker (en una app real: la DB). */
@@ -44,17 +44,17 @@ async function emitir(jobId: string, opts: FacturarOpts & { cbteNro: number }, e
     const res = await arca.facturar(opts);
     if (!res.aprobada && requiereRecuperacion(res)) {
       // 10016: el número ya se usó; si fue un envío anterior nuestro, quedó autorizado.
-      db.set(jobId, { ...db.get(jobId)!, estado: "incierto" });
+      db.set(jobId, { ...db.get(jobId)!, estado: 'incierto' });
       return resolver(jobId, envio);
     }
-    db.set(jobId, { ...db.get(jobId)!, estado: res.aprobada ? "autorizado" : "rechazado", cae: res.cae });
+    db.set(jobId, { ...db.get(jobId)!, estado: res.aprobada ? 'autorizado' : 'rechazado', cae: res.cae });
   } catch (e) {
     if (e instanceof ArcaResultadoIncierto) {
-      db.set(jobId, { ...db.get(jobId)!, estado: "incierto" });
+      db.set(jobId, { ...db.get(jobId)!, estado: 'incierto' });
       return resolver(jobId, envio);
     }
     if (e instanceof ArcaWSFEError) {
-      db.set(jobId, { ...db.get(jobId)!, estado: "rechazado" });
+      db.set(jobId, { ...db.get(jobId)!, estado: 'rechazado' });
       return;
     }
     throw e; // validación, auth, sin conexión: no se envió nada; reintentar el job más tarde
@@ -69,21 +69,21 @@ async function resolver(jobId: string, envio = 1) {
 
   const r = await arca.recuperarComprobante(job.intento);
   switch (r.estado) {
-    case "autorizado":
-      db.set(jobId, { ...job, estado: "autorizado", cae: r.resultado.cae });
+    case 'autorizado':
+      db.set(jobId, { ...job, estado: 'autorizado', cae: r.resultado.cae });
       console.log(`Recuperado: CAE ${r.resultado.cae}`);
       break;
-    case "no_emitido":
+    case 'no_emitido':
       if (envio >= MAX_ENVIOS) {
-        db.set(jobId, { ...job, estado: "incierto" }); // reintentar más tarde (ARCA puede estar caído)
+        db.set(jobId, { ...job, estado: 'incierto' }); // reintentar más tarde (ARCA puede estar caído)
         break;
       }
       // Seguro: mismo número. Si el original se autorizara después, ARCA rechaza este (10016).
       await emitir(jobId, { ...job.opts, cbteNro: job.intento.cbteNro }, envio + 1);
       break;
-    case "conflicto":
-      db.set(jobId, { ...job, estado: "conflicto" });
-      console.error("El número lo usó otra emisión:", r.encontrado.ResultGet);
+    case 'conflicto':
+      db.set(jobId, { ...job, estado: 'conflicto' });
+      console.error('El número lo usó otra emisión:', r.encontrado.ResultGet);
       break;
   }
 }
@@ -107,12 +107,12 @@ async function main() {
     descuentoGlobal: 300,
   };
   const { intento, importes } = arca.armarComprobante(opts);
-  db.set("job-1", { estado: "enviando", opts, intento });
-  console.log("Total a facturar:", importes.total);
+  db.set('job-1', { estado: 'enviando', opts, intento });
+  console.log('Total a facturar:', importes.total);
 
   // 2 y 3. Emitir y, si hace falta, recuperar.
-  await emitir("job-1", opts);
-  console.log(db.get("job-1"));
+  await emitir('job-1', opts);
+  console.log(db.get('job-1'));
 }
 
 main().catch(console.error);

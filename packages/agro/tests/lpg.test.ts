@@ -69,9 +69,11 @@ const AUTORIZACION =
   '<totalRetencion>20000</totalRetencion><totalNetoAPagar>8130274.01</totalNetoAPagar>' +
   '<coe>330100012345</coe><estado>AC</estado></autorizacion>';
 
-const EVENTO = '<eventos><evento><codigo>1</codigo><descripcion>Liquidación registrada</descripcion></evento></eventos>';
+const EVENTO =
+  '<eventos><evento><codigo>1</codigo><descripcion>Liquidación registrada</descripcion></evento></eventos>';
 
-const ERROR_1 = '<errores><error><codigo>1105</codigo><descripcion>El número de orden ya fue utilizado.</descripcion></error></errores>';
+const ERROR_1 =
+  '<errores><error><codigo>1105</codigo><descripcion>El número de orden ya fue utilizado.</descripcion></error></errores>';
 const ERROR_N =
   '<errores><error><codigo>1105</codigo><descripcion>El número de orden ya fue utilizado.</descripcion></error>' +
   '<error><codigo>1201</codigo><descripcion>CUIT vendedor inválido.</descripcion></error></errores>';
@@ -125,7 +127,12 @@ describe('WSLPG: liquidacionAutorizar', () => {
       'campania',
       'fechaCierre',
     ]);
-    expect(keys(c.req.deducciones.deduccion)).toEqual(['codigoConcepto', 'detalleAclaratorio', 'comisionGastosAdm', 'alicuotaIva']);
+    expect(keys(c.req.deducciones.deduccion)).toEqual([
+      'codigoConcepto',
+      'detalleAclaratorio',
+      'comisionGastosAdm',
+      'alicuotaIva',
+    ]);
     expect(keys(c.req.retenciones.retencion)).toEqual(['codigoConcepto', 'baseCalculo', 'alicuota']);
     expect(keys(c.req.percepciones.percepcion)).toEqual(['descripcion', 'importeFinal']);
     expect(c.body).toContain('<precioRefTn>250000.123</precioRefTn>');
@@ -149,7 +156,9 @@ describe('WSLPG: liquidacionAutorizar', () => {
       importeIva: 23625.01,
       importeDeduccion: 136125.07,
     });
-    expect(r.autorizacion.retenciones).toEqual([{ retencion: { codigoConcepto: 'RG', alicuota: 2 }, importeRetencion: 20000 }]);
+    expect(r.autorizacion.retenciones).toEqual([
+      { retencion: { codigoConcepto: 'RG', alicuota: 2 }, importeRetencion: 20000 },
+    ]);
     expect(r.autorizacion.percepciones).toEqual([]);
     expect(r.eventos).toEqual([{ codigo: '1', descripcion: 'Liquidación registrada' }]);
   });
@@ -434,7 +443,9 @@ describe('WSLPG: ajuste y certificación, detalles', () => {
   });
 
   it('cgAutorizar: orden XSD de cabecera', async () => {
-    const { agro, calls } = setup(() => lpgResp('cgAutorizarResp', 'oReturn', '<autorizacion><coe>1</coe></autorizacion>'));
+    const { agro, calls } = setup(() =>
+      lpgResp('cgAutorizarResp', 'oReturn', '<autorizacion><coe>1</coe></autorizacion>'),
+    );
     await agro.lpg.cgAutorizar(cg());
     expect(keys(calls[0].req.cabecera)).toEqual([
       'tipoCertificado',
@@ -446,18 +457,25 @@ describe('WSLPG: ajuste y certificación, detalles', () => {
       'codGrano',
       'campania',
     ]);
-    expect(keys(calls[0].req.retiroTransferencia)).toEqual(['certificadoDeposito', 'nroActDepositario', 'cuitReceptor']);
+    expect(keys(calls[0].req.retiroTransferencia)).toEqual([
+      'certificadoDeposito',
+      'nroActDepositario',
+      'cuitReceptor',
+    ]);
   });
 
   it('cgConsultarUltimoNroOrden', async () => {
-    const { agro, calls } = setup(() => lpgResp('cgConsultarUltimoNroOrdenResp', 'liqUltNroOrdenReturn', '<nroOrden>3</nroOrden>'));
+    const { agro, calls } = setup(() =>
+      lpgResp('cgConsultarUltimoNroOrdenResp', 'liqUltNroOrdenReturn', '<nroOrden>3</nroOrden>'),
+    );
     expect(await agro.lpg.cgConsultarUltimoNroOrden(1)).toBe(3);
     expect(calls[0].element).toBe('ser:cgConsultarUltimoNroOrdenReq');
   });
 });
 
 describe('WSLPG: paramétricas', () => {
-  const item = (c: string, d: string) => `<codigoDescripcion><codigo>${c}</codigo><descripcion>${d}</descripcion></codigoDescripcion>`;
+  const item = (c: string, d: string) =>
+    `<codigoDescripcion><codigo>${c}</codigo><descripcion>${d}</descripcion></codigoDescripcion>`;
 
   it('tipoGranoConsultar: tipoGranoReq solo con auth; 1 y N; vacía → []', async () => {
     const una = setup(() => lpgResp('tipoGranoResp', 'tipoGranoReturn', `<granos>${item('23', 'SOJA')}</granos>`));
@@ -481,19 +499,91 @@ describe('WSLPG: paramétricas', () => {
   });
 
   it.each([
-    ['provinciasConsultar', 'provinciasReq', 'provinciasResp', 'provinciasReturn', 'provincias', (a: ArcaAgro) => a.lpg.provinciasConsultar()],
+    [
+      'provinciasConsultar',
+      'provinciasReq',
+      'provinciasResp',
+      'provinciasReturn',
+      'provincias',
+      (a: ArcaAgro) => a.lpg.provinciasConsultar(),
+    ],
     ['puertoConsultar', 'puertoReq', 'puertoResp', 'puertoReturn', 'puertos', (a: ArcaAgro) => a.lpg.puertoConsultar()],
-    ['tipoActividadConsultar', 'tipoActividadReq', 'tipoActividadResp', 'tipoActividadReturn', 'tiposActividad', (a: ArcaAgro) => a.lpg.tipoActividadConsultar()],
-    ['tipoActividadRepresentadoConsultar', 'tipoActividadRepresentadoReq', 'tipoActividadRepresentadoResp', 'tipoActividadReturn', 'tiposActividad', (a: ArcaAgro) => a.lpg.tipoActividadRepresentadoConsultar()],
-    ['tipoCertificadoDepositoConsultar', 'tipoCertificadoDepReq', 'tipoCertificadoDepResp', 'tipoCertDepReturn', 'tiposCertDep', (a: ArcaAgro) => a.lpg.tipoCertificadoDepositoConsultar()],
-    ['tipoRetencionConsultar', 'tipoRetencionReq', 'tipoRetencionResp', 'tipoRetencionReturn', 'tiposRetencion', (a: ArcaAgro) => a.lpg.tipoRetencionConsultar()],
-    ['tipoDeduccionConsultar', 'tipoDeduccionReq', 'tipoDeduccionResp', 'tipoDeduccionReturn', 'tiposDeduccion', (a: ArcaAgro) => a.lpg.tipoDeduccionConsultar()],
-    ['codigoGradoReferenciaConsultar', 'gradoReferenciaReq', 'gradoReferenciaResp', 'gradoRefReturn', 'gradosRef', (a: ArcaAgro) => a.lpg.codigoGradoReferenciaConsultar()],
-    ['campaniasConsultar', 'campaniaReq', 'campaniaResp', 'campaniaReturn', 'campanias', (a: ArcaAgro) => a.lpg.campaniasConsultar()],
-    ['localidadXProvinciaConsultar', 'localidadReq', 'localidadResp', 'localidadesReturn', 'localidades', (a: ArcaAgro) => a.lpg.localidadXProvinciaConsultar(1)],
-    ['tipoOperacionXActividadConsultar', 'tipoOperacionReq', 'tipoOperacionResp', 'tipoOperacionReturn', 'tiposOperacion', (a: ArcaAgro) => a.lpg.tipoOperacionXActividadConsultar(40)],
+    [
+      'tipoActividadConsultar',
+      'tipoActividadReq',
+      'tipoActividadResp',
+      'tipoActividadReturn',
+      'tiposActividad',
+      (a: ArcaAgro) => a.lpg.tipoActividadConsultar(),
+    ],
+    [
+      'tipoActividadRepresentadoConsultar',
+      'tipoActividadRepresentadoReq',
+      'tipoActividadRepresentadoResp',
+      'tipoActividadReturn',
+      'tiposActividad',
+      (a: ArcaAgro) => a.lpg.tipoActividadRepresentadoConsultar(),
+    ],
+    [
+      'tipoCertificadoDepositoConsultar',
+      'tipoCertificadoDepReq',
+      'tipoCertificadoDepResp',
+      'tipoCertDepReturn',
+      'tiposCertDep',
+      (a: ArcaAgro) => a.lpg.tipoCertificadoDepositoConsultar(),
+    ],
+    [
+      'tipoRetencionConsultar',
+      'tipoRetencionReq',
+      'tipoRetencionResp',
+      'tipoRetencionReturn',
+      'tiposRetencion',
+      (a: ArcaAgro) => a.lpg.tipoRetencionConsultar(),
+    ],
+    [
+      'tipoDeduccionConsultar',
+      'tipoDeduccionReq',
+      'tipoDeduccionResp',
+      'tipoDeduccionReturn',
+      'tiposDeduccion',
+      (a: ArcaAgro) => a.lpg.tipoDeduccionConsultar(),
+    ],
+    [
+      'codigoGradoReferenciaConsultar',
+      'gradoReferenciaReq',
+      'gradoReferenciaResp',
+      'gradoRefReturn',
+      'gradosRef',
+      (a: ArcaAgro) => a.lpg.codigoGradoReferenciaConsultar(),
+    ],
+    [
+      'campaniasConsultar',
+      'campaniaReq',
+      'campaniaResp',
+      'campaniaReturn',
+      'campanias',
+      (a: ArcaAgro) => a.lpg.campaniasConsultar(),
+    ],
+    [
+      'localidadXProvinciaConsultar',
+      'localidadReq',
+      'localidadResp',
+      'localidadesReturn',
+      'localidades',
+      (a: ArcaAgro) => a.lpg.localidadXProvinciaConsultar(1),
+    ],
+    [
+      'tipoOperacionXActividadConsultar',
+      'tipoOperacionReq',
+      'tipoOperacionResp',
+      'tipoOperacionReturn',
+      'tiposOperacion',
+      (a: ArcaAgro) => a.lpg.tipoOperacionXActividadConsultar(40),
+    ],
   ] as const)('%s', async (method, req, resp, ret, container, run) => {
-    const { agro, calls } = setup(() => lpgResp(resp, ret, `<${container}>${item('1', 'UNO')}${item('2', 'DOS')}</${container}>`));
+    const { agro, calls } = setup(() =>
+      lpgResp(resp, ret, `<${container}>${item('1', 'UNO')}${item('2', 'DOS')}</${container}>`),
+    );
     expect(await run(agro)).toEqual([
       { codigo: '1', descripcion: 'UNO' },
       { codigo: '2', descripcion: 'DOS' },

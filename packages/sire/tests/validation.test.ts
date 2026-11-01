@@ -84,7 +84,12 @@ describe('buildCertificadoRequest', () => {
   it('importes NaN/Infinity/negativos', () => {
     expect(
       fieldsOf(() =>
-        buildCertificadoRequest({ ...BASE, importeRetencion: NaN, importeBaseCalculo: Infinity, importeComprobante: -1 }),
+        buildCertificadoRequest({
+          ...BASE,
+          importeRetencion: NaN,
+          importeBaseCalculo: Infinity,
+          importeComprobante: -1,
+        }),
       ).sort(),
     ).toEqual(['importeBaseCalculo', 'importeComprobante', 'importeRetencion']);
   });
@@ -97,8 +102,16 @@ describe('buildCertificadoRequest', () => {
     const fields = fieldsOf(() => buildCertificadoRequest({} as EmitirCertificadoParams));
     expect(fields).toEqual(
       expect.arrayContaining([
-        'regimen', 'fechaRetencion', 'imposibilidadRetencion', 'importeRetencion', 'importeBaseCalculo',
-        'regimenExclusion', 'tipoComprobante', 'fechaComprobante', 'importeComprobante', 'cuitRetenido',
+        'regimen',
+        'fechaRetencion',
+        'imposibilidadRetencion',
+        'importeRetencion',
+        'importeBaseCalculo',
+        'regimenExclusion',
+        'tipoComprobante',
+        'fechaComprobante',
+        'importeComprobante',
+        'cuitRetenido',
       ]),
     );
   });
@@ -106,44 +119,78 @@ describe('buildCertificadoRequest', () => {
   it('obligatoriedad condicional del manual', () => {
     expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, condicion: undefined }))).toEqual(['condicion']);
     expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, condicion: 3 }))).toEqual(['condicion']);
-    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, imposibilidadRetencion: true }))).toEqual(['motivoNoRetencion']);
+    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, imposibilidadRetencion: true }))).toEqual([
+      'motivoNoRetencion',
+    ]);
     expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, regimenExclusion: true })).sort()).toEqual([
-      'fechaPublicacion', 'porcentajeExclusion',
+      'fechaPublicacion',
+      'porcentajeExclusion',
     ]);
     expect(
-      fieldsOf(() => buildCertificadoRequest({ ...BASE, regimenExclusion: true, porcentajeExclusion: 30, fechaPublicacion: '2026-01-01' })),
+      fieldsOf(() =>
+        buildCertificadoRequest({
+          ...BASE,
+          regimenExclusion: true,
+          porcentajeExclusion: 30,
+          fechaPublicacion: '2026-01-01',
+        }),
+      ),
     ).toEqual(['porcentajeExclusion']);
-    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, tipoComprobante: TipoComprobante.NOTA_CREDITO })).sort()).toEqual([
-      'fechaRetencionCertificadoOriginal', 'importeCertificadoOriginal', 'motivoEmisionNotaCredito', 'numeroCertificadoOriginal',
+    expect(
+      fieldsOf(() => buildCertificadoRequest({ ...BASE, tipoComprobante: TipoComprobante.NOTA_CREDITO })).sort(),
+    ).toEqual([
+      'fechaRetencionCertificadoOriginal',
+      'importeCertificadoOriginal',
+      'motivoEmisionNotaCredito',
+      'numeroCertificadoOriginal',
     ]);
-    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, numeroCertificadoOriginal: '1' }))).toEqual(['numeroCertificadoOriginal']);
-    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, motivoEmisionNotaCredito: 'x' }))).toEqual(['motivoEmisionNotaCredito']);
+    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, numeroCertificadoOriginal: '1' }))).toEqual([
+      'numeroCertificadoOriginal',
+    ]);
+    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, motivoEmisionNotaCredito: 'x' }))).toEqual([
+      'motivoEmisionNotaCredito',
+    ]);
   });
 
   it('numeroComprobante según la tabla TIPO_COMPROBANTE', () => {
-    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, numeroComprobante: undefined }))).toEqual(['numeroComprobante']);
-    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, numeroComprobante: '3-8497' }))).toEqual(['numeroComprobante']);
+    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, numeroComprobante: undefined }))).toEqual([
+      'numeroComprobante',
+    ]);
+    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, numeroComprobante: '3-8497' }))).toEqual([
+      'numeroComprobante',
+    ]);
     expect(
-      buildCertificadoRequest({ ...BASE, tipoComprobante: TipoComprobante.ORDEN_DE_PAGO, numeroComprobante: 'OP-123456789' })
-        .numeroComprobante,
+      buildCertificadoRequest({
+        ...BASE,
+        tipoComprobante: TipoComprobante.ORDEN_DE_PAGO,
+        numeroComprobante: 'OP-123456789',
+      }).numeroComprobante,
     ).toBe('OP-123456789');
     expect(
-      fieldsOf(() => buildCertificadoRequest({ ...BASE, tipoComprobante: TipoComprobante.ORDEN_DE_PAGO, numeroComprobante: 'OP-1234567890' })),
+      fieldsOf(() =>
+        buildCertificadoRequest({
+          ...BASE,
+          tipoComprobante: TipoComprobante.ORDEN_DE_PAGO,
+          numeroComprobante: 'OP-1234567890',
+        }),
+      ),
     ).toEqual(['numeroComprobante']);
     expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, tipoComprobante: 7 }))).toEqual(['tipoComprobante']);
   });
 
   it('longitudes y enteros', () => {
-    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, codigoTrazabilidad: 'x'.repeat(37) }))).toEqual(['codigoTrazabilidad']);
+    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, codigoTrazabilidad: 'x'.repeat(37) }))).toEqual([
+      'codigoTrazabilidad',
+    ]);
     expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, regimen: 1000 }))).toEqual(['regimen']);
     expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, regimen: 8.5 }))).toEqual(['regimen']);
     expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, cae: '1'.repeat(15) }))).toEqual(['cae']);
   });
 
   it('no acepta motivoAnulacion en emitir', () => {
-    expect(
-      fieldsOf(() => buildCertificadoRequest({ ...BASE, motivoAnulacion: 1 } as EmitirCertificadoParams)),
-    ).toEqual(['motivoAnulacion']);
+    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, motivoAnulacion: 1 } as EmitirCertificadoParams))).toEqual(
+      ['motivoAnulacion'],
+    );
   });
 });
 

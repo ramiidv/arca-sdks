@@ -1,13 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ArcaValidationError } from '@ramiidv/arca-common';
-import {
-  cuitParam,
-  dateParam,
-  idCtaCteParam,
-  importeParam,
-  longParam,
-  porcentajeParam,
-} from '../src/validation.js';
+import { cuitParam, dateParam, idCtaCteParam, importeParam, longParam, porcentajeParam } from '../src/validation.js';
 
 describe('validación local', () => {
   it('cuitParam usa el dígito verificador y devuelve 11 dígitos', () => {

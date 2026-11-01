@@ -7,14 +7,14 @@
  *   etc.
  */
 
-import fs from "fs";
-import { Arca, CbteTipo, IvaTipo } from "@ramiidv/arca-facturacion";
+import fs from 'fs';
+import { Arca, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {
   const arca = new Arca({
     cuit: 20123456786,
-    cert: fs.readFileSync("./certs/certificado.crt", "utf-8"),
-    key: fs.readFileSync("./certs/clave.key", "utf-8"),
+    cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+    key: fs.readFileSync('./certs/clave.key', 'utf-8'),
     production: false,
   });
 
@@ -32,7 +32,7 @@ async function main() {
   if (result.aprobada) {
     console.log(`NC aprobada — CAE: ${result.cae}, Cbte #${result.cbteNro}`);
   } else {
-    console.error("NC rechazada:", result.observaciones);
+    console.error('NC rechazada:', result.observaciones);
   }
 }
 

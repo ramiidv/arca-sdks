@@ -157,7 +157,12 @@ export class ArcaMtxca {
   }
 
   /** Consulta un comprobante autorizado (CAE) o informado (CAEA). Lanza `ArcaServiceError` si no existe. */
-  async consultarComprobante(cbteTipo: number, ptoVta: number, cbteNro: number, opts?: CallOptions): Promise<MtxcaConsultaComprobanteResult> {
+  async consultarComprobante(
+    cbteTipo: number,
+    ptoVta: number,
+    cbteNro: number,
+    opts?: CallOptions,
+  ): Promise<MtxcaConsultaComprobanteResult> {
     const auth = await this.auth(opts);
     return this.client.consultarComprobante(auth, cbteTipo, ptoVta, cbteNro, opts);
   }
@@ -183,7 +188,11 @@ export class ArcaMtxca {
   }
 
   /** CAEAs otorgados entre dos fechas. */
-  async consultarCAEAEntreFechas(fechaDesde: FechaInput, fechaHasta: FechaInput, opts?: CallOptions): Promise<MtxcaCAEA[]> {
+  async consultarCAEAEntreFechas(
+    fechaDesde: FechaInput,
+    fechaHasta: FechaInput,
+    opts?: CallOptions,
+  ): Promise<MtxcaCAEA[]> {
     const auth = await this.auth(opts);
     return this.client.consultarCAEAEntreFechas(auth, fechaDesde, fechaHasta, opts);
   }
@@ -193,7 +202,10 @@ export class ArcaMtxca {
    * el XSD y las reglas excluyentes de ítems. Un rechazo devuelve
    * `resultado: 'R'`. Ante `uncertain`, verificá con `consultarComprobante()`.
    */
-  async informarComprobanteCAEA(comprobante: MtxcaComprobanteCAEA, opts?: CallOptions): Promise<MtxcaInformarCAEAResult> {
+  async informarComprobanteCAEA(
+    comprobante: MtxcaComprobanteCAEA,
+    opts?: CallOptions,
+  ): Promise<MtxcaInformarCAEAResult> {
     buildComprobante(comprobante, 'caea');
     validateComprobanteCAEA(comprobante);
     const auth = await this.auth(opts);
@@ -213,7 +225,11 @@ export class ArcaMtxca {
   }
 
   /** Informa que un CAEA no se utilizó en un punto de venta. Un rechazo devuelve `resultado: 'R'`. */
-  async informarCAEANoUtilizadoPtoVta(caea: string, ptoVta: number, opts?: CallOptions): Promise<MtxcaCAEANoUtilizadoResult> {
+  async informarCAEANoUtilizadoPtoVta(
+    caea: string,
+    ptoVta: number,
+    opts?: CallOptions,
+  ): Promise<MtxcaCAEANoUtilizadoResult> {
     const auth = await this.auth(opts);
     return this.client.informarCAEANoUtilizadoPtoVta(auth, caea, ptoVta, opts);
   }
@@ -267,7 +283,11 @@ export class ArcaMtxca {
    * Cotización de una moneda para una fecha (default: hoy en Argentina).
    * `cotizacion` es `null` si ARCA no tiene cotización.
    */
-  async getCotizacionMoneda(codigoMoneda: string, fecha: FechaInput = formatDate(new Date()), opts?: CallOptions): Promise<CotizacionResult> {
+  async getCotizacionMoneda(
+    codigoMoneda: string,
+    fecha: FechaInput = formatDate(new Date()),
+    opts?: CallOptions,
+  ): Promise<CotizacionResult> {
     return this.client.consultarCotizacionMoneda(await this.auth(opts), codigoMoneda, fecha, opts);
   }
 

@@ -9,15 +9,15 @@
  * devuelve el CAE original con reproceso = true, sin duplicar.
  */
 
-import fs from "fs";
-import { Arca, ArcaResultadoInciertoExpo, CbteTipo } from "@ramiidv/arca-facturacion";
-import type { FacturarExpoOpts } from "@ramiidv/arca-facturacion";
+import fs from 'fs';
+import { Arca, ArcaResultadoInciertoExpo, CbteTipo } from '@ramiidv/arca-facturacion';
+import type { FacturarExpoOpts } from '@ramiidv/arca-facturacion';
 
 async function main() {
   const arca = new Arca({
     cuit: 20123456786,
-    cert: fs.readFileSync("./certs/certificado.crt", "utf-8"),
-    key: fs.readFileSync("./certs/clave.key", "utf-8"),
+    cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+    key: fs.readFileSync('./certs/clave.key', 'utf-8'),
     production: false,
   });
 
@@ -25,30 +25,30 @@ async function main() {
     ptoVta: 1,
     cbteTipo: CbteTipo.FACTURA_E,
     tipoExpo: 1, // 1=Bienes, 2=Servicios, 4=Otros
-    pais: 203,   // País destino (203 = Estados Unidos)
+    pais: 203, // País destino (203 = Estados Unidos)
     cliente: {
-      nombre: "ACME Corp",
+      nombre: 'ACME Corp',
       cuitPais: 50000000016,
-      domicilio: "123 Main St, New York, NY 10001",
-      idImpositivo: "12-3456789",
+      domicilio: '123 Main St, New York, NY 10001',
+      idImpositivo: '12-3456789',
     },
-    moneda: "DOL",
+    moneda: 'DOL',
     cotizacion: 1200,
-    formaPago: "Wire Transfer - 30 days",
-    incoterms: "FOB",
+    formaPago: 'Wire Transfer - 30 days',
+    incoterms: 'FOB',
     idioma: 2, // 1=Español, 2=Inglés, 3=Portugués
     items: [
       {
-        codigo: "SKU-001",
-        descripcion: "Industrial Widget",
+        codigo: 'SKU-001',
+        descripcion: 'Industrial Widget',
         cantidad: 100,
         unidad: 7, // 7 = unidades
         precioUnitario: 10,
         // total se calcula automáticamente: 100 * 10 = 1000
       },
       {
-        codigo: "SKU-002",
-        descripcion: "Premium Gasket",
+        codigo: 'SKU-002',
+        descripcion: 'Premium Gasket',
         cantidad: 50,
         unidad: 7,
         precioUnitario: 25,
@@ -65,16 +65,16 @@ async function main() {
     if (!(e instanceof ArcaResultadoInciertoExpo)) throw e;
     // Persistí e.intento antes de reintentar. Reenviar con el mismo Id, número y fecha:
     result = await arca.facturarExpo({ ...opts, ...e.intento });
-    if (result.reproceso) console.log("WSFEX ya la tenía autorizada (reproceso)");
+    if (result.reproceso) console.log('WSFEX ya la tenía autorizada (reproceso)');
   }
 
   if (result.aprobada) {
-    console.log("Factura de exportación aprobada!");
+    console.log('Factura de exportación aprobada!');
     console.log(`  CAE: ${result.cae}`);
     console.log(`  Vencimiento: ${result.caeVencimiento}`);
     console.log(`  Comprobante #${result.cbteNro}`);
   } else {
-    console.error("Rechazada:", result.obs);
+    console.error('Rechazada:', result.obs);
   }
 }
 

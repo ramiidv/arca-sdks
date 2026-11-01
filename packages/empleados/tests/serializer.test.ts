@@ -123,9 +123,26 @@ describe('golden: registro 01', () => {
     });
     expect(linea).toHaveLength(130);
     expect(linea).toBe(
-      '01BT27111111117' + ' ' + '000' + '2025/03/01' + '2026/10/31' + '000000' + '00' + '2026/10/15' +
-      '0'.repeat(15) + '0' + '00000' + '000000' + '    ' + '00' + ' '.repeat(10) + '000000' + '000' +
-      ' '.repeat(10) + '0'.repeat(10) + '0',
+      '01BT27111111117' +
+        ' ' +
+        '000' +
+        '2025/03/01' +
+        '2026/10/31' +
+        '000000' +
+        '00' +
+        '2026/10/15' +
+        '0'.repeat(15) +
+        '0' +
+        '00000' +
+        '000000' +
+        '    ' +
+        '00' +
+        ' '.repeat(10) +
+        '000000' +
+        '000' +
+        ' '.repeat(10) +
+        '0'.repeat(10) +
+        '0',
     );
   });
 
@@ -247,7 +264,8 @@ describe('padding y overflow por campo (sin truncado silencioso)', () => {
 
 describe('códigos inválidos y tipos incorrectos', () => {
   const base: RegistroRelacionLaboral = { movimiento: 'MR', cuil: CUIL };
-  const bad = (extra: Record<string, unknown>) => () => serializarRegistro({ ...base, ...extra } as RegistroRelacionLaboral);
+  const bad = (extra: Record<string, unknown>) => () =>
+    serializarRegistro({ ...base, ...extra } as RegistroRelacionLaboral);
 
   it.each([
     ['NaN', { modalidadContrato: NaN }],
@@ -300,7 +318,10 @@ describe('caracteres y encoding', () => {
 
   it('ASCII: error o transliteración', () => {
     expect(() => serializarRegistro({ ...base, cct: 'ÑANDÚ' }, { encoding: 'ascii' })).toThrow(/ASCII/);
-    const linea = serializarRegistro({ ...base, cct: 'ÑANDÚ' }, { encoding: 'ascii', noRepresentables: 'transliterar' });
+    const linea = serializarRegistro(
+      { ...base, cct: 'ÑANDÚ' },
+      { encoding: 'ascii', noRepresentables: 'transliterar' },
+    );
     expect(campo(linea, 'cct')).toBe('NANDU     ');
     expect(() =>
       serializarRegistro({ ...base, cct: '😀' }, { encoding: 'ascii', noRepresentables: 'transliterar' }),

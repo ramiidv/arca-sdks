@@ -2,25 +2,25 @@
  * Ejemplo: recorrer las FCE recibidas, aceptar una y rechazar otra.
  */
 
-import fs from "fs";
-import { ArcaFecred, ArcaSoapError, FileTicketStorage } from "@ramiidv/arca-fecred";
+import fs from 'fs';
+import { ArcaFecred, ArcaSoapError, FileTicketStorage } from '@ramiidv/arca-fecred';
 
 async function main() {
   const fecred = new ArcaFecred({
-    cert: fs.readFileSync("./certs/certificado.crt", "utf-8"),
-    key: fs.readFileSync("./certs/clave.key", "utf-8"),
-    cuit: "20123456786",
+    cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+    key: fs.readFileSync('./certs/clave.key', 'utf-8'),
+    cuit: '20123456786',
     production: false,
-    ticketStorage: new FileTicketStorage("./.arca-tickets"),
+    ticketStorage: new FileTicketStorage('./.arca-tickets'),
   });
 
   // 1. Cuentas corrientes como receptor, emitidas en octubre (paginado)
   let nroPagina = 1;
   for (;;) {
     const pagina = await fecred.consultarCtasCtes({
-      rol: "Receptor",
-      fecha: { tipo: "Emision", desde: "2026-10-01", hasta: "2026-10-31" },
-      estadoCtaCte: "Modificable",
+      rol: 'Receptor',
+      fecha: { tipo: 'Emision', desde: '2026-10-01', hasta: '2026-10-31' },
+      estadoCtaCte: 'Modificable',
       nroPagina,
     });
     for (const cta of pagina.ctasCtes) {
@@ -35,7 +35,7 @@ async function main() {
   }
 
   // 2. Detalle de una cuenta corriente
-  const { ctaCte } = await fecred.consultarCtaCte({ codCtaCte: "1234567890" });
+  const { ctaCte } = await fecred.consultarCtaCte({ codCtaCte: '1234567890' });
 
   // 3. Aceptar. Las tablas de códigos salen de consultarTipos*().
   const formas = await fecred.consultarTiposFormasCancelacion();
@@ -52,7 +52,7 @@ async function main() {
     if (e instanceof ArcaSoapError && e.uncertain) {
       // La aceptación pudo haberse registrado: verificar antes de reintentar.
       const { estados } = await fecred.consultarHistorialEstadosCtaCte({ codCtaCte: ctaCte.codCtaCte });
-      console.log("Estado actual:", estados.at(-1));
+      console.log('Estado actual:', estados.at(-1));
     } else {
       throw e;
     }
@@ -61,19 +61,19 @@ async function main() {
   // 4. Rechazar otra FCE identificándola por la factura
   const motivos = await fecred.consultarTiposMotivosRechazo();
   await fecred.rechazarFECred({
-    idCtaCte: { idFactura: { cuitEmisor: "30712345671", codTipoCmp: 201, ptoVta: 3, nroCmp: 125 } },
+    idCtaCte: { idFactura: { cuitEmisor: '30712345671', codTipoCmp: 201, ptoVta: 3, nroCmp: 125 } },
     motivos: [
       {
         codMotivo: motivos[0].codigo,
         descMotivo: motivos[0].descripcion,
-        justificacion: "La mercadería no fue entregada",
+        justificacion: 'La mercadería no fue entregada',
       },
     ],
   });
 
   // 5. Informar la cancelación total de una FCE aceptada
   await fecred.informarCancelacionTotalFECred({
-    idCtaCte: { codCtaCte: "1234567891" },
+    idCtaCte: { codCtaCte: '1234567891' },
     formasCancelacion: [formas[0]],
     importeCancelacion: 121000,
   });

@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  ArcaAuthError,
-  ArcaError,
-  ArcaSoapError,
-  ArcaTicketVigenteError,
-  ArcaValidationError,
-} from '../src/errors.js';
+import { ArcaAuthError, ArcaError, ArcaSoapError, ArcaTicketVigenteError, ArcaValidationError } from '../src/errors.js';
 
 /** Simula una segunda copia del paquete (ej: build CJS cargado junto al ESM). */
 async function loadSecondCopy() {

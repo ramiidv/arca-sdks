@@ -194,14 +194,31 @@ export class ArcaEmpleados {
 
   /** Cantidad de registros por movimiento. */
   resumen(): ResumenIngresoMasivo {
-    const r: ResumenIngresoMasivo = { totalRegistros: this.entradas.length, altas: 0, bajas: 0, modificaciones: 0, na: 0, nb: 0 };
+    const r: ResumenIngresoMasivo = {
+      totalRegistros: this.entradas.length,
+      altas: 0,
+      bajas: 0,
+      modificaciones: 0,
+      na: 0,
+      nb: 0,
+    };
     for (const { registro } of this.entradas) {
       switch (registro.movimiento) {
-        case 'AT': r.altas++; break;
-        case 'BT': r.bajas++; break;
-        case 'MR': r.modificaciones++; break;
-        case 'NA': r.na++; break;
-        case 'NB': r.nb++; break;
+        case 'AT':
+          r.altas++;
+          break;
+        case 'BT':
+          r.bajas++;
+          break;
+        case 'MR':
+          r.modificaciones++;
+          break;
+        case 'NA':
+          r.na++;
+          break;
+        case 'NB':
+          r.nb++;
+          break;
       }
     }
     return r;
@@ -239,7 +256,13 @@ export class ArcaEmpleados {
     if ('movimiento' in datos && (datos as RegistroRelacionLaboral).movimiento !== movimiento) {
       throw new ArcaValidationError(
         `El registro trae movimiento "${String((datos as RegistroRelacionLaboral).movimiento)}" pero se agregó como ${movimiento}.`,
-        [{ field: 'movimiento', message: `Se esperaba ${movimiento}`, value: (datos as RegistroRelacionLaboral).movimiento }],
+        [
+          {
+            field: 'movimiento',
+            message: `Se esperaba ${movimiento}`,
+            value: (datos as RegistroRelacionLaboral).movimiento,
+          },
+        ],
         'movimiento',
       );
     }
@@ -257,7 +280,13 @@ export class ArcaEmpleados {
     if (!(CODIGOS_MOVIMIENTO as readonly unknown[]).includes(registro.movimiento)) {
       throw new ArcaValidationError(
         `Código de movimiento inválido: ${JSON.stringify(registro.movimiento) ?? String(registro.movimiento)}. Valores: ${CODIGOS_MOVIMIENTO.join(', ')}.`,
-        [{ field: 'movimiento', message: `Debe ser uno de ${CODIGOS_MOVIMIENTO.join(', ')}`, value: registro.movimiento }],
+        [
+          {
+            field: 'movimiento',
+            message: `Debe ser uno de ${CODIGOS_MOVIMIENTO.join(', ')}`,
+            value: registro.movimiento,
+          },
+        ],
         'movimiento',
       );
     }

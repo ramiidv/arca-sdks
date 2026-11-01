@@ -1,4 +1,4 @@
-export { Arca } from "./arca.js";
+export { Arca } from './arca.js';
 
 // Funciones puras (sin red)
 export {
@@ -10,11 +10,11 @@ export {
   requiereRecuperacion,
   formatFechaHora,
   toDateString,
-} from "./facturacion.js";
-export { generarUrlQR, urlQRDesdeFactura } from "./qr.js";
-export type { DatosQR } from "./qr.js";
-export { resolverCbteTipo } from "./cbte-tipo.js";
-export type { ClaseComprobante } from "./cbte-tipo.js";
+} from './facturacion.js';
+export { generarUrlQR, urlQRDesdeFactura } from './qr.js';
+export type { DatosQR } from './qr.js';
+export { resolverCbteTipo } from './cbte-tipo.js';
+export type { ClaseComprobante } from './cbte-tipo.js';
 
 // Errors
 export {
@@ -27,11 +27,11 @@ export {
   ArcaValidationError,
   ArcaResultadoIncierto,
   ArcaResultadoInciertoExpo,
-} from "./errors.js";
-export type { OperacionEmision } from "./errors.js";
+} from './errors.js';
+export type { OperacionEmision } from './errors.js';
 
 // Persistencia de tickets (desde arca-common)
-export { MemoryTicketStorage, FileTicketStorage } from "@ramiidv/arca-common";
+export { MemoryTicketStorage, FileTicketStorage } from '@ramiidv/arca-common';
 
 // Types
 export type {
@@ -107,7 +107,7 @@ export type {
   CaeaSinMovItem,
   // Padrón
   Contribuyente,
-} from "./types.js";
+} from './types.js';
 
 // Constants / Enums
 export {
@@ -130,12 +130,12 @@ export {
   TributoTipo,
   NOTA_CREDITO_MAP,
   NOTA_DEBITO_MAP,
-} from "./constants.js";
+} from './constants.js';
 
 // Low-level clients (for advanced usage)
-export { WsaaClient } from "./wsaa.js";
-export { WsfeClient } from "./wsfe.js";
-export type { WsClientOptions } from "./wsfe.js";
-export { WsfexClient } from "./wsfex.js";
+export { WsaaClient } from './wsaa.js';
+export { WsfeClient } from './wsfe.js';
+export type { WsClientOptions } from './wsfe.js';
+export { WsfexClient } from './wsfex.js';
 /** @deprecated Usar `@ramiidv/arca-padron`. */
-export { PadronClient } from "./padron.js";
+export { PadronClient } from './padron.js';

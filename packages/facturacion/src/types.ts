@@ -213,7 +213,7 @@ export interface FeCabResp {
   CbteTipo: number;
   FchProceso: string;
   CantReg: number;
-  Resultado: "A" | "R" | "P";
+  Resultado: 'A' | 'R' | 'P';
   Reproceso: string;
 }
 
@@ -224,7 +224,7 @@ export interface FECAEDetResponse {
   CbteDesde: number;
   CbteHasta: number;
   CbteFch: string;
-  Resultado: "A" | "R";
+  Resultado: 'A' | 'R';
   /** CAE otorgado (FECAESolicitar) */
   CAE?: string;
   CAEFchVto?: string;
@@ -278,7 +278,7 @@ export interface FECompConsultarResult {
     FchVtoPago: string;
     MonId: string;
     MonCotiz: number;
-    Resultado: "A" | "R";
+    Resultado: 'A' | 'R';
     CodAutorizacion: string;
     EmisionTipo: string;
     FchVto: string;
@@ -380,7 +380,7 @@ export interface QRInput {
   /** Número de documento del receptor (de corresponder) */
   nroDocRec?: number | string;
   /** Tipo de código de autorización: "E" = CAE, "A" = CAEA */
-  tipoCodAut?: "E" | "A";
+  tipoCodAut?: 'E' | 'A';
   /** Código de autorización (CAE o CAEA, 14 dígitos). El string que devuelve ARCA se convierte a número. */
   codAut: number | string;
 }
@@ -515,7 +515,7 @@ export interface WsfexAuthResult {
     Cae?: string;
     Fch_venc_Cae?: string;
     Fch_cbte?: string;
-    Resultado: "A" | "R";
+    Resultado: 'A' | 'R';
     /** "S" si WSFEX encontró la misma solicitud (mismo Id) ya procesada. */
     Reproceso?: string;
     Motivos_Obs?: string;
@@ -571,7 +571,7 @@ export interface WsfexGetCmpResult {
     Fecha_cbte_cae?: string;
     Fch_venc_Cae?: string;
     Cae?: string;
-    Resultado?: "A" | "R";
+    Resultado?: 'A' | 'R';
     Motivos_Obs?: string;
     Opcionales?: { Opcional: Opcional | Opcional[] };
     Fecha_pago?: string;
@@ -644,7 +644,7 @@ export interface CaeaSinMovResult {
   CAEA?: string;
   FchProceso?: string;
   PtoVta?: number;
-  Resultado: "A" | "R";
+  Resultado: 'A' | 'R';
   Errors?: { Err: WsError | WsError[] };
   Events?: { Evt: WsError | WsError[] };
 }
@@ -740,7 +740,7 @@ export interface FacturarExpoOpts {
    * bienes (tipoExpo 1), donde el default es "N"; en los demás casos se envía
    * vacío y no se admite (validación 1720).
    */
-  permisoExistente?: "S" | "N";
+  permisoExistente?: 'S' | 'N';
   /** Permisos de embarque */
   permisos?: WsfexPermiso[];
   /** Comprobantes asociados (para NC/ND de exportación) */
@@ -908,7 +908,7 @@ export interface FacturarOpts {
    * Cancela en la misma moneda extranjera: "S" o "N" (opcional). "S" solo con
    * moneda extranjera (validación 10241).
    */
-  canMisMonExt?: "S" | "N";
+  canMisMonExt?: 'S' | 'N';
   /** Comprobantes asociados (para NC/ND, o para asociar otros comprobantes). */
   cbtesAsoc?: ComprobanteRef[];
   /**
@@ -945,13 +945,13 @@ export interface ComprobanteRef {
   fecha?: Date | string;
 }
 
-export interface NotaCreditoOpts extends Omit<FacturarOpts, "cbteTipo"> {
+export interface NotaCreditoOpts extends Omit<FacturarOpts, 'cbteTipo'> {
   /** Comprobante original al que se asocia la nota de crédito.
    * El tipo de NC se infiere automáticamente del tipo del comprobante original. */
   comprobanteOriginal: ComprobanteRef;
 }
 
-export interface NotaDebitoOpts extends Omit<FacturarOpts, "cbteTipo"> {
+export interface NotaDebitoOpts extends Omit<FacturarOpts, 'cbteTipo'> {
   /** Comprobante original al que se asocia la nota de débito.
    * El tipo de ND se infiere automáticamente del tipo del comprobante original. */
   comprobanteOriginal: ComprobanteRef;
@@ -1002,7 +1002,7 @@ export interface FacturaResult {
   /** Cotización enviada (si se conoce) */
   cotizacion?: number;
   /** "E" si se autorizó con CAE, "A" si se informó con CAEA (para el QR) */
-  tipoCodAut?: "E" | "A";
+  tipoCodAut?: 'E' | 'A';
   /** Resultado crudo: FECAESolicitar, o FECompConsultar si se obtuvo con `recuperarComprobante` */
   raw: FECAESolicitarResult | FECompConsultarResult;
 }
@@ -1025,11 +1025,11 @@ export interface IntentoComprobante {
 
 export type ResultadoRecuperacion =
   /** ARCA autorizó el comprobante con los mismos datos del intento. */
-  | { estado: "autorizado"; resultado: FacturaResult }
+  | { estado: 'autorizado'; resultado: FacturaResult }
   /** ARCA no tiene ese número: reintentar con el mismo `cbteNro` es seguro. */
-  | { estado: "no_emitido" }
+  | { estado: 'no_emitido' }
   /** El número existe pero con otros datos (lo usó otra emisión). */
-  | { estado: "conflicto"; encontrado: FECompConsultarResult };
+  | { estado: 'conflicto'; encontrado: FECompConsultarResult };
 
 export interface ComprobanteArmado {
   /** Detalle listo para enviar a FECAESolicitar */

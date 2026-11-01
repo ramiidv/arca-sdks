@@ -1,10 +1,5 @@
 import { afipSoapCall, validateCuit } from '@ramiidv/arca-common';
-import type {
-  ArcaEvent,
-  CallOptions,
-  ServerStatus,
-  SoapCallOptions,
-} from '@ramiidv/arca-common';
+import type { ArcaEvent, CallOptions, ServerStatus, SoapCallOptions } from '@ramiidv/arca-common';
 import { toPadronError } from './errors.js';
 import { reqString } from './mapping.js';
 import type { WsAuth } from './types.js';

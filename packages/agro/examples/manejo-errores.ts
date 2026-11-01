@@ -36,7 +36,8 @@ async function autorizarConRecuperacion(params: AutorizarCPEAutomotorParams): Pr
     return await agro.cpe.autorizarCPEAutomotor(params);
   } catch (error) {
     const incierto =
-      (error instanceof ArcaSoapError && error.uncertain) || (error instanceof ArcaAgroResponseError && error.uncertain);
+      (error instanceof ArcaSoapError && error.uncertain) ||
+      (error instanceof ArcaAgroResponseError && error.uncertain);
     if (!incierto) throw error;
 
     // ¿Llegó a autorizarse? El último número de orden lo dice.

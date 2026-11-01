@@ -1,9 +1,9 @@
-import { afipSoapCall, ensureArray, extractServiceErrors } from "@ramiidv/arca-common";
-import type { ArcaEvent, CallOptions, LegacyTlsMode, SoapOperationKind } from "@ramiidv/arca-common";
-import { ENDPOINTS, WSFE_ERRORES_INTERNOS, WSFE_NAMESPACE } from "./constants.js";
-import { ArcaResultadoIncierto, ArcaSoapError, ArcaWSFEError } from "./errors.js";
-import type { OperacionEmision } from "./errors.js";
-import { eventosWsfe, intentoDesdeComprobante } from "./facturacion.js";
+import { afipSoapCall, ensureArray, extractServiceErrors } from '@ramiidv/arca-common';
+import type { ArcaEvent, CallOptions, LegacyTlsMode, SoapOperationKind } from '@ramiidv/arca-common';
+import { ENDPOINTS, WSFE_ERRORES_INTERNOS, WSFE_NAMESPACE } from './constants.js';
+import { ArcaResultadoIncierto, ArcaSoapError, ArcaWSFEError } from './errors.js';
+import type { OperacionEmision } from './errors.js';
+import { eventosWsfe, intentoDesdeComprobante } from './facturacion.js';
 import type {
   WsfeAuth,
   InvoiceRequest,
@@ -24,7 +24,7 @@ import type {
   CaeaRegInfResult,
   CaeaSinMovResult,
   CaeaSinMovItem,
-} from "./types.js";
+} from './types.js';
 
 type R = Record<string, any>;
 
@@ -59,7 +59,7 @@ function sinCampo(method: string, campo: string): ArcaSoapError {
 /** Cliente de bajo nivel de WSFEv1 (Factura electrónica, mercado interno). */
 export class WsfeClient {
   private readonly endpoint: string;
-  private readonly soapOpts: Omit<WsClientOptions, "endpoint" | "timeoutMs"> & { timeout?: number };
+  private readonly soapOpts: Omit<WsClientOptions, 'endpoint' | 'timeoutMs'> & { timeout?: number };
 
   constructor(production: boolean, opts: WsClientOptions = {}) {
     this.endpoint = opts.endpoint ?? (production ? ENDPOINTS.wsfe.production : ENDPOINTS.wsfe.testing);
@@ -103,19 +103,19 @@ export class WsfeClient {
     operacion: OperacionEmision,
     params: R,
     request: { PtoVta: number; CbteTipo: number; invoices: InvoiceDetail[] },
-    detalleKey: "FECAEDetResponse" | "FECAEADetResponse",
-    opts?: CallOptions
+    detalleKey: 'FECAEDetResponse' | 'FECAEADetResponse',
+    opts?: CallOptions,
   ): Promise<T> {
     const incierto = (cause: unknown) =>
       new ArcaResultadoIncierto(
         operacion,
         request.invoices.map((inv) => intentoDesdeComprobante(request.PtoVta, request.CbteTipo, inv)),
-        { cause }
+        { cause },
       );
 
     let result: R;
     try {
-      result = await this.call(operacion, params, { ...opts, kind: "emision" });
+      result = await this.call(operacion, params, { ...opts, kind: 'emision' });
     } catch (err) {
       if (err instanceof ArcaSoapError && err.uncertain) throw incierto(err);
       throw err;
@@ -147,7 +147,7 @@ export class WsfeClient {
    */
   async solicitarCAE(auth: WsfeAuth, request: InvoiceRequest, opts?: CallOptions): Promise<FECAESolicitarResult> {
     return this.emitir<FECAESolicitarResult>(
-      "FECAESolicitar",
+      'FECAESolicitar',
       {
         Auth: auth,
         FeCAEReq: {
@@ -156,20 +156,20 @@ export class WsfeClient {
         },
       },
       request,
-      "FECAEDetResponse",
-      opts
+      'FECAEDetResponse',
+      opts,
     );
   }
 
   async ultimoComprobante(auth: WsfeAuth, ptoVta: number, cbteTipo: number, opts?: CallOptions): Promise<number> {
     const result = (await this.consulta(
-      "FECompUltimoAutorizado",
+      'FECompUltimoAutorizado',
       auth,
       { PtoVta: ptoVta, CbteTipo: cbteTipo },
-      opts
+      opts,
     )) as FECompUltimoAutorizadoResult;
     if (result.CbteNro === undefined || result.CbteNro === null || Number.isNaN(Number(result.CbteNro))) {
-      throw sinCampo("FECompUltimoAutorizado", "CbteNro");
+      throw sinCampo('FECompUltimoAutorizado', 'CbteNro');
     }
     return Number(result.CbteNro);
   }
@@ -179,15 +179,15 @@ export class WsfeClient {
     cbteTipo: number,
     ptoVta: number,
     cbteNro: number,
-    opts?: CallOptions
+    opts?: CallOptions,
   ): Promise<FECompConsultarResult> {
     const result = (await this.consulta(
-      "FECompConsultar",
+      'FECompConsultar',
       auth,
       { FeCompConsReq: { CbteTipo: cbteTipo, CbteNro: cbteNro, PtoVta: ptoVta } },
-      opts
+      opts,
     )) as FECompConsultarResult;
-    if (!result.ResultGet) throw sinCampo("FECompConsultar", "ResultGet");
+    if (!result.ResultGet) throw sinCampo('FECompConsultar', 'ResultGet');
     return result;
   }
 
@@ -196,7 +196,7 @@ export class WsfeClient {
   // ============================================================
 
   async serverStatus(opts?: CallOptions): Promise<ServerStatus> {
-    return (await this.call("FEDummy", {}, opts)) as ServerStatus;
+    return (await this.call('FEDummy', {}, opts)) as ServerStatus;
   }
 
   private async getParam<T>(auth: WsfeAuth, method: string, itemKey: string, opts?: CallOptions): Promise<T[]> {
@@ -205,15 +205,15 @@ export class WsfeClient {
   }
 
   async getTiposComprobante(auth: WsfeAuth, opts?: CallOptions): Promise<ParamItem[]> {
-    return this.getParam(auth, "FEParamGetTiposCbte", "CbteTipo", opts);
+    return this.getParam(auth, 'FEParamGetTiposCbte', 'CbteTipo', opts);
   }
 
   async getTiposConcepto(auth: WsfeAuth, opts?: CallOptions): Promise<ParamItem[]> {
-    return this.getParam(auth, "FEParamGetTiposConcepto", "ConceptoTipo", opts);
+    return this.getParam(auth, 'FEParamGetTiposConcepto', 'ConceptoTipo', opts);
   }
 
   async getTiposDocumento(auth: WsfeAuth, opts?: CallOptions): Promise<ParamItem[]> {
-    return this.getParam(auth, "FEParamGetTiposDoc", "DocTipo", opts);
+    return this.getParam(auth, 'FEParamGetTiposDoc', 'DocTipo', opts);
   }
 
   /**
@@ -222,44 +222,44 @@ export class WsfeClient {
    */
   async getCondicionesIva(auth: WsfeAuth, opts?: CallOptions, claseCmp?: string): Promise<CondicionIvaItem[]> {
     const result = await this.consulta(
-      "FEParamGetCondicionIvaReceptor",
+      'FEParamGetCondicionIvaReceptor',
       auth,
       claseCmp !== undefined ? { ClaseCmp: claseCmp } : {},
-      opts
+      opts,
     );
     return ensureArray(result.ResultGet?.CondicionIvaReceptor as CondicionIvaItem | CondicionIvaItem[] | undefined);
   }
 
   async getTiposIva(auth: WsfeAuth, opts?: CallOptions): Promise<ParamItem[]> {
-    return this.getParam(auth, "FEParamGetTiposIva", "IvaTipo", opts);
+    return this.getParam(auth, 'FEParamGetTiposIva', 'IvaTipo', opts);
   }
 
   async getMonedas(auth: WsfeAuth, opts?: CallOptions): Promise<MonedaItem[]> {
-    const items = await this.getParam<MonedaItem>(auth, "FEParamGetTiposMonedas", "Moneda", opts);
+    const items = await this.getParam<MonedaItem>(auth, 'FEParamGetTiposMonedas', 'Moneda', opts);
     // Id es xs:string: códigos como "060" no deben quedar como número.
     return items.map((m) => ({ ...m, Id: String(m.Id) }));
   }
 
   async getTiposTributo(auth: WsfeAuth, opts?: CallOptions): Promise<ParamItem[]> {
-    return this.getParam(auth, "FEParamGetTiposTributos", "TributoTipo", opts);
+    return this.getParam(auth, 'FEParamGetTiposTributos', 'TributoTipo', opts);
   }
 
   async getTiposOpcional(auth: WsfeAuth, opts?: CallOptions): Promise<ParamItem[]> {
-    return this.getParam(auth, "FEParamGetTiposOpcional", "OpcionalTipo", opts);
+    return this.getParam(auth, 'FEParamGetTiposOpcional', 'OpcionalTipo', opts);
   }
 
   async getPuntosVenta(auth: WsfeAuth, opts?: CallOptions): Promise<PtoVentaItem[]> {
-    return this.getParam(auth, "FEParamGetPtosVenta", "PtoVenta", opts);
+    return this.getParam(auth, 'FEParamGetPtosVenta', 'PtoVenta', opts);
   }
 
   /** Actividades del emisor (`FEParamGetActividades`). */
   async getActividades(auth: WsfeAuth, opts?: CallOptions): Promise<ActividadItem[]> {
-    return this.getParam(auth, "FEParamGetActividades", "ActividadesTipo", opts);
+    return this.getParam(auth, 'FEParamGetActividades', 'ActividadesTipo', opts);
   }
 
   /** Países (`FEParamGetTiposPaises`). */
   async getTiposPaises(auth: WsfeAuth, opts?: CallOptions): Promise<PaisItem[]> {
-    return this.getParam(auth, "FEParamGetTiposPaises", "PaisTipo", opts);
+    return this.getParam(auth, 'FEParamGetTiposPaises', 'PaisTipo', opts);
   }
 
   /**
@@ -269,27 +269,27 @@ export class WsfeClient {
   async getCotizacion(
     auth: WsfeAuth,
     monedaId: string,
-    opts?: CallOptions & { fchCotiz?: string }
+    opts?: CallOptions & { fchCotiz?: string },
   ): Promise<CotizacionResult> {
     const params: R = { MonId: monedaId };
     if (opts?.fchCotiz !== undefined) params.FchCotiz = opts.fchCotiz;
-    const result = await this.consulta("FEParamGetCotizacion", auth, params, opts);
+    const result = await this.consulta('FEParamGetCotizacion', auth, params, opts);
     const r = result.ResultGet as R | undefined;
-    if (!r) throw sinCampo("FEParamGetCotizacion", "ResultGet");
+    if (!r) throw sinCampo('FEParamGetCotizacion', 'ResultGet');
     const cotiz = Number(r.MonCotiz);
     if (r.MonCotiz === undefined || r.MonCotiz === null || !Number.isFinite(cotiz)) {
-      throw sinCampo("FEParamGetCotizacion", "MonCotiz");
+      throw sinCampo('FEParamGetCotizacion', 'MonCotiz');
     }
     return {
       MonId: String(r.MonId ?? monedaId),
       MonCotiz: cotiz,
-      FchCotiz: r.FchCotiz === undefined || r.FchCotiz === null ? "" : String(r.FchCotiz),
+      FchCotiz: r.FchCotiz === undefined || r.FchCotiz === null ? '' : String(r.FchCotiz),
     };
   }
 
   async getCantMaxRegistros(auth: WsfeAuth, opts?: CallOptions): Promise<number> {
-    const result = await this.consulta("FECompTotXRequest", auth, {}, opts);
-    if (result.RegXReq === undefined || result.RegXReq === null) throw sinCampo("FECompTotXRequest", "RegXReq");
+    const result = await this.consulta('FECompTotXRequest', auth, {}, opts);
+    if (result.RegXReq === undefined || result.RegXReq === null) throw sinCampo('FECompTotXRequest', 'RegXReq');
     return Number(result.RegXReq);
   }
 
@@ -300,8 +300,8 @@ export class WsfeClient {
   private async caeaGet(method: string, auth: WsfeAuth, periodo: string, orden: number, opts?: CallOptions) {
     const result = await this.consulta(method, auth, { Periodo: periodo, Orden: orden }, opts);
     const r = result.ResultGet as R | undefined;
-    if (!r || r.CAEA === undefined || r.CAEA === null || r.CAEA === "") throw sinCampo(method, "ResultGet.CAEA");
-    const str = (v: unknown) => (v === undefined || v === null ? "" : String(v));
+    if (!r || r.CAEA === undefined || r.CAEA === null || r.CAEA === '') throw sinCampo(method, 'ResultGet.CAEA');
+    const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
     const caea: CaeaSolicitarResult = {
       ...r,
       CAEA: String(r.CAEA),
@@ -317,12 +317,22 @@ export class WsfeClient {
   }
 
   /** Solicita un CAEA (`FECAEASolicitar`). Si ya existe para el período, ARCA devuelve error (usar `consultarCAEA`). */
-  async solicitarCAEA(auth: WsfeAuth, periodo: string, orden: number, opts?: CallOptions): Promise<CaeaSolicitarResult> {
-    return this.caeaGet("FECAEASolicitar", auth, periodo, orden, opts);
+  async solicitarCAEA(
+    auth: WsfeAuth,
+    periodo: string,
+    orden: number,
+    opts?: CallOptions,
+  ): Promise<CaeaSolicitarResult> {
+    return this.caeaGet('FECAEASolicitar', auth, periodo, orden, opts);
   }
 
-  async consultarCAEA(auth: WsfeAuth, periodo: string, orden: number, opts?: CallOptions): Promise<CaeaSolicitarResult> {
-    return this.caeaGet("FECAEAConsultar", auth, periodo, orden, opts);
+  async consultarCAEA(
+    auth: WsfeAuth,
+    periodo: string,
+    orden: number,
+    opts?: CallOptions,
+  ): Promise<CaeaSolicitarResult> {
+    return this.caeaGet('FECAEAConsultar', auth, periodo, orden, opts);
   }
 
   /**
@@ -339,7 +349,7 @@ export class WsfeClient {
     });
 
     return this.emitir<CaeaRegInfResult>(
-      "FECAEARegInformativo",
+      'FECAEARegInformativo',
       {
         Auth: auth,
         FeCAEARegInfReq: {
@@ -348,8 +358,8 @@ export class WsfeClient {
         },
       },
       request,
-      "FECAEADetResponse",
-      opts
+      'FECAEADetResponse',
+      opts,
     );
   }
 
@@ -361,13 +371,13 @@ export class WsfeClient {
   async sinMovimientoCAEA(auth: WsfeAuth, caea: string, ptoVta: number, opts?: CallOptions): Promise<CaeaSinMovResult> {
     // Orden del WSDL: Auth, PtoVta, CAEA.
     const result = (await this.call(
-      "FECAEASinMovimientoInformar",
+      'FECAEASinMovimientoInformar',
       { Auth: auth, PtoVta: ptoVta, CAEA: caea },
-      { ...opts, kind: "emision" }
+      { ...opts, kind: 'emision' },
     )) as CaeaSinMovResult & R;
     checkErrors(result);
-    if (result.Resultado !== "A" && result.Resultado !== "R") {
-      throw new ArcaSoapError("Respuesta de FECAEASinMovimientoInformar sin Resultado", { uncertain: true });
+    if (result.Resultado !== 'A' && result.Resultado !== 'R') {
+      throw new ArcaSoapError('Respuesta de FECAEASinMovimientoInformar sin Resultado', { uncertain: true });
     }
     return { ...result, ...(result.CAEA !== undefined && { CAEA: String(result.CAEA) }) };
   }
@@ -382,13 +392,13 @@ export class WsfeClient {
     auth: WsfeAuth,
     caea: string,
     ptoVta: number,
-    opts?: CallOptions
+    opts?: CallOptions,
   ): Promise<CaeaSinMovItem[]> {
     // Orden del WSDL: Auth, CAEA, PtoVta.
-    const result = await this.consulta("FECAEASinMovimientoConsultar", auth, { CAEA: caea, PtoVta: ptoVta }, opts);
+    const result = await this.consulta('FECAEASinMovimientoConsultar', auth, { CAEA: caea, PtoVta: ptoVta }, opts);
     return ensureArray(result.ResultGet?.FECAEASinMov as R | R[] | undefined).map((i) => ({
       CAEA: String(i.CAEA),
-      FchProceso: String(i.FchProceso ?? ""),
+      FchProceso: String(i.FchProceso ?? ''),
       PtoVta: Number(i.PtoVta),
     }));
   }
@@ -432,7 +442,7 @@ export function buildDetRequest(inv: InvoiceDetail): R {
     det.CbtesAsoc = {
       CbteAsoc: inv.CbtesAsoc.map((c) => {
         const asoc: R = { Tipo: c.Tipo, PtoVta: c.PtoVta, Nro: c.Nro };
-        if (c.Cuit !== undefined && c.Cuit !== null && c.Cuit !== "") asoc.Cuit = String(c.Cuit);
+        if (c.Cuit !== undefined && c.Cuit !== null && c.Cuit !== '') asoc.Cuit = String(c.Cuit);
         if (c.CbteFch) asoc.CbteFch = c.CbteFch;
         return asoc;
       }),
@@ -443,7 +453,7 @@ export function buildDetRequest(inv: InvoiceDetail): R {
     det.Tributos = {
       Tributo: inv.Tributos.map((t) => {
         const trib: R = { Id: t.Id };
-        if (t.Desc !== undefined && t.Desc !== "") trib.Desc = t.Desc;
+        if (t.Desc !== undefined && t.Desc !== '') trib.Desc = t.Desc;
         trib.BaseImp = t.BaseImp;
         trib.Alic = t.Alic;
         trib.Importe = t.Importe;

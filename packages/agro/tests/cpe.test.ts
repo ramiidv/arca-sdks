@@ -78,7 +78,8 @@ const DETALLE_AUTOMOTOR =
   `<pdf>JVBERi0xLjQ=</pdf>` +
   METADATA;
 
-const ERROR_1 = '<errores><error><codigo>1501</codigo><descripcion>El número de orden ya fue utilizado.</descripcion></error></errores>';
+const ERROR_1 =
+  '<errores><error><codigo>1501</codigo><descripcion>El número de orden ya fue utilizado.</descripcion></error></errores>';
 const ERROR_N =
   '<errores><error><codigo>1501</codigo><descripcion>El número de orden ya fue utilizado.</descripcion></error>' +
   '<error><codigo>2104</codigo><descripcion>El CUIT del destino no es válido.</descripcion></error></errores>';
@@ -158,7 +159,8 @@ describe('WSCPE: transporte y forma del request', () => {
   });
 
   it('autorizarCPEFerroviaria: wrapper, orden XSD y precintos', async () => {
-    const resp = CABECERA('020200012345').replace('<tipoCartaPorte>74', '<tipoCartaPorte>75') +
+    const resp =
+      CABECERA('020200012345').replace('<tipoCartaPorte>74', '<tipoCartaPorte>75') +
       `<transporte><nroVagon>123456</nroVagon><nroPrecinto>P-0001</nroPrecinto><nroPrecinto>P-0002</nroPrecinto>` +
       `<nroOperativo>9876543210</nroOperativo><ramal><codigo>3</codigo><descripcion>Mitre</descripcion></ramal></transporte>`;
     const { agro, calls } = setup(() => cpeResp('AutorizarCPEFerroviariaResp', resp));
@@ -194,15 +196,21 @@ describe('WSCPE: transporte y forma del request', () => {
   });
 
   it('usa el endpoint de producción y permite sobrescribirlo', async () => {
-    const prod = setup(() => cpeResp('DummyResp', '<appserver>Ok</appserver><authserver>Ok</authserver><dbserver>Ok</dbserver>'), {
-      production: true,
-    });
+    const prod = setup(
+      () => cpeResp('DummyResp', '<appserver>Ok</appserver><authserver>Ok</authserver><dbserver>Ok</dbserver>'),
+      {
+        production: true,
+      },
+    );
     await prod.agro.cpe.dummy();
     expect(prod.calls[0].url).toBe('https://cpea-ws.afip.gob.ar/wscpe/services/soap');
 
-    const custom = setup(() => cpeResp('DummyResp', '<appserver>Ok</appserver><authserver>Ok</authserver><dbserver>Ok</dbserver>'), {
-      endpoints: { cpe: 'https://proxy.local/wscpe' },
-    });
+    const custom = setup(
+      () => cpeResp('DummyResp', '<appserver>Ok</appserver><authserver>Ok</authserver><dbserver>Ok</dbserver>'),
+      {
+        endpoints: { cpe: 'https://proxy.local/wscpe' },
+      },
+    );
     await custom.agro.cpe.dummy();
     expect(custom.calls[0].url).toBe('https://proxy.local/wscpe');
   });
@@ -229,7 +237,11 @@ interface OpCase {
 }
 
 const modifica = { fechaHoraPartida: '2026-11-02T09:00:00-03:00', kmRecorrer: 120 };
-const modificaTren = { ramal: { codigo: 99, descripcion: 'Otro' }, fechaHoraPartidaTren: '2026-11-02T09:00:00-03:00', kmRecorrer: 300 };
+const modificaTren = {
+  ramal: { codigo: 99, descripcion: 'Otro' },
+  fechaHoraPartidaTren: '2026-11-02T09:00:00-03:00',
+  kmRecorrer: 300,
+};
 const destino = { cuit: CUIT4, esDestinoCampo: false, codProvincia: 12, codLocalidad: 5244, planta: 1938 };
 
 const OPERACIONES: OpCase[] = [
@@ -246,11 +258,21 @@ const OPERACIONES: OpCase[] = [
         codGrano: 23,
         dominio: ['AB123CD'],
       }),
-    order: ['nroCTG', 'cuitDestinatario', 'cuitChofer', 'cuitTransportista', 'destino', 'pesoBruto', 'codGrano', 'dominio'],
+    order: [
+      'nroCTG',
+      'cuitDestinatario',
+      'cuitChofer',
+      'cuitTransportista',
+      'destino',
+      'pesoBruto',
+      'codGrano',
+      'dominio',
+    ],
   },
   {
     method: 'editarCPEConfirmadaAutomotor',
-    run: (a) => a.cpe.editarCPEConfirmadaAutomotor({ nroCTG: 10100012345, intervinientes: { cuitCorredorVentaPrimaria: CUIT2 } }),
+    run: (a) =>
+      a.cpe.editarCPEConfirmadaAutomotor({ nroCTG: 10100012345, intervinientes: { cuitCorredorVentaPrimaria: CUIT2 } }),
     order: ['nroCTG', 'intervinientes'],
   },
   {
@@ -276,7 +298,8 @@ const OPERACIONES: OpCase[] = [
   },
   {
     method: 'rechazoCPE',
-    run: (a) => a.cpe.rechazoCPE({ cuitSolicitante: CUIT, cartaPorte, rechazoMotivo: 2, rechazoObservaciones: 'Humedad' }),
+    run: (a) =>
+      a.cpe.rechazoCPE({ cuitSolicitante: CUIT, cartaPorte, rechazoMotivo: 2, rechazoObservaciones: 'Humedad' }),
     order: ['cuitSolicitante', 'cartaPorte', 'rechazoMotivo', 'rechazoObservaciones'],
   },
   {
@@ -287,7 +310,12 @@ const OPERACIONES: OpCase[] = [
   {
     method: 'nuevoDestinoDestinatarioCPEAutomotor',
     run: (a) =>
-      a.cpe.nuevoDestinoDestinatarioCPEAutomotor({ transporte: modifica, destinatario: { cuit: CUIT2 }, destino, cartaPorte }),
+      a.cpe.nuevoDestinoDestinatarioCPEAutomotor({
+        transporte: modifica,
+        destinatario: { cuit: CUIT2 },
+        destino,
+        cartaPorte,
+      }),
     order: ['cartaPorte', 'destino', 'destinatario', 'transporte'],
   },
   {
@@ -340,12 +368,17 @@ const OPERACIONES: OpCase[] = [
   {
     method: 'nuevoDestinoDestinatarioCPEFerroviaria',
     run: (a) =>
-      a.cpe.nuevoDestinoDestinatarioCPEFerroviaria({ transporte: modificaTren, destino, cartaPorte: { ...cartaPorte, tipoCPE: 75 } }),
+      a.cpe.nuevoDestinoDestinatarioCPEFerroviaria({
+        transporte: modificaTren,
+        destino,
+        cartaPorte: { ...cartaPorte, tipoCPE: 75 },
+      }),
     order: ['cartaPorte', 'destino', 'transporte'],
   },
   {
     method: 'regresoOrigenCPEFerroviaria',
-    run: (a) => a.cpe.regresoOrigenCPEFerroviaria({ transporte: modificaTren, cartaPorte: { ...cartaPorte, tipoCPE: 75 } }),
+    run: (a) =>
+      a.cpe.regresoOrigenCPEFerroviaria({ transporte: modificaTren, cartaPorte: { ...cartaPorte, tipoCPE: 75 } }),
     order: ['cartaPorte', 'transporte'],
   },
   {
@@ -502,7 +535,10 @@ describe('WSCPE: consultas', () => {
 
   it('consultarCPEPPendientesDeResolucion', async () => {
     const { agro, calls } = setup(() =>
-      cpeResp('ConsultarCPEPPendientesDeResolucionResp', '<cartaPorte><nroCTG>010100000009</nroCTG><estado>PA</estado></cartaPorte>'),
+      cpeResp(
+        'ConsultarCPEPPendientesDeResolucionResp',
+        '<cartaPorte><nroCTG>010100000009</nroCTG><estado>PA</estado></cartaPorte>',
+      ),
     );
     const r = await agro.cpe.consultarCPEPPendientesDeResolucion({ perfil: 'D', planta: 1938 });
     expect(calls[0].element).toBe('ser:ConsultarCPEPPendientesDeResolucionReq');
@@ -539,8 +575,9 @@ describe('WSCPE: consultas', () => {
   });
 
   it('respuesta sin <respuesta> → ArcaAgroResponseError', async () => {
-    const { agro } = setup(() =>
-      `<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body><ns2:ConsultarUltNroOrdenResp xmlns:ns2="${CPE_NS}"/></S:Body></S:Envelope>`,
+    const { agro } = setup(
+      () =>
+        `<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body><ns2:ConsultarUltNroOrdenResp xmlns:ns2="${CPE_NS}"/></S:Body></S:Envelope>`,
     );
     await expect(agro.cpe.consultarUltNroOrden(1, 74)).rejects.toBeInstanceOf(ArcaAgroResponseError);
   });
@@ -553,7 +590,10 @@ describe('WSCPE: consultas', () => {
 describe('WSCPE: paramétricas', () => {
   it('consultarProvincias: solo auth; codigo como string; 1 y N', async () => {
     const una = setup(() =>
-      cpeResp('ConsultarProvinciasResp', '<provincia><codigo>1</codigo><descripcion>BUENOS AIRES</descripcion></provincia>'),
+      cpeResp(
+        'ConsultarProvinciasResp',
+        '<provincia><codigo>1</codigo><descripcion>BUENOS AIRES</descripcion></provincia>',
+      ),
     );
     expect(await una.agro.cpe.consultarProvincias()).toEqual([{ codigo: '1', descripcion: 'BUENOS AIRES' }]);
     expect(una.calls[0].element).toBe('ser:ConsultarProvinciasReq');
@@ -578,7 +618,10 @@ describe('WSCPE: paramétricas', () => {
 
   it('consultarLocalidadesPorProvincia', async () => {
     const { agro, calls } = setup(() =>
-      cpeResp('ConsultarLocalidadesPorProvinciaResp', '<localidad><codigo>5244</codigo><descripcion>ROSARIO</descripcion></localidad>'),
+      cpeResp(
+        'ConsultarLocalidadesPorProvinciaResp',
+        '<localidad><codigo>5244</codigo><descripcion>ROSARIO</descripcion></localidad>',
+      ),
     );
     expect(await agro.cpe.consultarLocalidadesPorProvincia(12)).toEqual([{ codigo: '5244', descripcion: 'ROSARIO' }]);
     expect(calls[0].req.solicitud).toEqual({ codProvincia: 12 });
@@ -599,7 +642,9 @@ describe('WSCPE: paramétricas', () => {
         '<planta><nroPlanta>1938</nroPlanta><codProvincia>12</codProvincia><codLocalidad>5244</codLocalidad></planta>',
       ),
     );
-    expect(await agro.cpe.consultarPlantas('30-71234567-1')).toEqual([{ nroPlanta: 1938, codProvincia: 12, codLocalidad: 5244 }]);
+    expect(await agro.cpe.consultarPlantas('30-71234567-1')).toEqual([
+      { nroPlanta: 1938, codProvincia: 12, codLocalidad: 5244 },
+    ]);
     expect(calls[0].req.solicitud).toEqual({ cuit: CUIT2 });
     await expect(agro.cpe.consultarPlantas('30712345670')).rejects.toBeInstanceOf(ArcaValidationError);
   });
@@ -620,14 +665,22 @@ describe('WSCPE: paramétricas', () => {
     ]);
 
     const cat = setup(() =>
-      cpeResp('ConsultarCategoriasSemillasResp', '<categoria><codigo>1</codigo><descripcion>ORIGINAL</descripcion></categoria>'),
+      cpeResp(
+        'ConsultarCategoriasSemillasResp',
+        '<categoria><codigo>1</codigo><descripcion>ORIGINAL</descripcion></categoria>',
+      ),
     );
     expect(await cat.agro.cpe.consultarCategoriasSemillas()).toEqual([{ codigo: '1', descripcion: 'ORIGINAL' }]);
 
     const varie = setup(() =>
-      cpeResp('ConsultarVariedadesSemillasResp', '<variedad><codigo>7</codigo><descripcion>DM 46i20</descripcion><grano>23</grano></variedad>'),
+      cpeResp(
+        'ConsultarVariedadesSemillasResp',
+        '<variedad><codigo>7</codigo><descripcion>DM 46i20</descripcion><grano>23</grano></variedad>',
+      ),
     );
-    expect(await varie.agro.cpe.consultarVariedadesSemillas(23)).toEqual([{ codigo: '7', descripcion: 'DM 46i20', grano: 23 }]);
+    expect(await varie.agro.cpe.consultarVariedadesSemillas(23)).toEqual([
+      { codigo: '7', descripcion: 'DM 46i20', grano: 23 },
+    ]);
     expect(keys(varie.calls[0].req)).toEqual(['auth', 'codGrano']);
   });
 });

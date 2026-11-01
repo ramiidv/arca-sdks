@@ -48,7 +48,8 @@ export class PadronA100Client extends BasePadronClient {
         value: optString(a['value']),
       }));
       const descripcion = optString(p['description']);
-      if (descripcion === undefined) throw new ArcaPadronError(`Respuesta inválida de ARCA (${METHOD}): falta description`);
+      if (descripcion === undefined)
+        throw new ArcaPadronError(`Respuesta inválida de ARCA (${METHOD}): falta description`);
       return {
         id: reqString(p['id'], 'parameterList.id'),
         descripcion,

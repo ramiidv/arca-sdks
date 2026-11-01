@@ -14,17 +14,46 @@ import { CUIT_AGENTE, HEADER_INFO, NS, envelope, fault, makeSire, mockFetch, sen
 
 /** `xs:sequence` de `tns:certificado` en C2005_schema.xsd. */
 const XSD_CERTIFICADO = [
-  'version', 'codigoTrazabilidad', 'impuesto', 'regimen', 'fechaRetencion', 'condicion',
-  'imposibilidadRetencion', 'motivoNoRetencion', 'importeRetencion', 'importeBaseCalculo',
-  'regimenExclusion', 'porcentajeExclusion', 'fechaPublicacion', 'tipoComprobante', 'fechaComprobante',
-  'numeroComprobante', 'coe', 'coeOriginal', 'cae', 'importeComprobante', 'motivoEmisionNotaCredito',
-  'cuitRetenido', 'numeroCertificadoOriginal', 'fechaRetencionCertificadoOriginal',
-  'importeCertificadoOriginal', 'motivoAnulacion',
+  'version',
+  'codigoTrazabilidad',
+  'impuesto',
+  'regimen',
+  'fechaRetencion',
+  'condicion',
+  'imposibilidadRetencion',
+  'motivoNoRetencion',
+  'importeRetencion',
+  'importeBaseCalculo',
+  'regimenExclusion',
+  'porcentajeExclusion',
+  'fechaPublicacion',
+  'tipoComprobante',
+  'fechaComprobante',
+  'numeroComprobante',
+  'coe',
+  'coeOriginal',
+  'cae',
+  'importeComprobante',
+  'motivoEmisionNotaCredito',
+  'cuitRetenido',
+  'numeroCertificadoOriginal',
+  'fechaRetencionCertificadoOriginal',
+  'importeCertificadoOriginal',
+  'motivoAnulacion',
 ];
 /** Obligatorios (sin `minOccurs="0"`) de `tns:certificado`. */
 const XSD_CERTIFICADO_REQUIRED = [
-  'version', 'impuesto', 'regimen', 'fechaRetencion', 'imposibilidadRetencion', 'importeRetencion',
-  'importeBaseCalculo', 'regimenExclusion', 'tipoComprobante', 'fechaComprobante', 'importeComprobante',
+  'version',
+  'impuesto',
+  'regimen',
+  'fechaRetencion',
+  'imposibilidadRetencion',
+  'importeRetencion',
+  'importeBaseCalculo',
+  'regimenExclusion',
+  'tipoComprobante',
+  'fechaComprobante',
+  'importeComprobante',
   'cuitRetenido',
 ];
 const XSD_ANULACION = ['version', 'codigoTrazabilidad', 'impuesto', 'numeroCertificado', 'motivoAnulacion'];
@@ -75,7 +104,12 @@ describe('emitirCertificado', () => {
     const sent = sentBody(body);
     const emitir = sent['ser:emitir'] as Record<string, unknown>;
     expect(emitir['@_xmlns:ser']).toBe(NS);
-    expect(Object.keys(emitir).filter((k) => !k.startsWith('@_'))).toEqual(['token', 'sign', 'cuitAgente', 'certificado']);
+    expect(Object.keys(emitir).filter((k) => !k.startsWith('@_'))).toEqual([
+      'token',
+      'sign',
+      'cuitAgente',
+      'certificado',
+    ]);
     expect(emitir.token).toBe('TOKEN');
     expect(emitir.sign).toBe('SIGN');
     expect(body).toContain(`<cuitAgente>${CUIT_AGENTE}</cuitAgente>`);
@@ -128,7 +162,9 @@ describe('emitirCertificado', () => {
     expect(body).toContain('<regimenExclusion>true</regimenExclusion>');
     expect(body).toContain('<porcentajeExclusion>50.00</porcentajeExclusion>');
     expect(body).toContain('<fechaPublicacion>2026-01-01T00:00:00.000-03:00</fechaPublicacion>');
-    expect(body).toContain('<fechaRetencionCertificadoOriginal>2026-10-01T12:00:00.000-03:00</fechaRetencionCertificadoOriginal>');
+    expect(body).toContain(
+      '<fechaRetencionCertificadoOriginal>2026-10-01T12:00:00.000-03:00</fechaRetencionCertificadoOriginal>',
+    );
     expect(body).toContain('<importeCertificadoOriginal>100.50</importeCertificadoOriginal>');
     expect(body).toContain('<numeroCertificadoOriginal>0000000000012345</numeroCertificadoOriginal>');
   });
@@ -175,7 +211,9 @@ describe('emitirCertificado', () => {
   });
 
   it('Fault MISSING_AUTHENTICATION_TOKEN → ArcaSireServiceError', async () => {
-    const sire = makeSire(mockFetch({ status: 500, body: fault('soapenv:Server', 'MISSING_AUTHENTICATION_TOKEN') }).fetch);
+    const sire = makeSire(
+      mockFetch({ status: 500, body: fault('soapenv:Server', 'MISSING_AUTHENTICATION_TOKEN') }).fetch,
+    );
     await expect(sire.emitirCertificado(FACTURA)).rejects.toBeInstanceOf(ArcaSireServiceError);
   });
 
@@ -244,7 +282,10 @@ describe('anularCertificado', () => {
     const anular = sentBody(m.calls[0].body)['ser:anular'] as Record<string, unknown>;
     expect(anular['@_xmlns:ser']).toBe(NS);
     expect(Object.keys(anular).filter((k) => !k.startsWith('@_'))).toEqual([
-      'token', 'sign', 'cuitAgente', 'certificadoAnulacion',
+      'token',
+      'sign',
+      'cuitAgente',
+      'certificadoAnulacion',
     ]);
     expect(Object.keys(anular.certificadoAnulacion as object)).toEqual(XSD_ANULACION);
     const body = m.calls[0].body;
@@ -256,7 +297,12 @@ describe('anularCertificado', () => {
     const m = mockFetch({ body: ANULAR_OK });
     await makeSire(m.fetch).anularCertificado({ numeroCertificado: '1', motivoAnulacion: 1 });
     const anular = sentBody(m.calls[0].body)['ser:anular'] as Record<string, unknown>;
-    expect(Object.keys(anular.certificadoAnulacion as object)).toEqual(['version', 'impuesto', 'numeroCertificado', 'motivoAnulacion']);
+    expect(Object.keys(anular.certificadoAnulacion as object)).toEqual([
+      'version',
+      'impuesto',
+      'numeroCertificado',
+      'motivoAnulacion',
+    ]);
   });
 
   it('Fault de negocio → ArcaSireServiceError; 503 → incierto sin reintento', async () => {

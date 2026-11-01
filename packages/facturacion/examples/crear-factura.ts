@@ -13,21 +13,21 @@
  *   https://auth.afip.gob.ar/contribuyente_/certificados/
  */
 
-import fs from "fs";
-import { Arca, CbteTipo, DocTipo, IvaTipo } from "@ramiidv/arca-facturacion";
+import fs from 'fs';
+import { Arca, CbteTipo, DocTipo, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {
   // 1. Inicializar el SDK
   const arca = new Arca({
     cuit: 20123456786, // Tu CUIT sin guiones
-    cert: fs.readFileSync("./certs/certificado.crt", "utf-8"),
-    key: fs.readFileSync("./certs/clave.key", "utf-8"),
+    cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+    key: fs.readFileSync('./certs/clave.key', 'utf-8'),
     production: false, // true para producción
   });
 
   // 2. Verificar que los servidores estén activos
   const status = await arca.serverStatus();
-  console.log("Estado servidores:", status);
+  console.log('Estado servidores:', status);
 
   // 3. Crear la factura (número, fecha, totales e IVA se calculan automáticamente)
   const result = await arca.facturar({
@@ -38,7 +38,7 @@ async function main() {
 
   // 4. Verificar resultado
   if (result.aprobada) {
-    console.log("Factura aprobada!");
+    console.log('Factura aprobada!');
     console.log(`  CAE: ${result.cae}`);
     console.log(`  Vencimiento: ${result.caeVencimiento}`);
     console.log(`  Comprobante #${result.cbteNro}`);
@@ -49,7 +49,7 @@ async function main() {
     const qrUrl = arca.urlQR(result);
     console.log(`  QR: ${qrUrl}`);
   } else {
-    console.error("Factura rechazada:");
+    console.error('Factura rechazada:');
     for (const obs of result.observaciones) {
       console.error(`  [${obs.code}] ${obs.msg}`);
     }

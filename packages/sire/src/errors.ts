@@ -14,11 +14,7 @@ export class ArcaSireServiceError extends ArcaServiceError {
   /** `faultcode` del SOAP Fault (ej: `soapenv:Client`). */
   public readonly faultCode?: string;
 
-  constructor(
-    message: string,
-    errors: ServiceErrorDetail[],
-    options?: { cause?: unknown; faultCode?: string },
-  ) {
+  constructor(message: string, errors: ServiceErrorDetail[], options?: { cause?: unknown; faultCode?: string }) {
     super(message, errors, options?.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = 'ArcaSireServiceError';
     this.faultCode = options?.faultCode;

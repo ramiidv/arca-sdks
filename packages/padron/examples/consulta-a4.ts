@@ -12,7 +12,7 @@ const client = new ArcaPadron({
   cert: readFileSync('./cert.pem', 'utf-8'),
   key: readFileSync('./key.pem', 'utf-8'),
   cuit: '20123456786', // Tu CUIT representada
-  production: false,   // false = homologación, true = producción
+  production: false, // false = homologación, true = producción
 });
 
 async function main() {

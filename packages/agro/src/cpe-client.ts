@@ -128,12 +128,21 @@ export class CpeClient {
   ): T {
     const detalle = this.#decode<T>(node, schema, method, kind);
     if (!detalle.cabecera?.nroCTG) {
-      throw new ArcaAgroResponseError(`${SERVICE} ${method}: la respuesta no tiene cabecera.nroCTG`, kind === 'emision');
+      throw new ArcaAgroResponseError(
+        `${SERVICE} ${method}: la respuesta no tiene cabecera.nroCTG`,
+        kind === 'emision',
+      );
     }
     return detalle;
   }
 
-  async #lista<T>(method: string, body: Record<string, unknown>, item: string, schema: Schema, opts?: CallOptions): Promise<T[]> {
+  async #lista<T>(
+    method: string,
+    body: Record<string, unknown>,
+    item: string,
+    schema: Schema,
+    opts?: CallOptions,
+  ): Promise<T[]> {
     const r = await this.#call(method, body, 'consulta', opts);
     return this.#decode<Record<string, T[]>>(r, listOf(item, schema), method, 'consulta')[item];
   }
@@ -234,7 +243,10 @@ export class CpeClient {
    * Autoriza una CPE ferroviaria (tipo 75). Emisión: si falla con `uncertain`,
    * consultá `consultarUltNroOrden(sucursal, 75)` + `consultarCPEFerroviaria`.
    */
-  async autorizarCPEFerroviaria(params: AutorizarCPEFerroviariaParams, opts?: CallOptions): Promise<CPEFerroviariaDetalle> {
+  async autorizarCPEFerroviaria(
+    params: AutorizarCPEFerroviariaParams,
+    opts?: CallOptions,
+  ): Promise<CPEFerroviariaDetalle> {
     const solicitud = encodeRequest(params, S.AUTORIZAR_FERROVIARIA, 'autorizarCPEFerroviaria');
     const r = await this.#call('autorizarCPEFerroviaria', { solicitud }, 'emision', opts);
     return this.#detalle<CPEFerroviariaDetalle>(r, S.R_DETALLE_FERROVIARIA, 'autorizarCPEFerroviaria', 'emision');
@@ -274,7 +286,10 @@ export class CpeClient {
   }
 
   /** Regreso a origen de una CPE ferroviaria. Emisión. */
-  async regresoOrigenCPEFerroviaria(params: RegresoOrigenCPEFerroviariaParams, opts?: CallOptions): Promise<CPEResultado> {
+  async regresoOrigenCPEFerroviaria(
+    params: RegresoOrigenCPEFerroviariaParams,
+    opts?: CallOptions,
+  ): Promise<CPEResultado> {
     return this.#operar('regresoOrigenCPEFerroviaria', S.REGRESO_ORIGEN_FERROVIARIA, params, opts);
   }
 
@@ -284,7 +299,10 @@ export class CpeClient {
   }
 
   /** Consulta las CPE ferroviarias de un operativo. */
-  async consultaCPEFerroviariaPorNroOperativo(nroOperativo: number, opts?: CallOptions): Promise<OperativoFerroviarioCPE> {
+  async consultaCPEFerroviariaPorNroOperativo(
+    nroOperativo: number,
+    opts?: CallOptions,
+  ): Promise<OperativoFerroviarioCPE> {
     const method = 'consultaCPEFerroviariaPorNroOperativo';
     const solicitud = encodeRequest({ nroOperativo }, S.CONSULTAR_POR_NRO_OPERATIVO, method);
     const r = await this.#call(method, { solicitud }, 'consulta', opts);
@@ -302,7 +320,10 @@ export class CpeClient {
   }
 
   /** CPEs pendientes de resolución como solicitante (`S`) o destino (`D`). Sin resultados → `[]`. */
-  async consultarCPEPPendientesDeResolucion(params: ConsultarCPEPendientesParams, opts?: CallOptions): Promise<CPEResumen[]> {
+  async consultarCPEPPendientesDeResolucion(
+    params: ConsultarCPEPendientesParams,
+    opts?: CallOptions,
+  ): Promise<CPEResumen[]> {
     const solicitud = encodeRequest(params, S.CONSULTAR_PENDIENTES, 'consultarCPEPPendientesDeResolucion');
     return this.#lista('consultarCPEPPendientesDeResolucion', { solicitud }, 'cartaPorte', S.R_CPE_RESUMEN, opts);
   }
@@ -314,7 +335,8 @@ export class CpeClient {
   async consultarUltNroOrden(sucursal: number, tipoCPE: number, opts?: CallOptions): Promise<number> {
     const solicitud = encodeRequest({ sucursal, tipoCPE }, S.CONSULTAR_ULT_NRO_ORDEN, 'consultarUltNroOrden');
     const r = await this.#call('consultarUltNroOrden', { solicitud }, 'consulta', opts);
-    return this.#decode<{ nroOrden: number }>(r, { nroOrden: must(int()) }, 'consultarUltNroOrden', 'consulta').nroOrden;
+    return this.#decode<{ nroOrden: number }>(r, { nroOrden: must(int()) }, 'consultarUltNroOrden', 'consulta')
+      .nroOrden;
   }
 
   /**

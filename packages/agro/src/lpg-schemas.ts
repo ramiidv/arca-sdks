@@ -344,7 +344,11 @@ const R_DEDUCCIONES = wrapped(
   obj({ deduccion: opt(obj(R_DEDUCCION)), importeIva: dec(2), importeDeduccion: dec(2) }),
   0,
 );
-const R_RETENCIONES = wrapped('retencionReturn', obj({ retencion: opt(obj(R_RETENCION)), importeRetencion: dec(2) }), 0);
+const R_RETENCIONES = wrapped(
+  'retencionReturn',
+  obj({ retencion: opt(obj(R_RETENCION)), importeRetencion: dec(2) }),
+  0,
+);
 
 /** LpgLiquidacionRespType */
 export const R_LIQUIDACION_AUTORIZADA: Schema = {

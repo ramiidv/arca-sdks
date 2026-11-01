@@ -21,17 +21,41 @@ export interface SireClientConfig {
 
 /** Orden de los hijos de `certificado` en el XSD (`xs:sequence`). */
 const CERTIFICADO_ORDER = [
-  'version', 'codigoTrazabilidad', 'impuesto', 'regimen', 'fechaRetencion', 'condicion',
-  'imposibilidadRetencion', 'motivoNoRetencion', 'importeRetencion', 'importeBaseCalculo',
-  'regimenExclusion', 'porcentajeExclusion', 'fechaPublicacion', 'tipoComprobante', 'fechaComprobante',
-  'numeroComprobante', 'coe', 'coeOriginal', 'cae', 'importeComprobante', 'motivoEmisionNotaCredito',
-  'cuitRetenido', 'numeroCertificadoOriginal', 'fechaRetencionCertificadoOriginal',
-  'importeCertificadoOriginal', 'motivoAnulacion',
+  'version',
+  'codigoTrazabilidad',
+  'impuesto',
+  'regimen',
+  'fechaRetencion',
+  'condicion',
+  'imposibilidadRetencion',
+  'motivoNoRetencion',
+  'importeRetencion',
+  'importeBaseCalculo',
+  'regimenExclusion',
+  'porcentajeExclusion',
+  'fechaPublicacion',
+  'tipoComprobante',
+  'fechaComprobante',
+  'numeroComprobante',
+  'coe',
+  'coeOriginal',
+  'cae',
+  'importeComprobante',
+  'motivoEmisionNotaCredito',
+  'cuitRetenido',
+  'numeroCertificadoOriginal',
+  'fechaRetencionCertificadoOriginal',
+  'importeCertificadoOriginal',
+  'motivoAnulacion',
 ] as const satisfies readonly (keyof CertificadoRequest)[];
 
 /** Orden de los hijos de `certificadoAnulacion` en el XSD. */
 const ANULACION_ORDER = [
-  'version', 'codigoTrazabilidad', 'impuesto', 'numeroCertificado', 'motivoAnulacion',
+  'version',
+  'codigoTrazabilidad',
+  'impuesto',
+  'numeroCertificado',
+  'motivoAnulacion',
 ] as const satisfies readonly (keyof CertificadoAnulacionRequest)[];
 
 /**
@@ -73,7 +97,12 @@ function pick(source: object, order: readonly string[]): Record<string, unknown>
 }
 
 /** Campo string obligatorio de una respuesta: si falta, la respuesta es inválida. */
-function requiredString(result: Record<string, unknown>, field: string, method: string, kind: SoapOperationKind): string {
+function requiredString(
+  result: Record<string, unknown>,
+  field: string,
+  method: string,
+  kind: SoapOperationKind,
+): string {
   const value = result[field];
   if (value === undefined || value === null || value === '' || typeof value === 'object') {
     throw new ArcaSoapError(`Respuesta inválida de ${method}: falta ${field}`, {

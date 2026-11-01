@@ -4,20 +4,20 @@
 
 export const ENDPOINTS = {
   wsfe: {
-    testing: "https://wswhomo.afip.gov.ar/wsfev1/service.asmx",
-    production: "https://servicios1.afip.gov.ar/wsfev1/service.asmx",
+    testing: 'https://wswhomo.afip.gov.ar/wsfev1/service.asmx',
+    production: 'https://servicios1.afip.gov.ar/wsfev1/service.asmx',
   },
   wsfex: {
-    testing: "https://wswhomo.afip.gov.ar/wsfexv1/service.asmx",
-    production: "https://servicios1.afip.gov.ar/wsfexv1/service.asmx",
+    testing: 'https://wswhomo.afip.gov.ar/wsfexv1/service.asmx',
+    production: 'https://servicios1.afip.gov.ar/wsfexv1/service.asmx',
   },
   padronA5: {
-    testing: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5",
-    production: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5",
+    testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5',
+    production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5',
   },
   padronA13: {
-    testing: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13",
-    production: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13",
+    testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13',
+    production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13',
   },
 } as const;
 
@@ -56,23 +56,23 @@ export const WSFE_NUMERO_NO_CORRESPONDE = 10016;
 
 /** Servicios WSAA que usa este SDK. */
 export const WSAA_SERVICES = {
-  wsfe: "wsfe",
-  wsfex: "wsfex",
+  wsfe: 'wsfe',
+  wsfex: 'wsfex',
   /** Constancia de inscripción (ex Padrón A5, `ws_sr_padron_a5` está deprecado). */
-  padronA5: "ws_sr_constancia_inscripcion",
-  padronA13: "ws_sr_padron_a13",
+  padronA5: 'ws_sr_constancia_inscripcion',
+  padronA13: 'ws_sr_padron_a13',
 } as const;
 
-export const WSFE_NAMESPACE = "http://ar.gov.afip.dif.FEV1/";
-export const WSFEX_NAMESPACE = "http://ar.gov.afip.dif.fexv1/";
-export const PADRON_A5_NAMESPACE = "http://a5.soap.ws.server.puc.sr/";
-export const PADRON_A13_NAMESPACE = "http://a13.soap.ws.server.puc.sr/";
+export const WSFE_NAMESPACE = 'http://ar.gov.afip.dif.FEV1/';
+export const WSFEX_NAMESPACE = 'http://ar.gov.afip.dif.fexv1/';
+export const PADRON_A5_NAMESPACE = 'http://a5.soap.ws.server.puc.sr/';
+export const PADRON_A13_NAMESPACE = 'http://a13.soap.ws.server.puc.sr/';
 
 /**
  * URL base del QR de los comprobantes, según la especificación vigente de ARCA
  * ("Especificaciones del QR incluido en las facturas electrónicas").
  */
-export const QR_URL = "https://www.arca.gob.ar/fe/qr/";
+export const QR_URL = 'https://www.arca.gob.ar/fe/qr/';
 
 // ============================================================
 // Tipos de Comprobante
@@ -159,14 +159,14 @@ export enum Concepto {
 
 // Definido en @ramiidv/arca-common (tabla oficial completa, incluye las cédulas
 // provinciales y el código 99 como CONSUMIDOR_FINAL / SIN_IDENTIFICAR).
-export { DocTipo } from "@ramiidv/arca-common";
+export { DocTipo } from '@ramiidv/arca-common';
 
 // ============================================================
 // Condición de IVA del receptor
 // ============================================================
 
 // Definido en @ramiidv/arca-common para compartirlo con arca-padron.
-export { CondicionIva } from "@ramiidv/arca-common";
+export { CondicionIva } from '@ramiidv/arca-common';
 
 // ============================================================
 // Tipos de IVA (alícuotas)
@@ -195,21 +195,21 @@ export const IVA_RATES: Record<IvaTipo, number> = {
 // ============================================================
 
 export enum Moneda {
-  PESOS = "PES",
-  DOLARES = "DOL",
-  EUROS = "060",
-  REALES = "012",
-  PESOS_URUGUAYOS = "011",
-  PESOS_CHILENOS = "033",
-  GUARANIES = "031",
-  BOLIVIANOS = "029",
-  PESOS_COLOMBIANOS = "032",
-  PESOS_MEXICANOS = "010",
-  LIBRAS_ESTERLINAS = "021",
-  YENES = "019",
-  FRANCOS_SUIZOS = "009",
-  DOLARES_CANADIENSES = "018",
-  YUANES = "064",
+  PESOS = 'PES',
+  DOLARES = 'DOL',
+  EUROS = '060',
+  REALES = '012',
+  PESOS_URUGUAYOS = '011',
+  PESOS_CHILENOS = '033',
+  GUARANIES = '031',
+  BOLIVIANOS = '029',
+  PESOS_COLOMBIANOS = '032',
+  PESOS_MEXICANOS = '010',
+  LIBRAS_ESTERLINAS = '021',
+  YENES = '019',
+  FRANCOS_SUIZOS = '009',
+  DOLARES_CANADIENSES = '018',
+  YUANES = '064',
 }
 
 // ============================================================
@@ -288,10 +288,9 @@ export function isFCE(cbteTipo: number): boolean {
 }
 
 /** Notas de crédito y débito (WSFEv1, incluidas FCE). */
-const NOTAS = new Set<number>([
-  ...Object.values(NOTA_CREDITO_MAP),
-  ...Object.values(NOTA_DEBITO_MAP),
-].filter((t) => !TIPOS_E.has(t)));
+const NOTAS = new Set<number>(
+  [...Object.values(NOTA_CREDITO_MAP), ...Object.values(NOTA_DEBITO_MAP)].filter((t) => !TIPOS_E.has(t)),
+);
 
 export function isNotaCreditoODebito(cbteTipo: number): boolean {
   return NOTAS.has(cbteTipo);

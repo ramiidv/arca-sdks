@@ -1,11 +1,5 @@
 import { afipSoapCall } from '@ramiidv/arca-common';
-import type {
-  ArcaEvent,
-  CallOptions,
-  LegacyTlsMode,
-  ServerStatus,
-  SoapOperationKind,
-} from '@ramiidv/arca-common';
+import type { ArcaEvent, CallOptions, LegacyTlsMode, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
 import {
   checkFecredErrors,
   invalidResponse,
@@ -181,7 +175,12 @@ export class FecredClient {
     return result;
   }
 
-  private async operacion(method: string, auth: WsAuthSource, fields: Xml, opts?: CallOptions): Promise<OperacionFecredResult> {
+  private async operacion(
+    method: string,
+    auth: WsAuthSource,
+    fields: Xml,
+    opts?: CallOptions,
+  ): Promise<OperacionFecredResult> {
     const r = await this.call(method, auth, fields, 'emision', opts);
     return {
       resultado: resultadoAprobado(r, method),
@@ -190,7 +189,11 @@ export class FecredClient {
     };
   }
 
-  private async codigosDescripciones(method: string, auth: WsAuthSource, opts?: CallOptions): Promise<CodigoDescripcion[]> {
+  private async codigosDescripciones(
+    method: string,
+    auth: WsAuthSource,
+    opts?: CallOptions,
+  ): Promise<CodigoDescripcion[]> {
     const r = await this.call(method, auth, {}, 'consulta', opts);
     return parseCodigosDescripciones(r, 'arrayCodigoDescripcion', method);
   }
@@ -243,7 +246,13 @@ export class FecredClient {
     opts?: CallOptions,
   ): Promise<ObligadoRecepcionResult> {
     const m = 'consultarObligadoRecepcion';
-    const r = await this.call(m, auth, { cuitConsultada: cuitParam(cuitConsultada, 'cuitConsultada') }, 'consulta', opts);
+    const r = await this.call(
+      m,
+      auth,
+      { cuitConsultada: cuitParam(cuitConsultada, 'cuitConsultada') },
+      'consulta',
+      opts,
+    );
     const out: ObligadoRecepcionResult = { obligado: parseSiNo(r, 'respuesta', m), ...parseInfo(r, m) };
     const desde = parseOptStr(r, 'desde', m);
     if (desde !== undefined) out.desde = desde;
@@ -284,7 +293,11 @@ export class FecredClient {
   }
 
   /** `consultarCtaCte`: detalle de una cuenta corriente. */
-  async consultarCtaCte(auth: WsAuthSource, idCtaCte: IdCtaCteInput, opts?: CallOptions): Promise<ConsultarCtaCteResult> {
+  async consultarCtaCte(
+    auth: WsAuthSource,
+    idCtaCte: IdCtaCteInput,
+    opts?: CallOptions,
+  ): Promise<ConsultarCtaCteResult> {
     const m = 'consultarCtaCte';
     const r = await this.call(m, auth, { idCtaCte: idCtaCteParam(idCtaCte) }, 'consulta', opts);
     if (r['ctaCte'] === undefined || r['ctaCte'] === null || r['ctaCte'] === '') invalidResponse(`${m}.ctaCte`);
@@ -327,7 +340,13 @@ export class FecredClient {
     opts?: CallOptions,
   ): Promise<HistorialEstadosComprobanteResult> {
     const m = 'consultarHistorialEstadosComprobante';
-    const r = await this.call(m, auth, { idComprobante: idComprobanteParam(idComprobante, 'idComprobante') }, 'consulta', opts);
+    const r = await this.call(
+      m,
+      auth,
+      { idComprobante: idComprobanteParam(idComprobante, 'idComprobante') },
+      'consulta',
+      opts,
+    );
     if (r['arrayHistorialEstados'] === undefined) invalidResponse(`${m}.arrayHistorialEstados`);
     return {
       idComprobante: parseIdComprobante(r['idComprobante'], `${m}.idComprobante`),
@@ -355,9 +374,19 @@ export class FecredClient {
   }
 
   /** `obtenerRemitos`: remitos asociados a un comprobante. */
-  async obtenerRemitos(auth: WsAuthSource, idComprobante: IdComprobanteInput, opts?: CallOptions): Promise<IdComprobante[]> {
+  async obtenerRemitos(
+    auth: WsAuthSource,
+    idComprobante: IdComprobanteInput,
+    opts?: CallOptions,
+  ): Promise<IdComprobante[]> {
     const m = 'obtenerRemitos';
-    const r = await this.call(m, auth, { idComprobante: idComprobanteParam(idComprobante, 'idComprobante') }, 'consulta', opts);
+    const r = await this.call(
+      m,
+      auth,
+      { idComprobante: idComprobanteParam(idComprobante, 'idComprobante') },
+      'consulta',
+      opts,
+    );
     return parseItems(r, 'arrayIdsRemitos', 'idsComprobantes', m).map((x, i) =>
       parseIdComprobante(x, `${m}.arrayIdsRemitos.idsComprobantes[${i}]`),
     );
@@ -368,14 +397,19 @@ export class FecredClient {
   // -------------------------------------------------------------------------
 
   /** `aceptarFECred`: acepta una factura de crédito. */
-  async aceptarFECred(auth: WsAuthSource, params: AceptarFecredParams, opts?: CallOptions): Promise<OperacionFecredResult> {
+  async aceptarFECred(
+    auth: WsAuthSource,
+    params: AceptarFecredParams,
+    opts?: CallOptions,
+  ): Promise<OperacionFecredResult> {
     const f: Xml = { idCtaCte: idCtaCteParam(params?.idCtaCte) };
     put(f, 'arrayConfirmarNotasDC', confirmarNotasParam(params.confirmarNotasDC));
     put(f, 'arrayFormasCancelacion', formasCancelacionParam(params.formasCancelacion, 'formasCancelacion', false));
     put(f, 'arrayRetenciones', retencionesParam(params.retenciones));
     put(f, 'arrayAjustesOperacion', ajustesParam(params.ajustesOperacion));
     if (params.tipoCancelacion !== undefined) f.tipoCancelacion = tipoCancelacionParam(params.tipoCancelacion);
-    if (params.importeCancelado !== undefined) f.importeCancelado = importeParam(params.importeCancelado, 'importeCancelado');
+    if (params.importeCancelado !== undefined)
+      f.importeCancelado = importeParam(params.importeCancelado, 'importeCancelado');
     if (params.importeTotalRetPesos !== undefined) {
       f.importeTotalRetPesos = importeParam(params.importeTotalRetPesos, 'importeTotalRetPesos');
     }
@@ -391,7 +425,11 @@ export class FecredClient {
   }
 
   /** `rechazarFECred`: rechaza una factura de crédito. */
-  async rechazarFECred(auth: WsAuthSource, params: RechazarFecredParams, opts?: CallOptions): Promise<OperacionFecredResult> {
+  async rechazarFECred(
+    auth: WsAuthSource,
+    params: RechazarFecredParams,
+    opts?: CallOptions,
+  ): Promise<OperacionFecredResult> {
     return this.operacion(
       'rechazarFECred',
       auth,
@@ -450,7 +488,11 @@ export class FecredClient {
   }
 
   /** `rechazarNotaDC`: rechaza una nota de débito/crédito. */
-  async rechazarNotaDC(auth: WsAuthSource, params: RechazarNotaDCParams, opts?: CallOptions): Promise<RechazarNotaDCResult> {
+  async rechazarNotaDC(
+    auth: WsAuthSource,
+    params: RechazarNotaDCParams,
+    opts?: CallOptions,
+  ): Promise<RechazarNotaDCResult> {
     const m = 'rechazarNotaDC';
     const r = await this.call(
       m,
@@ -474,7 +516,10 @@ export class FecredClient {
   // -------------------------------------------------------------------------
 
   /** `consultarCuentasEnAgtDptoCltv`: cuentas de la CUIT representada en Agentes de Depósito Colectivo. */
-  async consultarCuentasEnAgtDptoCltv(auth: WsAuthSource, opts?: CallOptions): Promise<ConsultarCuentasEnAgtDptoCltvResult> {
+  async consultarCuentasEnAgtDptoCltv(
+    auth: WsAuthSource,
+    opts?: CallOptions,
+  ): Promise<ConsultarCuentasEnAgtDptoCltvResult> {
     const m = 'consultarCuentasEnAgtDptoCltv';
     const r = await this.call(m, auth, {}, 'consulta', opts);
     return {

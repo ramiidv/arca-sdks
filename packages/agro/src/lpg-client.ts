@@ -172,7 +172,11 @@ export class LpgClient {
     opts?: CallOptions,
   ): Promise<LiquidacionConsultaResultado> {
     const o = OPS.liquidacionXCoeConsultar;
-    const body = encodeRequest({ coe, pdf: params.pdf === undefined ? undefined : params.pdf ? 'S' : 'N' }, S.CONSULTA_X_COE, o.method);
+    const body = encodeRequest(
+      { coe, pdf: params.pdf === undefined ? undefined : params.pdf ? 'S' : 'N' },
+      S.CONSULTA_X_COE,
+      o.method,
+    );
     const r = await this.#call(o, body, 'consulta', opts);
     const res = this.#decode<LiquidacionConsultaResultado>(r, S.R_LIQ_CONS_RETURN, o.method, 'consulta');
     return this.#requireCoe(res, 'autorizacion', o.method, 'consulta');
@@ -208,7 +212,10 @@ export class LpgClient {
   }
 
   /** Ajuste unificado (crédito y/o débito) de una liquidación. Emisión. */
-  async liquidacionAjustarUnificado(params: AjusteUnificadoParams, opts?: CallOptions): Promise<AjusteUnificadoResultado> {
+  async liquidacionAjustarUnificado(
+    params: AjusteUnificadoParams,
+    opts?: CallOptions,
+  ): Promise<AjusteUnificadoResultado> {
     const o = OPS.liquidacionAjustarUnificado;
     const body = encodeRequest(params, S.AJUSTE_UNIFICADO, o.method, requireAjuste);
     const r = await this.#call(o, body, 'emision', opts);
@@ -238,17 +245,29 @@ export class LpgClient {
   }
 
   /** Solicita la anulación de una certificación. Emisión. */
-  async cgSolicitarAnulacion(coe: string | number, params: { pdf?: boolean } = {}, opts?: CallOptions): Promise<AnulacionCertificacionResultado> {
+  async cgSolicitarAnulacion(
+    coe: string | number,
+    params: { pdf?: boolean } = {},
+    opts?: CallOptions,
+  ): Promise<AnulacionCertificacionResultado> {
     return this.#cgAnulacion(OPS.cgSolicitarAnulacion, coe, params, opts);
   }
 
   /** Confirma la anulación de una certificación. Emisión. */
-  async cgConfirmarAnulacion(coe: string | number, params: { pdf?: boolean } = {}, opts?: CallOptions): Promise<AnulacionCertificacionResultado> {
+  async cgConfirmarAnulacion(
+    coe: string | number,
+    params: { pdf?: boolean } = {},
+    opts?: CallOptions,
+  ): Promise<AnulacionCertificacionResultado> {
     return this.#cgAnulacion(OPS.cgConfirmarAnulacion, coe, params, opts);
   }
 
   async #cgAnulacion(o: Op, coe: string | number, params: { pdf?: boolean }, opts?: CallOptions) {
-    const body = encodeRequest({ coe, pdf: params.pdf === undefined ? undefined : params.pdf ? 'S' : 'N' }, S.CONSULTA_X_COE, o.method);
+    const body = encodeRequest(
+      { coe, pdf: params.pdf === undefined ? undefined : params.pdf ? 'S' : 'N' },
+      S.CONSULTA_X_COE,
+      o.method,
+    );
     const r = await this.#call(o, body, 'emision', opts);
     return this.#decode<AnulacionCertificacionResultado>(r, S.R_CG_ANULACION_RETURN, o.method, 'emision');
   }

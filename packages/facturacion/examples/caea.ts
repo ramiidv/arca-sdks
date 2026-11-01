@@ -16,19 +16,19 @@
  * Cada período es una quincena: orden 1 (días 1-15) u orden 2 (días 16-fin).
  */
 
-import fs from "fs";
-import { Arca, CbteTipo, IvaTipo } from "@ramiidv/arca-facturacion";
+import fs from 'fs';
+import { Arca, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {
   const arca = new Arca({
     cuit: 20123456786,
-    cert: fs.readFileSync("./certs/certificado.crt", "utf-8"),
-    key: fs.readFileSync("./certs/clave.key", "utf-8"),
+    cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+    key: fs.readFileSync('./certs/clave.key', 'utf-8'),
     production: false,
   });
 
   // 1. Solicitar CAEA para noviembre 2026, primera quincena
-  const caea = await arca.solicitarCAEA("202611", 1);
+  const caea = await arca.solicitarCAEA('202611', 1);
   console.log(`CAEA: ${caea.CAEA}`);
   console.log(`Vigencia: ${caea.FchVigDesde} - ${caea.FchVigHasta}`);
   console.log(`Tope informar: ${caea.FchTopeInf}`);
@@ -40,7 +40,7 @@ async function main() {
     ptoVta: 5, // punto de venta CAEA (contingencia)
     cbteTipo: CbteTipo.FACTURA_B,
     cbteNro: 120, // el número que se usó al emitirlo offline
-    fechaHoraGeneracion: new Date("2026-11-03T14:32:10-03:00"),
+    fechaHoraGeneracion: new Date('2026-11-03T14:32:10-03:00'),
     items: [{ neto: 1000, iva: IvaTipo.IVA_21 }],
   });
 
@@ -48,7 +48,7 @@ async function main() {
     console.log(`Factura registrada — Cbte #${result.cbteNro}`);
     console.log(`Total: $${result.importes.total}`);
   } else {
-    console.error("Error:", result.observaciones);
+    console.error('Error:', result.observaciones);
   }
 
   // 4. Si no hubo movimientos en el período para un punto de venta
@@ -56,8 +56,8 @@ async function main() {
   // console.log(await arca.consultarSinMovimientoCAEA(caea.CAEA, 6));
 
   // Consultar un CAEA existente
-  const existente = await arca.consultarCAEA("202611", 1);
-  console.log("CAEA consultado:", existente.CAEA);
+  const existente = await arca.consultarCAEA('202611', 1);
+  console.log('CAEA consultado:', existente.CAEA);
 }
 
 main().catch(console.error);

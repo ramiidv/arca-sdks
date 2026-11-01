@@ -1,10 +1,10 @@
-import { EventEmitter } from "node:events";
-import { anySignal, ensureArray, formatDate, safeEmit, validateCuit } from "@ramiidv/arca-common";
-import type { CallOptions } from "@ramiidv/arca-common";
-import { WsaaClient } from "./wsaa.js";
-import { WsfeClient } from "./wsfe.js";
-import { WsfexClient } from "./wsfex.js";
-import { PadronClient } from "./padron.js";
+import { EventEmitter } from 'node:events';
+import { anySignal, ensureArray, formatDate, safeEmit, validateCuit } from '@ramiidv/arca-common';
+import type { CallOptions } from '@ramiidv/arca-common';
+import { WsaaClient } from './wsaa.js';
+import { WsfeClient } from './wsfe.js';
+import { WsfexClient } from './wsfex.js';
+import { PadronClient } from './padron.js';
 import {
   armarComprobante,
   buildInvoiceDetail,
@@ -14,15 +14,10 @@ import {
   calcularTotales,
   formatFechaHora,
   redondear2,
-} from "./facturacion.js";
-import { eventosWsfex } from "./wsfex.js";
-import { ArcaResultadoInciertoExpo, ArcaSoapError } from "./errors.js";
-import {
-  fail,
-  validateFacturarOpts,
-  validateFacturarExpoOpts,
-  validateInvoiceRequest,
-} from "./validation.js";
+} from './facturacion.js';
+import { eventosWsfex } from './wsfex.js';
+import { ArcaResultadoInciertoExpo, ArcaSoapError } from './errors.js';
+import { fail, validateFacturarOpts, validateFacturarExpoOpts, validateInvoiceRequest } from './validation.js';
 import type {
   ArcaConfig,
   ArcaEvent,
@@ -66,18 +61,10 @@ import type {
   ResultadoRecuperacion,
   QROptions,
   FacturarCAEAOpts,
-} from "./types.js";
-import { generarUrlQR, urlQRDesdeFactura } from "./qr.js";
-import type { DatosQR } from "./qr.js";
-import {
-  CbteTipo,
-  NOTA_CREDITO_MAP,
-  NOTA_DEBITO_MAP,
-  TipoExpo,
-  WSAA_SERVICES,
-  isTipoC,
-  isTipoE,
-} from "./constants.js";
+} from './types.js';
+import { generarUrlQR, urlQRDesdeFactura } from './qr.js';
+import type { DatosQR } from './qr.js';
+import { CbteTipo, NOTA_CREDITO_MAP, NOTA_DEBITO_MAP, TipoExpo, WSAA_SERVICES, isTipoC, isTipoE } from './constants.js';
 
 /** TTL por defecto del cache de parámetros (24 horas). */
 const DEFAULT_PARAM_CACHE_TTL_MS = 24 * 60 * 60_000;
@@ -173,13 +160,13 @@ export class Arca {
    * arca.on("request:retry", (e) => console.warn(`Retry #${e.attempt}: ${e.error}`));
    * ```
    */
-  on(event: ArcaEvent["type"], handler: (event: ArcaEvent) => void): this {
+  on(event: ArcaEvent['type'], handler: (event: ArcaEvent) => void): this {
     this.emitter.on(event, handler);
     return this;
   }
 
   /** Desuscribirse de un evento. */
-  off(event: ArcaEvent["type"], handler: (event: ArcaEvent) => void): this {
+  off(event: ArcaEvent['type'], handler: (event: ArcaEvent) => void): this {
     this.emitter.off(event, handler);
     return this;
   }
@@ -227,11 +214,7 @@ export class Arca {
   }
 
   /** Siguiente número de comprobante (último + 1). */
-  async siguienteComprobante(
-    ptoVta: number,
-    cbteTipo: number,
-    call?: CallOptions
-  ): Promise<number> {
+  async siguienteComprobante(ptoVta: number, cbteTipo: number, call?: CallOptions): Promise<number> {
     const ultimo = await this.ultimoComprobante(ptoVta, cbteTipo, call);
     return ultimo + 1;
   }
@@ -240,15 +223,18 @@ export class Arca {
   async crearFacturaAuto(
     ptoVta: number,
     cbteTipo: number,
-    invoice: Omit<InvoiceDetail, "CbteDesde" | "CbteHasta">,
-    call?: CallOptions
+    invoice: Omit<InvoiceDetail, 'CbteDesde' | 'CbteHasta'>,
+    call?: CallOptions,
   ): Promise<FECAESolicitarResult> {
     const nextNum = await this.siguienteComprobante(ptoVta, cbteTipo, call);
-    return this.crearFactura({
-      PtoVta: ptoVta,
-      CbteTipo: cbteTipo,
-      invoices: [{ ...invoice, CbteDesde: nextNum, CbteHasta: nextNum }],
-    }, call);
+    return this.crearFactura(
+      {
+        PtoVta: ptoVta,
+        CbteTipo: cbteTipo,
+        invoices: [{ ...invoice, CbteDesde: nextNum, CbteHasta: nextNum }],
+      },
+      call,
+    );
   }
 
   // ============================================================
@@ -283,13 +269,13 @@ export class Arca {
    * Crea una nota de crédito. Tipo de NC inferido del comprobante original.
    */
   async notaCredito(opts: NotaCreditoOpts, call?: CallOptions): Promise<FacturaResult> {
-    this.rechazarClaseE(opts, "Crédito");
+    this.rechazarClaseE(opts, 'Crédito');
     const cbteTipo = NOTA_CREDITO_MAP[opts.comprobanteOriginal?.tipo];
     if (cbteTipo === undefined) {
       fail(
-        "comprobanteOriginal.tipo",
+        'comprobanteOriginal.tipo',
         `No se puede inferir el tipo de Nota de Crédito para CbteTipo ${opts.comprobanteOriginal?.tipo}`,
-        opts.comprobanteOriginal?.tipo
+        opts.comprobanteOriginal?.tipo,
       );
     }
     return this.emitirComprobante(this.conAsociado(cbteTipo, opts), call);
@@ -299,36 +285,33 @@ export class Arca {
    * Crea una nota de débito. Tipo de ND inferido del comprobante original.
    */
   async notaDebito(opts: NotaDebitoOpts, call?: CallOptions): Promise<FacturaResult> {
-    this.rechazarClaseE(opts, "Débito");
+    this.rechazarClaseE(opts, 'Débito');
     const cbteTipo = NOTA_DEBITO_MAP[opts.comprobanteOriginal?.tipo];
     if (cbteTipo === undefined) {
       fail(
-        "comprobanteOriginal.tipo",
+        'comprobanteOriginal.tipo',
         `No se puede inferir el tipo de Nota de Débito para CbteTipo ${opts.comprobanteOriginal?.tipo}`,
-        opts.comprobanteOriginal?.tipo
+        opts.comprobanteOriginal?.tipo,
       );
     }
     return this.emitirComprobante(this.conAsociado(cbteTipo, opts), call);
   }
 
   /** Las NC/ND de exportación (clase E) van por WSFEX, no por WSFEv1. */
-  private rechazarClaseE(opts: NotaCreditoOpts | NotaDebitoOpts, clase: "Crédito" | "Débito"): void {
+  private rechazarClaseE(opts: NotaCreditoOpts | NotaDebitoOpts, clase: 'Crédito' | 'Débito'): void {
     const tipo = opts.comprobanteOriginal?.tipo;
     if (tipo !== undefined && isTipoE(tipo)) {
-      const destino = clase === "Crédito" ? CbteTipo.NOTA_CREDITO_E : CbteTipo.NOTA_DEBITO_E;
+      const destino = clase === 'Crédito' ? CbteTipo.NOTA_CREDITO_E : CbteTipo.NOTA_DEBITO_E;
       fail(
-        "comprobanteOriginal.tipo",
+        'comprobanteOriginal.tipo',
         `las Notas de ${clase} de exportación (tipo ${destino}) se emiten por WSFEX: usar ` +
           `facturarExpo({ cbteTipo: ${destino}, cbtesAsoc: [...] })`,
-        tipo
+        tipo,
       );
     }
   }
 
-  private conAsociado(
-    cbteTipo: number,
-    opts: NotaCreditoOpts | NotaDebitoOpts
-  ): FacturarOpts {
+  private conAsociado(cbteTipo: number, opts: NotaCreditoOpts | NotaDebitoOpts): FacturarOpts {
     const { comprobanteOriginal, ...rest } = opts;
     const asociados: ComprobanteRef[] = [comprobanteOriginal, ...(opts.cbtesAsoc ?? [])];
     return { ...rest, cbteTipo, cbtesAsoc: asociados };
@@ -336,11 +319,8 @@ export class Arca {
 
   private async emitirComprobante(opts: FacturarOpts, call?: CallOptions): Promise<FacturaResult> {
     const { detail, importes } = await this.prepararComprobante(opts, call);
-    const result = await this.crearFactura(
-      { PtoVta: opts.ptoVta, CbteTipo: opts.cbteTipo, invoices: [detail] },
-      call
-    );
-    return parseFacturaResult(result, importes, { moneda: detail.MonId, cotizacion: detail.MonCotiz, tipoCodAut: "E" });
+    const result = await this.crearFactura({ PtoVta: opts.ptoVta, CbteTipo: opts.cbteTipo, invoices: [detail] }, call);
+    return parseFacturaResult(result, importes, { moneda: detail.MonId, cotizacion: detail.MonCotiz, tipoCodAut: 'E' });
   }
 
   /**
@@ -368,23 +348,15 @@ export class Arca {
    * Tip: si la respuesta se perdió por timeout, esperar unos segundos antes de
    * llamar: ARCA puede seguir procesando el request original.
    */
-  async recuperarComprobante(
-    intento: IntentoComprobante,
-    call?: CallOptions
-  ): Promise<ResultadoRecuperacion> {
+  async recuperarComprobante(intento: IntentoComprobante, call?: CallOptions): Promise<ResultadoRecuperacion> {
     const ultimo = await this.ultimoComprobante(intento.ptoVta, intento.cbteTipo, call);
-    if (ultimo < intento.cbteNro) return { estado: "no_emitido" };
+    if (ultimo < intento.cbteNro) return { estado: 'no_emitido' };
 
-    const encontrado = await this.consultarComprobante(
-      intento.cbteTipo,
-      intento.ptoVta,
-      intento.cbteNro,
-      call
-    );
+    const encontrado = await this.consultarComprobante(intento.cbteTipo, intento.ptoVta, intento.cbteNro, call);
     if (coincideConIntento(encontrado, intento)) {
-      return { estado: "autorizado", resultado: facturaResultDesdeConsulta(encontrado) };
+      return { estado: 'autorizado', resultado: facturaResultDesdeConsulta(encontrado) };
     }
-    return { estado: "conflicto", encontrado };
+    return { estado: 'conflicto', encontrado };
   }
 
   /** Consulta un comprobante previamente autorizado. */
@@ -392,13 +364,12 @@ export class Arca {
     cbteTipo: number,
     ptoVta: number,
     cbteNro: number,
-    call?: CallOptions
+    call?: CallOptions,
   ): Promise<FECompConsultarResult> {
     const opts = this.opts(call);
     const auth = await this.getAuth(WSAA_SERVICES.wsfe, opts);
     return this.wsfe.consultarComprobante(auth, cbteTipo, ptoVta, cbteNro, opts);
   }
-
 
   // ============================================================
   // WSFEX - Facturación de Exportación
@@ -443,7 +414,7 @@ export class Arca {
     cbteTipo: number,
     ptoVta: number,
     cbteNro: number,
-    call?: CallOptions
+    call?: CallOptions,
   ): Promise<WsfexGetCmpResult> {
     const callOpts = this.opts(call);
     const auth = await this.getAuth(WSAA_SERVICES.wsfex, callOpts);
@@ -569,7 +540,7 @@ export class Arca {
         Pro_total_item: totalItem,
       };
     });
-    if (totalCents < 0) fail("items", "el total de los items no puede ser negativo");
+    if (totalCents < 0) fail('items', 'el total de los items no puede ser negativo');
 
     // Permiso_existente: "S"/"N" solo para Factura E (19) de bienes; vacío en el resto
     // (tabla de validación 1720 del manual de WSFEX).
@@ -584,7 +555,7 @@ export class Arca {
       Punto_vta: opts.ptoVta,
       Cbte_nro: cbteNro,
       Tipo_expo: opts.tipoExpo,
-      Permiso_existente: esFacturaBienes ? (opts.permisoExistente ?? "N") : "",
+      Permiso_existente: esFacturaBienes ? (opts.permisoExistente ?? 'N') : '',
       Dst_cmp: opts.pais,
       Cliente: opts.cliente.nombre,
       Cuit_pais_cliente: opts.cliente.cuitPais,
@@ -617,25 +588,28 @@ export class Arca {
     // Emisión: no se reintenta. Un resultado incierto llega como ArcaResultadoInciertoExpo.
     const result = await this.wsfex.authorize(auth, invoice, callOpts);
     const r = result.FEXResultAuth!;
-    const aprobada = r.Resultado === "A";
-    const cae = aprobada && r.Cae !== undefined && r.Cae !== null && r.Cae !== "" ? String(r.Cae) : undefined;
+    const aprobada = r.Resultado === 'A';
+    const cae = aprobada && r.Cae !== undefined && r.Cae !== null && r.Cae !== '' ? String(r.Cae) : undefined;
     if (aprobada && cae === undefined) {
       throw new ArcaResultadoInciertoExpo(invoice, {
-        cause: new ArcaSoapError("FEXAuthorize aprobó el comprobante sin informar el CAE", { uncertain: true }),
+        cause: new ArcaSoapError('FEXAuthorize aprobó el comprobante sin informar el CAE', { uncertain: true }),
       });
     }
 
     return {
       aprobada,
       id: Number(r.Id ?? id),
-      reproceso: r.Reproceso === "S",
+      reproceso: r.Reproceso === 'S',
       fecha,
       cae,
       caeVencimiento: aprobada && r.Fch_venc_Cae ? String(r.Fch_venc_Cae) : undefined,
       cbteNro: Number(r.Cbte_nro),
       ptoVta: Number(r.Punto_vta),
       cbteTipo: Number(r.Cbte_tipo),
-      obs: r.Motivos_Obs === undefined || r.Motivos_Obs === null || r.Motivos_Obs === "" ? undefined : String(r.Motivos_Obs),
+      obs:
+        r.Motivos_Obs === undefined || r.Motivos_Obs === null || r.Motivos_Obs === ''
+          ? undefined
+          : String(r.Motivos_Obs),
       eventos: eventosWsfex(result),
       raw: result,
     };
@@ -647,8 +621,8 @@ export class Arca {
 
   private validarPeriodoCAEA(periodo: string, orden: number): void {
     const m = /^(\d{4})(\d{2})$/.exec(String(periodo));
-    if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) fail("periodo", "periodo debe tener formato YYYYMM", periodo);
-    if (orden !== 1 && orden !== 2) fail("orden", "orden debe ser 1 (primera quincena) o 2 (segunda quincena)", orden);
+    if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) fail('periodo', 'periodo debe tener formato YYYYMM', periodo);
+    if (orden !== 1 && orden !== 2) fail('orden', 'orden debe ser 1 (primera quincena) o 2 (segunda quincena)', orden);
   }
 
   /**
@@ -679,9 +653,12 @@ export class Arca {
   async registrarCAEA(request: CaeaRegInfRequest, call?: CallOptions): Promise<CaeaRegInfResult> {
     validateInvoiceRequest(request);
     request.invoices.forEach((inv, i) => {
-      if (!inv.CAEA) fail(`invoices[${i}].CAEA`, "CAEA es requerido");
+      if (!inv.CAEA) fail(`invoices[${i}].CAEA`, 'CAEA es requerido');
       if (!inv.CbteFchHsGen)
-        fail(`invoices[${i}].CbteFchHsGen`, "CbteFchHsGen (yyyymmddhhmmss) es requerido desde la RG 5782 (validación 1440)");
+        fail(
+          `invoices[${i}].CbteFchHsGen`,
+          'CbteFchHsGen (yyyymmddhhmmss) es requerido desde la RG 5782 (validación 1440)',
+        );
       formatFechaHora(inv.CbteFchHsGen, `invoices[${i}].CbteFchHsGen`);
     });
     const callOpts = this.opts(call);
@@ -711,13 +688,13 @@ export class Arca {
    * ```
    */
   async registrarFacturaCAEA(caea: string, opts: FacturarCAEAOpts, call?: CallOptions): Promise<FacturaResult> {
-    if (!caea) fail("caea", "caea es requerido");
+    if (!caea) fail('caea', 'caea es requerido');
     if (opts.fechaHoraGeneracion === undefined)
       fail(
-        "fechaHoraGeneracion",
-        "fechaHoraGeneracion (CbteFchHsGen) es requerido: fecha y hora en que se generó el comprobante de contingencia (RG 5782)"
+        'fechaHoraGeneracion',
+        'fechaHoraGeneracion (CbteFchHsGen) es requerido: fecha y hora en que se generó el comprobante de contingencia (RG 5782)',
       );
-    const hsGen = formatFechaHora(opts.fechaHoraGeneracion, "fechaHoraGeneracion");
+    const hsGen = formatFechaHora(opts.fechaHoraGeneracion, 'fechaHoraGeneracion');
     const { fechaHoraGeneracion: _, ...facturarOpts } = opts;
     const fecha = opts.fecha ?? hsGen.slice(0, 8);
     const { detail, importes } = await this.prepararComprobante({ ...facturarOpts, fecha }, call);
@@ -728,7 +705,7 @@ export class Arca {
         CbteTipo: opts.cbteTipo,
         invoices: [{ ...detail, CAEA: caea, CbteFchHsGen: hsGen }],
       },
-      call
+      call,
     );
 
     // CaeaRegInfResult usa FECAEADetResponse: adaptar para parseFacturaResult.
@@ -736,7 +713,11 @@ export class Arca {
       ...result,
       FeDetResp: { FECAEDetResponse: result.FeDetResp.FECAEADetResponse },
     } as FECAESolicitarResult;
-    return parseFacturaResult(adapted, importes, { moneda: detail.MonId, cotizacion: detail.MonCotiz, tipoCodAut: "A" });
+    return parseFacturaResult(adapted, importes, {
+      moneda: detail.MonId,
+      cotizacion: detail.MonCotiz,
+      tipoCodAut: 'A',
+    });
   }
 
   /**
@@ -805,7 +786,7 @@ export class Arca {
   private wsfeParam<T>(
     key: string,
     fn: (auth: WsfeAuth, opts: CallOptions) => Promise<T>,
-    call?: CallOptions
+    call?: CallOptions,
   ): Promise<T> {
     const callOpts = this.opts(call);
     return this.cachedParam(key, async () => fn(await this.getAuth(WSAA_SERVICES.wsfe, callOpts), callOpts));
@@ -818,17 +799,17 @@ export class Arca {
 
   /** Tipos de comprobante disponibles. Cacheado. */
   async getTiposComprobante(call?: CallOptions): Promise<ParamItem[]> {
-    return this.wsfeParam("tiposCbte", (a, o) => this.wsfe.getTiposComprobante(a, o), call);
+    return this.wsfeParam('tiposCbte', (a, o) => this.wsfe.getTiposComprobante(a, o), call);
   }
 
   /** Tipos de concepto (Productos, Servicios, Ambos). Cacheado. */
   async getTiposConcepto(call?: CallOptions): Promise<ParamItem[]> {
-    return this.wsfeParam("tiposConcepto", (a, o) => this.wsfe.getTiposConcepto(a, o), call);
+    return this.wsfeParam('tiposConcepto', (a, o) => this.wsfe.getTiposConcepto(a, o), call);
   }
 
   /** Tipos de documento disponibles (CUIT, DNI, etc.). Cacheado. */
   async getTiposDocumento(call?: CallOptions): Promise<ParamItem[]> {
-    return this.wsfeParam("tiposDoc", (a, o) => this.wsfe.getTiposDocumento(a, o), call);
+    return this.wsfeParam('tiposDoc', (a, o) => this.wsfe.getTiposDocumento(a, o), call);
   }
 
   /**
@@ -837,37 +818,37 @@ export class Arca {
    */
   async getCondicionesIva(call?: CallOptions & { claseCmp?: string }): Promise<CondicionIvaItem[]> {
     const clase = call?.claseCmp;
-    return this.wsfeParam(`condicionesIva:${clase ?? ""}`, (a, o) => this.wsfe.getCondicionesIva(a, o, clase), call);
+    return this.wsfeParam(`condicionesIva:${clase ?? ''}`, (a, o) => this.wsfe.getCondicionesIva(a, o, clase), call);
   }
 
   /** Alícuotas de IVA disponibles (0%, 2.5%, 5%, 10.5%, 21%, 27%). Cacheado. */
   async getTiposIva(call?: CallOptions): Promise<ParamItem[]> {
-    return this.wsfeParam("tiposIva", (a, o) => this.wsfe.getTiposIva(a, o), call);
+    return this.wsfeParam('tiposIva', (a, o) => this.wsfe.getTiposIva(a, o), call);
   }
 
   /** Monedas disponibles. Cacheado. */
   async getMonedas(call?: CallOptions): Promise<MonedaItem[]> {
-    return this.wsfeParam("monedas", (a, o) => this.wsfe.getMonedas(a, o), call);
+    return this.wsfeParam('monedas', (a, o) => this.wsfe.getMonedas(a, o), call);
   }
 
   /** Tipos de tributo disponibles. Cacheado. */
   async getTiposTributo(call?: CallOptions): Promise<ParamItem[]> {
-    return this.wsfeParam("tiposTrib", (a, o) => this.wsfe.getTiposTributo(a, o), call);
+    return this.wsfeParam('tiposTrib', (a, o) => this.wsfe.getTiposTributo(a, o), call);
   }
 
   /** Tipos de datos opcionales disponibles. Cacheado. */
   async getTiposOpcional(call?: CallOptions): Promise<ParamItem[]> {
-    return this.wsfeParam("tiposOpc", (a, o) => this.wsfe.getTiposOpcional(a, o), call);
+    return this.wsfeParam('tiposOpc', (a, o) => this.wsfe.getTiposOpcional(a, o), call);
   }
 
   /** Actividades del emisor (`FEParamGetActividades`). Cacheado. */
   async getActividades(call?: CallOptions): Promise<ActividadItem[]> {
-    return this.wsfeParam("actividades", (a, o) => this.wsfe.getActividades(a, o), call);
+    return this.wsfeParam('actividades', (a, o) => this.wsfe.getActividades(a, o), call);
   }
 
   /** Países (`FEParamGetTiposPaises`). Cacheado. */
   async getTiposPaises(call?: CallOptions): Promise<PaisItem[]> {
-    return this.wsfeParam("tiposPaises", (a, o) => this.wsfe.getTiposPaises(a, o), call);
+    return this.wsfeParam('tiposPaises', (a, o) => this.wsfe.getTiposPaises(a, o), call);
   }
 
   /**
@@ -937,7 +918,7 @@ export class Arca {
    * `notaDebito`, `registrarFacturaCAEA` o recuperado con `recuperarComprobante`,
    * usando el CUIT de esta instancia.
    */
-  urlQR(factura: FacturaResult, datos?: Omit<DatosQR, "cuit">, options?: QROptions): string {
+  urlQR(factura: FacturaResult, datos?: Omit<DatosQR, 'cuit'>, options?: QROptions): string {
     return urlQRDesdeFactura(factura, { ...datos, cuit: this.cuit }, options);
   }
 
@@ -956,8 +937,8 @@ export class Arca {
     caeFchVto?: string;
   } {
     const detArr = ensureArray(result.FeDetResp.FECAEDetResponse);
-    const approved = result.FeCabResp.Resultado === "A";
-    const firstApproved = detArr.find((d) => d.Resultado === "A");
+    const approved = result.FeCabResp.Resultado === 'A';
+    const firstApproved = detArr.find((d) => d.Resultado === 'A');
     return {
       approved,
       details: detArr,
@@ -980,7 +961,7 @@ export class Arca {
    */
   static calcularTotales(
     items: LineItem[],
-    opts?: { tributos?: { Importe: number }[]; tipoC?: boolean; descuentoGlobal?: number }
+    opts?: { tributos?: { Importe: number }[]; tipoC?: boolean; descuentoGlobal?: number },
   ) {
     return calcularTotales(items, opts);
   }

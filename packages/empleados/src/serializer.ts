@@ -13,12 +13,7 @@ import { ArcaValidationError, formatDate, normalizeCuit } from '@ramiidv/arca-co
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
 import { ArcaSerializationError } from './errors.js';
 import { CODIGOS_MOVIMIENTO, LONGITUD_REGISTRO, TIPO_REGISTRO } from './constants.js';
-import type {
-  EncodingArchivo,
-  FechaInput,
-  OpcionesSerializacion,
-  RegistroRelacionLaboral,
-} from './types.js';
+import type { EncodingArchivo, FechaInput, OpcionesSerializacion, RegistroRelacionLaboral } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Diseño de registro
@@ -213,7 +208,11 @@ function formatearRetribucion(c: CampoDiseno, value: unknown, o: OpcionesResuelt
   if (!Number.isSafeInteger(centavos)) fail(c, value, 'importe demasiado grande.');
   const digits = String(centavos);
   if (digits.length > c.longitud) {
-    fail(c, value, `${value} ocupa ${digits.length} posiciones (2 decimales implícitos) y el campo admite ${c.longitud}.`);
+    fail(
+      c,
+      value,
+      `${value} ocupa ${digits.length} posiciones (2 decimales implícitos) y el campo admite ${c.longitud}.`,
+    );
   }
   return digits.padStart(c.longitud, '0');
 }
@@ -225,7 +224,8 @@ function transliterar(s: string): string {
 function formatearAlfanumerico(c: CampoDiseno, value: unknown, o: OpcionesResueltas): string {
   if (vacio(value)) return ' '.repeat(c.longitud);
   if (typeof value !== 'string') fail(c, value, `se esperaba string, se recibió ${tipoDe(value)}.`);
-  if (CONTROL_CHARS.test(value)) fail(c, value, 'contiene caracteres de control (saltos de línea, tabulaciones, etc.).');
+  if (CONTROL_CHARS.test(value))
+    fail(c, value, 'contiene caracteres de control (saltos de línea, tabulaciones, etc.).');
   const max = maxCodePoint(o.encoding);
   let s = value.normalize('NFC');
   const noRepresentable = (t: string) => [...t].find((ch) => ch.codePointAt(0)! > max);
@@ -265,7 +265,11 @@ function formatearCampo(c: CampoDiseno, registro: RegistroRelacionLaboral, o: Op
   switch (c.campo) {
     case 'movimiento':
       if (typeof value !== 'string' || !(CODIGOS_MOVIMIENTO as readonly string[]).includes(value)) {
-        fail(c, value, `debe ser uno de ${CODIGOS_MOVIMIENTO.join(', ')} (se recibió ${JSON.stringify(value) ?? tipoDe(value)}).`);
+        fail(
+          c,
+          value,
+          `debe ser uno de ${CODIGOS_MOVIMIENTO.join(', ')} (se recibió ${JSON.stringify(value) ?? tipoDe(value)}).`,
+        );
       }
       return value;
     case 'cuil':
@@ -274,9 +278,12 @@ function formatearCampo(c: CampoDiseno, registro: RegistroRelacionLaboral, o: Op
       return formatearRetribucion(c, value, o);
   }
   switch (c.tipo) {
-    case 'N': return formatearNumerico(c, value, o);
-    case 'A': return formatearAlfanumerico(c, value, o);
-    case 'F': return formatearFecha(c, value);
+    case 'N':
+      return formatearNumerico(c, value, o);
+    case 'A':
+      return formatearAlfanumerico(c, value, o);
+    case 'F':
+      return formatearFecha(c, value);
   }
 }
 
@@ -336,7 +343,10 @@ export function erroresDeFormato(registro: unknown, opciones?: OpcionesSerializa
  * Por defecto: líneas separadas por CRLF y CRLF final.
  * @throws ArcaSerializationError con `indice` del registro que falló y `cause` = error original.
  */
-export function serializarArchivo(registros: readonly RegistroRelacionLaboral[], opciones?: OpcionesSerializacion): string {
+export function serializarArchivo(
+  registros: readonly RegistroRelacionLaboral[],
+  opciones?: OpcionesSerializacion,
+): string {
   const o = resolverOpciones(opciones);
   if (!Array.isArray(registros)) {
     throw new ArcaSerializationError(`Se esperaba un array de registros, se recibió ${tipoDe(registros)}.`);
@@ -347,7 +357,12 @@ export function serializarArchivo(registros: readonly RegistroRelacionLaboral[],
     } catch (e) {
       if (!(e instanceof ArcaSerializationError)) throw e;
       throw new ArcaSerializationError(`Registro ${i}: ${e.message}`, {
-        field: e.field, desde: e.desde, hasta: e.hasta, value: e.value, indice: i, cause: e,
+        field: e.field,
+        desde: e.desde,
+        hasta: e.hasta,
+        value: e.value,
+        indice: i,
+        cause: e,
       });
     }
   });

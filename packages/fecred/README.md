@@ -29,7 +29,7 @@ import { ArcaFecred, FileTicketStorage } from '@ramiidv/arca-fecred';
 const fecred = new ArcaFecred({
   cert: readFileSync('./cert.pem', 'utf-8'),
   key: readFileSync('./key.pem', 'utf-8'),
-  cuit: '20-12345678-6',          // CUIT representada (number o string, con o sin guiones)
+  cuit: '20-12345678-6', // CUIT representada (number o string, con o sin guiones)
   production: false,
   ticketStorage: new FileTicketStorage('./.arca-tickets'),
 });
@@ -60,21 +60,21 @@ console.log(r.resultado); // 'A' o 'O' (un rechazo se lanza como ArcaServiceErro
 
 `ArcaFecredConfig` extiende `ArcaBaseConfig` de `@ramiidv/arca-common`:
 
-| Opción | Tipo | Default | Descripción |
-| --- | --- | --- | --- |
-| `cert`, `key` | `string` | — | Certificado y clave privada (PEM) |
-| `cuit` | `number \| string` | — | CUIT representada; se valida el dígito verificador y se envía como 11 dígitos |
-| `production` | `boolean` | `false` | Homologación o producción |
-| `timeout` | `number` | `30000` | Timeout HTTP (ms) |
-| `retries` / `retryDelayMs` | `number` | `1` / `1000` | Reintentos de **consultas** (las operaciones nunca se reintentan) |
-| `tokenTTLMinutes` | `number` | `720` | Vigencia pedida a WSAA |
-| `ticketStorage` | `TicketStorage` | — | Persistencia del TA (recomendado en producción: `FileTicketStorage` o propio) |
-| `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs` | | | Opciones de WSAA (ver arca-common) |
-| `fetch` | `typeof fetch` | `globalThis.fetch` | `fetch` propio (proxy, tests) |
-| `legacyTls` | `'auto' \| 'never' \| 'always'` | `'auto'` | Transporte TLS legacy |
-| `onEvent` | `(e: ArcaEvent) => void` | — | Eventos `auth:*` y `request:*` |
-| `wsaa` | `WsaaClient` | — | `WsaaClient` propio (compartir tickets entre SDKs) |
-| `endpoints` | `{ wsfecred?, wsaa? }` | — | Sobrescribe las URLs |
+| Opción                                                   | Tipo                            | Default            | Descripción                                                                   |
+| -------------------------------------------------------- | ------------------------------- | ------------------ | ----------------------------------------------------------------------------- |
+| `cert`, `key`                                            | `string`                        | —                  | Certificado y clave privada (PEM)                                             |
+| `cuit`                                                   | `number \| string`              | —                  | CUIT representada; se valida el dígito verificador y se envía como 11 dígitos |
+| `production`                                             | `boolean`                       | `false`            | Homologación o producción                                                     |
+| `timeout`                                                | `number`                        | `30000`            | Timeout HTTP (ms)                                                             |
+| `retries` / `retryDelayMs`                               | `number`                        | `1` / `1000`       | Reintentos de **consultas** (las operaciones nunca se reintentan)             |
+| `tokenTTLMinutes`                                        | `number`                        | `720`              | Vigencia pedida a WSAA                                                        |
+| `ticketStorage`                                          | `TicketStorage`                 | —                  | Persistencia del TA (recomendado en producción: `FileTicketStorage` o propio) |
+| `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs` |                                 |                    | Opciones de WSAA (ver arca-common)                                            |
+| `fetch`                                                  | `typeof fetch`                  | `globalThis.fetch` | `fetch` propio (proxy, tests)                                                 |
+| `legacyTls`                                              | `'auto' \| 'never' \| 'always'` | `'auto'`           | Transporte TLS legacy                                                         |
+| `onEvent`                                                | `(e: ArcaEvent) => void`        | —                  | Eventos `auth:*` y `request:*`                                                |
+| `wsaa`                                                   | `WsaaClient`                    | —                  | `WsaaClient` propio (compartir tickets entre SDKs)                            |
+| `endpoints`                                              | `{ wsfecred?, wsaa? }`          | —                  | Sobrescribe las URLs                                                          |
 
 Todos los métodos aceptan un último parámetro opcional `opts?: CallOptions` (`{ signal }`) para cancelar.
 
@@ -84,34 +84,34 @@ Fuente: WSDL de FECredService (`https://fwshomo.afip.gob.ar/wsfecred/FECredServi
 
 ### Consultas (se reintentan ante errores transitorios)
 
-| Método | Operación | Devuelve |
-| --- | --- | --- |
-| `status()` | `dummy` | `{ appserver, dbserver, authserver }` |
-| `consultarMontoObligadoRecepcion({ cuitConsultada, fechaEmision })` | idem | `{ obligado, montoDesde?, evento?, observaciones }` |
-| `consultarObligadoRecepcion(cuit)` | idem | `{ obligado, desde?, ... }` (campo `respuesta` del WS) |
-| `consultarCtasCtes({ rol, cuitContraparte?, fecha?, estadoCtaCte?, nroPagina?, opcionTransferencia? })` | idem | `{ ctasCtes: InfoCtaCte[], nroPagina?, hayMas?, ... }` |
-| `consultarCtaCte(idCtaCte)` | idem | `{ ctaCte: CuentaCorriente, ... }` |
-| `consultarComprobantes({ rol, cuitContraparte?, codTipoCmp?, estadoCmp?, fecha?, codCtaCte?, estadoCtaCte?, nroPagina? })` | idem | `{ comprobantes: Comprobante[], nroPagina?, hayMas?, ... }` |
-| `consultarHistorialEstadosComprobante(idComprobante)` | idem | `{ idComprobante, estados }` |
-| `consultarHistorialEstadosCtaCte(idCtaCte)` | idem | `{ idCtaCte, estados }` |
-| `obtenerRemitos(idComprobante)` | idem | `IdComprobante[]` |
-| `consultarCuentasEnAgtDptoCltv()` | idem | `{ cuentas, ... }` |
-| `consultarFacturasAgtDptoCltv({ idCtaCte?, fecha? })` | idem | `{ facturas, ... }` |
-| `consultarTiposRetenciones()` | idem | `{ codigoJurisdiccion, descripcionJurisdiccion, porcentajeRetencion }[]` |
-| `consultarTiposFormasCancelacion()` | idem | `{ codigo, descripcion }[]` |
-| `consultarTiposMotivosRechazo()` | idem | `{ codigo, descripcion }[]` |
-| `consultarTiposAjustesOperacion()` | idem | `{ codigo, descripcion }[]` |
+| Método                                                                                                                     | Operación | Devuelve                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------ |
+| `status()`                                                                                                                 | `dummy`   | `{ appserver, dbserver, authserver }`                                    |
+| `consultarMontoObligadoRecepcion({ cuitConsultada, fechaEmision })`                                                        | idem      | `{ obligado, montoDesde?, evento?, observaciones }`                      |
+| `consultarObligadoRecepcion(cuit)`                                                                                         | idem      | `{ obligado, desde?, ... }` (campo `respuesta` del WS)                   |
+| `consultarCtasCtes({ rol, cuitContraparte?, fecha?, estadoCtaCte?, nroPagina?, opcionTransferencia? })`                    | idem      | `{ ctasCtes: InfoCtaCte[], nroPagina?, hayMas?, ... }`                   |
+| `consultarCtaCte(idCtaCte)`                                                                                                | idem      | `{ ctaCte: CuentaCorriente, ... }`                                       |
+| `consultarComprobantes({ rol, cuitContraparte?, codTipoCmp?, estadoCmp?, fecha?, codCtaCte?, estadoCtaCte?, nroPagina? })` | idem      | `{ comprobantes: Comprobante[], nroPagina?, hayMas?, ... }`              |
+| `consultarHistorialEstadosComprobante(idComprobante)`                                                                      | idem      | `{ idComprobante, estados }`                                             |
+| `consultarHistorialEstadosCtaCte(idCtaCte)`                                                                                | idem      | `{ idCtaCte, estados }`                                                  |
+| `obtenerRemitos(idComprobante)`                                                                                            | idem      | `IdComprobante[]`                                                        |
+| `consultarCuentasEnAgtDptoCltv()`                                                                                          | idem      | `{ cuentas, ... }`                                                       |
+| `consultarFacturasAgtDptoCltv({ idCtaCte?, fecha? })`                                                                      | idem      | `{ facturas, ... }`                                                      |
+| `consultarTiposRetenciones()`                                                                                              | idem      | `{ codigoJurisdiccion, descripcionJurisdiccion, porcentajeRetencion }[]` |
+| `consultarTiposFormasCancelacion()`                                                                                        | idem      | `{ codigo, descripcion }[]`                                              |
+| `consultarTiposMotivosRechazo()`                                                                                           | idem      | `{ codigo, descripcion }[]`                                              |
+| `consultarTiposAjustesOperacion()`                                                                                         | idem      | `{ codigo, descripcion }[]`                                              |
 
 ### Operaciones que cambian estado (emisiones: nunca se reintentan)
 
-| Método | Operación | Devuelve |
-| --- | --- | --- |
-| `aceptarFECred({ idCtaCte, saldoAceptado, codMoneda, cotizacionMonedaUlt, ... })` | idem | `{ resultado: 'A' \| 'O', idCtaCte, evento?, observaciones }` |
-| `rechazarFECred({ idCtaCte, motivos })` | idem | idem |
-| `informarCancelacionTotalFECred({ idCtaCte, formasCancelacion, importeCancelacion })` | idem | idem |
-| `modificarOpcionTransferencia({ idCtaCte, opcionTransferencia })` | idem | idem |
-| `informarFacturaAgtDptoCltv({ idCtaCte, ctaAgente })` | idem | idem |
-| `rechazarNotaDC({ idComprobante, motivos })` | idem | `{ resultado, idComprobante, ... }` |
+| Método                                                                                | Operación | Devuelve                                                      |
+| ------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------- |
+| `aceptarFECred({ idCtaCte, saldoAceptado, codMoneda, cotizacionMonedaUlt, ... })`     | idem      | `{ resultado: 'A' \| 'O', idCtaCte, evento?, observaciones }` |
+| `rechazarFECred({ idCtaCte, motivos })`                                               | idem      | idem                                                          |
+| `informarCancelacionTotalFECred({ idCtaCte, formasCancelacion, importeCancelacion })` | idem      | idem                                                          |
+| `modificarOpcionTransferencia({ idCtaCte, opcionTransferencia })`                     | idem      | idem                                                          |
+| `informarFacturaAgtDptoCltv({ idCtaCte, ctaAgente })`                                 | idem      | idem                                                          |
+| `rechazarNotaDC({ idComprobante, motivos })`                                          | idem      | `{ resultado, idComprobante, ... }`                           |
 
 `aceptarFECred` acepta además los opcionales del XSD: `confirmarNotasDC` (`{ acepta, idNota }[]`), `formasCancelacion`, `retenciones` (`{ codTipo, importe, porcentaje, descMotivo? }[]`), `ajustesOperacion` (`{ codigo, importe }[]`), `tipoCancelacion` (`'PAR' | 'TOT'`), `importeCancelado`, `importeTotalRetPesos`, `importeEmbargoPesos`, `informaCBU` y `cbuComprador`.
 
@@ -138,12 +138,12 @@ Los códigos de formas de cancelación, motivos de rechazo, ajustes de operació
 
 ## Errores
 
-| Clase | Cuándo |
-| --- | --- |
-| `ArcaValidationError` | Datos inválidos (CUIT con dígito verificador incorrecto, fechas inexistentes, importes NaN/negativos, textos fuera de 3..250, CBU inválido, etc.). No se llega a pedir el ticket ni a llamar a ARCA. `field` indica el parámetro. |
-| `ArcaServiceError` | ARCA devolvió `arrayErrores` o `arrayErroresFormato`, o una operación terminó con `resultado = 'R'`. `errors: { code, msg, rawCode? }[]` (`rawCode` para los códigos alfanuméricos de `arrayErroresFormato`). |
-| `ArcaSoapError` | HTTP, timeout, SOAP Fault (ej: `wscommon_005`/`wscommon_007` de auth) o respuesta sin un campo obligatorio del XSD. `uncertain` indica si ARCA pudo haber procesado el request. |
-| `ArcaAuthError` / `ArcaTicketVigenteError` | Falla de WSAA / ya hay un TA vigente que no está en el `ticketStorage`. |
+| Clase                                      | Cuándo                                                                                                                                                                                                                            |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ArcaValidationError`                      | Datos inválidos (CUIT con dígito verificador incorrecto, fechas inexistentes, importes NaN/negativos, textos fuera de 3..250, CBU inválido, etc.). No se llega a pedir el ticket ni a llamar a ARCA. `field` indica el parámetro. |
+| `ArcaServiceError`                         | ARCA devolvió `arrayErrores` o `arrayErroresFormato`, o una operación terminó con `resultado = 'R'`. `errors: { code, msg, rawCode? }[]` (`rawCode` para los códigos alfanuméricos de `arrayErroresFormato`).                     |
+| `ArcaSoapError`                            | HTTP, timeout, SOAP Fault (ej: `wscommon_005`/`wscommon_007` de auth) o respuesta sin un campo obligatorio del XSD. `uncertain` indica si ARCA pudo haber procesado el request.                                                   |
+| `ArcaAuthError` / `ArcaTicketVigenteError` | Falla de WSAA / ya hay un TA vigente que no está en el `ticketStorage`.                                                                                                                                                           |
 
 Las observaciones (`arrayObservaciones`) y el `evento` no son errores: vienen en el resultado.
 
@@ -178,10 +178,10 @@ Detalles del protocolo (verificados contra homologación): namespace `http://ar.
 
 ## Entornos
 
-| Entorno | WSFECRED |
-| --- | --- |
-| Homologación | `https://fwshomo.afip.gob.ar/wsfecred/FECredService` |
-| Producción | `https://serviciosjava.afip.gob.ar/wsfecred/FECredService` |
+| Entorno      | WSFECRED                                                   |
+| ------------ | ---------------------------------------------------------- |
+| Homologación | `https://fwshomo.afip.gob.ar/wsfecred/FECredService`       |
+| Producción   | `https://serviciosjava.afip.gob.ar/wsfecred/FECredService` |
 
 Los endpoints de WSAA están en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
 

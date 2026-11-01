@@ -26,13 +26,13 @@ npm install @ramiidv/arca-facturacion
 ## Uso rápido
 
 ```typescript
-import fs from "fs";
-import { Arca, CbteTipo, IvaTipo } from "@ramiidv/arca-facturacion";
+import fs from 'fs';
+import { Arca, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
 
 const arca = new Arca({
   cuit: 20123456786,
-  cert: fs.readFileSync("./cert.crt", "utf-8"),
-  key: fs.readFileSync("./key.key", "utf-8"),
+  cert: fs.readFileSync('./cert.crt', 'utf-8'),
+  key: fs.readFileSync('./key.key', 'utf-8'),
   production: false, // true para producción
 });
 
@@ -66,23 +66,24 @@ El SDK calcula automáticamente: IVA, totales (neto, IVA, exento, no gravado, tr
 
 ```typescript
 const arca = new Arca({
-  cuit: 20123456786,          // CUIT (número o string, con o sin guiones). Se valida el dígito verificador
-  cert: "...",                 // Certificado X.509 (PEM)
-  key: "...",                  // Clave privada (PEM)
-  production: false,           // Default: false (testing/homologación)
-  tokenTTLMinutes: 720,        // Default: 720 (12 horas)
-  timeout: 30_000,             // Default: 30000 (30 segundos). `requestTimeoutMs` sigue aceptándose (deprecado)
-  retries: 1,                  // Default: 1 (solo consultas; las emisiones nunca se reintentan)
-  retryDelayMs: 1_000,         // Default: 1000 (backoff exponencial: 1s, 2s, ...)
-  ticketStorage: new FileTicketStorage("./.arca-tickets"), // Recomendado: persistir el TA
-  clockOffsetMs: 0,            // Default: 0. Desfase relojARCA - relojLocal
-  autoClockSkew: true,         // Default: true. Ajusta el desfase si WSAA lo rechaza
+  cuit: 20123456786, // CUIT (número o string, con o sin guiones). Se valida el dígito verificador
+  cert: '...', // Certificado X.509 (PEM)
+  key: '...', // Clave privada (PEM)
+  production: false, // Default: false (testing/homologación)
+  tokenTTLMinutes: 720, // Default: 720 (12 horas)
+  timeout: 30_000, // Default: 30000 (30 segundos). `requestTimeoutMs` sigue aceptándose (deprecado)
+  retries: 1, // Default: 1 (solo consultas; las emisiones nunca se reintentan)
+  retryDelayMs: 1_000, // Default: 1000 (backoff exponencial: 1s, 2s, ...)
+  ticketStorage: new FileTicketStorage('./.arca-tickets'), // Recomendado: persistir el TA
+  clockOffsetMs: 0, // Default: 0. Desfase relojARCA - relojLocal
+  autoClockSkew: true, // Default: true. Ajusta el desfase si WSAA lo rechaza
   loginErrorCooldownMs: 60_000, // Default: 60000. Espera tras un login WSAA fallido
-  legacyTls: "auto",           // Default: "auto". Ver "Producción y TLS"
-  fetch: miFetch,              // Opcional: fetch propio (proxy, mTLS, tests)
-  endpoints: { wsfe: "https://mi-proxy/wsfev1" }, // Opcional: URLs propias (wsaa, wsfe, wsfex, padronA5, padronA13)
-  signal: shutdown.signal,     // Opcional: cancela todas las llamadas (ej: al apagar)
-  onEvent: (e) => {            // Opcional: callback para logging/debugging
+  legacyTls: 'auto', // Default: "auto". Ver "Producción y TLS"
+  fetch: miFetch, // Opcional: fetch propio (proxy, mTLS, tests)
+  endpoints: { wsfe: 'https://mi-proxy/wsfev1' }, // Opcional: URLs propias (wsaa, wsfe, wsfex, padronA5, padronA13)
+  signal: shutdown.signal, // Opcional: cancela todas las llamadas (ej: al apagar)
+  onEvent: (e) => {
+    // Opcional: callback para logging/debugging
     console.log(e.type, e);
   },
 });
@@ -116,11 +117,11 @@ Homologación (`wswhomo.afip.gov.ar`) no necesita el transporte legacy.
 
 Cuando una factura se envía a ARCA pueden pasar tres cosas:
 
-| Resultado | Qué lanza / devuelve el SDK | ¿Se emitió? |
-| --- | --- | --- |
-| ARCA autorizó | `FacturaResult` con `aprobada: true` y `cae` | Sí |
-| ARCA rechazó | `ArcaWSFEError` (errores) o `aprobada: false` (observaciones) | No (ver 10016 abajo) |
-| No se sabe (timeout, conexión cortada, HTTP 5xx, respuesta ilegible, error interno 500/501/502 de ARCA) | `ArcaResultadoIncierto` | **Hay que averiguarlo** |
+| Resultado                                                                                               | Qué lanza / devuelve el SDK                                   | ¿Se emitió?             |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------- |
+| ARCA autorizó                                                                                           | `FacturaResult` con `aprobada: true` y `cae`                  | Sí                      |
+| ARCA rechazó                                                                                            | `ArcaWSFEError` (errores) o `aprobada: false` (observaciones) | No (ver 10016 abajo)    |
+| No se sabe (timeout, conexión cortada, HTTP 5xx, respuesta ilegible, error interno 500/501/502 de ARCA) | `ArcaResultadoIncierto`                                       | **Hay que averiguarlo** |
 
 Las emisiones (`FECAESolicitar`, `FECAEARegInformativo`, `FECAEASinMovimientoInformar`, `FEXAuthorize`)
 **nunca se reintentan**: si ARCA otorgó el CAE y la respuesta se perdió, un reintento automático
@@ -166,11 +167,17 @@ Sin `cbteNro`, el SDK usa el último autorizado + 1 y **no hay lock**: serializ�
 
 ```typescript
 import {
-  Arca, ArcaResultadoIncierto, ArcaWSFEError, CbteTipo, IvaTipo, FileTicketStorage, requiereRecuperacion,
-} from "@ramiidv/arca-facturacion";
-import { formatDate } from "@ramiidv/arca-common";
+  Arca,
+  ArcaResultadoIncierto,
+  ArcaWSFEError,
+  CbteTipo,
+  IvaTipo,
+  FileTicketStorage,
+  requiereRecuperacion,
+} from '@ramiidv/arca-facturacion';
+import { formatDate } from '@ramiidv/arca-common';
 
-const arca = new Arca({ cuit, cert, key, production: true, ticketStorage: new FileTicketStorage("./.arca") });
+const arca = new Arca({ cuit, cert, key, production: true, ticketStorage: new FileTicketStorage('./.arca') });
 
 async function emitir(job: Job) {
   // 1. Reservar el número y guardar el intento ANTES de enviar.
@@ -186,16 +193,16 @@ async function emitir(job: Job) {
     descuentoGlobal: job.descuento,
   };
   const { intento } = arca.armarComprobante(opts);
-  await db.jobs.update(job.id, { estado: "enviando", opts, intento });
+  await db.jobs.update(job.id, { estado: 'enviando', opts, intento });
 
   try {
     const res = await arca.facturar(opts);
-    if (res.aprobada) return db.jobs.update(job.id, { estado: "autorizado", cae: res.cae, vto: res.caeVencimiento });
-    if (requiereRecuperacion(res)) return db.jobs.update(job.id, { estado: "incierto" }); // 10016
-    return db.jobs.update(job.id, { estado: "rechazado", obs: res.observaciones });
+    if (res.aprobada) return db.jobs.update(job.id, { estado: 'autorizado', cae: res.cae, vto: res.caeVencimiento });
+    if (requiereRecuperacion(res)) return db.jobs.update(job.id, { estado: 'incierto' }); // 10016
+    return db.jobs.update(job.id, { estado: 'rechazado', obs: res.observaciones });
   } catch (e) {
-    if (e instanceof ArcaResultadoIncierto) return db.jobs.update(job.id, { estado: "incierto" });
-    if (e instanceof ArcaWSFEError) return db.jobs.update(job.id, { estado: "rechazado", errores: e.errors });
+    if (e instanceof ArcaResultadoIncierto) return db.jobs.update(job.id, { estado: 'incierto' });
+    if (e instanceof ArcaWSFEError) return db.jobs.update(job.id, { estado: 'rechazado', errores: e.errors });
     throw e; // validación, auth, sin conexión (no se envió): reintentar el job más tarde
   }
 }
@@ -203,9 +210,9 @@ async function emitir(job: Job) {
 // Al arrancar y periódicamente: resolver los "enviando" (proceso caído) y los "incierto".
 async function resolver(job: Job) {
   const r = await arca.recuperarComprobante(job.intento);
-  if (r.estado === "autorizado") return db.jobs.update(job.id, { estado: "autorizado", cae: r.resultado.cae });
-  if (r.estado === "no_emitido") return emitirDeNuevoConElMismoNumero(job); // mismo opts, mismo cbteNro
-  return db.jobs.update(job.id, { estado: "conflicto", encontrado: r.encontrado }); // revisión manual
+  if (r.estado === 'autorizado') return db.jobs.update(job.id, { estado: 'autorizado', cae: r.resultado.cae });
+  if (r.estado === 'no_emitido') return emitirDeNuevoConElMismoNumero(job); // mismo opts, mismo cbteNro
+  return db.jobs.update(job.id, { estado: 'conflicto', encontrado: r.encontrado }); // revisión manual
 }
 ```
 
@@ -238,9 +245,9 @@ const result = await arca.facturar({
   condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
   items: [{ neto: 50000, iva: IvaTipo.IVA_21 }],
   servicio: {
-    desde: new Date("2026-03-01"),
-    hasta: new Date("2026-03-31"),
-    vtoPago: new Date("2026-04-15"),
+    desde: new Date('2026-03-01'),
+    hasta: new Date('2026-03-31'),
+    vtoPago: new Date('2026-04-15'),
   },
   // concepto se auto-detecta como SERVICIOS al proveer `servicio`
 });
@@ -259,11 +266,11 @@ const result = await arca.facturar({
   docNro: 30712345671,
   condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
   items: [
-    { neto: 1000, iva: IvaTipo.IVA_21 },   // IVA: 210
-    { neto: 500, iva: IvaTipo.IVA_10_5 },   // IVA: 52.5
-    { neto: 200, iva: IvaTipo.IVA_0 },      // IVA: 0 (gravado al 0%)
-    { neto: 300, exento: true },             // Exento (ImpOpEx)
-    { neto: 150 },                           // No gravado (ImpTotConc)
+    { neto: 1000, iva: IvaTipo.IVA_21 }, // IVA: 210
+    { neto: 500, iva: IvaTipo.IVA_10_5 }, // IVA: 52.5
+    { neto: 200, iva: IvaTipo.IVA_0 }, // IVA: 0 (gravado al 0%)
+    { neto: 300, exento: true }, // Exento (ImpOpEx)
+    { neto: 150 }, // No gravado (ImpTotConc)
   ],
 });
 // result.importes:
@@ -293,8 +300,8 @@ const result = await arca.facturar({
   ptoVta: 1,
   cbteTipo: CbteTipo.FACTURA_B,
   items: [
-    { total: 4500, iva: IvaTipo.IVA_21 },    // plato principal
-    { total: 1800.5, iva: IvaTipo.IVA_21 },  // bebida
+    { total: 4500, iva: IvaTipo.IVA_21 }, // plato principal
+    { total: 1800.5, iva: IvaTipo.IVA_21 }, // bebida
     { total: 300, exento: true },
   ],
   descuentoGlobal: 660.05, // monto final, se prorratea entre alícuotas, exento y no gravado
@@ -308,12 +315,12 @@ se asigna al grupo de mayor base.
 ### Elegir el tipo de comprobante
 
 ```typescript
-import { resolverCbteTipo, CondicionIva } from "@ramiidv/arca-facturacion";
+import { resolverCbteTipo, CondicionIva } from '@ramiidv/arca-facturacion';
 
 resolverCbteTipo(CondicionIva.RESPONSABLE_INSCRIPTO, CondicionIva.CONSUMIDOR_FINAL); // FACTURA_B
-resolverCbteTipo(CondicionIva.RESPONSABLE_INSCRIPTO, CondicionIva.MONOTRIBUTISTA);   // FACTURA_A
-resolverCbteTipo(CondicionIva.MONOTRIBUTISTA, CondicionIva.RESPONSABLE_INSCRIPTO);   // FACTURA_C
-resolverCbteTipo(CondicionIva.RESPONSABLE_INSCRIPTO, CondicionIva.RESPONSABLE_INSCRIPTO, "nota_credito"); // NOTA_CREDITO_A
+resolverCbteTipo(CondicionIva.RESPONSABLE_INSCRIPTO, CondicionIva.MONOTRIBUTISTA); // FACTURA_A
+resolverCbteTipo(CondicionIva.MONOTRIBUTISTA, CondicionIva.RESPONSABLE_INSCRIPTO); // FACTURA_C
+resolverCbteTipo(CondicionIva.RESPONSABLE_INSCRIPTO, CondicionIva.RESPONSABLE_INSCRIPTO, 'nota_credito'); // NOTA_CREDITO_A
 ```
 
 Reglas según RG 1415, RG 5003/2021 y la tabla de condiciones por clase del manual WSFEv1.
@@ -346,7 +353,7 @@ await arca.facturar({
   ptoVta: 1,
   cbteTipo: CbteTipo.NOTA_CREDITO_B,
   items: [{ total: 121, iva: IvaTipo.IVA_21 }],
-  periodoAsoc: { desde: "20261001", hasta: "20261031" },
+  periodoAsoc: { desde: '20261001', hasta: '20261031' },
 });
 ```
 
@@ -359,7 +366,7 @@ const result = await arca.notaDebito({
     tipo: CbteTipo.FACTURA_A,
     ptoVta: 1,
     nro: 200,
-    fecha: "20260301",
+    fecha: '20260301',
   },
   docTipo: DocTipo.CUIT,
   docNro: 30712345671,
@@ -378,7 +385,7 @@ const result = await arca.facturar({
   docNro: 30712345671,
   condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
   items: [{ neto: 100000, iva: IvaTipo.IVA_21 }],
-  opcionales: [{ Id: "2101", Valor: "0110012345678901234567" }], // CBU obligatorio
+  opcionales: [{ Id: '2101', Valor: '0110012345678901234567' }], // CBU obligatorio
 });
 
 // Nota de crédito FCE: el asociado lleva CUIT del emisor y fecha; Opcional 22 (anulación S/N)
@@ -388,8 +395,8 @@ await arca.notaCredito({
   docNro: 30712345671,
   condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
   items: [{ neto: 100000, iva: IvaTipo.IVA_21 }],
-  opcionales: [{ Id: "22", Valor: "N" }],
-  comprobanteOriginal: { tipo: CbteTipo.FCE_FACTURA_A, ptoVta: 1, nro: 15, cuit: 20123456786, fecha: "20261020" },
+  opcionales: [{ Id: '22', Valor: 'N' }],
+  comprobanteOriginal: { tipo: CbteTipo.FCE_FACTURA_A, ptoVta: 1, nro: 15, cuit: 20123456786, fecha: '20261020' },
 });
 ```
 
@@ -403,31 +410,33 @@ ID, número e `Imp_total` se calculan automáticamente. Reglas del manual de WSF
   fecha del comprobante); en NC/ND E no se admite (1673).
 
 ```typescript
-import { ArcaResultadoInciertoExpo, type FacturarExpoOpts, type FacturaExpoResult } from "@ramiidv/arca-facturacion";
+import { ArcaResultadoInciertoExpo, type FacturarExpoOpts, type FacturaExpoResult } from '@ramiidv/arca-facturacion';
 
 const opts: FacturarExpoOpts = {
   ptoVta: 1,
   cbteTipo: CbteTipo.FACTURA_E,
   tipoExpo: 1, // 1=Bienes, 2=Servicios, 4=Otros
-  pais: 203,   // País destino (203 = Estados Unidos)
+  pais: 203, // País destino (203 = Estados Unidos)
   cliente: {
-    nombre: "ACME Corp",
+    nombre: 'ACME Corp',
     cuitPais: 50000000016,
-    domicilio: "123 Main St, New York",
-    idImpositivo: "12-3456789",
+    domicilio: '123 Main St, New York',
+    idImpositivo: '12-3456789',
   },
-  moneda: "DOL",
+  moneda: 'DOL',
   cotizacion: 1200,
-  formaPago: "Wire Transfer",
-  incoterms: "FOB",
+  formaPago: 'Wire Transfer',
+  incoterms: 'FOB',
   idioma: 2, // 1=Español, 2=Inglés, 3=Portugués
-  items: [{
-    codigo: "SKU001",
-    descripcion: "Widget",
-    cantidad: 100,
-    unidad: 7,
-    precioUnitario: 10,
-  }],
+  items: [
+    {
+      codigo: 'SKU001',
+      descripcion: 'Widget',
+      cantidad: 100,
+      unidad: 7,
+      precioUnitario: 10,
+    },
+  ],
 };
 
 let result: FacturaExpoResult;
@@ -455,14 +464,14 @@ Con la API raw: `crearFacturaExportacion(error.request)` reenvía exactamente el
 ```typescript
 // Consulta básica por CUIT (padrón A13, servicio ws_sr_padron_a13)
 const persona = await arca.consultarCuit(30712345671);
-console.log(persona.nombre);       // "EMPRESA SA"
-console.log(persona.tipoPersona);  // "JURIDICA"
-console.log(persona.estadoClave);  // "ACTIVO"
+console.log(persona.nombre); // "EMPRESA SA"
+console.log(persona.tipoPersona); // "JURIDICA"
+console.log(persona.estadoClave); // "ACTIVO"
 
 // Constancia de inscripción (ex padrón A5, servicio ws_sr_constancia_inscripcion)
 const detalle = await arca.consultarCuitDetalle(20123456786);
 console.log(detalle.domicilioFiscal); // { direccion, localidad, codPostal }
-console.log(detalle.impuestos);       // [{ id: 30, descripcion: "IVA", estado: "AC" }]
+console.log(detalle.impuestos); // [{ id: 30, descripcion: "IVA", estado: "AC" }]
 ```
 
 ### CAEA — Contingencia
@@ -474,15 +483,17 @@ controlador fiscal) y cada comprobante se informa con la **fecha y hora en que s
 
 ```typescript
 // 1. Solicitar el CAEA de la quincena (o consultarlo si ya se pidió)
-const caea = await arca.solicitarCAEA("202611", 1); // noviembre, 1ra quincena
-console.log(`CAEA: ${caea.CAEA}, vigencia: ${caea.FchVigDesde} - ${caea.FchVigHasta}, informar hasta ${caea.FchTopeInf}`);
+const caea = await arca.solicitarCAEA('202611', 1); // noviembre, 1ra quincena
+console.log(
+  `CAEA: ${caea.CAEA}, vigencia: ${caea.FchVigDesde} - ${caea.FchVigHasta}, informar hasta ${caea.FchTopeInf}`,
+);
 
 // 2. Informar cada comprobante emitido offline (misma interfaz que facturar())
 const result = await arca.registrarFacturaCAEA(caea.CAEA, {
   ptoVta: 5,
   cbteTipo: CbteTipo.FACTURA_B,
-  cbteNro: 120,                                              // el número que usaste offline
-  fechaHoraGeneracion: new Date("2026-11-03T14:32:10-03:00"), // obligatorio (CbteFchHsGen)
+  cbteNro: 120, // el número que usaste offline
+  fechaHoraGeneracion: new Date('2026-11-03T14:32:10-03:00'), // obligatorio (CbteFchHsGen)
   // fecha: "20261103",  // opcional: default = la fecha de fechaHoraGeneracion
   items: [{ neto: 100, iva: IvaTipo.IVA_21 }],
 });
@@ -492,7 +503,7 @@ await arca.sinMovimientoCAEA(caea.CAEA, 6);
 const informados = await arca.consultarSinMovimientoCAEA(caea.CAEA, 6);
 
 // Consultar un CAEA existente
-const existente = await arca.consultarCAEA("202611", 1);
+const existente = await arca.consultarCAEA('202611', 1);
 ```
 
 `registrarFacturaCAEA` nunca usa la fecha del informe como fecha del comprobante: si no pasás `fecha`,
@@ -501,7 +512,7 @@ usa la de `fechaHoraGeneracion`. Un `Date` se formatea en hora de Argentina (`fo
 ### Previsualizar o armar sin enviar
 
 ```typescript
-import { armarComprobante, calcularTotales } from "@ramiidv/arca-facturacion";
+import { armarComprobante, calcularTotales } from '@ramiidv/arca-facturacion';
 
 const { importes, iva } = calcularTotales([
   { neto: 1000, iva: IvaTipo.IVA_21 },
@@ -511,7 +522,11 @@ console.log(importes);
 // { total: 1762.5, neto: 1500, iva: 262.5, exento: 0, noGravado: 0, tributos: 0 }
 
 // Detalle completo, listo para FECAESolicitar, sin red. Valida igual que facturar().
-const { request, importes: imp, intento } = armarComprobante({
+const {
+  request,
+  importes: imp,
+  intento,
+} = armarComprobante({
   ptoVta: 1,
   cbteTipo: CbteTipo.FACTURA_B,
   cbteNro: 151,
@@ -533,19 +548,22 @@ const url = arca.urlQR(result);
 // → "https://www.arca.gob.ar/fe/qr/?p=<base64>"
 
 // O con los datos sueltos (la fecha acepta YYYYMMDD, YYYY-MM-DD o Date; el CAE, string o número)
-const url2 = Arca.generateQRUrl({
-  fecha: "20261030",
-  cuit: 20123456786,
-  ptoVta: 1,
-  tipoCmp: CbteTipo.FACTURA_B,
-  nroCmp: 150,
-  importe: 121,
-  moneda: "PES",
-  ctz: 1,
-  tipoDocRec: DocTipo.CONSUMIDOR_FINAL,
-  nroDocRec: 0,
-  codAut: "73429843294823", // CAE
-}, { baseUrl: "https://www.afip.gob.ar/fe/qr/" }); // baseUrl opcional
+const url2 = Arca.generateQRUrl(
+  {
+    fecha: '20261030',
+    cuit: 20123456786,
+    ptoVta: 1,
+    tipoCmp: CbteTipo.FACTURA_B,
+    nroCmp: 150,
+    importe: 121,
+    moneda: 'PES',
+    ctz: 1,
+    tipoDocRec: DocTipo.CONSUMIDOR_FINAL,
+    nroDocRec: 0,
+    codAut: '73429843294823', // CAE
+  },
+  { baseUrl: 'https://www.afip.gob.ar/fe/qr/' },
+); // baseUrl opcional
 ```
 
 También se exportan `generarUrlQR(input, options?)` y `urlQRDesdeFactura(factura, datos, options?)`.
@@ -565,7 +583,7 @@ const result = await arca.facturar({
   items: [{ neto: 1000, iva: IvaTipo.IVA_21 }],
   moneda: Moneda.DOLARES,
   cotizacion: cotiz.MonCotiz,
-  canMisMonExt: "N", // opcional: "S" si se cancela en la misma moneda extranjera
+  canMisMonExt: 'N', // opcional: "S" si se cancela en la misma moneda extranjera
 });
 ```
 
@@ -585,7 +603,7 @@ errores de negocio ni SOAP Faults. **Las emisiones nunca se reintentan** (ver "E
 ```typescript
 const arca = new Arca({
   ...config,
-  retries: 2,         // 2 reintentos (3 intentos totales)
+  retries: 2, // 2 reintentos (3 intentos totales)
   retryDelayMs: 2000, // empezar con 2s → 4s → 8s
 });
 ```
@@ -602,29 +620,29 @@ const arca = new Arca({
 });
 
 // Opción 2: suscripción por tipo de evento
-arca.on("request:end", (e) => {
-  if (e.type === "request:end") {
-    metrics.histogram("arca.request.duration", e.durationMs);
+arca.on('request:end', (e) => {
+  if (e.type === 'request:end') {
+    metrics.histogram('arca.request.duration', e.durationMs);
   }
 });
 
-arca.on("request:retry", (e) => {
-  if (e.type === "request:retry") {
+arca.on('request:retry', (e) => {
+  if (e.type === 'request:retry') {
     logger.warn(`Retry #${e.attempt} for ${e.method}: ${e.error}`);
   }
 });
 ```
 
-| Evento | Cuándo | Datos |
-| --- | --- | --- |
-| `auth:login` | Nuevo token obtenido | `service`, `durationMs` |
-| `auth:cache-hit` | Token reutilizado | `service`, `source` (`memory` / `storage`) |
-| `auth:clock-skew` | Se ajustó el desfase de reloj | `service`, `offsetMs`, `previousOffsetMs` |
-| `auth:storage-error` | Falló el `ticketStorage` (no interrumpe) | `service`, `operation`, `error` |
-| `request:start` | Antes de una llamada SOAP | `method`, `endpoint` |
-| `request:end` | Llamada SOAP completada | `method`, `durationMs` |
-| `request:retry` | Reintentando tras error (solo consultas) | `method`, `attempt`, `error` |
-| `request:error` | Llamada SOAP falló | `method`, `error` |
+| Evento               | Cuándo                                   | Datos                                      |
+| -------------------- | ---------------------------------------- | ------------------------------------------ |
+| `auth:login`         | Nuevo token obtenido                     | `service`, `durationMs`                    |
+| `auth:cache-hit`     | Token reutilizado                        | `service`, `source` (`memory` / `storage`) |
+| `auth:clock-skew`    | Se ajustó el desfase de reloj            | `service`, `offsetMs`, `previousOffsetMs`  |
+| `auth:storage-error` | Falló el `ticketStorage` (no interrumpe) | `service`, `operation`, `error`            |
+| `request:start`      | Antes de una llamada SOAP                | `method`, `endpoint`                       |
+| `request:end`        | Llamada SOAP completada                  | `method`, `durationMs`                     |
+| `request:retry`      | Reintentando tras error (solo consultas) | `method`, `attempt`, `error`               |
+| `request:error`      | Llamada SOAP falló                       | `method`, `error`                          |
 
 ## Manejo de errores
 
@@ -665,16 +683,16 @@ try {
 }
 ```
 
-| Clase | `code` | Cuándo se lanza |
-| --- | --- | --- |
-| `ArcaResultadoIncierto` | `ARCA_RESULTADO_INCIERTO` | Emisión WSFEv1 sin respuesta confiable. Contiene `intento`, `intentos`, `operacion` |
-| `ArcaResultadoInciertoExpo` | `ARCA_RESULTADO_INCIERTO_EXPO` | `FEXAuthorize` sin respuesta confiable. Contiene `id`, `cbteTipo`, `ptoVta`, `cbteNro`, `intento` y `request` para reenviar con el mismo Id |
-| `ArcaWSFEError` | `ARCA_WSFE_ERROR` | Error devuelto por WSFE/WSFEX (no se emitió; los errores internos llegan como resultado incierto). Extiende `ArcaServiceError`. Contiene `errors: { code, msg }[]` y `tieneCodigo(code)` |
-| `ArcaValidationError` | `ARCA_VALIDATION_ERROR` | Datos de entrada inválidos. Contiene `field` y `details` |
-| `ArcaTicketVigenteError` | `ARCA_TICKET_VIGENTE` | WSAA ya emitió un TA vigente que no está en memoria ni en el storage |
-| `ArcaAuthError` | `ARCA_AUTH_ERROR` | Falla en login WSAA, respuesta inesperada, token/sign inválidos |
-| `ArcaSoapError` | `ARCA_SOAP_ERROR` | Error HTTP, timeout, SOAP Fault. Contiene `statusCode?`, `faultString?`, `uncertain`, `aborted` |
-| `ArcaError` | `ARCA_ERROR` | Clase base para todos los errores del SDK |
+| Clase                       | `code`                         | Cuándo se lanza                                                                                                                                                                          |
+| --------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ArcaResultadoIncierto`     | `ARCA_RESULTADO_INCIERTO`      | Emisión WSFEv1 sin respuesta confiable. Contiene `intento`, `intentos`, `operacion`                                                                                                      |
+| `ArcaResultadoInciertoExpo` | `ARCA_RESULTADO_INCIERTO_EXPO` | `FEXAuthorize` sin respuesta confiable. Contiene `id`, `cbteTipo`, `ptoVta`, `cbteNro`, `intento` y `request` para reenviar con el mismo Id                                              |
+| `ArcaWSFEError`             | `ARCA_WSFE_ERROR`              | Error devuelto por WSFE/WSFEX (no se emitió; los errores internos llegan como resultado incierto). Extiende `ArcaServiceError`. Contiene `errors: { code, msg }[]` y `tieneCodigo(code)` |
+| `ArcaValidationError`       | `ARCA_VALIDATION_ERROR`        | Datos de entrada inválidos. Contiene `field` y `details`                                                                                                                                 |
+| `ArcaTicketVigenteError`    | `ARCA_TICKET_VIGENTE`          | WSAA ya emitió un TA vigente que no está en memoria ni en el storage                                                                                                                     |
+| `ArcaAuthError`             | `ARCA_AUTH_ERROR`              | Falla en login WSAA, respuesta inesperada, token/sign inválidos                                                                                                                          |
+| `ArcaSoapError`             | `ARCA_SOAP_ERROR`              | Error HTTP, timeout, SOAP Fault. Contiene `statusCode?`, `faultString?`, `uncertain`, `aborted`                                                                                          |
+| `ArcaError`                 | `ARCA_ERROR`                   | Clase base para todos los errores del SDK                                                                                                                                                |
 
 `instanceof` funciona aunque haya más de una copia del paquete cargada (por ejemplo ESM y CommonJS en
 el mismo proceso), y `code` sirve para persistir o comparar sin `instanceof`.
@@ -729,40 +747,40 @@ puntos de venta y las cotizaciones **no** se cachean.
 
 ### `new Arca(config)`
 
-| Parámetro | Tipo | Default | Descripción |
-| --- | --- | --- | --- |
-| `cuit` | `number \| string` | — | CUIT del contribuyente (se valida el dígito verificador) |
-| `cert` | `string` | — | Contenido del certificado X.509 (PEM) |
-| `key` | `string` | — | Contenido de la clave privada (PEM) |
-| `production` | `boolean` | `false` | Entorno de producción |
-| `tokenTTLMinutes` | `number` | `720` | TTL del token en minutos |
-| `timeout` | `number` | `30000` | Timeout HTTP en milisegundos (`requestTimeoutMs`: alias deprecado) |
-| `retries` | `number` | `1` | Reintentos en consultas (las emisiones nunca se reintentan) |
-| `retryDelayMs` | `number` | `1000` | Delay inicial entre reintentos (exponencial) |
-| `onEvent` | `function` | — | Callback para eventos del SDK |
-| `paramCacheTTLMs` | `number` | `86400000` | TTL del cache de parámetros (0 = sin cache) |
-| `ticketStorage` | `TicketStorage` | — | Persistencia del TA entre reinicios (recomendado) |
-| `clockOffsetMs` | `number` | `0` | Desfase `relojARCA - relojLocal` en ms |
-| `autoClockSkew` | `boolean` | `true` | Ajustar el desfase si WSAA rechaza el login por reloj |
-| `loginErrorCooldownMs` | `number` | `60000` | Espera tras un login WSAA fallido (0 la desactiva) |
-| `fetch` | `typeof fetch` | `globalThis.fetch` | `fetch` propio para todos los requests |
-| `legacyTls` | `"auto" \| "never" \| "always"` | `"auto"` | Transporte TLS legacy (ver "Producción y TLS") |
-| `endpoints` | `{ wsaa?, wsfe?, wsfex?, padronA5?, padronA13? }` | — | URLs propias de los servicios |
-| `signal` | `AbortSignal` | — | Cancela todas las llamadas de la instancia |
-| `wsaa` | `WsaaClient` | — | Cliente WSAA compartido (ej: con `ArcaPadron`) |
+| Parámetro              | Tipo                                              | Default            | Descripción                                                        |
+| ---------------------- | ------------------------------------------------- | ------------------ | ------------------------------------------------------------------ |
+| `cuit`                 | `number \| string`                                | —                  | CUIT del contribuyente (se valida el dígito verificador)           |
+| `cert`                 | `string`                                          | —                  | Contenido del certificado X.509 (PEM)                              |
+| `key`                  | `string`                                          | —                  | Contenido de la clave privada (PEM)                                |
+| `production`           | `boolean`                                         | `false`            | Entorno de producción                                              |
+| `tokenTTLMinutes`      | `number`                                          | `720`              | TTL del token en minutos                                           |
+| `timeout`              | `number`                                          | `30000`            | Timeout HTTP en milisegundos (`requestTimeoutMs`: alias deprecado) |
+| `retries`              | `number`                                          | `1`                | Reintentos en consultas (las emisiones nunca se reintentan)        |
+| `retryDelayMs`         | `number`                                          | `1000`             | Delay inicial entre reintentos (exponencial)                       |
+| `onEvent`              | `function`                                        | —                  | Callback para eventos del SDK                                      |
+| `paramCacheTTLMs`      | `number`                                          | `86400000`         | TTL del cache de parámetros (0 = sin cache)                        |
+| `ticketStorage`        | `TicketStorage`                                   | —                  | Persistencia del TA entre reinicios (recomendado)                  |
+| `clockOffsetMs`        | `number`                                          | `0`                | Desfase `relojARCA - relojLocal` en ms                             |
+| `autoClockSkew`        | `boolean`                                         | `true`             | Ajustar el desfase si WSAA rechaza el login por reloj              |
+| `loginErrorCooldownMs` | `number`                                          | `60000`            | Espera tras un login WSAA fallido (0 la desactiva)                 |
+| `fetch`                | `typeof fetch`                                    | `globalThis.fetch` | `fetch` propio para todos los requests                             |
+| `legacyTls`            | `"auto" \| "never" \| "always"`                   | `"auto"`           | Transporte TLS legacy (ver "Producción y TLS")                     |
+| `endpoints`            | `{ wsaa?, wsfe?, wsfex?, padronA5?, padronA13? }` | —                  | URLs propias de los servicios                                      |
+| `signal`               | `AbortSignal`                                     | —                  | Cancela todas las llamadas de la instancia                         |
+| `wsaa`                 | `WsaaClient`                                      | —                  | Cliente WSAA compartido (ej: con `ArcaPadron`)                     |
 
 ### Facturación — API simplificada
 
-| Método | Descripción |
-| --- | --- |
-| `facturar(opts)` | Crea un comprobante con cálculo automático de IVA y totales |
-| `notaCredito(opts)` | Crea nota de crédito asociada (tipo NC inferido automáticamente) |
-| `notaDebito(opts)` | Crea nota de débito asociada (tipo ND inferido automáticamente) |
-| `armarComprobante(opts)` | Valida y arma el comprobante sin enviarlo; devuelve `request`, `importes` e `intento` |
-| `recuperarComprobante(intento)` | Resuelve un resultado incierto: `autorizado`, `no_emitido` o `conflicto` |
-| `facturarExpo(opts)` | Comprobante de exportación con auto ID, numeración y cálculo de totales |
-| `registrarFacturaCAEA(caea, opts)` | Informa un comprobante de contingencia con CAEA (`fechaHoraGeneracion` obligatorio) |
-| `urlQR(factura)` | URL del QR del comprobante |
+| Método                             | Descripción                                                                           |
+| ---------------------------------- | ------------------------------------------------------------------------------------- |
+| `facturar(opts)`                   | Crea un comprobante con cálculo automático de IVA y totales                           |
+| `notaCredito(opts)`                | Crea nota de crédito asociada (tipo NC inferido automáticamente)                      |
+| `notaDebito(opts)`                 | Crea nota de débito asociada (tipo ND inferido automáticamente)                       |
+| `armarComprobante(opts)`           | Valida y arma el comprobante sin enviarlo; devuelve `request`, `importes` e `intento` |
+| `recuperarComprobante(intento)`    | Resuelve un resultado incierto: `autorizado`, `no_emitido` o `conflicto`              |
+| `facturarExpo(opts)`               | Comprobante de exportación con auto ID, numeración y cálculo de totales               |
+| `registrarFacturaCAEA(caea, opts)` | Informa un comprobante de contingencia con CAEA (`fechaHoraGeneracion` obligatorio)   |
+| `urlQR(factura)`                   | URL del QR del comprobante                                                            |
 
 `FacturaResult`: `aprobada`, `cae`, `caeVencimiento`, `cbteNro`, `ptoVta`, `cbteTipo`, `importes`,
 `observaciones`, `eventos` (los `Events` de ARCA), `fecha`, `docTipo`, `docNro`, `moneda`,
@@ -772,94 +790,94 @@ puntos de venta y las cotizaciones **no** se cachean.
 
 ### Facturación — API raw
 
-| Método | Descripción |
-| --- | --- |
-| `crearFactura(request)` | Solicita CAE para uno o más comprobantes (sin auto-cálculo) |
-| `crearFacturaAuto(ptoVta, cbteTipo, invoice)` | Como `crearFactura` pero obtiene el número automáticamente |
-| `ultimoComprobante(ptoVta, cbteTipo)` | Último número autorizado |
-| `siguienteComprobante(ptoVta, cbteTipo)` | Siguiente número (último + 1) |
-| `consultarComprobante(cbteTipo, ptoVta, cbteNro)` | Consulta un comprobante existente |
+| Método                                            | Descripción                                                 |
+| ------------------------------------------------- | ----------------------------------------------------------- |
+| `crearFactura(request)`                           | Solicita CAE para uno o más comprobantes (sin auto-cálculo) |
+| `crearFacturaAuto(ptoVta, cbteTipo, invoice)`     | Como `crearFactura` pero obtiene el número automáticamente  |
+| `ultimoComprobante(ptoVta, cbteTipo)`             | Último número autorizado                                    |
+| `siguienteComprobante(ptoVta, cbteTipo)`          | Siguiente número (último + 1)                               |
+| `consultarComprobante(cbteTipo, ptoVta, cbteNro)` | Consulta un comprobante existente                           |
 
 ### Exportación (WSFEX)
 
-| Método | Descripción |
-| --- | --- |
-| `facturarExpo(opts)` | Factura de exportación simplificada (auto ID y numeración) |
-| `crearFacturaExportacion(invoice)` | Autoriza un comprobante de exportación (API raw) |
-| `ultimoComprobanteExpo(ptoVta, cbteTipo)` | Último número autorizado (WSFEX) |
-| `siguienteComprobanteExpo(ptoVta, cbteTipo, opts?)` | Siguiente número (WSFEX) |
-| `ultimoIdExpo()` | Último ID de request WSFEX |
-| `consultarComprobanteExpo(cbteTipo, ptoVta, cbteNro)` | Consulta comprobante de exportación |
-| `serverStatusExpo()` | Estado de los servidores WSFEX |
-| `getTiposCbteExpo()` | Tipos de comprobante de exportación |
-| `getMonedasExpo()` | Monedas (WSFEX) |
-| `getPaisesExpo()` | Países destino |
-| `getIdiomasExpo()` | Idiomas disponibles |
-| `getIncotermsExpo()` | Incoterms |
-| `getUMedExpo()` | Unidades de medida |
-| `getTiposExpo()` | Tipos de exportación |
-| `getCuitsPaisExpo()` | CUITs de países |
-| `getPuntosVentaExpo()` | Puntos de venta de exportación (`FEXGetPARAM_PtoVenta`) |
-| `getOpcionalesExpo()` | Tipos de datos opcionales (`FEXGetPARAM_Opcionales`) |
-| `getActividadesExpo()` | Actividades del emisor (`FEXGetPARAM_Actividades`) |
-| `getCotizacionExpo(monedaId, { fecha? })` | Cotización (`FEXGetPARAM_Ctz`) |
-| `getMonedasConCotizacionExpo({ fecha? })` | Monedas con cotización (`FEXGetPARAM_MON_CON_COTIZACION`) |
-| `checkPermisoExpo(idPermiso, dstMerc)` | Verifica un permiso de embarque (`FEXCheck_Permiso`); devuelve `Status` |
+| Método                                                | Descripción                                                             |
+| ----------------------------------------------------- | ----------------------------------------------------------------------- |
+| `facturarExpo(opts)`                                  | Factura de exportación simplificada (auto ID y numeración)              |
+| `crearFacturaExportacion(invoice)`                    | Autoriza un comprobante de exportación (API raw)                        |
+| `ultimoComprobanteExpo(ptoVta, cbteTipo)`             | Último número autorizado (WSFEX)                                        |
+| `siguienteComprobanteExpo(ptoVta, cbteTipo, opts?)`   | Siguiente número (WSFEX)                                                |
+| `ultimoIdExpo()`                                      | Último ID de request WSFEX                                              |
+| `consultarComprobanteExpo(cbteTipo, ptoVta, cbteNro)` | Consulta comprobante de exportación                                     |
+| `serverStatusExpo()`                                  | Estado de los servidores WSFEX                                          |
+| `getTiposCbteExpo()`                                  | Tipos de comprobante de exportación                                     |
+| `getMonedasExpo()`                                    | Monedas (WSFEX)                                                         |
+| `getPaisesExpo()`                                     | Países destino                                                          |
+| `getIdiomasExpo()`                                    | Idiomas disponibles                                                     |
+| `getIncotermsExpo()`                                  | Incoterms                                                               |
+| `getUMedExpo()`                                       | Unidades de medida                                                      |
+| `getTiposExpo()`                                      | Tipos de exportación                                                    |
+| `getCuitsPaisExpo()`                                  | CUITs de países                                                         |
+| `getPuntosVentaExpo()`                                | Puntos de venta de exportación (`FEXGetPARAM_PtoVenta`)                 |
+| `getOpcionalesExpo()`                                 | Tipos de datos opcionales (`FEXGetPARAM_Opcionales`)                    |
+| `getActividadesExpo()`                                | Actividades del emisor (`FEXGetPARAM_Actividades`)                      |
+| `getCotizacionExpo(monedaId, { fecha? })`             | Cotización (`FEXGetPARAM_Ctz`)                                          |
+| `getMonedasConCotizacionExpo({ fecha? })`             | Monedas con cotización (`FEXGetPARAM_MON_CON_COTIZACION`)               |
+| `checkPermisoExpo(idPermiso, dstMerc)`                | Verifica un permiso de embarque (`FEXCheck_Permiso`); devuelve `Status` |
 
 ### CAEA (Autorización Anticipada)
 
-| Método | Descripción |
-| --- | --- |
-| `solicitarCAEA(periodo, orden)` | Solicita un CAEA para un período y quincena |
-| `consultarCAEA(periodo, orden)` | Consulta un CAEA existente |
-| `registrarFacturaCAEA(caea, opts)` | Informa un comprobante con CAEA (API simplificada, `fechaHoraGeneracion` obligatorio) |
-| `registrarCAEA(request)` | Informa comprobantes con CAEA (API raw, cada uno con `CAEA` y `CbteFchHsGen`) |
-| `sinMovimientoCAEA(caea, ptoVta)` | Informa sin movimientos para un CAEA |
-| `consultarSinMovimientoCAEA(caea, ptoVta)` | Consulta los informes sin movimiento (`FECAEASinMovimientoConsultar`) |
+| Método                                     | Descripción                                                                           |
+| ------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `solicitarCAEA(periodo, orden)`            | Solicita un CAEA para un período y quincena                                           |
+| `consultarCAEA(periodo, orden)`            | Consulta un CAEA existente                                                            |
+| `registrarFacturaCAEA(caea, opts)`         | Informa un comprobante con CAEA (API simplificada, `fechaHoraGeneracion` obligatorio) |
+| `registrarCAEA(request)`                   | Informa comprobantes con CAEA (API raw, cada uno con `CAEA` y `CbteFchHsGen`)         |
+| `sinMovimientoCAEA(caea, ptoVta)`          | Informa sin movimientos para un CAEA                                                  |
+| `consultarSinMovimientoCAEA(caea, ptoVta)` | Consulta los informes sin movimiento (`FECAEASinMovimientoConsultar`)                 |
 
 ### Padrón (Consulta de contribuyentes)
 
-| Método | Descripción |
-| --- | --- |
-| `consultarCuit(cuit)` | **Deprecado.** Datos básicos de un contribuyente (padrón A13) |
+| Método                       | Descripción                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------ |
+| `consultarCuit(cuit)`        | **Deprecado.** Datos básicos de un contribuyente (padrón A13)                  |
 | `consultarCuitDetalle(cuit)` | **Deprecado.** Constancia de inscripción (ex A5): domicilio fiscal e impuestos |
 
 Retornan `Contribuyente` con: `cuit`, `nombre`, `tipoPersona`, `estadoClave`, `domicilioFiscal?`, `impuestos?`, `raw`.
 
 ### Parámetros WSFE
 
-| Método | Descripción |
-| --- | --- |
-| `serverStatus()` | Estado de los servidores |
-| `getTiposComprobante()` | Lista de tipos de comprobante |
-| `getTiposConcepto()` | Lista de tipos de concepto |
-| `getTiposDocumento()` | Lista de tipos de documento |
-| `getCondicionesIva({ claseCmp? })` | Condiciones de IVA válidas para el receptor (con `Cmp_Clase`) |
-| `getTiposIva()` | Lista de alícuotas de IVA |
-| `getMonedas()` | Lista de monedas |
-| `getTiposTributo()` | Lista de tipos de tributo |
-| `getTiposOpcional()` | Lista de datos opcionales |
-| `getActividades()` | Actividades del emisor (`FEParamGetActividades`) |
-| `getTiposPaises()` | Países (`FEParamGetTiposPaises`) |
-| `getPuntosVenta()` | Puntos de venta habilitados (no se cachea) |
-| `getCotizacion(monedaId, { fecha? })` | Cotización de una moneda: `{ MonId, MonCotiz, FchCotiz }` |
-| `getCantMaxRegistros()` | Máx registros por request |
+| Método                                | Descripción                                                   |
+| ------------------------------------- | ------------------------------------------------------------- |
+| `serverStatus()`                      | Estado de los servidores                                      |
+| `getTiposComprobante()`               | Lista de tipos de comprobante                                 |
+| `getTiposConcepto()`                  | Lista de tipos de concepto                                    |
+| `getTiposDocumento()`                 | Lista de tipos de documento                                   |
+| `getCondicionesIva({ claseCmp? })`    | Condiciones de IVA válidas para el receptor (con `Cmp_Clase`) |
+| `getTiposIva()`                       | Lista de alícuotas de IVA                                     |
+| `getMonedas()`                        | Lista de monedas                                              |
+| `getTiposTributo()`                   | Lista de tipos de tributo                                     |
+| `getTiposOpcional()`                  | Lista de datos opcionales                                     |
+| `getActividades()`                    | Actividades del emisor (`FEParamGetActividades`)              |
+| `getTiposPaises()`                    | Países (`FEParamGetTiposPaises`)                              |
+| `getPuntosVenta()`                    | Puntos de venta habilitados (no se cachea)                    |
+| `getCotizacion(monedaId, { fecha? })` | Cotización de una moneda: `{ MonId, MonCotiz, FchCotiz }`     |
+| `getCantMaxRegistros()`               | Máx registros por request                                     |
 
 ### Eventos
 
-| Método | Descripción |
-| --- | --- |
-| `on(event, handler)` | Suscribirse a un tipo de evento |
-| `off(event, handler)` | Desuscribirse de un evento |
+| Método                | Descripción                     |
+| --------------------- | ------------------------------- |
+| `on(event, handler)`  | Suscribirse a un tipo de evento |
+| `off(event, handler)` | Desuscribirse de un evento      |
 
 ### Utilidades estáticas
 
-| Método | Descripción |
-| --- | --- |
-| `Arca.generateQRUrl(input, options?)` | Genera la URL del QR oficial de ARCA |
-| `Arca.calcularTotales(items, opts?)` | **Deprecado**: usar la función `calcularTotales` |
-| `Arca.extractCAE(result)` | **Deprecado**: usar la API simplificada o `FeDetResp` |
-| `Arca.formatDate(date)` | **Deprecado**: usar `formatDate` de `@ramiidv/arca-common` |
+| Método                                | Descripción                                                |
+| ------------------------------------- | ---------------------------------------------------------- |
+| `Arca.generateQRUrl(input, options?)` | Genera la URL del QR oficial de ARCA                       |
+| `Arca.calcularTotales(items, opts?)`  | **Deprecado**: usar la función `calcularTotales`           |
+| `Arca.extractCAE(result)`             | **Deprecado**: usar la API simplificada o `FeDetResp`      |
+| `Arca.formatDate(date)`               | **Deprecado**: usar `formatDate` de `@ramiidv/arca-common` |
 
 También se exportan como funciones: `armarComprobante`, `calcularTotales`, `resolverCbteTipo`,
 `intentoDesdeComprobante`, `coincideConIntento`, `facturaResultDesdeConsulta`, `requiereRecuperacion`,
@@ -867,43 +885,43 @@ También se exportan como funciones: `armarComprobante`, `calcularTotales`, `res
 
 ### Otros
 
-| Método | Descripción |
-| --- | --- |
+| Método             | Descripción                                                                                                                                                                                                                                                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `clearAuthCache()` | Invalida los tickets de acceso (memoria y `ticketStorage`). Devuelve `Promise<void>`. **Ojo:** WSAA no emite un ticket nuevo mientras el anterior siga vigente, así que borrar uno vigente deja sin acceso hasta que venza (`ArcaTicketVigenteError`). Usalo solo si el ticket es inválido (ej: cambiaste de certificado) |
-| `wsaa` | Cliente WSAA de la instancia, para compartirlo con otros SDKs |
+| `wsaa`             | Cliente WSAA de la instancia, para compartirlo con otros SDKs                                                                                                                                                                                                                                                             |
 
 ## Tipos de comprobante soportados
 
-| Enum | Código | Descripción |
-| --- | --- | --- |
-| `FACTURA_A` | 1 | Factura A |
-| `NOTA_DEBITO_A` | 2 | Nota de Débito A |
-| `NOTA_CREDITO_A` | 3 | Nota de Crédito A |
-| `RECIBO_A` | 4 | Recibo A |
-| `FACTURA_B` | 6 | Factura B |
-| `NOTA_DEBITO_B` | 7 | Nota de Débito B |
-| `NOTA_CREDITO_B` | 8 | Nota de Crédito B |
-| `RECIBO_B` | 9 | Recibo B |
-| `FACTURA_C` | 11 | Factura C |
-| `NOTA_DEBITO_C` | 12 | Nota de Débito C |
-| `NOTA_CREDITO_C` | 13 | Nota de Crédito C |
-| `RECIBO_C` | 15 | Recibo C |
-| `FACTURA_E` | 19 | Factura de Exportación |
-| `NOTA_DEBITO_E` | 20 | Nota de Débito E |
-| `NOTA_CREDITO_E` | 21 | Nota de Crédito E |
-| `FACTURA_M` | 51 | Factura M |
-| `NOTA_DEBITO_M` | 52 | Nota de Débito M |
-| `NOTA_CREDITO_M` | 53 | Nota de Crédito M |
-| `RECIBO_M` | 54 | Recibo M |
-| `FCE_FACTURA_A` | 201 | Factura de Crédito Electrónica MiPyME A |
-| `FCE_NOTA_DEBITO_A` | 202 | Nota de Débito FCE MiPyME A |
-| `FCE_NOTA_CREDITO_A` | 203 | Nota de Crédito FCE MiPyME A |
-| `FCE_FACTURA_B` | 206 | Factura de Crédito Electrónica MiPyME B |
-| `FCE_NOTA_DEBITO_B` | 207 | Nota de Débito FCE MiPyME B |
-| `FCE_NOTA_CREDITO_B` | 208 | Nota de Crédito FCE MiPyME B |
-| `FCE_FACTURA_C` | 211 | Factura de Crédito Electrónica MiPyME C |
-| `FCE_NOTA_DEBITO_C` | 212 | Nota de Débito FCE MiPyME C |
-| `FCE_NOTA_CREDITO_C` | 213 | Nota de Crédito FCE MiPyME C |
+| Enum                 | Código | Descripción                             |
+| -------------------- | ------ | --------------------------------------- |
+| `FACTURA_A`          | 1      | Factura A                               |
+| `NOTA_DEBITO_A`      | 2      | Nota de Débito A                        |
+| `NOTA_CREDITO_A`     | 3      | Nota de Crédito A                       |
+| `RECIBO_A`           | 4      | Recibo A                                |
+| `FACTURA_B`          | 6      | Factura B                               |
+| `NOTA_DEBITO_B`      | 7      | Nota de Débito B                        |
+| `NOTA_CREDITO_B`     | 8      | Nota de Crédito B                       |
+| `RECIBO_B`           | 9      | Recibo B                                |
+| `FACTURA_C`          | 11     | Factura C                               |
+| `NOTA_DEBITO_C`      | 12     | Nota de Débito C                        |
+| `NOTA_CREDITO_C`     | 13     | Nota de Crédito C                       |
+| `RECIBO_C`           | 15     | Recibo C                                |
+| `FACTURA_E`          | 19     | Factura de Exportación                  |
+| `NOTA_DEBITO_E`      | 20     | Nota de Débito E                        |
+| `NOTA_CREDITO_E`     | 21     | Nota de Crédito E                       |
+| `FACTURA_M`          | 51     | Factura M                               |
+| `NOTA_DEBITO_M`      | 52     | Nota de Débito M                        |
+| `NOTA_CREDITO_M`     | 53     | Nota de Crédito M                       |
+| `RECIBO_M`           | 54     | Recibo M                                |
+| `FCE_FACTURA_A`      | 201    | Factura de Crédito Electrónica MiPyME A |
+| `FCE_NOTA_DEBITO_A`  | 202    | Nota de Débito FCE MiPyME A             |
+| `FCE_NOTA_CREDITO_A` | 203    | Nota de Crédito FCE MiPyME A            |
+| `FCE_FACTURA_B`      | 206    | Factura de Crédito Electrónica MiPyME B |
+| `FCE_NOTA_DEBITO_B`  | 207    | Nota de Débito FCE MiPyME B             |
+| `FCE_NOTA_CREDITO_B` | 208    | Nota de Crédito FCE MiPyME B            |
+| `FCE_FACTURA_C`      | 211    | Factura de Crédito Electrónica MiPyME C |
+| `FCE_NOTA_DEBITO_C`  | 212    | Nota de Débito FCE MiPyME C             |
+| `FCE_NOTA_CREDITO_C` | 213    | Nota de Crédito FCE MiPyME C            |
 
 Tambien se incluyen tipos especiales: `COMPRA_BIENES_USADOS` (49), `CTA_VTA_LIQ_PROD_A/B` (60/61), `LIQUIDACION_A/B` (63/64), y comprobantes RG 1415 (34, 35, 39, 40).
 
@@ -922,10 +940,10 @@ Tambien se incluyen tipos especiales: `COMPRA_BIENES_USADOS` (49), `CTA_VTA_LIQ_
 
 ## Entornos
 
-| Entorno | WSAA | WSFE | WSFEX | Padrón |
-| --- | --- | --- | --- | --- |
-| Testing | `wsaahomo.afip.gov.ar` | `wswhomo.afip.gov.ar` | `wswhomo.afip.gov.ar` | `awshomo.afip.gov.ar` |
-| Producción | `wsaa.afip.gov.ar` | `servicios1.afip.gov.ar` | `servicios1.afip.gov.ar` | `aws.afip.gov.ar` |
+| Entorno    | WSAA                   | WSFE                     | WSFEX                    | Padrón                |
+| ---------- | ---------------------- | ------------------------ | ------------------------ | --------------------- |
+| Testing    | `wsaahomo.afip.gov.ar` | `wswhomo.afip.gov.ar`    | `wswhomo.afip.gov.ar`    | `awshomo.afip.gov.ar` |
+| Producción | `wsaa.afip.gov.ar`     | `servicios1.afip.gov.ar` | `servicios1.afip.gov.ar` | `aws.afip.gov.ar`     |
 
 Se pueden reemplazar con `endpoints` en la config. Producción de WSFEv1/WSFEX en Node >= 17: ver
 [Producción y TLS](#producción-y-tls).
