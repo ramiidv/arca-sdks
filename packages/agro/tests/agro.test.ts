@@ -30,11 +30,6 @@ describe('ArcaAgro', () => {
     expect(calls.map((c) => c.soapAction).sort()).toEqual([`"${LPG_NS}dummy"`, `"${CPE_NS}dummy"`]);
   });
 
-  it('serverStatus (deprecado) es un alias de status', async () => {
-    const { agro } = setup((call) => (call.url.includes('wscpe') ? CPE_DUMMY : LPG_DUMMY));
-    expect(await agro.serverStatus()).toEqual(await agro.status());
-  });
-
   it('clearAuthCache espera el borrado en el ticketStorage de ambos servicios', async () => {
     const deleted: string[] = [];
     const storage: TicketStorage = {

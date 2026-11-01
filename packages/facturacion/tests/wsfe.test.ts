@@ -3,7 +3,7 @@ import { ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/a
 import { ArcaResultadoIncierto, ArcaWSFEError } from '../src/errors.js';
 import { CbteTipo, CondicionIva, DocTipo, IvaTipo, Moneda, TributoTipo } from '../src/constants.js';
 import { requiereRecuperacion } from '../src/facturacion.js';
-import { Arca, ArcaFacturacion } from '../src/index.js';
+import { ArcaFacturacion } from '../src/index.js';
 import {
   arcaDePrueba,
   caeAprobado,
@@ -505,7 +505,7 @@ describe('config', () => {
 
   it('comparte el WsaaClient pasado en config.wsaa', async () => {
     const arca = await arcaDePrueba();
-    const otra = new Arca({ cuit: 20123456786, cert: '', key: '', wsaa: arca.wsaa });
+    const otra = new ArcaFacturacion({ cuit: 20123456786, cert: '', key: '', wsaa: arca.wsaa });
     expect(otra.wsaa).toBe(arca.wsaa);
   });
 
@@ -513,9 +513,7 @@ describe('config', () => {
     const arca = await arcaDePrueba();
     const spy = vi.spyOn(arca.wsaa, 'clearTicket').mockResolvedValue();
     await arca.clearAuthCache();
-    expect(spy.mock.calls.map((c) => c[0]).sort()).toEqual(
-      ['wsfe', 'wsfex', 'ws_sr_constancia_inscripcion', 'ws_sr_padron_a13'].sort(),
-    );
+    expect(spy.mock.calls.map((c) => c[0]).sort()).toEqual(['wsfe', 'wsfex']);
   });
 
   it('on/off: suscribe y desuscribe handlers de eventos', async () => {
@@ -542,25 +540,5 @@ describe('status', () => {
     expect(r.wsfe).toEqual({ ok: true, status: { appserver: 'OK', dbserver: 'OK', authserver: 'OK' } });
     expect(r.wsfex.ok).toBe(false);
     expect(!r.wsfex.ok && r.wsfex.error).toBeInstanceOf(ArcaSoapError);
-  });
-
-  it('Arca (deprecado) es el mismo cliente que ArcaFacturacion', () => {
-    expect(Arca).toBe(ArcaFacturacion);
-  });
-});
-
-describe('serverStatus (deprecado)', () => {
-  it('FEDummy → AppServer/DbServer/AuthServer', async () => {
-    const arca = await arcaDePrueba();
-    mockArcaFetch({
-      FEDummy: wsfeResponse('FEDummy', '<AppServer>OK</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer>'),
-    });
-    expect(await arca.serverStatus()).toEqual({ AppServer: 'OK', DbServer: 'OK', AuthServer: 'OK' });
-  });
-
-  it('respuesta incompleta: ArcaSoapError', async () => {
-    const arca = await arcaDePrueba();
-    mockArcaFetch({ FEDummy: wsfeResponse('FEDummy', '<AppServer>OK</AppServer><DbServer>OK</DbServer>') });
-    await expect(arca.serverStatus()).rejects.toBeInstanceOf(ArcaSoapError);
   });
 });

@@ -46,7 +46,7 @@ describe('facturar con cbteNro explícito', () => {
 
 describe('emisiones: nunca se reintentan', () => {
   it('timeout → ArcaResultadoIncierto con el intento, y una sola llamada', async () => {
-    const arca = await arcaDePrueba({ requestTimeoutMs: 20, retries: 5 });
+    const arca = await arcaDePrueba({ timeout: 20, retries: 5 });
     const mock = mockArcaFetch({
       FECAESolicitar: () =>
         new Promise<Response>((_, reject) => setTimeout(() => reject(new DOMException('aborted', 'AbortError')), 60)),

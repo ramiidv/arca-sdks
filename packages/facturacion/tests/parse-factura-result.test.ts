@@ -24,17 +24,19 @@ describe('parseFacturaResult', () => {
         Reproceso: 'N',
       },
       FeDetResp: {
-        FECAEDetResponse: {
-          Concepto: 1,
-          DocTipo: 99,
-          DocNro: 0,
-          CbteDesde: 150,
-          CbteHasta: 150,
-          CbteFch: '20260328',
-          Resultado: 'A',
-          CAE: '74512345678901',
-          CAEFchVto: '20260407',
-        },
+        FECAEDetResponse: [
+          {
+            Concepto: 1,
+            DocTipo: 99,
+            DocNro: 0,
+            CbteDesde: 150,
+            CbteHasta: 150,
+            CbteFch: '20260328',
+            Resultado: 'A',
+            CAE: '74512345678901',
+            CAEFchVto: '20260407',
+          },
+        ],
       },
     };
 
@@ -63,20 +65,22 @@ describe('parseFacturaResult', () => {
         Reproceso: 'N',
       },
       FeDetResp: {
-        FECAEDetResponse: {
-          Concepto: 1,
-          DocTipo: 99,
-          DocNro: 0,
-          CbteDesde: 150,
-          CbteHasta: 150,
-          CbteFch: '20260328',
-          Resultado: 'R',
-          CAE: '',
-          CAEFchVto: '',
-          Observaciones: {
-            Obs: { Code: 10016, Msg: 'Error de test' },
+        FECAEDetResponse: [
+          {
+            Concepto: 1,
+            DocTipo: 99,
+            DocNro: 0,
+            CbteDesde: 150,
+            CbteHasta: 150,
+            CbteFch: '20260328',
+            Resultado: 'R',
+            CAE: '',
+            CAEFchVto: '',
+            Observaciones: {
+              Obs: [{ Code: 10016, Msg: 'Error de test' }],
+            },
           },
-        },
+        ],
       },
     };
 
@@ -147,23 +151,25 @@ describe('parseFacturaResult', () => {
         Reproceso: 'N',
       },
       FeDetResp: {
-        FECAEDetResponse: {
-          Concepto: 1,
-          DocTipo: 99,
-          DocNro: 0,
-          CbteDesde: 150,
-          CbteHasta: 150,
-          CbteFch: '20260328',
-          Resultado: 'R',
-          CAE: '',
-          CAEFchVto: '',
-          Observaciones: {
-            Obs: [
-              { Code: 10001, Msg: 'Error 1' },
-              { Code: 10002, Msg: 'Error 2' },
-            ],
+        FECAEDetResponse: [
+          {
+            Concepto: 1,
+            DocTipo: 99,
+            DocNro: 0,
+            CbteDesde: 150,
+            CbteHasta: 150,
+            CbteFch: '20260328',
+            Resultado: 'R',
+            CAE: '',
+            CAEFchVto: '',
+            Observaciones: {
+              Obs: [
+                { Code: 10001, Msg: 'Error 1' },
+                { Code: 10002, Msg: 'Error 2' },
+              ],
+            },
           },
-        },
+        ],
       },
     };
 

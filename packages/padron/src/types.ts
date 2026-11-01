@@ -7,14 +7,7 @@ export type {
   TicketStorage,
   CallOptions,
 } from '@ramiidv/arca-common';
-import type { ArcaEvent, ArcaSdkConfig, CondicionIva, ServerStatus } from '@ramiidv/arca-common';
-
-// ---------------------------------------------------------------------------
-// Backward-compatible alias
-// ---------------------------------------------------------------------------
-
-/** @deprecated Use ArcaEvent from @ramiidv/arca-common instead. */
-export type ArcaPadronEvent = ArcaEvent;
+import type { ArcaSdkConfig, CondicionIva, ServiceStatus } from '@ramiidv/arca-common';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -38,7 +31,7 @@ export interface ArcaPadronConfig extends ArcaSdkConfig {
 }
 
 /** Resultado de `status()`: el de cada servicio por separado (uno caído no oculta a los demás). */
-export type PadronStatus = Record<PadronServicio, PromiseSettledResult<ServerStatus>>;
+export type PadronStatus = Record<PadronServicio, ServiceStatus>;
 
 // ---------------------------------------------------------------------------
 // Authentication

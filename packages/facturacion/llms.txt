@@ -57,9 +57,9 @@ The SDK has two API levels:
 2. **Raw API** (`crearFactura`, `crearFacturaAuto`) — maps 1:1 to AFIP's WSFEv1 SOAP methods. Returns raw AFIP XML responses parsed to JS objects.
 
 Internally:
-- `Arca` (main class) — orchestrator, holds config, exposes all methods
+- `ArcaFacturacion` (main class) — orchestrator, holds config, exposes all methods
 - `WsaaClient` (from `@ramiidv/arca-common`) — WSAA authentication, ticket cache/storage, clock skew
-- `WsfeClient` / `WsfexClient` — WSFEv1 / WSFEX SOAP calls via arca-common's `afipSoapCall` (`qualified: true`, SOAPAction = namespace + method). Request fields are serialized in WSDL sequence order.
+- `WsfeClient` / `WsfexClient` — WSFEv1 / WSFEX SOAP calls (`qualified: true`, SOAPAction = namespace + method). Requests and responses are described with the schema DSL of `@ramiidv/arca-common/schema` (`src/schemas.ts`): requests are validated and serialized in WSDL order, responses are decoded by type (xs:string keeps leading zeros, xs:long is a number).
 - `facturacion.ts` — pure functions for IVA/total calculation and invoice building
 - `qr.ts` — QR URL (`generarUrlQR`, `urlQRDesdeFactura`)
 - `errors.ts` — `ArcaWSFEError` (extends `ArcaServiceError`), `ArcaResultadoIncierto`, `ArcaResultadoInciertoExpo`; base errors from arca-common
@@ -73,11 +73,11 @@ new ArcaFacturacion({                   // ArcaConfig extends ArcaBaseConfig (@r
   key: string,                // Private key PEM content
   production?: boolean,       // Default: false (uses homologación/testing endpoints)
   tokenTTLMinutes?: number,   // Default: 720 (12 hours)
-  timeout?: number,           // Default: 30000 (30 seconds). `requestTimeoutMs` = deprecated alias
+  timeout?: number,           // Default: 30000 (30 seconds)
   loginErrorCooldownMs?: number, // Default: 60000. Wait after a failed WSAA login
   fetch?: typeof fetch,       // Custom fetch for every request (proxy, mTLS, tests)
   legacyTls?: "auto" | "never" | "always", // Default "auto" (see Production TLS)
-  endpoints?: { wsaa?, wsfe?, wsfex?, padronA5?, padronA13? }, // Custom service URLs
+  endpoints?: { wsaa?, wsfe?, wsfex? }, // Custom service URLs
   retries?: number,           // Default: 1. Queries only (timeout, network, 5xx). Emissions are NEVER retried.
   retryDelayMs?: number,      // Default: 1000. Exponential backoff: delay * 2^(attempt-1).
   onEvent?: (event: ArcaEvent) => void, // Callback for all SDK events
@@ -244,17 +244,15 @@ Export (class E) NC/ND are issued through WSFEX: `notaCredito`/`notaDebito` with
 ## Static utilities
 
 ```typescript
-// Preview totals without submitting to ARCA (function export; ArcaFacturacion.calcularTotales is @deprecated)
+// Preview totals without submitting to ARCA
 const { importes, iva } = calcularTotales(
   [{ neto: 1000, iva: IvaTipo.IVA_21 }],
   { tributos: [...], tipoC: false }
 );
 
-// Dates: use formatDate from @ramiidv/arca-common (ArcaFacturacion.formatDate / toDateString are @deprecated aliases)
+// Dates: use formatDate from @ramiidv/arca-common
 formatDate(new Date()); // "20260328" (Argentina timezone)
 formatFechaHora(new Date()); // "20260328143210" (CbteFchHsGen format)
-
-// ArcaFacturacion.extractCAE(rawResult) is @deprecated
 ```
 
 ## Raw API (advanced)
@@ -287,7 +285,7 @@ const rawResult2 = await arca.crearFacturaAuto(1, CbteTipo.FACTURA_B, { ...invoi
 ## Query methods
 
 ```typescript
-await arca.status();  // { wsfe, wsfex }: { ok: true, status: { appserver, dbserver, authserver } } | { ok: false, error }. serverStatus()/serverStatusExpo() are @deprecated
+await arca.status();  // { wsfe, wsfex }: { ok: true, status: { appserver, dbserver, authserver } } | { ok: false, error }
 await arca.ultimoComprobante(ptoVta, cbteTipo);     // number
 await arca.consultarComprobante(cbteTipo, ptoVta, cbteNro);
 await arca.getPuntosVenta();
@@ -576,7 +574,7 @@ Raw API also available via `crearFacturaExportacion(invoice)` for full control.
 Query methods:
 ```typescript
 await arca.consultarComprobanteExpo(CbteTipo.FACTURA_E, 1, cbteNro);
-await arca.serverStatusExpo();
+await arca.status();         // WSFE and WSFEX
 await arca.getPaisesExpo();    // Country codes
 await arca.getIncotermsExpo(); // Incoterms
 await arca.getUMedExpo();      // Units of measure
@@ -627,24 +625,7 @@ const existing = await arca.consultarCAEA("202611", 1);
 
 ## Padrón (taxpayer registry)
 
-**Deprecated: use `@ramiidv/arca-padron`** (constancia de inscripción, A4, A10, A13, A100, `condicionIvaDesdePadron`). Kept for compatibility.
-
-```typescript
-// Basic lookup (A13) — works with standard cert
-const persona = await arca.consultarCuit(30712345671);
-persona.cuit;         // 30712345671
-persona.nombre;       // "EMPRESA SA"
-persona.tipoPersona;  // "JURIDICA"
-persona.estadoClave;  // "ACTIVO"
-persona.raw;          // full parsed AFIP response
-
-// Constancia de inscripción (former A5) — service ws_sr_constancia_inscripcion, method getPersona_v2
-const detalle = await arca.consultarCuitDetalle(20123456786);
-detalle.domicilioFiscal; // { direccion, localidad, codPostal }
-detalle.impuestos;       // [{ id: 30, descripcion: "IVA", estado: "AC" }]
-```
-
-Returns `Contribuyente`: `cuit`, `nombre`, `tipoPersona`, `estadoClave`, `domicilioFiscal?`, `impuestos?`, `raw`.
+Use `@ramiidv/arca-padron` (constancia de inscripción, A4, A10, A13, A100, `condicionIvaDesdePadron`). Removed from this package in 6.0.
 
 ## Key domain concepts
 
@@ -659,4 +640,3 @@ Returns `Contribuyente`: `cuit`, `nombre`, `tipoPersona`, `estadoClave`, `domici
 - **Tipo C**: Invoices issued by monotributistas (simplified tax regime). No IVA discrimination.
 - **WSFEX**: ARCA's web service for export invoices. Separate from WSFEv1, different schema.
 - **CAEA**: Código de Autorización Electrónico Anticipado. Since RG 5782, contingency-only; reports require CbteFchHsGen.
-- **Padrón A13 / Constancia de inscripción**: ARCA's taxpayer registry web services. A13 = basic info (name, status, address). Constancia de inscripción (`ws_sr_constancia_inscripcion`, former A5, which is deprecated) = address and registered taxes. Each requires separate WSAA authorization.

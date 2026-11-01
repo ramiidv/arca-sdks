@@ -1,9 +1,8 @@
-import { ArcaSdkBase, ensureArray, formatDate, statusOf } from '@ramiidv/arca-common';
+import { ArcaSdkBase, formatDate, statusOf } from '@ramiidv/arca-common';
 import type { CallOptions, ServiceStatus } from '@ramiidv/arca-common';
 import { WsfeClient } from './wsfe.js';
 import type { WsClientOptions } from './wsfe.js';
 import { WsfexClient } from './wsfex.js';
-import { PadronClient } from './padron.js';
 import {
   armarComprobante,
   buildInvoiceDetail,
@@ -23,9 +22,7 @@ import type {
   InvoiceRequest,
   InvoiceDetail,
   FECAESolicitarResult,
-  FECAEDetResponse,
   FECompConsultarResult,
-  ServerStatus,
   ParamItem,
   MonedaItem,
   PtoVentaItem,
@@ -37,7 +34,6 @@ import type {
   NotaCreditoOpts,
   NotaDebitoOpts,
   FacturaResult,
-  LineItem,
   QRInput,
   WsfexInvoice,
   WsfexAuthResult,
@@ -52,7 +48,6 @@ import type {
   CaeaRegInfResult,
   CaeaSinMovResult,
   CaeaSinMovItem,
-  Contribuyente,
   ComprobanteArmado,
   ComprobanteRef,
   IntentoComprobante,
@@ -76,12 +71,11 @@ import {
 /** TTL por defecto del cache de parámetros (24 horas). */
 const DEFAULT_PARAM_CACHE_TTL_MS = 24 * 60 * 60_000;
 
-/** Servicios de WSAA que usa `Arca` (nombre corto → id de WSAA). */
+/** Servicios de WSAA que usa `ArcaFacturacion` (nombre corto → id de WSAA). */
 type ArcaService = keyof typeof WSAA_SERVICES;
 
 /**
- * Cliente principal: WSFEv1 (facturación, CAEA), WSFEX (exportación) y
- * Padrón (deprecado).
+ * Cliente principal: WSFEv1 (facturación, CAEA) y WSFEX (exportación).
  *
  * Hereda de `ArcaSdkBase` de arca-common: `wsaa`, `cuit` (string de 11
  * dígitos), `production`, `on`/`off` y `clearAuthCache`.
@@ -89,7 +83,6 @@ type ArcaService = keyof typeof WSAA_SERVICES;
 export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
   private readonly wsfe: WsfeClient;
   private readonly wsfex: WsfexClient;
-  private readonly padron: PadronClient;
   /** CUIT como número, como se envía en `Auth.Cuit` y en el QR. */
   private readonly cuitNum: number;
   private readonly paramCache = new Map<string, { data: unknown; expires: number }>();
@@ -100,7 +93,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    */
   constructor(config: ArcaConfig) {
     // Los defaults (timeout 30s, 1 reintento, 1s de backoff, TTL 12h) los aplica arca-common.
-    super({ ...config, timeout: config.timeout ?? config.requestTimeoutMs }, WSAA_SERVICES);
+    super(config, WSAA_SERVICES);
     this.cuitNum = Number(this.cuit);
     this.paramCacheTTLMs = config.paramCacheTTLMs ?? DEFAULT_PARAM_CACHE_TTL_MS;
 
@@ -115,10 +108,6 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     this.wsfex = new WsfexClient(this.production, {
       ...clientOpts,
       endpoint: this.endpoint(ENDPOINTS.wsfex, endpoints.wsfex),
-    });
-    this.padron = new PadronClient(this.production, {
-      ...clientOpts,
-      endpoints: { padronA5: endpoints.padronA5, padronA13: endpoints.padronA13 },
     });
   }
 
@@ -374,15 +363,6 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     const callOpts = this.opts(call);
     const auth = await this.getAuth('wsfex', callOpts);
     return this.wsfex.getCmp(auth, cbteTipo, ptoVta, cbteNro, callOpts);
-  }
-
-  /**
-   * Estado de los servidores WSFEX.
-   * @deprecated Usá `status()`, que devuelve el de WSFE y WSFEX con el
-   *   `ServerStatus` de arca-common (`appserver`/`dbserver`/`authserver`).
-   */
-  async serverStatusExpo(call?: CallOptions): Promise<ServerStatus> {
-    return this.wsfex.serverStatus(this.opts(call));
   }
 
   private async expo<T>(fn: (auth: WsfeAuth, opts: CallOptions) => Promise<T>, call?: CallOptions): Promise<T> {
@@ -697,36 +677,6 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
   }
 
   // ============================================================
-  // Padrón - Consulta de contribuyentes
-  // ============================================================
-
-  /**
-   * Consulta datos de un contribuyente por CUIT (padrón A13).
-   * Requiere cert con acceso a `ws_sr_padron_a13`.
-   *
-   * @deprecated Usar `@ramiidv/arca-padron` (`ArcaPadron.getPersonaA13`).
-   */
-  async consultarCuit(cuit: number, call?: CallOptions): Promise<Contribuyente> {
-    const callOpts = this.opts(call);
-    const auth = await this.getAuth('padronA13', callOpts);
-    return this.padron.getPersonaA13(auth, cuit, callOpts);
-  }
-
-  /**
-   * Consulta la constancia de inscripción de un contribuyente (ex padrón A5):
-   * domicilio fiscal e impuestos. Requiere cert con acceso a
-   * `ws_sr_constancia_inscripcion`.
-   *
-   * @deprecated Usar `@ramiidv/arca-padron` (`ArcaPadron.getConstanciaInscripcion`
-   * y `condicionIvaDesdePadron`).
-   */
-  async consultarCuitDetalle(cuit: number, call?: CallOptions): Promise<Contribuyente> {
-    const callOpts = this.opts(call);
-    const auth = await this.getAuth('padronA5', callOpts);
-    return this.padron.getPersonaA5(auth, cuit, callOpts);
-  }
-
-  // ============================================================
   // Estado y parámetros WSFE
   // ============================================================
 
@@ -757,20 +707,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    */
   status(call?: CallOptions): Promise<{ wsfe: ServiceStatus; wsfex: ServiceStatus }> {
     const opts = this.opts(call);
-    const lower = (s: ServerStatus) => ({ appserver: s.AppServer, dbserver: s.DbServer, authserver: s.AuthServer });
-    return statusOf({
-      wsfe: async () => lower(await this.wsfe.serverStatus(opts)),
-      wsfex: async () => lower(await this.wsfex.serverStatus(opts)),
-    });
-  }
-
-  /**
-   * Estado de los servidores WSFE. No requiere autenticación.
-   * @deprecated Usá `status()`, que devuelve el de WSFE y WSFEX con el
-   *   `ServerStatus` de arca-common (`appserver`/`dbserver`/`authserver`).
-   */
-  async serverStatus(call?: CallOptions): Promise<ServerStatus> {
-    return this.wsfe.serverStatus(this.opts(call));
+    return statusOf({ wsfe: () => this.wsfe.dummy(opts), wsfex: () => this.wsfex.dummy(opts) });
   }
 
   /** Tipos de comprobante disponibles. Cacheado. */
@@ -902,57 +839,8 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
   // Utilidades estáticas
   // ============================================================
 
-  /**
-   * Extrae CAE del resultado raw de FECAESolicitar.
-   * @deprecated Usar la API simplificada (`facturar` devuelve `cae`) o leer `FeDetResp` directamente.
-   */
-  static extractCAE(result: FECAESolicitarResult): {
-    approved: boolean;
-    details: FECAEDetResponse[];
-    cae?: string;
-    caeFchVto?: string;
-  } {
-    const detArr = ensureArray(result.FeDetResp.FECAEDetResponse);
-    const approved = result.FeCabResp.Resultado === 'A';
-    const firstApproved = detArr.find((d) => d.Resultado === 'A');
-    return {
-      approved,
-      details: detArr,
-      cae: firstApproved?.CAE === undefined ? undefined : String(firstApproved.CAE),
-      caeFchVto: firstApproved?.CAEFchVto,
-    };
-  }
-
-  /**
-   * Formatea Date a YYYYMMDD (timezone Argentina).
-   * @deprecated Usar `formatDate` de `@ramiidv/arca-common`.
-   */
-  static formatDate(date: Date | string): string {
-    return formatDate(date);
-  }
-
-  /**
-   * Calcula importes e IVA desde line items. Para previsualizar sin enviar.
-   * @deprecated Usar la función `calcularTotales` exportada por el paquete.
-   */
-  static calcularTotales(
-    items: LineItem[],
-    opts?: { tributos?: { Importe: number }[]; tipoC?: boolean; descuentoGlobal?: number },
-  ) {
-    return calcularTotales(items, opts);
-  }
-
   /** Invalida el cache de parámetros (getTipos*, getMonedas, etc.). */
   clearParamCache(): void {
     this.paramCache.clear();
   }
 }
-
-/**
- * Nombre anterior de `ArcaFacturacion`.
- * @deprecated Usá `ArcaFacturacion` (mismo cliente; el nombre sigue la
- *   convención del resto de los SDKs: `ArcaPadron`, `ArcaCdc`...).
- */
-export const Arca = ArcaFacturacion;
-/** @deprecated Usá `ArcaFacturacion`. */
-export type Arca = ArcaFacturacion;

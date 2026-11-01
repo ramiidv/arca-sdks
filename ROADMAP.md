@@ -48,21 +48,21 @@ Queda para facturacion 6.0: las respuestas crudas pueden pasar a usar arrays
 siempre (`wrapped()`), sin el `restoreSingles` de `decode.ts`. También
 `validation.ts` podría apoyarse en los schemas en vez de validar a mano.
 
-### 2. Próximas majors: quitar lo deprecado
+### 2. ~~Próximas majors: quitar lo deprecado~~ (hecho, pendiente de release)
 
-| Paquete | Qué se quita | Reemplazo |
-|---|---|---|
-| facturacion 6.0 | `Arca` | `ArcaFacturacion` |
-| facturacion 6.0 | `serverStatus()`, `serverStatusExpo()` y su `ServerStatus` en mayúsculas | `status()` |
-| facturacion 6.0 | `src/padron.ts`, `consultarCuit`, `consultarCuitDetalle`, `endpoints.padronA5/A13` | `@ramiidv/arca-padron` |
-| facturacion 6.0 | `requestTimeoutMs` | `timeout` |
-| facturacion 6.0 | Forma `X \| X[]` en las respuestas crudas (`FeDetResp`, `Observaciones`, `Iva`...) | Arrays siempre |
-| agro 0.5 | `serverStatus()` | `status()` |
-| fecred 0.5 | `ArcaFecred.fecred`, `FecredClientConfig.soapOptions`/`onEvent` | `client`, `transport` |
-| mtxca 0.5 | `endpoint`, `wsaaEndpoint` | `endpoints: { mtxca, wsaa }` |
-| padron 0.6 | `status()` con `PromiseSettledResult` | `status()` con `ServiceStatus` (`statusOf` de common), igual que agro y facturacion |
+Rama `feat/majors-sin-deprecados` (sobre `feat/wsfe-wsfex-dsl`), con changesets:
+facturacion 6.0, agro 0.5, fecred 0.5, mtxca 0.5 y padron 0.6. Además de lo
+planeado, facturacion 6.0 quita `extractCAE`, `formatDate`/`calcularTotales`
+estáticos y `toDateString`; las respuestas crudas usan arrays siempre; y
+padron 0.6 quita `TipoDocumento`, `IVA_NO_INSCRIPTO`, `checkServiceErrors` y
+`ArcaPadronEvent`.
 
-En facturacion 6.0, revisar también la convención de nombres. cdc usa los
+Para subir arca-server a estas versiones: `src/routes/afip.ts` (`padron.status()`
+devuelve `ServiceStatus`, no `PromiseSettledResult`) y `tests/arca-sdk.test.ts`
+(`Arca` → `ArcaFacturacion`). El resto compila y pasa sus tests contra las
+versiones nuevas.
+
+Queda por decidir: la convención de nombres. cdc usa los
 nombres de AFIP (`CbteModo`, PascalCase) y padron tiene métodos en inglés
 (`getConstanciaInscripcion`). Decidir si se unifican o se documenta la regla
 (por ejemplo, PascalCase en los servicios ASMX y camelCase en los Java).

@@ -166,7 +166,7 @@ try {
 
 ## Cliente de bajo nivel
 
-`fecred.fecred` es un `FecredClient`: los mismos métodos con las credenciales como primer parámetro y respuestas tipadas.
+`fecred.client` es un `FecredClient`: los mismos métodos con las credenciales como primer parámetro y respuestas tipadas.
 
 ```typescript
 const ticket = await fecred.wsaa.getAccessTicket('wsfecred');

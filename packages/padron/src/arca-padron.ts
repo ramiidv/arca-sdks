@@ -1,4 +1,4 @@
-import { ArcaSdkBase } from '@ramiidv/arca-common';
+import { ArcaSdkBase, statusOf } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
 import { ENDPOINTS } from './constants.js';
 import { PadronA4Client } from './padron-a4.js';
@@ -173,20 +173,19 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
    * @example
    * ```ts
    * const s = await padron.status();
-   * if (s.a4.status === 'fulfilled') console.log(s.a4.value.appserver);
-   * else console.error(s.a4.reason);
+   * if (s.a4.ok) console.log(s.a4.status.appserver);
+   * else console.error(s.a4.error);
    * ```
    */
-  async status(call?: CallOptions): Promise<PadronStatus> {
+  status(call?: CallOptions): Promise<PadronStatus> {
     const opts = this.callOptions(call);
-    const [a5, a4, a10, a13, a100] = await Promise.allSettled([
-      this.a5.dummy(opts),
-      this.a4.dummy(opts),
-      this.a10.dummy(opts),
-      this.a13.dummy(opts),
-      this.a100.dummy(opts),
-    ]);
-    return { a5, a4, a10, a13, a100 };
+    return statusOf({
+      a5: () => this.a5.dummy(opts),
+      a4: () => this.a4.dummy(opts),
+      a10: () => this.a10.dummy(opts),
+      a13: () => this.a13.dummy(opts),
+      a100: () => this.a100.dummy(opts),
+    });
   }
 
   // -------------------------------------------------------------------------

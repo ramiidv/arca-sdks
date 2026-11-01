@@ -1,12 +1,12 @@
-import { SoapServiceClient, ensureArray } from '@ramiidv/arca-common';
-import type { CallOptions, SoapOperationKind } from '@ramiidv/arca-common';
+import { SoapServiceClient, ensureArray, parseServerStatus } from '@ramiidv/arca-common';
+import type { CallOptions, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
 import { ENDPOINTS, WSFEX_ERRORES_INTERNOS, WSFEX_NAMESPACE } from './constants.js';
 import { encodeRequest } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import { decodeArca } from './decode.js';
 import { ArcaResultadoInciertoExpo, ArcaSoapError, ArcaWSFEError } from './errors.js';
 import * as S from './schemas.js';
-import { serverStatusDe, transportDe } from './wsfe.js';
+import { transportDe } from './wsfe.js';
 import type { WsClientOptions } from './wsfe.js';
 import type {
   WsfeAuth,
@@ -19,7 +19,6 @@ import type {
   WsfexCotizacion,
   WsfexPtoVenta,
   WsfexErr,
-  ServerStatus,
   MensajeArca,
 } from './types.js';
 
@@ -234,9 +233,9 @@ export class WsfexClient extends SoapServiceClient {
     return result;
   }
 
-  /** Estado de los servidores de WSFEX (`FEXDummy`). */
-  async serverStatus(opts?: CallOptions): Promise<ServerStatus> {
-    return serverStatusDe(await this.call('FEXDummy', {}, opts), 'FEXDummy');
+  /** Estado de los servidores de WSFEX (`FEXDummy`, sin autenticación). */
+  async dummy(opts?: CallOptions): Promise<ServerStatus> {
+    return parseServerStatus(await this.call('FEXDummy', {}, opts), 'FEXDummy');
   }
 
   /** Cotización de una moneda (`FEXGetPARAM_Ctz`). */

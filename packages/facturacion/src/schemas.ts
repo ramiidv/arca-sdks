@@ -9,8 +9,8 @@
  *
  * Las listas de las respuestas se describen como `obj({ Item: list(...) })` y
  * no con `wrapped()`: los tipos públicos (`FECAESolicitarResult`, etc.)
- * conservan el contenedor y la cardinalidad del XML (`X | X[]`). Ver
- * `decodeArca` en `decode.ts`.
+ * conservan el contenedor del XML (`{ Obs: [...] }`), con la lista siempre
+ * como array.
  *
  * @internal No se exporta desde `index.ts`.
  */
@@ -127,7 +127,7 @@ export const CONDICION_IVA_REQ: Schema = { ClaseCmp: opt(str()) };
 /** `Obs`/`Evt`/`Err` (`Code` es `minOccurs=1`). */
 const MENSAJE: Schema = { Code: must(int()), Msg: opt(str()) };
 
-/** Contenedor de lista en una respuesta: `{ Item: X | X[] }` (ver `decodeArca`). */
+/** Contenedor de lista en una respuesta: `{ Item: X[] }`. */
 const arrayOf = (item: string, schema: Schema): Field => opt(obj({ [item]: list(obj(schema), 0) }));
 
 const OBSERVACIONES = arrayOf('Obs', MENSAJE);

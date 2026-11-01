@@ -44,10 +44,9 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
 
   /** @throws ArcaValidationError si la CUIT es inválida. */
   constructor(config: ArcaMtxcaConfig) {
-    const wsaa = config.endpoints?.wsaa ?? config.wsaaEndpoint;
-    super({ ...config, endpoints: { ...config.endpoints, wsaa } }, { mtxca: MTXCA_SERVICE_ID });
+    super(config, { mtxca: MTXCA_SERVICE_ID });
     this.client = new MtxcaClient({
-      endpoint: this.endpoint(MTXCA_ENDPOINTS, config.endpoints?.mtxca ?? config.endpoint),
+      endpoint: this.endpoint(MTXCA_ENDPOINTS, config.endpoints?.mtxca),
       ...this.transport,
     });
   }

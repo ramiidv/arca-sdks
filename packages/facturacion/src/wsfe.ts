@@ -1,5 +1,12 @@
 import { SoapServiceClient, ensureArray, extractServiceErrors, parseServerStatus } from '@ramiidv/arca-common';
-import type { ArcaEvent, CallOptions, LegacyTlsMode, ServiceTransport, SoapOperationKind } from '@ramiidv/arca-common';
+import type {
+  ArcaEvent,
+  CallOptions,
+  LegacyTlsMode,
+  ServerStatus,
+  ServiceTransport,
+  SoapOperationKind,
+} from '@ramiidv/arca-common';
 import { ENDPOINTS, WSFE_ERRORES_INTERNOS, WSFE_NAMESPACE } from './constants.js';
 import { encodeRequest } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
@@ -15,7 +22,6 @@ import type {
   FECAESolicitarResult,
   FECompUltimoAutorizadoResult,
   FECompConsultarResult,
-  ServerStatus,
   ParamItem,
   CondicionIvaItem,
   MonedaItem,
@@ -70,17 +76,6 @@ export function transportDe(opts: WsClientOptions): ServiceTransport {
     fetch: opts.fetch,
     legacyTls: opts.legacyTls,
   };
-}
-
-/**
- * `ServerStatus` (`AppServer`/`DbServer`/`AuthServer`) de la respuesta de un
- * `dummy` de WSFEv1/WSFEX.
- *
- * @throws ArcaSoapError si falta alguno de los tres campos.
- */
-export function serverStatusDe(result: R, method: string): ServerStatus {
-  const s = parseServerStatus(result, method);
-  return { AppServer: s.appserver, DbServer: s.dbserver, AuthServer: s.authserver };
 }
 
 /** Cliente de bajo nivel de WSFEv1 (Factura electrónica, mercado interno). */
@@ -236,8 +231,9 @@ export class WsfeClient extends SoapServiceClient {
   // Parámetros
   // ============================================================
 
-  async serverStatus(opts?: CallOptions): Promise<ServerStatus> {
-    return serverStatusDe(await this.call('FEDummy', {}, opts), 'FEDummy');
+  /** Estado de los servidores de WSFEv1 (`FEDummy`, sin autenticación). */
+  async dummy(opts?: CallOptions): Promise<ServerStatus> {
+    return parseServerStatus(await this.call('FEDummy', {}, opts), 'FEDummy');
   }
 
   private async getParam<T>(

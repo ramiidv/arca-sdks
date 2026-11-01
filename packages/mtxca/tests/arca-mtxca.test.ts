@@ -52,25 +52,18 @@ describe('ArcaMtxca', () => {
     expect(m.calls[0].body).toContain('<cuitRepresentada>20123456786</cuitRepresentada>');
   });
 
-  it('endpoints.mtxca tiene prioridad sobre endpoint (deprecated) y endpoints.wsaa/wsaaEndpoint llegan a WSAA', async () => {
+  it('endpoints.mtxca y endpoints.wsaa reemplazan los oficiales', async () => {
     const m = mockFetch(ultimo(1));
-    await mtxca(m.fetch, {
-      endpoint: 'https://old.local/mtxca',
-      endpoints: { mtxca: 'https://proxy.local/mtxca' },
-    }).ultimoComprobante(4000, 1);
+    await mtxca(m.fetch, { endpoints: { mtxca: 'https://proxy.local/mtxca' } }).ultimoComprobante(4000, 1);
     expect(m.calls[0].url).toBe('https://proxy.local/mtxca');
-    const viejo = new ArcaMtxca({ cert: 'C', key: 'K', cuit: '20123456786', wsaaEndpoint: 'https://old.local/wsaa' });
-    const nuevo = new ArcaMtxca({
+    const a = new ArcaMtxca({
       cert: 'C',
       key: 'K',
       cuit: '20123456786',
-      wsaaEndpoint: 'https://old.local/wsaa',
       endpoints: { wsaa: 'https://proxy.local/wsaa' },
     });
     // `endpoint` es privado en WsaaClient: se lee en runtime.
-    const wsaaUrl = (a: ArcaMtxca) => (a.wsaa as unknown as { endpoint: string }).endpoint;
-    expect(wsaaUrl(viejo)).toBe('https://old.local/wsaa');
-    expect(wsaaUrl(nuevo)).toBe('https://proxy.local/wsaa');
+    expect((a.wsaa as unknown as { endpoint: string }).endpoint).toBe('https://proxy.local/wsaa');
   });
 
   it('config.signal cancela las llamadas', async () => {
@@ -81,12 +74,6 @@ describe('ArcaMtxca', () => {
       ArcaSoapError,
     );
     expect(m.fn).not.toHaveBeenCalled();
-  });
-
-  it('permite sobrescribir el endpoint', async () => {
-    const m = mockFetch(ultimo(1));
-    await mtxca(m.fetch, { endpoint: 'https://proxy.local/mtxca' }).ultimoComprobante(4000, 1);
-    expect(m.calls[0].url).toBe('https://proxy.local/mtxca');
   });
 
   it('ultimoComprobante: 1502 (sin comprobantes) es 0; otros errores lanzan', async () => {

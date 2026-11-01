@@ -52,9 +52,4 @@ export class ArcaAgro extends ArcaSdkBase<AgroService> {
   status(opts?: CallOptions): Promise<{ cpe: AgroServiceStatus; lpg: AgroServiceStatus }> {
     return statusOf({ cpe: () => this.cpe.dummy(opts), lpg: () => this.lpg.dummy(opts) });
   }
-
-  /** @deprecated Usá `status()` (mismo resultado). */
-  serverStatus(opts?: CallOptions): Promise<{ cpe: AgroServiceStatus; lpg: AgroServiceStatus }> {
-    return this.status(opts);
-  }
 }

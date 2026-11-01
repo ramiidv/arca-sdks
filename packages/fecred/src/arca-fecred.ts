@@ -60,11 +60,6 @@ export class ArcaFecred extends ArcaSdkBase<'wsfecred'> {
   /** Cliente de bajo nivel de FECredService. */
   public readonly client: FecredClient;
 
-  /** @deprecated Usá `client` (mismo objeto; mismo nombre que en el resto de los SDKs). */
-  get fecred(): FecredClient {
-    return this.client;
-  }
-
   constructor(config: ArcaFecredConfig) {
     // CUIT con dígito verificador (error con `field: 'cuit'`), enviado como 11 dígitos.
     super({ ...config, cuit: validateCuit(config.cuit) }, { wsfecred: ENDPOINTS.wsfecred.serviceId });

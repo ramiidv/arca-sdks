@@ -53,17 +53,6 @@ function rateBasisPoints(ivaId: number): number {
   return Math.round(IVA_RATES[ivaId as keyof typeof IVA_RATES] * 100);
 }
 
-/**
- * Convierte un Date o string YYYYMMDD / YYYY-MM-DD a string YYYYMMDD (un Date
- * se toma en la zona horaria de Argentina).
- *
- * @deprecated Usar `formatDate` de `@ramiidv/arca-common` (es la misma
- * función): valida que la fecha exista y lanza `ArcaValidationError` si no.
- */
-export function toDateString(d: Date | string): string {
-  return formatDate(d);
-}
-
 let fechaHoraFormatter: Intl.DateTimeFormat | undefined;
 
 /**

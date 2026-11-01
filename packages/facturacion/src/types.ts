@@ -26,8 +26,6 @@ export interface ArcaConfig extends ArcaSdkConfig {
    * verificador y se envía como número.
    */
   cuit: number | string;
-  /** @deprecated Usar `timeout` (de `ArcaBaseConfig`). Si vienen ambos, gana `timeout`. */
-  requestTimeoutMs?: number;
   /**
    * TTL del cache de parámetros (getTipos*, getMonedas, etc.) en milisegundos.
    * Default: 86400000 (24 horas). 0 para desactivar. Los puntos de venta y las
@@ -39,8 +37,6 @@ export interface ArcaConfig extends ArcaSdkConfig {
     wsaa?: string;
     wsfe?: string;
     wsfex?: string;
-    padronA5?: string;
-    padronA13?: string;
   };
 }
 
@@ -221,7 +217,7 @@ export interface FECAEDetResponse {
   CAEFchVto?: string;
   /** CAEA informado (FECAEARegInformativo) */
   CAEA?: string;
-  Observaciones?: { Obs: WsError | WsError[] };
+  Observaciones?: { Obs: WsError[] };
 }
 
 export interface WsError {
@@ -237,17 +233,17 @@ export interface MensajeArca {
 
 export interface FECAESolicitarResult {
   FeCabResp: FeCabResp;
-  FeDetResp: { FECAEDetResponse: FECAEDetResponse | FECAEDetResponse[] };
-  Errors?: { Err: WsError | WsError[] };
-  Events?: { Evt: WsError | WsError[] };
+  FeDetResp: { FECAEDetResponse: FECAEDetResponse[] };
+  Errors?: { Err: WsError[] };
+  Events?: { Evt: WsError[] };
 }
 
 export interface FECompUltimoAutorizadoResult {
   PtoVta: number;
   CbteTipo: number;
   CbteNro: number;
-  Errors?: { Err: WsError | WsError[] };
-  Events?: { Evt: WsError | WsError[] };
+  Errors?: { Err: WsError[] };
+  Events?: { Evt: WsError[] };
 }
 
 export interface FECompConsultarResult {
@@ -277,25 +273,14 @@ export interface FECompConsultarResult {
     PtoVta: number;
     CbteTipo: number;
     CondicionIVAReceptorId?: number;
-    Iva?: { AlicIva: AlicuotaIva | AlicuotaIva[] };
-    Tributos?: { Tributo: Tributo | Tributo[] };
-    CbtesAsoc?: { CbteAsoc: ComprobanteAsociado | ComprobanteAsociado[] };
-    Opcionales?: { Opcional: Opcional | Opcional[] };
-    Observaciones?: { Obs: WsError | WsError[] };
+    Iva?: { AlicIva: AlicuotaIva[] };
+    Tributos?: { Tributo: Tributo[] };
+    CbtesAsoc?: { CbteAsoc: ComprobanteAsociado[] };
+    Opcionales?: { Opcional: Opcional[] };
+    Observaciones?: { Obs: WsError[] };
   };
-  Errors?: { Err: WsError | WsError[] };
-  Events?: { Evt: WsError | WsError[] };
-}
-
-/**
- * Estado de WSFE/WSFEX con los nombres de ARCA.
- * @deprecated Lo devuelven `serverStatus()`/`serverStatusExpo()`; `status()`
- *   usa `ServiceStatus`/`ServerStatus` de arca-common.
- */
-export interface ServerStatus {
-  AppServer: string;
-  DbServer: string;
-  AuthServer: string;
+  Errors?: { Err: WsError[] };
+  Events?: { Evt: WsError[] };
 }
 
 export interface ParamItem {
@@ -545,7 +530,7 @@ export interface WsfexGetCmpResult {
     Cbte_nro: number;
     Tipo_expo: number;
     Permiso_existente?: string;
-    Permisos?: { Permiso: WsfexPermiso | WsfexPermiso[] };
+    Permisos?: { Permiso: WsfexPermiso[] };
     Dst_cmp: number;
     Cliente?: string;
     Cuit_pais_cliente: number | string;
@@ -557,21 +542,21 @@ export interface WsfexGetCmpResult {
     Obs_comerciales?: string;
     Imp_total: number;
     Obs?: string;
-    Cmps_asoc?: { Cmp_asoc: WsfexCmpAsoc | WsfexCmpAsoc[] };
+    Cmps_asoc?: { Cmp_asoc: WsfexCmpAsoc[] };
     Forma_pago?: string;
     Incoterms?: string;
     Incoterms_Ds?: string;
     Idioma_cbte: number;
-    Items?: { Item: WsfexItem | WsfexItem[] };
+    Items?: { Item: WsfexItem[] };
     /** Fecha de autorización del CAE */
     Fecha_cbte_cae?: string;
     Fch_venc_Cae?: string;
     Cae?: string;
     Resultado?: 'A' | 'R';
     Motivos_Obs?: string;
-    Opcionales?: { Opcional: Opcional | Opcional[] };
+    Opcionales?: { Opcional: Opcional[] };
     Fecha_pago?: string;
-    Actividades?: { Actividad: { Id: number } | { Id: number }[] };
+    Actividades?: { Actividad: { Id: number }[] };
   };
   FEXErr?: WsfexErr;
   FEXEvents?: WsfexEvents;
@@ -611,16 +596,16 @@ export interface CaeaSolicitarResult {
   FchVigHasta: string;
   FchTopeInf: string;
   FchProceso: string;
-  Observaciones?: { Obs: WsError | WsError[] };
+  Observaciones?: { Obs: WsError[] };
   /** Eventos de ARCA de la respuesta (normalizados). */
   eventos?: MensajeArca[];
 }
 
 export interface CaeaRegInfResult {
   FeCabResp: FeCabResp;
-  FeDetResp: { FECAEADetResponse: FECAEDetResponse | FECAEDetResponse[] };
-  Errors?: { Err: WsError | WsError[] };
-  Events?: { Evt: WsError | WsError[] };
+  FeDetResp: { FECAEADetResponse: FECAEDetResponse[] };
+  Errors?: { Err: WsError[] };
+  Events?: { Evt: WsError[] };
 }
 
 export interface CaeaRegInfRequest {
@@ -641,8 +626,8 @@ export interface CaeaSinMovResult {
   FchProceso?: string;
   PtoVta?: number;
   Resultado: 'A' | 'R';
-  Errors?: { Err: WsError | WsError[] };
-  Events?: { Evt: WsError | WsError[] };
+  Errors?: { Err: WsError[] };
+  Events?: { Evt: WsError[] };
 }
 
 /** Un informe "sin movimiento" (`FECAEASinMovimientoConsultar`). */
@@ -650,36 +635,6 @@ export interface CaeaSinMovItem {
   CAEA: string;
   FchProceso: string;
   PtoVta: number;
-}
-
-// ============================================================
-// Padrón - Consulta de contribuyentes
-// ============================================================
-
-export interface Contribuyente {
-  /** CUIT del contribuyente */
-  cuit: number;
-  /** Nombre completo o razón social */
-  nombre: string;
-  /** Tipo de persona: "FISICA" o "JURIDICA" */
-  tipoPersona: string;
-  /** Estado de la clave: "ACTIVO", etc. */
-  estadoClave: string;
-  /** Domicilio fiscal (disponible con A5) */
-  domicilioFiscal?: {
-    direccion?: string;
-    localidad?: string;
-    codPostal?: string;
-    tipoDomicilio?: string;
-  };
-  /** Impuestos/categorías del contribuyente */
-  impuestos?: {
-    id: number;
-    descripcion: string;
-    estado: string;
-  }[];
-  /** Respuesta cruda del WS */
-  raw: Record<string, any>;
 }
 
 // ============================================================

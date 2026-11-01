@@ -62,7 +62,7 @@ describe('WSFEv1: respuestas decodificadas con el schema', () => {
     expect(r.CbteFch).toBe('20261030');
   });
 
-  it('las listas conservan la cardinalidad del XML (X | X[])', async () => {
+  it('las listas son siempre arrays, dentro del contenedor del XML', async () => {
     const obs = (code: number) => `<Obs><Code>${code}</Code><Msg>obs ${code}</Msg></Obs>`;
     mockArcaFetch({
       FECompConsultar: [
@@ -81,13 +81,13 @@ describe('WSFEv1: respuestas decodificadas con el schema', () => {
     const client = new WsfeClient(false);
 
     const conIva = await client.consultarComprobante(AUTH, 1, 1, 12345678);
-    expect(conIva.ResultGet.Iva).toEqual({ AlicIva: { Id: 5, BaseImp: 100.41, Importe: 21.09 } });
+    expect(conIva.ResultGet.Iva).toEqual({ AlicIva: [{ Id: 5, BaseImp: 100.41, Importe: 21.09 }] });
     const conOpcional = await client.consultarComprobante(AUTH, 1, 1, 12345678);
-    expect(conOpcional.ResultGet.Opcionales).toEqual({ Opcional: { Id: '2101', Valor: '0000003100012345678901' } });
+    expect(conOpcional.ResultGet.Opcionales).toEqual({ Opcional: [{ Id: '2101', Valor: '0000003100012345678901' }] });
 
     const rechazo = await client.solicitarCAE(AUTH, { PtoVta: 1, CbteTipo: 1, invoices: [DETALLE] });
-    const det = rechazo.FeDetResp.FECAEDetResponse;
-    expect(Array.isArray(det)).toBe(false);
+    const [det] = rechazo.FeDetResp.FECAEDetResponse;
+    expect(rechazo.FeDetResp.FECAEDetResponse).toHaveLength(1);
     expect(det).toMatchObject({
       DocNro: 30712345671,
       Observaciones: {
@@ -260,7 +260,7 @@ describe('WSFEX sobre el DSL', () => {
     expect(cmp.Items).toEqual({ Item: [expect.not.objectContaining({ Pro_codigo: expect.anything() })] });
   });
 
-  it('FEXGetCMP: CAE con cero inicial, CUIT país como string y listas con su cardinalidad', async () => {
+  it('FEXGetCMP: CAE con cero inicial, CUIT país como string y listas como arrays', async () => {
     mockArcaFetch({
       FEXGetCMP: wsfexResponse(
         'FEXGetCMP',
@@ -279,7 +279,7 @@ describe('WSFEX sobre el DSL', () => {
       Cuit_pais_cliente: '55000002206',
       Moneda_ctz: 1015.5,
       Imp_total: 100,
-      Items: { Item: { Pro_codigo: '007', Pro_qty: 1, Pro_umed: 7 } },
+      Items: { Item: [{ Pro_codigo: '007', Pro_qty: 1, Pro_umed: 7 }] },
     });
   });
 

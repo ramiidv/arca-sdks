@@ -1,4 +1,4 @@
-export { Arca, ArcaFacturacion } from './arca.js';
+export { ArcaFacturacion } from './arca.js';
 
 // Funciones puras (sin red)
 export {
@@ -9,7 +9,6 @@ export {
   facturaResultDesdeConsulta,
   requiereRecuperacion,
   formatFechaHora,
-  toDateString,
 } from './facturacion.js';
 export { generarUrlQR, urlQRDesdeFactura } from './qr.js';
 export type { DatosQR } from './qr.js';
@@ -55,7 +54,6 @@ export type {
   FECAESolicitarResult,
   FECompUltimoAutorizadoResult,
   FECompConsultarResult,
-  ServerStatus,
   ParamItem,
   CondicionIvaItem,
   MonedaItem,
@@ -105,8 +103,6 @@ export type {
   CaeaRegInfResult,
   CaeaSinMovResult,
   CaeaSinMovItem,
-  // Padrón
-  Contribuyente,
 } from './types.js';
 
 // Constants / Enums
@@ -137,5 +133,3 @@ export { WsaaClient } from './wsaa.js';
 export { WsfeClient } from './wsfe.js';
 export type { WsClientOptions } from './wsfe.js';
 export { WsfexClient } from './wsfex.js';
-/** @deprecated Usar `@ramiidv/arca-padron`. */
-export { PadronClient } from './padron.js';

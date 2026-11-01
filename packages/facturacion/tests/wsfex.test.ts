@@ -3,7 +3,7 @@ import { ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
 import { ArcaResultadoInciertoExpo, ArcaWSFEError } from '../src/errors.js';
 import { CbteTipo, TipoExpo } from '../src/constants.js';
 import type { FacturarExpoOpts } from '../src/types.js';
-import { arcaDePrueba, colgado, mockArcaFetch, networkError, orden, wsfexResponse } from './helpers.js';
+import { arcaDePrueba, colgado, mockArcaFetch, networkError, orden, wsfeResponse, wsfexResponse } from './helpers.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -423,26 +423,16 @@ describe('WSFEX: consultas', () => {
   });
 });
 
-describe('serverStatusExpo', () => {
-  it('FEXDummy → AppServer/DbServer/AuthServer', async () => {
-    const arca = await arcaDePrueba();
-    mockArcaFetch({
-      FEXDummy: wsfexResponse(
-        'FEXDummy',
-        '<AppServer>OK</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer>',
-      ),
-    });
-    expect(await arca.serverStatusExpo()).toEqual({ AppServer: 'OK', DbServer: 'OK', AuthServer: 'OK' });
-  });
-
-  it('usa endpoints.wsfex', async () => {
+describe('endpoints.wsfex', () => {
+  it('lo usa status()', async () => {
     const urls: string[] = [];
+    const ok = '<AppServer>OK</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer>';
     const fetchPropio = vi.fn(async (url: string) => {
       urls.push(url);
-      return wsfexResponse('FEXDummy', '<AppServer>OK</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer>');
+      return url.includes('wsfex') ? wsfexResponse('FEXDummy', ok) : wsfeResponse('FEDummy', ok);
     }) as unknown as typeof fetch;
     const arca = await arcaDePrueba({ fetch: fetchPropio, endpoints: { wsfex: 'https://proxy.local/wsfex' } });
-    await arca.serverStatusExpo();
-    expect(urls).toEqual(['https://proxy.local/wsfex']);
+    await arca.status();
+    expect(urls).toContain('https://proxy.local/wsfex');
   });
 });

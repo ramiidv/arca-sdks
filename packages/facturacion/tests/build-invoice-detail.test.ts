@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildInvoiceDetail, toDateString } from '../src/facturacion.js';
+import { buildInvoiceDetail } from '../src/facturacion.js';
 import { IvaTipo, DocTipo, Concepto, Moneda, CbteTipo, CondicionIva } from '../src/constants.js';
 
 describe('buildInvoiceDetail', () => {
@@ -108,17 +108,5 @@ describe('buildInvoiceDetail', () => {
     expect(detail.MonId).toBe('DOL');
     expect(detail.MonCotiz).toBe(1200);
     expect(detail.CanMisMonExt).toBe('S');
-  });
-});
-
-describe('toDateString', () => {
-  it('pasa strings YYYYMMDD sin cambio', () => {
-    expect(toDateString('20260328')).toBe('20260328');
-  });
-
-  it('formatea Date a YYYYMMDD en timezone Argentina', () => {
-    const result = toDateString(new Date('2026-03-28T12:00:00Z'));
-    expect(result).toMatch(/^\d{8}$/);
-    expect(result.startsWith('2026')).toBe(true);
   });
 });

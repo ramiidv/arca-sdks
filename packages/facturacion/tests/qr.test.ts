@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ArcaValidationError } from '@ramiidv/arca-common';
-import { Arca } from '../src/arca.js';
+import { ArcaFacturacion } from '../src/arca.js';
 import { generarUrlQR, urlQRDesdeFactura } from '../src/qr.js';
 import type { FacturaResult } from '../src/types.js';
 
@@ -20,9 +20,9 @@ const base = {
   codAut: 74512345678901,
 };
 
-describe('generarUrlQR / Arca.generateQRUrl', () => {
+describe('generarUrlQR / ArcaFacturacion.generateQRUrl', () => {
   it('URL de la especificación vigente (arca.gob.ar) con el JSON versión 1', () => {
-    const url = Arca.generateQRUrl(base);
+    const url = ArcaFacturacion.generateQRUrl(base);
     expect(url).toMatch(/^https:\/\/www\.arca\.gob\.ar\/fe\/qr\/\?p=.+$/);
     expect(decode(url)).toEqual({
       ver: 1,

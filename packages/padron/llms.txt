@@ -73,7 +73,7 @@ Datos basicos del contribuyente via ws_sr_padron_a10. Incluye: datos generales, 
 Tablas de parametros via ws_sr_padron_a100 (getParameterCollectionByName). id, descripcion and attribute values are returned exactly as sent by ARCA (xs:string: "10.50" stays "10.50"). Throws ArcaPadronError if parameterCollection is missing; an empty collection returns []. CollectionName enum (manual A100 v2.1): PROVINCIA (SUPA.E_PROVINCIA), TIPO_DOCUMENTO (SUPA.TIPO_DOCUMENTO), TIPO_DOMICILIO (SUPA.TIPO_DOMICILIO), TIPO_CLAVE (SUPA.TIPO_CLAVE_IDENTIFICACION), TIPO_EMPRESA_JURIDICA, TIPO_EMPRESA_JURIDICA_SUBGRUPO, TIPO_RELACION, TIPO_SUBTIPO_RELACION, TIPO_COMPONENTE_SOCIEDAD, TIPO_RELACION_COMPONENTE_SOC, TIPO_EMAIL, TIPO_TELEFONO, TIPO_RESIDENCIA, TIPO_DATO_ADICIONAL_DOMICILIO, ORGANISMO_INFORMANTE, ORGANISMO_CONTROL, PROVINCIA_SOCIEDAD_ORG, SEXO (E_SEXO), CALLE (PUC_PARAM.T_CALLE), LOCALIDAD (PUC_PARAM.T_LOCALIDAD), AUTONOMO_MONOTRIBUTO (SUPA.E_AUTONOMO_MONOTRIBUTO), REGIMEN (SUPA.E_REGIMEN), TIPO_REGIMEN (SUPA.TIPO_REGIMEN), CARACTERIZACION (SUPA.E_CARACTERIZACION), TIPO_ARCHIVO (SUPA.TIPO_ARCHIVO), ACTIVIDAD_RUBRO (SUPA.A_ACTIVIDAD_RUBRO), RUBRO_ACTIVIDAD (SUPA.E_RUBRO_ACTIVIDAD), ACTIVIDAD_OCUPACIONAL (SUPA.E_ACTIVIDAD_OCUPACIONAL).
 
 ### status(): Promise<PadronStatus>
-Health check (dummy) of a5, a4, a10, a13, a100 in parallel with Promise.allSettled. Each value is PromiseSettledResult<ServerStatus>: `if (s.a4.status === 'fulfilled') s.a4.value.appserver`. No authentication.
+Health check (dummy) of a5, a4, a10, a13, a100 in parallel. Each value is `ServiceStatus` from arca-common (`{ ok: true, status: ServerStatus } | { ok: false, error: Error }`): `if (s.a4.ok) s.a4.status.appserver`. No authentication.
 
 ## Tipos principales
 
@@ -186,8 +186,8 @@ Discriminated union types: auth:login, auth:cache-hit (source: memory|storage), 
 - Provincia (0-24, Argentine provinces)
 - TipoDomicilio (FISCAL, LEGAL, REAL)
 - TipoPersona (FISICA, JURIDICA)
-- ImpuestoId (GANANCIAS_PH=11, MONOTRIBUTO=20, MONOTRIBUTO_AUTONOMO=21, IVA_RESPONSABLE_INSCRIPTO=30, BIENES_PERSONALES=180, EMPLEADOR=301, AUTONOMOS=308 — from ARCA manuals; GANANCIAS_PJ=10, IVA_EXENTO=32, IVA_NO_ALCANZADO=34 are not in the padron manuals; IVA_NO_INSCRIPTO=33 deprecated). Social monotributo is identified by category, not by tax id.
-- DocTipo (numeric WSFEv1 document codes, from common). TipoDocumento is a deprecated alias of DocTipo: it is NOT the padron `tipoDocumento` string ("DNI", "LC"...).
+- ImpuestoId (GANANCIAS_PH=11, MONOTRIBUTO=20, MONOTRIBUTO_AUTONOMO=21, IVA_RESPONSABLE_INSCRIPTO=30, BIENES_PERSONALES=180, EMPLEADOR=301, AUTONOMOS=308 — from ARCA manuals; GANANCIAS_PJ=10, IVA_EXENTO=32, IVA_NO_ALCANZADO=34 are not in the padron manuals). Social monotributo is identified by category, not by tax id.
+- DocTipo (numeric WSFEv1 document codes, from common): it is NOT the padron `tipoDocumento` string ("DNI", "LC"...).
 - CondicionIva (re-exported from @ramiidv/arca-common)
 - CollectionName (see getParametros)
 
@@ -200,4 +200,3 @@ Accesibles como propiedades publicas: padron.wsaa, padron.a5 (constancia: getPer
 - ensureArray<T>(value): T[] - normaliza single/array SOAP responses
 - parseXml(xml): Record<string, unknown> - parse XML with CUIT-safe options
 - buildXml(obj): string - build XML from object
-- checkServiceErrors: deprecated (Padron reports business errors as SOAP Faults)

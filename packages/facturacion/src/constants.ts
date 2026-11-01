@@ -11,14 +11,6 @@ export const ENDPOINTS = {
     testing: 'https://wswhomo.afip.gov.ar/wsfexv1/service.asmx',
     production: 'https://servicios1.afip.gov.ar/wsfexv1/service.asmx',
   },
-  padronA5: {
-    testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5',
-    production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5',
-  },
-  padronA13: {
-    testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13',
-    production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13',
-  },
 } as const;
 
 /** Tipos de exportación (WSFEX). */
@@ -58,15 +50,10 @@ export const WSFE_NUMERO_NO_CORRESPONDE = 10016;
 export const WSAA_SERVICES = {
   wsfe: 'wsfe',
   wsfex: 'wsfex',
-  /** Constancia de inscripción (ex Padrón A5, `ws_sr_padron_a5` está deprecado). */
-  padronA5: 'ws_sr_constancia_inscripcion',
-  padronA13: 'ws_sr_padron_a13',
 } as const;
 
 export const WSFE_NAMESPACE = 'http://ar.gov.afip.dif.FEV1/';
 export const WSFEX_NAMESPACE = 'http://ar.gov.afip.dif.fexv1/';
-export const PADRON_A5_NAMESPACE = 'http://a5.soap.ws.server.puc.sr/';
-export const PADRON_A13_NAMESPACE = 'http://a13.soap.ws.server.puc.sr/';
 
 /**
  * URL base del QR de los comprobantes, según la especificación vigente de ARCA

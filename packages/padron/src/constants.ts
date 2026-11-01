@@ -1,17 +1,7 @@
-import { DocTipo, WSAA_ENDPOINTS } from '@ramiidv/arca-common';
+import { WSAA_ENDPOINTS } from '@ramiidv/arca-common';
 
 // Re-export shared enums from common
 export { Provincia, DocTipo, CondicionIva } from '@ramiidv/arca-common';
-
-/**
- * @deprecated Es `DocTipo` de arca-common: los códigos numéricos de tipo de
- * documento de WSFEv1 (80 = CUIT, 96 = DNI...). No sirve para interpretar el
- * campo `tipoDocumento` del padrón, que es un string ("DNI", "LC", "LE"...;
- * ver la colección A100 `SUPA.TIPO_DOCUMENTO`). Usá `DocTipo`.
- */
-export const TipoDocumento = DocTipo;
-/** @deprecated Usá `DocTipo` (ver la constante `TipoDocumento`). */
-export type TipoDocumento = DocTipo;
 
 // ---------------------------------------------------------------------------
 // Endpoints
@@ -89,8 +79,6 @@ export enum ImpuestoId {
   IVA_RESPONSABLE_INSCRIPTO = 30,
   /** IVA exento. Sin respaldo en los manuales del padrón: el A4 informa la exención como impuesto 30 con estado EXENTO. */
   IVA_EXENTO = 32,
-  /** @deprecated Sin respaldo en los manuales del padrón y sin uso en el SDK. */
-  IVA_NO_INSCRIPTO = 33,
   /** IVA no alcanzado. Sin respaldo en los manuales del padrón. */
   IVA_NO_ALCANZADO = 34,
   /** Bienes personales (manual de constancia v4.1: "180 – Bs Ps"). Antes figuraba, mal, como 31. */

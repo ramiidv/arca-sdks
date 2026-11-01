@@ -1,9 +1,9 @@
 # @ramiidv/arca-facturacion
 
-[![CI](https://github.com/ramiidv/arca-facturacion/actions/workflows/ci.yml/badge.svg)](https://github.com/ramiidv/arca-facturacion/actions/workflows/ci.yml)
+[![CI](https://github.com/ramiidv/arca-sdks/actions/workflows/ci.yml/badge.svg)](https://github.com/ramiidv/arca-sdks/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@ramiidv/arca-facturacion)](https://www.npmjs.com/package/@ramiidv/arca-facturacion)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Node >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
+[![Node >= 20.19](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen)](https://nodejs.org)
 
 SDK en TypeScript para interactuar con los Web Services de **ARCA** (ex AFIP) — Facturación Electrónica Argentina.
 
@@ -60,7 +60,7 @@ El SDK calcula automáticamente: IVA, totales (neto, IVA, exento, no gravado, tr
 > este dato desde el **01/12/2026** (manual WSFEv1 v4.8; el v4.7 publicado lo remite a la RG 5616).
 > Si el receptor está identificado (`docTipo` distinto de 99), `condicionIva` es obligatoria: el SDK
 > no la infiere porque un CUIT puede ser RI, monotributista o exento. Podés obtenerla del padrón con
-> `condicionIvaDesdePadron` de [`@ramiidv/arca-padron`](https://github.com/ramiidv/arca-padron).
+> `condicionIvaDesdePadron` de [`@ramiidv/arca-padron`](https://github.com/ramiidv/arca-sdks/tree/main/packages/padron).
 
 ## Configuración
 
@@ -71,7 +71,7 @@ const arca = new ArcaFacturacion({
   key: '...', // Clave privada (PEM)
   production: false, // Default: false (testing/homologación)
   tokenTTLMinutes: 720, // Default: 720 (12 horas)
-  timeout: 30_000, // Default: 30000 (30 segundos). `requestTimeoutMs` sigue aceptándose (deprecado)
+  timeout: 30_000, // Default: 30000 (30 segundos)
   retries: 1, // Default: 1 (solo consultas; las emisiones nunca se reintentan)
   retryDelayMs: 1_000, // Default: 1000 (backoff exponencial: 1s, 2s, ...)
   ticketStorage: new FileTicketStorage('./.arca-tickets'), // Recomendado: persistir el TA
@@ -80,7 +80,7 @@ const arca = new ArcaFacturacion({
   loginErrorCooldownMs: 60_000, // Default: 60000. Espera tras un login WSAA fallido
   legacyTls: 'auto', // Default: "auto". Ver "Producción y TLS"
   fetch: miFetch, // Opcional: fetch propio (proxy, mTLS, tests)
-  endpoints: { wsfe: 'https://mi-proxy/wsfev1' }, // Opcional: URLs propias (wsaa, wsfe, wsfex, padronA5, padronA13)
+  endpoints: { wsfe: 'https://mi-proxy/wsfev1' }, // Opcional: URLs propias (wsaa, wsfe, wsfex)
   signal: shutdown.signal, // Opcional: cancela todas las llamadas (ej: al apagar)
   onEvent: (e) => {
     // Opcional: callback para logging/debugging
@@ -167,7 +167,7 @@ Sin `cbteNro`, el SDK usa el último autorizado + 1 y **no hay lock**: serializ�
 
 ```typescript
 import {
-  Arca,
+  ArcaFacturacion,
   ArcaResultadoIncierto,
   ArcaWSFEError,
   CbteTipo,
@@ -456,24 +456,6 @@ if (result.aprobada) {
 
 Con la API raw: `crearFacturaExportacion(error.request)` reenvía exactamente el mismo `Cmp`.
 
-### Consultar contribuyente (Padrón)
-
-> **Deprecado**: usá [`@ramiidv/arca-padron`](https://github.com/ramiidv/arca-padron), que además
-> tiene `condicionIvaDesdePadron`. Estos métodos se mantienen por compatibilidad.
-
-```typescript
-// Consulta básica por CUIT (padrón A13, servicio ws_sr_padron_a13)
-const persona = await arca.consultarCuit(30712345671);
-console.log(persona.nombre); // "EMPRESA SA"
-console.log(persona.tipoPersona); // "JURIDICA"
-console.log(persona.estadoClave); // "ACTIVO"
-
-// Constancia de inscripción (ex padrón A5, servicio ws_sr_constancia_inscripcion)
-const detalle = await arca.consultarCuitDetalle(20123456786);
-console.log(detalle.domicilioFiscal); // { direccion, localidad, codPostal }
-console.log(detalle.impuestos); // [{ id: 30, descripcion: "IVA", estado: "AC" }]
-```
-
 ### CAEA — Contingencia
 
 Desde la **RG 5782** (manual WSFEv1 v4.6) el CAEA es solo una modalidad de contingencia: todos los
@@ -650,7 +632,6 @@ El SDK provee clases de error específicas para catch granular:
 
 ```typescript
 import {
-  Arca,
   ArcaAuthError,
   ArcaTicketVigenteError,
   ArcaResultadoIncierto,
@@ -754,7 +735,7 @@ puntos de venta y las cotizaciones **no** se cachean.
 | `key`                  | `string`                                          | —                  | Contenido de la clave privada (PEM)                                |
 | `production`           | `boolean`                                         | `false`            | Entorno de producción                                              |
 | `tokenTTLMinutes`      | `number`                                          | `720`              | TTL del token en minutos                                           |
-| `timeout`              | `number`                                          | `30000`            | Timeout HTTP en milisegundos (`requestTimeoutMs`: alias deprecado) |
+| `timeout`              | `number`                                          | `30000`            | Timeout HTTP en milisegundos                                       |
 | `retries`              | `number`                                          | `1`                | Reintentos en consultas (las emisiones nunca se reintentan)        |
 | `retryDelayMs`         | `number`                                          | `1000`             | Delay inicial entre reintentos (exponencial)                       |
 | `onEvent`              | `function`                                        | —                  | Callback para eventos del SDK                                      |
@@ -765,7 +746,7 @@ puntos de venta y las cotizaciones **no** se cachean.
 | `loginErrorCooldownMs` | `number`                                          | `60000`            | Espera tras un login WSAA fallido (0 la desactiva)                 |
 | `fetch`                | `typeof fetch`                                    | `globalThis.fetch` | `fetch` propio para todos los requests                             |
 | `legacyTls`            | `"auto" \| "never" \| "always"`                   | `"auto"`           | Transporte TLS legacy (ver "Producción y TLS")                     |
-| `endpoints`            | `{ wsaa?, wsfe?, wsfex?, padronA5?, padronA13? }` | —                  | URLs propias de los servicios                                      |
+| `endpoints`            | `{ wsaa?, wsfe?, wsfex? }`                        | —                  | URLs propias de los servicios                                      |
 | `signal`               | `AbortSignal`                                     | —                  | Cancela todas las llamadas de la instancia                         |
 | `wsaa`                 | `WsaaClient`                                      | —                  | Cliente WSAA compartido (ej: con `ArcaPadron`)                     |
 
@@ -808,7 +789,6 @@ puntos de venta y las cotizaciones **no** se cachean.
 | `siguienteComprobanteExpo(ptoVta, cbteTipo, opts?)`   | Siguiente número (WSFEX)                                                |
 | `ultimoIdExpo()`                                      | Último ID de request WSFEX                                              |
 | `consultarComprobanteExpo(cbteTipo, ptoVta, cbteNro)` | Consulta comprobante de exportación                                     |
-| `serverStatusExpo()`                                  | Estado de los servidores WSFEX                                          |
 | `getTiposCbteExpo()`                                  | Tipos de comprobante de exportación                                     |
 | `getMonedasExpo()`                                    | Monedas (WSFEX)                                                         |
 | `getPaisesExpo()`                                     | Países destino                                                          |
@@ -835,20 +815,11 @@ puntos de venta y las cotizaciones **no** se cachean.
 | `sinMovimientoCAEA(caea, ptoVta)`          | Informa sin movimientos para un CAEA                                                  |
 | `consultarSinMovimientoCAEA(caea, ptoVta)` | Consulta los informes sin movimiento (`FECAEASinMovimientoConsultar`)                 |
 
-### Padrón (Consulta de contribuyentes)
-
-| Método                       | Descripción                                                                    |
-| ---------------------------- | ------------------------------------------------------------------------------ |
-| `consultarCuit(cuit)`        | **Deprecado.** Datos básicos de un contribuyente (padrón A13)                  |
-| `consultarCuitDetalle(cuit)` | **Deprecado.** Constancia de inscripción (ex A5): domicilio fiscal e impuestos |
-
-Retornan `Contribuyente` con: `cuit`, `nombre`, `tipoPersona`, `estadoClave`, `domicilioFiscal?`, `impuestos?`, `raw`.
-
 ### Parámetros WSFE
 
 | Método                                | Descripción                                                   |
 | ------------------------------------- | ------------------------------------------------------------- |
-| `serverStatus()`                      | Estado de los servidores                                      |
+| `status()`                            | Estado de WSFE y WSFEX (`ServiceStatus` de arca-common)     |
 | `getTiposComprobante()`               | Lista de tipos de comprobante                                 |
 | `getTiposConcepto()`                  | Lista de tipos de concepto                                    |
 | `getTiposDocumento()`                 | Lista de tipos de documento                                   |
@@ -875,13 +846,10 @@ Retornan `Contribuyente` con: `cuit`, `nombre`, `tipoPersona`, `estadoClave`, `d
 | Método                                | Descripción                                                |
 | ------------------------------------- | ---------------------------------------------------------- |
 | `ArcaFacturacion.generateQRUrl(input, options?)` | Genera la URL del QR oficial de ARCA                       |
-| `ArcaFacturacion.calcularTotales(items, opts?)`  | **Deprecado**: usar la función `calcularTotales`           |
-| `ArcaFacturacion.extractCAE(result)`             | **Deprecado**: usar la API simplificada o `FeDetResp`      |
-| `ArcaFacturacion.formatDate(date)`               | **Deprecado**: usar `formatDate` de `@ramiidv/arca-common` |
 
 También se exportan como funciones: `armarComprobante`, `calcularTotales`, `resolverCbteTipo`,
 `intentoDesdeComprobante`, `coincideConIntento`, `facturaResultDesdeConsulta`, `requiereRecuperacion`,
-`generarUrlQR`, `urlQRDesdeFactura`, `formatFechaHora` y `toDateString` (deprecado: es `formatDate` de common).
+`generarUrlQR`, `urlQRDesdeFactura` y `formatFechaHora`.
 
 ### Otros
 
@@ -940,10 +908,10 @@ Tambien se incluyen tipos especiales: `COMPRA_BIENES_USADOS` (49), `CTA_VTA_LIQ_
 
 ## Entornos
 
-| Entorno    | WSAA                   | WSFE                     | WSFEX                    | Padrón                |
-| ---------- | ---------------------- | ------------------------ | ------------------------ | --------------------- |
-| Testing    | `wsaahomo.afip.gov.ar` | `wswhomo.afip.gov.ar`    | `wswhomo.afip.gov.ar`    | `awshomo.afip.gov.ar` |
-| Producción | `wsaa.afip.gov.ar`     | `servicios1.afip.gov.ar` | `servicios1.afip.gov.ar` | `aws.afip.gov.ar`     |
+| Entorno    | WSAA                   | WSFE                     | WSFEX                    |
+| ---------- | ---------------------- | ------------------------ | ------------------------ |
+| Testing    | `wsaahomo.afip.gov.ar` | `wswhomo.afip.gov.ar`    | `wswhomo.afip.gov.ar`    |
+| Producción | `wsaa.afip.gov.ar`     | `servicios1.afip.gov.ar` | `servicios1.afip.gov.ar` |
 
 Se pueden reemplazar con `endpoints` en la config. Producción de WSFEv1/WSFEX en Node >= 17: ver
 [Producción y TLS](#producción-y-tls).

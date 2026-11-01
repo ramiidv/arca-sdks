@@ -1,5 +1,3 @@
-import { checkServiceErrors as commonCheckServiceErrors } from '@ramiidv/arca-common';
-
 // Main class
 export { ArcaPadron } from './arca-padron.js';
 
@@ -44,7 +42,6 @@ export type {
   SoapCallOptions,
   ServerStatus,
   ArcaEvent,
-  ArcaPadronEvent,
   PersonaA4,
   DependenciaA4,
   DomicilioA4,
@@ -83,7 +80,6 @@ export {
   ENDPOINTS,
   Provincia,
   DocTipo,
-  TipoDocumento,
   CondicionIva,
   TipoDomicilio,
   TipoPersona,
@@ -94,10 +90,3 @@ export {
 
 // Utilities (from common)
 export { ensureArray, parseXml, buildXml } from '@ramiidv/arca-common';
-
-/**
- * @deprecated Padrón no devuelve errores de negocio en el body (los informa
- * como SOAP Fault, que el SDK ya convierte en `ArcaPadronServiceError`). Si lo
- * necesitás para otro servicio, importalo de `@ramiidv/arca-common`.
- */
-export const checkServiceErrors = commonCheckServiceErrors;
