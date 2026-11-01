@@ -96,11 +96,14 @@ Solo facturacion tiene `tests/integration` (se saltean sin certificado).
 - Grabar respuestas reales, sin token, sign ni CUIT reales, como fixtures para
   los tests unitarios.
 
-### 5. Detección de cambios incompatibles
+### 5. ~~Detección de cambios incompatibles~~ (hecho)
 
-- `@microsoft/api-extractor` por paquete, con el reporte `*.api.md` versionado:
-  un PR que cambia la API pública lo muestra en el diff y obliga a decidir si
-  es major.
+Rama `chore/api-extractor`: `scripts/api-report.mjs` corre api-extractor por
+cada entry point de `exports` y deja el reporte en `packages/*/api/*.api.md`.
+CI corre `npm run api:check` (falla si la API cambió sin actualizar el
+reporte); `npm run api:update` lo regenera. Las ramas que cambian la API
+(`feat/majors-sin-deprecados`, `feat/dsl-choice`) tienen que correr
+`api:update` después de rebasear sobre esta.
 
 ### 6. Mantenimiento
 
@@ -113,7 +116,9 @@ Solo facturacion tiene `tests/integration` (se saltean sin certificado).
 ## Cómo publicar
 
 1. Cada PR que cambia un paquete publicado agrega un changeset
-   (`npm run changeset`), con patch, minor o major por paquete.
+   (`npm run changeset`), con patch, minor o major por paquete. Si cambia la
+   API pública, `npm run api:update` y commitear el `.api.md`: el diff ayuda a
+   elegir el tipo de cambio.
 2. Al mergear a `main`, el workflow Release abre o actualiza el PR "chore:
    version packages", con versiones, CHANGELOGs y rangos internos.
 3. Al mergear ese PR, el workflow publica en npm con trusted publishing (OIDC),

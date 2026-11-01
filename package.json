@@ -23,6 +23,8 @@
     "release": "npm run build && changeset publish",
     "test:smoke": "node scripts/smoke-require.cjs",
     "wsdl:check": "node scripts/wsdl.mjs",
+    "api:check": "node scripts/api-report.mjs",
+    "api:update": "node scripts/api-report.mjs --write",
     "wsdl:update": "node scripts/wsdl.mjs --write",
     "typecheck:examples": "for p in packages/*/examples; do tsc -p $p || exit 1; done"
   },
@@ -30,6 +32,7 @@
     "@arethetypeswrong/cli": "^0.18.5",
     "@biomejs/biome": "^2.6.4",
     "@changesets/cli": "^3.0.3",
+    "@microsoft/api-extractor": "^7.60.1",
     "@types/node": "^22.0.0",
     "publint": "^0.3.25",
     "typescript": "^6.0.3",
