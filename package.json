@@ -21,7 +21,9 @@
     "changeset": "changeset",
     "version-packages": "changeset version && npm install --package-lock-only",
     "release": "npm run build && changeset publish",
-    "test:smoke": "node scripts/smoke-require.cjs"
+    "test:smoke": "node scripts/smoke-require.cjs",
+    "wsdl:check": "node scripts/wsdl.mjs",
+    "wsdl:update": "node scripts/wsdl.mjs --write"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",

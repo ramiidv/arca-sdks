@@ -320,3 +320,10 @@ export function childOrder(xml: string, tag: string): string[] {
     .filter((n): n is string => n !== undefined)
     .map(localName);
 }
+
+// ---------------------------------------------------------------------------
+// Contratos contra el XSD
+// ---------------------------------------------------------------------------
+
+export { checkSchemaAgainstXsd, loadXsdTypes } from './xsd-contract.js';
+export type { ContractOptions, XsdComplexType, XsdElement, XsdTypes } from './xsd-contract.js';

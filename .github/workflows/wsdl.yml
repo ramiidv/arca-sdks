@@ -1,0 +1,21 @@
+name: WSDL de ARCA
+
+# Verifica todas las noches que los WSDL publicados por ARCA sigan iguales a los
+# snapshots de packages/*/wsdl/ (contra los que corren los tests de contrato).
+# Si ARCA cambia un servicio, el job falla: correr `npm run wsdl:update`,
+# revisar el diff y ajustar los schemas.
+
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm run wsdl:check
