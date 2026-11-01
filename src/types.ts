@@ -1,271 +1,380 @@
-// Shared types from common
-export type { AccessTicket, ArcaEvent, ServerStatus, SoapCallOptions } from '@ramiidv/arca-common';
-import type { ArcaEvent } from '@ramiidv/arca-common';
+import type { ArcaBaseConfig, CallOptions } from '@ramiidv/arca-common';
+
+// Tipos compartidos de common que forman parte de la API pública.
+export type {
+  AccessTicket,
+  ArcaEvent,
+  CallOptions,
+  LegacyTlsMode,
+  ServerStatus,
+  TicketStorage,
+} from '@ramiidv/arca-common';
 
 // ---------------------------------------------------------------------------
-// Configuration
+// Configuración
 // ---------------------------------------------------------------------------
 
-export interface ArcaMtxcaConfig {
-  /** Contenido del certificado X.509 en formato PEM */
-  cert: string;
-  /** Contenido de la clave privada en formato PEM */
-  key: string;
-  /** CUIT del contribuyente (sin guiones) */
-  cuit: number;
-  /** Usar entorno de produccion (default: false = testing/homologacion) */
-  production?: boolean;
-  /** Timeout para requests HTTP en milisegundos (default: 30000) */
-  timeout?: number;
-  /** Cantidad de reintentos en caso de error transitorio (default: 1) */
-  retries?: number;
-  /** Delay inicial entre reintentos en milisegundos, se duplica con cada intento (default: 1000) */
-  retryDelayMs?: number;
-  /** Callback para eventos del SDK (auth, requests, retries) */
-  onEvent?: (event: ArcaEvent) => void;
+export interface ArcaMtxcaConfig extends ArcaBaseConfig {
+  /** URL de WSMTXCA. Si se indica, ignora `production`. */
+  endpoint?: string;
+  /** URL de WSAA. Si se indica, ignora `production` para el login. */
+  wsaaEndpoint?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Authentication
-// ---------------------------------------------------------------------------
-
+/** Credenciales de cada request (`AuthRequestType`). */
 export interface MtxcaAuth {
-  Token: string;
-  Sign: string;
-  Cuit: number;
+  token: string;
+  sign: string;
+  /** CUIT representada (11 dígitos). */
+  cuitRepresentada: string;
 }
 
+/**
+ * Fecha de un campo `xsd:date`: `Date` (se toma la fecha calendario de
+ * Argentina) o string `YYYY-MM-DD` / `YYYYMMDD`. Se envía como `YYYY-MM-DD`.
+ */
+export type FechaInput = Date | string;
+
 // ---------------------------------------------------------------------------
-// Items (detalle de articulos)
+// Request: ComprobanteType
 // ---------------------------------------------------------------------------
 
+/** `ItemType`. Los importes se redondean según el XSD antes de enviarse. */
 export interface MtxcaItem {
-  /** Codigo/Barcode del producto (EAN, interno, etc.) */
+  /** Unidades MTX (int >= 1). Obligatorio salvo unidad 97/99 (validación 500). */
+  unidadesMtx?: number;
+  /** Código MTX/GTIN. Obligatorio salvo unidad 97/99 (validación 503). */
+  codigoMtx?: string;
+  /** Código interno del producto (máx. 50). */
   codigo?: string;
-  /** Descripcion del producto/servicio */
+  /** Descripción (máx. 4000). */
   descripcion: string;
-  /** Cantidad */
-  cantidad: number;
-  /** Codigo de unidad de medida (consultarUnidadesMedida) */
-  unidadMedida: number;
-  /** Precio unitario */
-  precioUnitario: number;
-  /** Importe total del item (cantidad * precioUnitario - bonificacion) */
-  importeItem: number;
-  /** Codigo de condicion de IVA del item (usar enum CodigoCondicionIVA) */
-  codigoCondicionIVA: number;
-  /** Importe de IVA del item */
-  importeIVA: number;
-  /** Importe de bonificacion/descuento. Default: 0 */
+  /** Cantidad (6 decimales). No corresponde con unidad 97/99; obligatoria en el resto. */
+  cantidad?: number;
+  /** Código de unidad de medida (`getUnidadesMedida()`). */
+  codigoUnidadMedida: number;
+  /**
+   * Precio unitario (6 decimales). Sin IVA en clase A, con IVA en clase B.
+   * No corresponde con unidad 97/99; obligatorio en el resto.
+   */
+  precioUnitario?: number;
+  /** Bonificación (6 decimales). No corresponde con unidad 97/99. */
   importeBonificacion?: number;
+  /** Condición de IVA del ítem (`CodigoCondicionIVA`). */
+  codigoCondicionIVA: number;
+  /** IVA del ítem (2 decimales). Obligatorio en clase A (1, 2, 3, 51, 52, 53); no corresponde en 6, 7, 8. */
+  importeIVA?: number;
+  /** Importe del ítem con IVA incluido (2 decimales). Negativo en unidad 95/99. */
+  importeItem: number;
 }
 
-// ---------------------------------------------------------------------------
-// Subtotales IVA
-// ---------------------------------------------------------------------------
-
-export interface SubtotalIVA {
-  /** Codigo de condicion de IVA */
+/** `SubtotalIVAType`: total de IVA de una alícuota (códigos 4, 5, 6). */
+export interface MtxcaSubtotalIVA {
   codigo: number;
-  /** Base imponible */
-  baseImponible: number;
-  /** Importe de IVA */
   importe: number;
 }
 
-// ---------------------------------------------------------------------------
-// Comprobante asociado
-// ---------------------------------------------------------------------------
-
-export interface MtxcaComprobanteAsociado {
-  /** Tipo de comprobante asociado */
-  codigoTipoComprobante: number;
-  /** Punto de venta del comprobante asociado */
-  numeroPuntoVenta: number;
-  /** Numero de comprobante asociado */
-  numeroComprobante: number;
-  /** CUIT del emisor */
-  cuit?: number;
-}
-
-// ---------------------------------------------------------------------------
-// Tributo
-// ---------------------------------------------------------------------------
-
-export interface MtxcaTributo {
-  /** Codigo del tributo */
-  codigoTributo: number;
-  /** Descripcion del tributo */
+/** `OtroTributoType`. */
+export interface MtxcaOtroTributo {
+  /** Código de tributo (`getTiposTributo()`). */
+  codigo: number;
+  /** Obligatoria si `codigo` es 99. */
   descripcion?: string;
-  /** Base imponible */
   baseImponible: number;
-  /** Alicuota del tributo */
-  alicuota?: number;
-  /** Importe del tributo */
   importe: number;
 }
 
-// ---------------------------------------------------------------------------
-// Invoice (request para autorizarComprobante)
-// ---------------------------------------------------------------------------
+/** `ComprobanteAsociadoType`. */
+export interface MtxcaComprobanteAsociado {
+  codigoTipoComprobante: number;
+  numeroPuntoVenta: number;
+  numeroComprobante: number;
+  cuit?: number | string;
+  fechaEmision?: FechaInput;
+}
 
-export interface MtxcaInvoice {
-  /** Concepto: 1=Productos, 2=Servicios, 3=Productos y Servicios */
-  concepto: number;
-  /** Tipo de documento del receptor */
-  docTipo: number;
-  /** Numero de documento del receptor */
-  docNro: number;
-  /** Fecha del comprobante (formato YYYY-MM-DD) */
-  cbteFch: string;
-  /** Items / articulos del comprobante */
-  items: MtxcaItem[];
-  /** Codigo de moneda (usar enum Moneda). Default: PES */
-  codigoMoneda?: string;
-  /** Cotizacion de la moneda (1 para pesos) */
-  cotizacionMoneda?: number;
-  /** Importe gravado */
+/** `PeriodoComprobantesAsociadosType`. */
+export interface MtxcaPeriodo {
+  fechaDesde: FechaInput;
+  fechaHasta: FechaInput;
+}
+
+/** `DatoAdicionalType` (`getTiposDatosAdicionales()`). */
+export interface MtxcaDatoAdicional {
+  t: number;
+  c1?: string;
+  c2?: string;
+  c3?: string;
+  c4?: string;
+  c5?: string;
+  c6?: string;
+}
+
+/** `CompradorType`. */
+export interface MtxcaComprador {
+  codigoTipoDocumento: number;
+  numeroDocumento: number | string;
+  /** Porcentaje de titularidad (2 decimales). */
+  porcentaje: number;
+}
+
+/** Campos de `ComprobanteType` comunes a CAE, CAEA y ajustes de IVA. */
+export interface MtxcaComprobanteBase {
+  codigoTipoComprobante: number;
+  numeroPuntoVenta: number;
+  /** Opcional: si no se envía, ARCA usa la fecha de proceso. */
+  fechaEmision?: FechaInput;
+  codigoTipoDocumento?: number;
+  numeroDocumento?: number | string;
+  /** Condición de IVA del receptor, RG 5616 (`getCondicionesIVAReceptor()`). */
+  condicionIVAReceptor?: number;
   importeGravado?: number;
-  /** Importe no gravado */
   importeNoGravado?: number;
-  /** Importe exento */
   importeExento?: number;
-  /** Subtotales de IVA */
-  subtotalesIVA?: SubtotalIVA[];
-  /** Importe total de tributos */
+  /** Gravado + no gravado + exento. */
+  importeSubtotal: number;
   importeOtrosTributos?: number;
-  /** Detalle de tributos */
-  otrosTributos?: MtxcaTributo[];
-  /** Importe total del comprobante */
   importeTotal: number;
-  /** Comprobantes asociados (para NC/ND) */
-  comprobanteAsociado?: MtxcaComprobanteAsociado[];
-  /** Fecha desde del servicio (formato YYYY-MM-DD, requerido para servicios) */
-  fechaDesde?: string;
-  /** Fecha hasta del servicio (formato YYYY-MM-DD, requerido para servicios) */
-  fechaHasta?: string;
-  /** Fecha de vencimiento de pago (formato YYYY-MM-DD, requerido para servicios) */
-  fechaVtoPago?: string;
-  /** Observaciones */
+  /** Código de moneda (`Moneda` o `getMonedas()`). */
+  codigoMoneda: string;
+  /** Cotización (6 decimales). Debe ser 1 para PES. */
+  cotizacionMoneda?: number;
+  cancelaEnMismaMonedaExtranjera?: 'S' | 'N';
   observaciones?: string;
+  codigoConcepto: number;
+  /** Obligatoria si `codigoConcepto` es 2 o 3. */
+  fechaServicioDesde?: FechaInput;
+  /** Obligatoria si `codigoConcepto` es 2 o 3. */
+  fechaServicioHasta?: FechaInput;
+  /** Obligatoria si `codigoConcepto` es 2 o 3. */
+  fechaVencimientoPago?: FechaInput;
+  comprobantesAsociados?: MtxcaComprobanteAsociado[];
+  periodoComprobantesAsociados?: MtxcaPeriodo;
+  otrosTributos?: MtxcaOtroTributo[];
+  items: MtxcaItem[];
+  subtotalesIVA?: MtxcaSubtotalIVA[];
+  datosAdicionales?: MtxcaDatoAdicional[];
+  compradores?: MtxcaComprador[];
+  /** Códigos de actividad (`getActividadesVigentes()`). */
+  actividades?: number[];
+}
+
+/** Comprobante a autorizar con CAE (`autorizarComprobante` / `autorizarAjusteIVA`), con número explícito. */
+export interface MtxcaComprobanteCAE extends MtxcaComprobanteBase {
+  numeroComprobante: number;
+}
+
+/**
+ * Request de `ArcaMtxca.autorizar()`. Si no se indica `numeroComprobante`, se
+ * usa el último autorizado + 1 (`consultarUltimoComprobanteAutorizado`).
+ */
+export interface AutorizarRequest extends MtxcaComprobanteBase {
+  numeroComprobante?: number;
+}
+
+/** Comprobante emitido con CAEA a informar (`informarComprobanteCAEA` / `informarAjusteIVACAEA`). */
+export interface MtxcaComprobanteCAEA extends MtxcaComprobanteBase {
+  numeroComprobante: number;
+  /** CAEA usado (14 dígitos). Se envía como `codigoAutorizacion`. */
+  caea: string;
+  /** Opcional; si se informa debe ser "A". */
+  codigoTipoAutorizacion?: 'A';
+  /** Opcional; si se informa debe coincidir con la fecha hasta del CAEA. */
+  fechaVencimiento?: FechaInput;
+  /** Fecha/hora de generación: `Date` (hora de Argentina) o string `YYYY-MM-DDTHH:MM:SS`. */
+  fechaHoraGen?: Date | string;
+}
+
+/** Opciones de `ArcaMtxca.autorizar()`. */
+export interface AutorizarOptions extends CallOptions {
+  /**
+   * Valida localmente la coherencia de importes según las validaciones
+   * excluyentes del manual (default: true). Desactivalo solo si ARCA acepta
+   * un caso que esta validación rechaza.
+   */
+  validarImportes?: boolean;
 }
 
 // ---------------------------------------------------------------------------
-// Invoice result
+// Responses
 // ---------------------------------------------------------------------------
 
-export interface MtxcaObservacion {
-  code: number;
-  msg: string;
+/** `CodigoDescripcionType`. */
+export interface CodigoDescripcion {
+  codigo: number;
+  descripcion: string;
 }
 
-export interface MtxcaInvoiceResult {
-  /** Resultado: "A" = Aprobado, "R" = Rechazado */
-  resultado: string;
-  /** CAE otorgado (solo si aprobado) */
-  cae?: string;
-  /** Fecha de vencimiento del CAE (YYYY-MM-DD) */
-  caeFchVto?: string;
-  /** Numero de comprobante asignado */
-  cbteNro: number;
-  /** Observaciones de ARCA */
-  observaciones: MtxcaObservacion[];
-  /** Errores de ARCA */
-  errores: MtxcaObservacion[];
+/** `CodigoDescripcionStringType` (monedas). */
+export interface CodigoDescripcionString {
+  codigo: string;
+  descripcion: string;
 }
 
-// ---------------------------------------------------------------------------
-// AutorizarRequest
-// ---------------------------------------------------------------------------
+/** Resultado de una autorización: A = aprobado, O = aprobado con observaciones, R = rechazado. */
+export type MtxcaResultado = 'A' | 'O' | 'R';
 
-export interface AutorizarRequest {
-  /** Punto de venta */
-  ptoVta: number;
-  /** Tipo de comprobante (usar enum CbteTipo) */
-  cbteTipo: number;
-  /** Detalle del comprobante con articulos */
-  invoice: MtxcaInvoice;
-}
-
-// ---------------------------------------------------------------------------
-// ConsultarComprobante result
-// ---------------------------------------------------------------------------
-
-export interface MtxcaComprobante {
+/** `ComprobanteCAEResponseType`. */
+export interface MtxcaComprobanteCAEResponse {
+  cuit: string;
   codigoTipoComprobante: number;
   numeroPuntoVenta: number;
   numeroComprobante: number;
   fechaEmision: string;
-  codigoTipoDocumento: number;
-  numeroDocumento: number;
-  importeTotal: number;
-  importeNoGravado: number;
-  importeGravado: number;
-  importeExento: number;
-  importeOtrosTributos: number;
-  importeSubtotal: number;
-  codigoMoneda: string;
-  cotizacionMoneda: number;
-  resultado: string;
+  /** CAE (14 dígitos). */
+  cae: string;
+  fechaVencimientoCAE: string;
+}
+
+interface ResultadoBase {
+  /** Observaciones (en A no suele haber; en O explican por qué). */
+  observaciones: CodigoDescripcion[];
+  /** Motivos del rechazo (resultado R). */
+  errores: CodigoDescripcion[];
+  /** Anuncio informativo del sistema, si lo hay. */
+  evento?: CodigoDescripcion;
+}
+
+/**
+ * Respuesta de `autorizarComprobante` / `autorizarAjusteIVA`. Un rechazo NO
+ * lanza: devuelve `resultado: 'R'` con `errores`. Revisá `resultado` antes de
+ * usar `comprobante`.
+ */
+export type MtxcaAutorizarResult =
+  | (ResultadoBase & { resultado: 'A' | 'O'; comprobante: MtxcaComprobanteCAEResponse })
+  | (ResultadoBase & { resultado: 'R'; comprobante?: undefined });
+
+/** `ComprobanteCAEAResponseType`. */
+export interface MtxcaComprobanteCAEAResponse {
+  caea: string;
+  codigoTipoComprobante: number;
+  numeroPuntoVenta: number;
+  numeroComprobante: number;
+}
+
+/**
+ * Respuesta de `informarComprobanteCAEA` / `informarAjusteIVACAEA`. Un rechazo
+ * NO lanza: devuelve `resultado: 'R'` con `errores`.
+ */
+export type MtxcaInformarCAEAResult =
+  | (ResultadoBase & { resultado: 'A' | 'O'; fechaProceso: string; comprobante: MtxcaComprobanteCAEAResponse })
+  | (ResultadoBase & { resultado: 'R'; fechaProceso?: string; comprobante?: undefined });
+
+/** `CAEAResponseType`. */
+export interface MtxcaCAEA {
+  fechaProceso: string;
+  /** CAEA (14 dígitos). */
+  caea: string;
+  /** AAAAMM */
+  periodo: number;
+  /** 1 = primera quincena, 2 = segunda. */
+  orden: number;
+  fechaDesde: string;
+  fechaHasta: string;
+  fechaTopeInforme: string;
+  observaciones: CodigoDescripcion[];
+}
+
+/**
+ * Respuesta de `informarCAEANoUtilizado` / `informarCAEANoUtilizadoPtoVta`.
+ * Un rechazo NO lanza: devuelve `resultado: 'R'` con `errores`.
+ */
+export interface MtxcaCAEANoUtilizadoResult {
+  resultado: MtxcaResultado;
+  fechaProceso?: string;
+  caea?: string;
+  numeroPuntoVenta?: number;
+  errores: CodigoDescripcion[];
+  evento?: CodigoDescripcion;
+}
+
+/** Ítem tal como lo devuelve `consultarComprobante`. */
+export interface MtxcaItemConsultado {
+  unidadesMtx?: number;
+  codigoMtx?: string;
+  codigo?: string;
+  descripcion: string;
+  cantidad?: number;
+  codigoUnidadMedida: number;
+  precioUnitario?: number;
+  importeBonificacion?: number;
+  codigoCondicionIVA: number;
+  importeIVA?: number;
+  importeItem: number;
+}
+
+/** `ComprobanteType` tal como lo devuelve `consultarComprobante`. */
+export interface MtxcaComprobanteConsultado {
+  codigoTipoComprobante: number;
+  numeroPuntoVenta: number;
+  numeroComprobante: number;
+  fechaEmision?: string;
+  /** "E" = CAE, "A" = CAEA. */
+  codigoTipoAutorizacion?: string;
+  /** CAE o CAEA (14 dígitos). */
   codigoAutorizacion?: string;
   fechaVencimiento?: string;
-  observaciones: MtxcaObservacion[];
-  items: MtxcaItem[];
+  codigoTipoDocumento?: number;
+  numeroDocumento?: string;
+  condicionIVAReceptor?: number;
+  importeGravado?: number;
+  importeNoGravado?: number;
+  importeExento?: number;
+  importeSubtotal: number;
+  importeOtrosTributos?: number;
+  importeTotal: number;
+  codigoMoneda: string;
+  cotizacionMoneda?: number;
+  cancelaEnMismaMonedaExtranjera?: string;
+  observaciones?: string;
+  codigoConcepto: number;
+  fechaServicioDesde?: string;
+  fechaServicioHasta?: string;
+  fechaVencimientoPago?: string;
+  fechaHoraGen?: string;
+  comprobantesAsociados: Array<{
+    codigoTipoComprobante: number;
+    numeroPuntoVenta: number;
+    numeroComprobante: number;
+    cuit?: string;
+    fechaEmision?: string;
+  }>;
+  periodoComprobantesAsociados?: { fechaDesde: string; fechaHasta: string };
+  otrosTributos: Array<{ codigo: number; descripcion?: string; baseImponible: number; importe: number }>;
+  items: MtxcaItemConsultado[];
+  subtotalesIVA: MtxcaSubtotalIVA[];
+  datosAdicionales: MtxcaDatoAdicional[];
+  compradores: Array<{ codigoTipoDocumento: number; numeroDocumento: string; porcentaje: number }>;
+  actividades: number[];
 }
 
-// ---------------------------------------------------------------------------
-// Parameter types (from consultar* methods)
-// ---------------------------------------------------------------------------
-
-export interface ParamItem {
-  /** ID numerico del parametro */
-  Id: number;
-  /** Descripcion */
-  Desc: string;
-  /** Fecha vigencia desde */
-  FchDesde?: string;
-  /** Fecha vigencia hasta */
-  FchHasta?: string;
+/** Respuesta de `consultarComprobante`. */
+export interface MtxcaConsultaComprobanteResult {
+  comprobante: MtxcaComprobanteConsultado;
+  observaciones: CodigoDescripcion[];
+  evento?: CodigoDescripcion;
 }
 
-export interface MonedaItem {
-  /** Codigo de moneda (ej: "PES", "DOL") */
-  Id: string;
-  /** Descripcion */
-  Desc: string;
-  /** Fecha vigencia desde */
-  FchDesde?: string;
-  /** Fecha vigencia hasta */
-  FchHasta?: string;
+/** `PuntoVentaType`. */
+export interface PuntoVenta {
+  numeroPuntoVenta: number;
+  /** "S" o "N". */
+  bloqueado: string;
+  fechaBaja?: string;
 }
 
-export interface UnidadMedidaItem {
-  /** Codigo de unidad de medida */
-  Id: number;
-  /** Descripcion */
-  Desc: string;
-  /** Fecha vigencia desde */
-  FchDesde?: string;
-  /** Fecha vigencia hasta */
-  FchHasta?: string;
+/** `ActividadVigenteType`. */
+export interface ActividadVigente {
+  codigo: number;
+  orden: number;
+  descripcion: string;
 }
 
-export interface PtoVentaItem {
-  /** Numero de punto de venta */
-  Nro: number;
-  /** Tipo de emision (CAE/CAEA) */
-  EmisionTipo: string;
-  /** Si esta bloqueado */
-  Bloqueado: string;
-  /** Fecha de baja */
-  FchBaja: string;
-}
-
+/** Respuesta de `consultarCotizacionMoneda`. */
 export interface CotizacionResult {
-  /** Codigo de moneda */
-  monedaId: string;
-  /** Cotizacion */
-  cotizacion: number;
-  /** Fecha de cotizacion */
+  codigoMoneda: string;
+  /** Fecha consultada (YYYY-MM-DD). */
   fechaCotizacion: string;
+  /** Cotización, o `null` si ARCA no tiene cotización para esa moneda (respuesta sin valor, sin error). */
+  cotizacion: number | null;
 }

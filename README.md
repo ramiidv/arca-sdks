@@ -1,386 +1,239 @@
 # @ramiidv/arca-mtxca
 
-SDK de TypeScript para el web service WSMTXCA de ARCA (ex AFIP). Facturacion electronica con detalle de articulos (item-level detail: codigos de barras, cantidades, precios unitarios, descripciones por linea).
+SDK de TypeScript para el web service **WSMTXCA** de ARCA (ex AFIP): factura electrónica con detalle de ítems (código MTX/GTIN, cantidad, precio unitario e IVA por línea), con CAE y con CAEA.
 
-## Caracteristicas
+- Tipos fieles al WSDL/XSD de WSMTXCA y elementos en el orden de la secuencia (Axis2 valida el orden).
+- Redondeo según el XSD: 2 decimales en importes, 6 en cantidad, precio unitario, bonificación y cotización.
+- Validación local de las reglas excluyentes del manual (presencia de campos por unidad de medida, fórmulas por ítem, subtotales de IVA por alícuota, totales).
+- Las emisiones nunca se reintentan y los errores con resultado desconocido se marcan como `uncertain`.
+- Los errores de negocio de ARCA (`arrayErrores`) se lanzan como `ArcaServiceError` en las consultas.
+- Autenticación WSAA automática (via `@ramiidv/arca-common`), con `ticketStorage` persistente opcional.
+- ESM, Node 18+, `fetch` nativo.
 
-- Zero dependencias SOAP: construye los envelopes SOAP manualmente
-- Zero dependencias HTTP: usa `fetch` nativo (Node 18+)
-- Firma CMS/PKCS#7 con node-forge (via arca-common)
-- ESM only
-- TypeScript estricto con tipos completos
-- Cache automatico de tokens WSAA
-- Reintentos con backoff exponencial
-- Sistema de eventos para monitoreo
-
-## Instalacion
+## Instalación
 
 ```bash
 npm install @ramiidv/arca-mtxca
 ```
 
-## WSMTXCA vs WSFEv1
-
-| Caracteristica | WSFEv1 (`arca-facturacion`) | WSMTXCA (`arca-mtxca`) |
-|---|---|---|
-| Detalle de items | No | Si (codigo, descripcion, cantidad, precio unitario por linea) |
-| Protocolo | SOAP (.NET) | SOAP (Java) |
-| Formato fechas | YYYYMMDD | YYYY-MM-DD |
-| IVA por item | No (subtotales globales) | Si (codigoCondicionIVA + importeIVA por item) |
-| Tipos cbte | A, B, C, E, M, FCE | A, B, M |
-| Uso tipico | Facturas sin detalle de productos | Facturas con detalle de productos (ej: retail, e-commerce) |
-
-## Inicio rapido
+## Inicio rápido
 
 ```typescript
-import { readFileSync } from 'fs';
-import { ArcaMtxca, CbteTipo, CodigoCondicionIVA } from '@ramiidv/arca-mtxca';
+import { readFileSync } from 'node:fs';
+import { ArcaMtxca, CbteTipo, Concepto, CodigoCondicionIVA, Moneda } from '@ramiidv/arca-mtxca';
 
 const mtxca = new ArcaMtxca({
   cert: readFileSync('./cert.pem', 'utf-8'),
   key: readFileSync('./key.pem', 'utf-8'),
-  cuit: 20123456789,
-  production: false, // false = homologacion
+  cuit: '20-12345678-6',
+  production: false, // homologación
 });
 
-// Autorizar factura B con detalle de articulos
-const result = await mtxca.autorizar({
-  ptoVta: 1,
-  cbteTipo: CbteTipo.FACTURA_B,
-  invoice: {
-    concepto: 1, // Productos
-    docTipo: 99, // Consumidor Final
-    docNro: 0,
-    cbteFch: '2026-03-31',
-    importeTotal: 121,
-    importeGravado: 100,
-    importeNoGravado: 0,
-    importeExento: 0,
-    subtotalesIVA: [
-      { codigo: CodigoCondicionIVA.IVA_21, baseImponible: 100, importe: 21 },
-    ],
-    items: [
-      {
-        codigo: '7790001000012',
-        descripcion: 'Producto de ejemplo',
-        cantidad: 2,
-        unidadMedida: 7, // unidades
-        precioUnitario: 50,
-        importeItem: 100,
-        codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
-        importeIVA: 21,
-      },
-    ],
-  },
+// Factura A: 1 producto a $100 + IVA 21%
+const res = await mtxca.autorizar({
+  codigoTipoComprobante: CbteTipo.FACTURA_A,
+  numeroPuntoVenta: 4000,
+  // numeroComprobante: omitido => último autorizado + 1
+  fechaEmision: new Date(),
+  codigoTipoDocumento: 80,
+  numeroDocumento: '30-00000000-7',
+  condicionIVAReceptor: 1, // RG 5616: ver getCondicionesIVAReceptor()
+  importeGravado: 100,
+  importeNoGravado: 0,
+  importeExento: 0,
+  importeSubtotal: 100,
+  importeTotal: 121,
+  codigoMoneda: Moneda.PESOS,
+  cotizacionMoneda: 1,
+  codigoConcepto: Concepto.PRODUCTOS,
+  items: [{
+    unidadesMtx: 1,
+    codigoMtx: '7790001000012',
+    codigo: 'P0001',
+    descripcion: 'Producto de ejemplo',
+    cantidad: 1,
+    codigoUnidadMedida: 7,
+    precioUnitario: 100, // clase A: sin IVA
+    codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
+    importeIVA: 21,
+    importeItem: 121, // con IVA incluido
+  }],
+  subtotalesIVA: [{ codigo: CodigoCondicionIVA.IVA_21, importe: 21 }],
 });
 
-if (result.resultado === 'A') {
-  console.log('CAE:', result.cae);
-  console.log('Vencimiento:', result.caeFchVto);
-  console.log('Cbte Nro:', result.cbteNro);
+if (res.resultado === 'R') {
+  console.error('Rechazado', res.errores);
+} else {
+  // 'A' aprobado, 'O' aprobado con observaciones
+  console.log(res.comprobante.numeroComprobante, res.comprobante.cae, res.comprobante.fechaVencimientoCAE);
+  if (res.observaciones.length) console.warn(res.observaciones);
 }
 ```
 
-## Configuracion
+## Configuración
+
+`ArcaMtxcaConfig` extiende `ArcaBaseConfig` de `@ramiidv/arca-common`:
+
+| Opción | Descripción |
+| --- | --- |
+| `cert`, `key` | Certificado y clave privada PEM. |
+| `cuit` | CUIT representada (número o string, con o sin guiones). Se valida el dígito verificador. |
+| `production` | `false` (default) = homologación. |
+| `endpoint` | URL de WSMTXCA. Si se indica, ignora `production`. |
+| `wsaaEndpoint` | URL de WSAA. Si se indica, ignora `production` para el login. |
+| `timeout`, `retries`, `retryDelayMs` | Transporte. `retries` solo aplica a consultas. |
+| `ticketStorage` | Storage persistente de tickets WSAA (recomendado en producción). |
+| `tokenTTLMinutes`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs` | Opciones de WSAA. |
+| `fetch`, `legacyTls` | `fetch` propio (proxy, tests) y transporte TLS legacy. |
+| `onEvent` | Callback de eventos (`auth:*`, `request:*`). |
+
+Endpoints (manual WSMTXCA):
+
+| Entorno | URL |
+| --- | --- |
+| Homologación | `https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService` |
+| Producción | `https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService` |
+
+Todos los métodos aceptan un último parámetro `opts?: CallOptions` con `signal` para cancelar.
+
+## Reglas de importes
+
+Los campos del request se llaman igual que en el XSD (`ComprobanteType`, `ItemType`). Lo más importante del manual:
+
+- `importeItem` incluye el IVA. En clase A (1, 2, 3, 51, 52, 53) `precioUnitario` va **sin** IVA y el ítem lleva `importeIVA`; en clase B (6, 7, 8) `precioUnitario` va **con** IVA y el ítem no lleva `importeIVA`.
+- `importeItem` = (`precioUnitario` × `cantidad` − `importeBonificacion`) × (1 + alícuota) en clase A; = `precioUnitario` × `cantidad` − `importeBonificacion` en clase B.
+- Unidad 99 (bonificación) y 97 (seña): sin `cantidad`, `precioUnitario` ni `importeBonificacion`; la bonificación tiene `importeItem` negativo y requiere otro ítem con la misma condición de IVA. En clase A, `importeIVA` = `importeItem` − `importeItem` / (1 + alícuota).
+- Fuera de 97/99, `unidadesMtx` y `codigoMtx` son obligatorios.
+- `importeGravado` = Σ (`importeItem` − IVA) de los ítems con condición 3–6; `importeNoGravado` = Σ ítems condición 1; `importeExento` = Σ ítems condición 2; `importeSubtotal` = gravado + no gravado + exento.
+- `subtotalesIVA`: uno por cada condición 4, 5 o 6 presente, con la suma del IVA de esos ítems.
+- `importeTotal` = `importeSubtotal` + `importeOtrosTributos` + Σ subtotales de IVA = `importeOtrosTributos` + Σ `importeItem`.
+- Margen de error del manual: error relativo ≤ 0,01% o absoluto ≤ 0,01 × cantidad de elementos.
+
+`autorizar()` valida todo esto antes de enviar y lanza `ArcaValidationError` con el detalle (incluye el código de error de ARCA que se evita y el valor esperado). Si ARCA acepta un caso que la validación local rechaza, pasá `{ validarImportes: false }`. Para redondear como el SDK: `roundImporte()` y `roundDecimal()`.
+
+Ejemplo de bonificación en clase A:
 
 ```typescript
-interface ArcaMtxcaConfig {
-  /** Certificado X.509 en formato PEM */
-  cert: string;
-  /** Clave privada RSA en formato PEM */
-  key: string;
-  /** CUIT del contribuyente (sin guiones) */
-  cuit: number;
-  /** Usar endpoints de produccion (default: false) */
-  production?: boolean;
-  /** Timeout en ms (default: 30000) */
-  timeout?: number;
-  /** Cantidad de reintentos en errores 5xx/red (default: 1) */
-  retries?: number;
-  /** Delay base en ms para backoff exponencial (default: 1000) */
-  retryDelayMs?: number;
-  /** Callback de eventos para monitoreo */
-  onEvent?: (event: ArcaEvent) => void;
+items: [
+  { unidadesMtx: 1, codigoMtx: '7790001000012', descripcion: 'Producto', cantidad: 1, codigoUnidadMedida: 7,
+    precioUnitario: 100, codigoCondicionIVA: 5, importeIVA: 21, importeItem: 121 },
+  { descripcion: 'Bonificación 10%', codigoUnidadMedida: 99, codigoCondicionIVA: 5, importeIVA: -2.1, importeItem: -12.1 },
+],
+importeGravado: 90, importeSubtotal: 90, importeTotal: 108.9,
+subtotalesIVA: [{ codigo: 5, importe: 18.9 }],
+```
+
+## Resultado de una autorización y manejo de errores
+
+| Situación | Qué pasa |
+| --- | --- |
+| Datos inválidos localmente | `ArcaValidationError` (no se hace ningún request). |
+| ARCA aprueba | `{ resultado: 'A', comprobante: { cae, fechaVencimientoCAE, ... } }` |
+| ARCA aprueba con observaciones | `{ resultado: 'O', comprobante, observaciones }` |
+| ARCA rechaza | `{ resultado: 'R', errores }` — **no lanza**; revisá `resultado`. |
+| Consulta con `arrayErrores` | `ArcaServiceError` con `errors[]` (`code`, `msg`). |
+| Fault SOAP, HTTP, red, timeout | `ArcaSoapError` (`uncertain`, `faultString`, `statusCode`). |
+| Login WSAA | `ArcaAuthError` / `ArcaTicketVigenteError`. |
+
+`ultimoComprobante()` devuelve 0 solo ante el error 1502 de ARCA ("no hay comprobantes para ese punto de venta y tipo"); cualquier otro error lanza.
+
+### Emisiones con resultado incierto
+
+`autorizar`, `autorizarAjusteIVA`, `solicitarCAEA`, `informarComprobanteCAEA`, `informarAjusteIVACAEA`, `informarCAEANoUtilizado` e `informarCAEANoUtilizadoPtoVta` se envían una sola vez (nunca se reintentan). Si fallan con `ArcaSoapError` y `uncertain === true` (timeout, conexión cortada, HTTP 5xx, respuesta ilegible), ARCA pudo haber procesado el request. **No reintentes a ciegas**: si el comprobante ya fue autorizado, un reenvío con el mismo número es rechazado por correlatividad (102) y uno con el número siguiente duplica la factura.
+
+```typescript
+import { ArcaSoapError } from '@ramiidv/arca-mtxca';
+
+const numero = (await mtxca.ultimoComprobante(4000, CbteTipo.FACTURA_A)) + 1;
+try {
+  return await mtxca.autorizar({ ...comprobante, numeroComprobante: numero });
+} catch (e) {
+  if (e instanceof ArcaSoapError && e.uncertain) {
+    // ¿Llegó a autorizarse?
+    const ultimo = await mtxca.ultimoComprobante(4000, CbteTipo.FACTURA_A);
+    if (ultimo >= numero) {
+      const { comprobante } = await mtxca.consultarComprobante(CbteTipo.FACTURA_A, 4000, numero);
+      return comprobante; // codigoAutorizacion = CAE
+    }
+    // No se autorizó: se puede reenviar con el mismo número.
+  }
+  throw e;
 }
 ```
+
+Para CAEA: `solicitarCAEA` incierto → `consultarCAEAEntreFechas()`; `informarComprobanteCAEA` incierto → `consultarComprobante()`.
+
+Las solicitudes de un mismo punto de venta y tipo deben ser secuenciales (ARCA rechaza con 135 una solicitud concurrente), y la numeración automática supone un único emisor por punto de venta.
 
 ## API
 
-### Metodos principales
+### Comprobantes con CAE
 
-#### `autorizar(request: AutorizarRequest): Promise<MtxcaInvoiceResult>`
+| Método | Operación WSMTXCA |
+| --- | --- |
+| `autorizar(req, opts?)` | `autorizarComprobante` (número automático si se omite) |
+| `autorizarAjusteIVA(req, opts?)` | `autorizarAjusteIVA` (solo valida el XSD: tiene reglas propias) |
+| `ultimoComprobante(ptoVta, cbteTipo, opts?)` | `consultarUltimoComprobanteAutorizado` |
+| `siguienteComprobante(ptoVta, cbteTipo, opts?)` | último + 1 |
+| `consultarComprobante(cbteTipo, ptoVta, cbteNro, opts?)` | `consultarComprobante` → `{ comprobante, observaciones, evento? }` |
 
-Autoriza un comprobante con detalle de articulos. Retorna CAE si fue aprobado.
+### CAEA
 
-```typescript
-const result = await mtxca.autorizar({
-  ptoVta: 1,
-  cbteTipo: CbteTipo.FACTURA_A,
-  invoice: {
-    concepto: 1,
-    docTipo: 80, // CUIT
-    docNro: 30123456789,
-    cbteFch: '2026-03-31',
-    importeTotal: 242,
-    importeGravado: 200,
-    subtotalesIVA: [
-      { codigo: CodigoCondicionIVA.IVA_21, baseImponible: 200, importe: 42 },
-    ],
-    items: [
-      {
-        codigo: '001',
-        descripcion: 'Servicio de consultoria',
-        cantidad: 1,
-        unidadMedida: 7,
-        precioUnitario: 200,
-        importeItem: 200,
-        codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
-        importeIVA: 42,
-      },
-    ],
-  },
-});
-```
+| Método | Operación WSMTXCA |
+| --- | --- |
+| `solicitarCAEA(periodo, orden, opts?)` | `solicitarCAEA` (`periodo` AAAAMM, `orden` 1 o 2) |
+| `consultarCAEA(caea, opts?)` | `consultarCAEA` |
+| `consultarCAEAEntreFechas(desde, hasta, opts?)` | `consultarCAEAEntreFechas` |
+| `informarComprobanteCAEA(comp, opts?)` | `informarComprobanteCAEA` (`comp.caea` = CAEA usado) |
+| `informarAjusteIVACAEA(comp, opts?)` | `informarAjusteIVACAEA` |
+| `informarCAEANoUtilizado(caea, opts?)` | `informarCAEANoUtilizado` |
+| `informarCAEANoUtilizadoPtoVta(caea, ptoVta, opts?)` | `informarCAEANoUtilizadoPtoVta` |
+| `consultarPtosVtaCAEANoInformados(caea, opts?)` | `consultarPtosVtaCAEANoInformados` |
 
-#### `ultimoComprobante(ptoVta, cbteTipo): Promise<number>`
+### Parámetros y estado
 
-Ultimo numero de comprobante autorizado.
+| Método | Operación | Devuelve |
+| --- | --- | --- |
+| `status()` | `dummy` (sin auth) | `{ appserver, dbserver, authserver }` |
+| `getTiposComprobante()` | `consultarTiposComprobante` | `CodigoDescripcion[]` |
+| `getTiposDocumento()` | `consultarTiposDocumento` | `CodigoDescripcion[]` |
+| `getAlicuotasIVA()` | `consultarAlicuotasIVA` | `CodigoDescripcion[]` |
+| `getCondicionesIVA()` | `consultarCondicionesIVA` | `CodigoDescripcion[]` |
+| `getCondicionesIVAReceptor(cbteTipo)` | `consultarCondicionesIVAReceptor` | `CodigoDescripcion[]` |
+| `getMonedas()` | `consultarMonedas` | `{ codigo: string, descripcion }[]` |
+| `getCotizacionMoneda(codigo, fecha?)` | `consultarCotizacionMoneda` | `{ codigoMoneda, fechaCotizacion, cotizacion: number \| null }` |
+| `getUnidadesMedida()` | `consultarUnidadesMedida` | `CodigoDescripcion[]` |
+| `getTiposTributo()` | `consultarTiposTributo` | `CodigoDescripcion[]` |
+| `getTiposDatosAdicionales()` | `consultarTiposDatosAdicionales` | `CodigoDescripcion[]` |
+| `getActividadesVigentes()` | `consultarActividadesVigentes` | `{ codigo, orden, descripcion }[]` |
+| `getPuntosVenta()` / `getPuntosVentaCAE()` / `getPuntosVentaCAEA()` | `consultarPuntosVenta*` | `{ numeroPuntoVenta, bloqueado, fechaBaja? }[]` |
 
-```typescript
-const ultimo = await mtxca.ultimoComprobante(1, CbteTipo.FACTURA_B);
-```
+`getCotizacionMoneda` usa la fecha de hoy si no se indica; `cotizacion` es `null` cuando ARCA no tiene cotización (responde sin valor y sin error).
 
-#### `siguienteComprobante(ptoVta, cbteTipo): Promise<number>`
+`clearAuthCache()` (async) descarta el ticket WSAA de `wsmtxca`.
 
-Siguiente numero de comprobante (ultimo + 1).
+### Cliente de bajo nivel
 
-```typescript
-const siguiente = await mtxca.siguienteComprobante(1, CbteTipo.FACTURA_B);
-```
-
-#### `consultarComprobante(cbteTipo, ptoVta, cbteNro): Promise<MtxcaComprobante>`
-
-Consulta un comprobante previamente autorizado, incluyendo el detalle de items.
+`mtxca.client` (`MtxcaClient`) expone una función por operación del WSDL (`autorizarComprobante`, `consultarCAEA`, ...) que recibe `MtxcaAuth` (`{ token, sign, cuitRepresentada }`) y `numeroComprobante` explícito. Valida contra el XSD y redondea, pero no valida la coherencia de importes. Se puede usar sin `ArcaMtxca`:
 
 ```typescript
-const comprobante = await mtxca.consultarComprobante(CbteTipo.FACTURA_B, 1, 150);
-console.log(comprobante.items); // Detalle de articulos
+import { MtxcaClient, MTXCA_ENDPOINTS } from '@ramiidv/arca-mtxca';
+const client = new MtxcaClient({ endpoint: MTXCA_ENDPOINTS.testing });
+await client.dummy();
 ```
 
-#### `status(): Promise<ServerStatus>`
+## Enums y constantes
 
-Health check del servicio. No requiere autenticacion.
-
-```typescript
-const estado = await mtxca.status();
-console.log(estado.appserver); // "OK"
-```
-
-### Consulta de parametros
-
-```typescript
-const tiposCbte = await mtxca.getTiposComprobante();
-const tiposDoc = await mtxca.getTiposDocumento();
-const alicuotas = await mtxca.getAlicuotasIVA();
-const condiciones = await mtxca.getCondicionesIVA();
-const monedas = await mtxca.getMonedas();
-const unidades = await mtxca.getUnidadesMedida();
-const ptosVenta = await mtxca.getPuntosVenta();
-const ptosVentaCAE = await mtxca.getPuntosVentaCAE();
-const ptosVentaCAEA = await mtxca.getPuntosVentaCAEA();
-const cotizacion = await mtxca.getCotizacionMoneda('DOL');
-```
-
-### Acceso a clientes de bajo nivel
-
-Para casos avanzados, se pueden usar los clientes individuales directamente:
-
-```typescript
-const mtxca = new ArcaMtxca({ /* ... */ });
-
-// Obtener ticket de acceso manualmente
-const ticket = await mtxca.wsaa.getAccessTicket('wsmtxca');
-
-const auth = {
-  Token: ticket.token,
-  Sign: ticket.sign,
-  Cuit: 20123456789,
-};
-
-// Llamar directamente al servicio
-const result = await mtxca.client.autorizarComprobante(auth, request);
-```
-
-## Tipos principales
-
-### MtxcaItem
-
-```typescript
-interface MtxcaItem {
-  codigo?: string;         // Codigo/barcode del producto
-  descripcion: string;     // Descripcion del producto/servicio
-  cantidad: number;        // Cantidad
-  unidadMedida: number;    // Codigo unidad de medida
-  precioUnitario: number;  // Precio unitario
-  importeItem: number;     // Importe total del item
-  codigoCondicionIVA: number; // Condicion de IVA del item
-  importeIVA: number;      // Importe de IVA del item
-  importeBonificacion?: number; // Descuento
-}
-```
-
-### MtxcaInvoiceResult
-
-```typescript
-interface MtxcaInvoiceResult {
-  resultado: string;     // "A" = Aprobado, "R" = Rechazado
-  cae?: string;          // CAE otorgado
-  caeFchVto?: string;    // Vencimiento del CAE (YYYY-MM-DD)
-  cbteNro: number;       // Numero de comprobante
-  observaciones: MtxcaObservacion[];
-  errores: MtxcaObservacion[];
-}
-```
-
-### MtxcaComprobante
-
-```typescript
-interface MtxcaComprobante {
-  codigoTipoComprobante: number;
-  numeroPuntoVenta: number;
-  numeroComprobante: number;
-  fechaEmision: string;
-  codigoTipoDocumento: number;
-  numeroDocumento: number;
-  importeTotal: number;
-  importeNoGravado: number;
-  importeGravado: number;
-  importeExento: number;
-  importeOtrosTributos: number;
-  importeSubtotal: number;
-  codigoMoneda: string;
-  cotizacionMoneda: number;
-  resultado: string;
-  codigoAutorizacion?: string;
-  fechaVencimiento?: string;
-  observaciones: MtxcaObservacion[];
-  items: MtxcaItem[];
-}
-```
-
-## Manejo de errores
-
-El SDK usa la jerarquia de errores de `@ramiidv/arca-common`:
-
-```
-Error
-  └── ArcaError (base)
-        ├── ArcaAuthError (errores de WSAA)
-        ├── ArcaServiceError (errores de negocio)
-        └── ArcaSoapError (errores HTTP/transporte)
-```
-
-```typescript
-import { ArcaAuthError, ArcaServiceError, ArcaSoapError } from '@ramiidv/arca-mtxca';
-
-try {
-  await mtxca.autorizar(request);
-} catch (error) {
-  if (error instanceof ArcaAuthError) {
-    // Certificado vencido, servicio no autorizado, WSAA caido
-    console.error('Error de autenticacion:', error.message);
-  } else if (error instanceof ArcaServiceError) {
-    // Errores de negocio (comprobante rechazado, etc.)
-    for (const detalle of error.errors) {
-      console.error(`[${detalle.code}] ${detalle.msg}`);
-    }
-  } else if (error instanceof ArcaSoapError) {
-    // Errores HTTP/red
-    console.error('Error HTTP:', error.statusCode, error.message);
-  }
-}
-```
-
-Ademas, las respuestas de `autorizar()` pueden tener `resultado === 'R'` con observaciones/errores sin lanzar excepcion. Siempre verificar `result.resultado`:
-
-```typescript
-const result = await mtxca.autorizar(request);
-if (result.resultado !== 'A') {
-  console.error('Rechazado:', result.errores);
-  console.warn('Observaciones:', result.observaciones);
-}
-```
-
-## Eventos
-
-```typescript
-const mtxca = new ArcaMtxca({
-  // ...
-  onEvent: (evento) => {
-    switch (evento.type) {
-      case 'auth:login':
-        console.log(`Login para ${evento.service}`);
-        break;
-      case 'auth:cache-hit':
-        console.log(`Token cacheado para ${evento.service}`);
-        break;
-      case 'request:start':
-        console.log(`Inicio ${evento.method}`);
-        break;
-      case 'request:end':
-        console.log(`Fin ${evento.method} (${evento.durationMs}ms)`);
-        break;
-      case 'request:retry':
-        console.log(`Reintento #${evento.attempt}`);
-        break;
-      case 'request:error':
-        console.error(`Error: ${evento.error}`);
-        break;
-    }
-  },
-});
-```
-
-## Enums utiles
-
-```typescript
-import { CbteTipo, Concepto, CodigoCondicionIVA, Moneda } from '@ramiidv/arca-mtxca';
-
-// Tipos de comprobante
-CbteTipo.FACTURA_A     // 1
-CbteTipo.NOTA_DEBITO_A // 2
-CbteTipo.NOTA_CREDITO_A // 3
-CbteTipo.FACTURA_B     // 6
-CbteTipo.NOTA_DEBITO_B // 7
-CbteTipo.NOTA_CREDITO_B // 8
-
-// Concepto
-Concepto.PRODUCTOS     // 1
-Concepto.SERVICIOS     // 2
-Concepto.PRODUCTOS_Y_SERVICIOS // 3
-
-// Condicion IVA del item
-CodigoCondicionIVA.NO_GRAVADO // 1
-CodigoCondicionIVA.EXENTO     // 2
-CodigoCondicionIVA.IVA_0      // 3
-CodigoCondicionIVA.IVA_10_5   // 4
-CodigoCondicionIVA.IVA_21     // 5
-CodigoCondicionIVA.IVA_27     // 6
-CodigoCondicionIVA.GRAVADO    // 7
-CodigoCondicionIVA.IVA_5      // 8
-CodigoCondicionIVA.IVA_2_5    // 9
-
-// Monedas
-Moneda.PESOS   // "PES"
-Moneda.DOLARES // "DOL"
-Moneda.EUROS   // "060"
-```
+- `CbteTipo`: 1, 2, 3, 6, 7, 8, 51, 52, 53 (A con leyenda "OPERACIÓN SUJETA A RETENCIÓN") y FCE 201–203, 206–208.
+- `Concepto`: 1 productos, 2 servicios, 3 ambos.
+- `CodigoCondicionIVA`: 1 no gravado, 2 exento, 3 0%, 4 10,5%, 5 21%, 6 27% (y `ALICUOTAS_IVA`).
+- `UnidadMedidaEspecial`: 95, 97 (seña), 99 (bonificación).
+- `Moneda`: `PES`, `DOL`, `060` (euro). Lista completa: `getMonedas()`.
 
 ## Requisitos
 
-- Node.js >= 18 (soporte nativo de `fetch`)
-- Certificado digital emitido por ARCA/AFIP
-- Autorizacion para el servicio `wsmtxca`
+- Node.js >= 18.
+- Certificado digital de ARCA asociado al servicio `wsmtxca` y empadronamiento en "Codificación de Productos – Factura con Detalle".
 
 ## Licencia
 

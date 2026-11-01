@@ -1,90 +1,90 @@
 /**
- * Ejemplo: Manejo de errores
+ * Ejemplo: manejo de errores.
  *
- * El SDK provee clases de error especificas para catch granular:
- *   - ArcaAuthError: falla de autenticacion WSAA
- *   - ArcaSoapError: error HTTP/SOAP (timeout, servidor caido)
- *   - ArcaServiceError: error de negocio de ARCA (con codigos)
- *   - ArcaValidationError: datos de entrada invalidos
+ *   - ArcaValidationError: datos inválidos detectados localmente (no se envió nada)
+ *   - resultado 'R': ARCA rechazó el comprobante (autorizar no lanza)
+ *   - ArcaServiceError: una consulta devolvió arrayErrores
+ *   - ArcaSoapError: Fault SOAP, HTTP, red o timeout (ver `uncertain`)
+ *   - ArcaAuthError / ArcaTicketVigenteError: login WSAA
  */
 
-import fs from "fs";
+import fs from 'node:fs';
 import {
   ArcaMtxca,
+  ArcaAuthError,
+  ArcaServiceError,
+  ArcaSoapError,
+  ArcaTicketVigenteError,
+  ArcaValidationError,
   CbteTipo,
   CodigoCondicionIVA,
-  ArcaAuthError,
-  ArcaSoapError,
-  ArcaServiceError,
-} from "@ramiidv/arca-mtxca";
-import { ArcaValidationError } from "@ramiidv/arca-common";
+  Concepto,
+  FileTicketStorage,
+  Moneda,
+} from '@ramiidv/arca-mtxca';
 
 async function main() {
   const mtxca = new ArcaMtxca({
-    cuit: 20123456789,
-    cert: fs.readFileSync("./certs/certificado.crt", "utf-8"),
-    key: fs.readFileSync("./certs/clave.key", "utf-8"),
+    cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+    key: fs.readFileSync('./certs/clave.key', 'utf-8'),
+    cuit: '20123456786',
     production: false,
     timeout: 60_000,
+    ticketStorage: new FileTicketStorage('./.tickets'),
+    onEvent: (e) => console.debug('[arca]', e.type),
   });
 
   try {
-    const result = await mtxca.autorizar({
-      ptoVta: 1,
-      cbteTipo: CbteTipo.FACTURA_B,
-      invoice: {
-        concepto: 1,
-        docTipo: 99,
-        docNro: 0,
-        cbteFch: "2026-03-31",
-        importeTotal: 121,
-        items: [
-          {
-            descripcion: "Producto de ejemplo",
-            cantidad: 1,
-            unidadMedida: 7,
-            precioUnitario: 100,
-            importeItem: 100,
-            codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
-            importeIVA: 21,
-          },
-        ],
-      },
+    const res = await mtxca.autorizar({
+      codigoTipoComprobante: CbteTipo.FACTURA_A,
+      numeroPuntoVenta: 4000,
+      codigoTipoDocumento: 80,
+      numeroDocumento: '30000000007',
+      condicionIVAReceptor: 1,
+      importeGravado: 100,
+      importeSubtotal: 100,
+      importeTotal: 125, // incoherente: debería ser 121
+      codigoMoneda: Moneda.PESOS,
+      cotizacionMoneda: 1,
+      codigoConcepto: Concepto.PRODUCTOS,
+      items: [{
+        unidadesMtx: 1,
+        codigoMtx: '7790001000012',
+        descripcion: 'Producto',
+        cantidad: 1,
+        codigoUnidadMedida: 7,
+        precioUnitario: 100,
+        codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
+        importeIVA: 21,
+        importeItem: 121,
+      }],
+      subtotalesIVA: [{ codigo: CodigoCondicionIVA.IVA_21, importe: 21 }],
     });
 
-    if (result.resultado !== "A") {
-      console.error("Factura rechazada:");
-      for (const obs of result.observaciones) {
-        console.error(`  [${obs.code}] ${obs.msg}`);
-      }
-      return;
+    if (res.resultado === 'R') {
+      for (const err of res.errores) console.error(`ARCA rechazó [${err.codigo}] ${err.descripcion}`);
+    } else {
+      console.log('CAE:', res.comprobante.cae);
     }
-
-    console.log(`CAE: ${result.cae}`);
   } catch (e) {
     if (e instanceof ArcaValidationError) {
-      // Datos de entrada invalidos (se detecta antes de llamar al servicio)
-      console.error("Error de validacion:", e.message);
-      for (const detail of e.details) {
-        console.error(`  Campo: ${detail.field} - ${detail.message}`);
-      }
-    } else if (e instanceof ArcaAuthError) {
-      // Certificado invalido, expirado, o respuesta WSAA inesperada
-      console.error("Error de autenticacion:", e.message);
-      mtxca.clearAuthCache();
+      for (const d of e.details) console.error(`Dato inválido ${d.field}: ${d.message}`);
     } else if (e instanceof ArcaServiceError) {
-      // Error de negocio con codigos de ARCA
-      for (const err of e.errors) {
-        console.error(`ARCA [${err.code}]: ${err.msg}`);
-      }
+      for (const err of e.errors) console.error(`Error de ARCA [${err.code}] ${err.msg}`);
     } else if (e instanceof ArcaSoapError) {
-      // Timeout, HTTP 500, SOAP Fault
-      console.error("Error de conexion:", e.message);
-      if (e.statusCode) console.error("HTTP status:", e.statusCode);
+      console.error(`Error SOAP/HTTP: ${e.message}`, { uncertain: e.uncertain, fault: e.faultString, status: e.statusCode });
+      if (e.uncertain) console.error('El comprobante pudo haberse autorizado: verificá con ultimoComprobante/consultarComprobante.');
+    } else if (e instanceof ArcaTicketVigenteError) {
+      console.error('Hay un ticket WSAA vigente que no está en el storage; esperá a que venza.');
+    } else if (e instanceof ArcaAuthError) {
+      console.error('Error de autenticación WSAA:', e.message);
     } else {
       throw e;
     }
   }
 }
 
-main().catch(console.error);
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

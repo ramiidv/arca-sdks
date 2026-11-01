@@ -1,77 +1,58 @@
 /**
- * Ejemplo: Consultas de parametros del servicio WSMTXCA
- *
- * Consulta tipos de comprobante, monedas, unidades de medida, cotizacion
- * de monedas, puntos de venta y otros parametros del servicio.
+ * Ejemplo: consultas de parámetros, comprobantes y CAEA.
  */
 
-import fs from "fs";
-import { ArcaMtxca, CbteTipo, Moneda } from "@ramiidv/arca-mtxca";
+import fs from 'node:fs';
+import { ArcaMtxca, ArcaServiceError, CbteTipo, Moneda } from '@ramiidv/arca-mtxca';
 
 async function main() {
   const mtxca = new ArcaMtxca({
-    cuit: 20123456789,
-    cert: fs.readFileSync("./certs/certificado.crt", "utf-8"),
-    key: fs.readFileSync("./certs/clave.key", "utf-8"),
+    cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+    key: fs.readFileSync('./certs/clave.key', 'utf-8'),
+    cuit: '20123456786',
     production: false,
   });
 
-  // Tipos de comprobante disponibles
-  const tiposCbte = await mtxca.getTiposComprobante();
-  console.log("Tipos de comprobante:");
-  for (const tipo of tiposCbte) {
-    console.log(`  [${tipo.Id}] ${tipo.Desc}`);
+  console.log('Estado:', await mtxca.status());
+
+  console.log('Tipos de comprobante:', await mtxca.getTiposComprobante());
+  console.log('Condiciones de IVA (ítems):', await mtxca.getCondicionesIVA());
+  console.log('Condiciones de IVA del receptor (Factura B):', await mtxca.getCondicionesIVAReceptor(CbteTipo.FACTURA_B));
+  console.log('Unidades de medida:', await mtxca.getUnidadesMedida());
+  console.log('Tipos de tributo:', await mtxca.getTiposTributo());
+  console.log('Monedas:', await mtxca.getMonedas());
+  console.log('Actividades vigentes:', await mtxca.getActividadesVigentes());
+  console.log('Puntos de venta CAE:', await mtxca.getPuntosVentaCAE());
+
+  const cot = await mtxca.getCotizacionMoneda(Moneda.DOLARES);
+  console.log(cot.cotizacion === null ? `Sin cotización para ${cot.fechaCotizacion}` : `Dólar ${cot.fechaCotizacion}: ${cot.cotizacion}`);
+
+  const ultimo = await mtxca.ultimoComprobante(4000, CbteTipo.FACTURA_A);
+  console.log('Último Factura A:', ultimo);
+  if (ultimo > 0) {
+    const { comprobante } = await mtxca.consultarComprobante(CbteTipo.FACTURA_A, 4000, ultimo);
+    console.log(`Comprobante ${comprobante.numeroComprobante}: total ${comprobante.importeTotal}, ${comprobante.items.length} ítems`);
   }
 
-  // Tipos de documento
-  const tiposDoc = await mtxca.getTiposDocumento();
-  console.log("\nTipos de documento:");
-  for (const doc of tiposDoc) {
-    console.log(`  [${doc.Id}] ${doc.Desc}`);
+  // CAEA de la quincena actual
+  const hoy = new Date();
+  const periodo = hoy.getFullYear() * 100 + hoy.getMonth() + 1;
+  const orden = hoy.getDate() <= 15 ? 1 : 2;
+  try {
+    const caea = await mtxca.solicitarCAEA(periodo, orden);
+    console.log(`CAEA ${caea.caea}: ${caea.fechaDesde} a ${caea.fechaHasta}, informar hasta ${caea.fechaTopeInforme}`);
+  } catch (e) {
+    if (e instanceof ArcaServiceError) {
+      console.error('CAEA rechazado:', e.errors);
+      const otorgados = await mtxca.consultarCAEAEntreFechas(new Date(hoy.getFullYear(), hoy.getMonth(), 1), hoy);
+      console.log('CAEAs ya otorgados:', otorgados.map((c) => c.caea));
+    } else {
+      throw e;
+    }
   }
-
-  // Monedas disponibles
-  const monedas = await mtxca.getMonedas();
-  console.log("\nMonedas:");
-  for (const m of monedas) {
-    console.log(`  [${m.Id}] ${m.Desc}`);
-  }
-
-  // Cotizacion del dolar
-  const cotizacion = await mtxca.getCotizacionMoneda(Moneda.DOLARES);
-  console.log(`\nCotizacion USD: ${cotizacion.cotizacion} (${cotizacion.fechaCotizacion})`);
-
-  // Unidades de medida
-  const unidades = await mtxca.getUnidadesMedida();
-  console.log("\nUnidades de medida:");
-  for (const u of unidades) {
-    console.log(`  [${u.Id}] ${u.Desc}`);
-  }
-
-  // Alicuotas de IVA
-  const alicuotas = await mtxca.getAlicuotasIVA();
-  console.log("\nAlicuotas IVA:");
-  for (const a of alicuotas) {
-    console.log(`  [${a.Id}] ${a.Desc}`);
-  }
-
-  // Condiciones de IVA
-  const condiciones = await mtxca.getCondicionesIVA();
-  console.log("\nCondiciones IVA:");
-  for (const c of condiciones) {
-    console.log(`  [${c.Id}] ${c.Desc}`);
-  }
-
-  // Puntos de venta habilitados
-  const ptosVenta = await mtxca.getPuntosVenta();
-  console.log("\nPuntos de venta:");
-  for (const pv of ptosVenta) {
-    console.log(`  PtoVta ${pv.Nro} - Tipo: ${pv.EmisionTipo} - Bloqueado: ${pv.Bloqueado}`);
-  }
-
-  // Ultimo comprobante autorizado
-  const ultimoNro = await mtxca.ultimoComprobante(1, CbteTipo.FACTURA_B);
-  console.log(`\nUltimo Factura B en PtoVta 1: #${ultimoNro}`);
 }
 
-main().catch(console.error);
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

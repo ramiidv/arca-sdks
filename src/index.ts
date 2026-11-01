@@ -1,57 +1,78 @@
-// Main class
+// Cliente de alto nivel
 export { ArcaMtxca } from './arca-mtxca.js';
 
-// Low-level client
+// Cliente de bajo nivel
 export { MtxcaClient } from './mtxca-client.js';
 export type { MtxcaClientConfig } from './mtxca-client.js';
 
-// Errors (re-exported from common)
+// Errores (de common)
 export {
   ArcaError,
   ArcaAuthError,
   ArcaSoapError,
   ArcaServiceError,
+  ArcaValidationError,
+  ArcaTicketVigenteError,
 } from '@ramiidv/arca-common';
+export type { ServiceErrorDetail, ValidationErrorDetail } from '@ramiidv/arca-common';
 
-// Types
+// WSAA y storage de tickets (de common)
+export { WsaaClient, MemoryTicketStorage, FileTicketStorage } from '@ramiidv/arca-common';
+export type { WsaaClientConfig } from '@ramiidv/arca-common';
+
+// Tipos
 export type {
   ArcaMtxcaConfig,
   MtxcaAuth,
+  FechaInput,
   MtxcaItem,
-  SubtotalIVA,
+  MtxcaSubtotalIVA,
+  MtxcaOtroTributo,
   MtxcaComprobanteAsociado,
-  MtxcaTributo,
-  MtxcaInvoice,
-  MtxcaObservacion,
-  MtxcaInvoiceResult,
+  MtxcaPeriodo,
+  MtxcaDatoAdicional,
+  MtxcaComprador,
+  MtxcaComprobanteBase,
+  MtxcaComprobanteCAE,
+  MtxcaComprobanteCAEA,
   AutorizarRequest,
-  MtxcaComprobante,
-  ParamItem,
-  MonedaItem,
-  UnidadMedidaItem,
-  PtoVentaItem,
+  AutorizarOptions,
+  CodigoDescripcion,
+  CodigoDescripcionString,
+  MtxcaResultado,
+  MtxcaComprobanteCAEResponse,
+  MtxcaAutorizarResult,
+  MtxcaComprobanteCAEAResponse,
+  MtxcaInformarCAEAResult,
+  MtxcaCAEA,
+  MtxcaCAEANoUtilizadoResult,
+  MtxcaItemConsultado,
+  MtxcaComprobanteConsultado,
+  MtxcaConsultaComprobanteResult,
+  PuntoVenta,
+  ActividadVigente,
   CotizacionResult,
-  // Common types
   AccessTicket,
   ArcaEvent,
+  CallOptions,
+  LegacyTlsMode,
   ServerStatus,
-  SoapCallOptions,
+  TicketStorage,
 } from './types.js';
 
-// Constants and enums
+// Constantes
 export {
   MTXCA_ENDPOINTS,
   MTXCA_NAMESPACE,
   MTXCA_SERVICE_ID,
+  ALICUOTAS_IVA,
   CbteTipo,
   Concepto,
   CodigoCondicionIVA,
+  UnidadMedidaEspecial,
   Moneda,
 } from './constants.js';
 
-// Validation
-export { validateAutorizarRequest, validateMtxcaItem } from './validation.js';
-
-// WSAA (re-exported from common)
-export { WsaaClient } from '@ramiidv/arca-common';
-export type { WsaaClientConfig } from '@ramiidv/arca-common';
+// Validación y redondeo
+export { validateComprobanteCAE, validateComprobanteCAEA } from './validation.js';
+export { roundImporte, roundDecimal } from './format.js';

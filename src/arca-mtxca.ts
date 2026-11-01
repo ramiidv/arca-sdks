@@ -1,235 +1,310 @@
-import { WsaaClient } from '@ramiidv/arca-common';
-import type { ArcaEvent, ServerStatus, SoapCallOptions } from '@ramiidv/arca-common';
-import { MTXCA_SERVICE_ID } from './constants.js';
+import { ArcaServiceError, formatDate, validateCuit, WsaaClient } from '@ramiidv/arca-common';
+import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
+import { MTXCA_ENDPOINTS, MTXCA_SERVICE_ID } from './constants.js';
 import { MtxcaClient } from './mtxca-client.js';
-import { validateAutorizarRequest } from './validation.js';
+import { buildComprobante } from './serialize.js';
+import { validateComprobanteCAE, validateComprobanteCAEA } from './validation.js';
 import type {
+  ActividadVigente,
   ArcaMtxcaConfig,
-  MtxcaAuth,
+  AutorizarOptions,
   AutorizarRequest,
-  MtxcaInvoiceResult,
-  MtxcaComprobante,
-  ParamItem,
-  MonedaItem,
-  UnidadMedidaItem,
-  PtoVentaItem,
+  CodigoDescripcion,
+  CodigoDescripcionString,
   CotizacionResult,
+  FechaInput,
+  MtxcaAuth,
+  MtxcaAutorizarResult,
+  MtxcaCAEA,
+  MtxcaCAEANoUtilizadoResult,
+  MtxcaComprobanteCAEA,
+  MtxcaConsultaComprobanteResult,
+  MtxcaInformarCAEAResult,
+  PuntoVenta,
 } from './types.js';
 
+/** Error 1502 de consultarUltimoComprobanteAutorizado: no hay comprobantes para ese punto de venta y tipo. */
+const SIN_COMPROBANTES = 1502;
+
 /**
- * Main orchestrator class for the WSMTXCA web service.
- *
- * Provides high-level methods that handle WSAA authentication automatically.
- * WSMTXCA is used for electronic invoicing WITH item-level detail (barcodes,
- * quantities, unit prices, product descriptions per line).
+ * Cliente de alto nivel de WSMTXCA (factura electrónica con detalle de
+ * ítems): autenticación WSAA automática, numeración y validación local.
  *
  * @example
  * ```ts
- * import { ArcaMtxca, CbteTipo, CodigoCondicionIVA } from '@ramiidv/arca-mtxca';
- * import { readFileSync } from 'fs';
- *
- * const mtxca = new ArcaMtxca({
- *   cert: readFileSync('cert.pem', 'utf-8'),
- *   key: readFileSync('key.pem', 'utf-8'),
- *   cuit: 20123456789,
- *   production: false,
- * });
- *
- * const result = await mtxca.autorizar({
- *   ptoVta: 1,
- *   cbteTipo: CbteTipo.FACTURA_B,
- *   invoice: {
- *     concepto: 1,
- *     docTipo: 99,
- *     docNro: 0,
- *     cbteFch: '2026-03-31',
- *     importeTotal: 121,
- *     items: [{
- *       descripcion: 'Producto de ejemplo',
- *       cantidad: 1,
- *       unidadMedida: 7,
- *       precioUnitario: 100,
- *       importeItem: 100,
- *       codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
- *       importeIVA: 21,
- *     }],
- *   },
- * });
+ * const mtxca = new ArcaMtxca({ cert, key, cuit: '20123456786' });
+ * const res = await mtxca.autorizar({ ...comprobante });
+ * if (res.resultado === 'R') console.error(res.errores);
+ * else console.log(res.comprobante.cae);
  * ```
  */
 export class ArcaMtxca {
-  /** Low-level WSAA client for direct access */
+  /** Cliente WSAA (acceso directo). */
   public readonly wsaa: WsaaClient;
-  /** Low-level MTXCA SOAP client for direct access */
+  /** Cliente SOAP de bajo nivel (acceso directo). */
   public readonly client: MtxcaClient;
-
-  private readonly cuit: number;
-  private readonly onEvent?: (event: ArcaEvent) => void;
+  /** CUIT representada, normalizada a 11 dígitos. */
+  public readonly cuit: string;
 
   constructor(config: ArcaMtxcaConfig) {
-    const isProduction = config.production ?? false;
-    this.cuit = config.cuit;
-    this.onEvent = config.onEvent;
-
-    const soapOptions: Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs'> = {
-      timeout: config.timeout,
-      retries: config.retries,
-      retryDelayMs: config.retryDelayMs,
-    };
+    this.cuit = validateCuit(config.cuit);
+    const production = config.production ?? false;
 
     this.wsaa = new WsaaClient({
       cert: config.cert,
       key: config.key,
-      production: isProduction,
+      production,
+      endpoint: config.wsaaEndpoint,
+      tokenTTLMinutes: config.tokenTTLMinutes,
       timeout: config.timeout,
       retries: config.retries,
       retryDelayMs: config.retryDelayMs,
       onEvent: config.onEvent,
+      ticketStorage: config.ticketStorage,
+      clockOffsetMs: config.clockOffsetMs,
+      autoClockSkew: config.autoClockSkew,
+      loginErrorCooldownMs: config.loginErrorCooldownMs,
+      fetch: config.fetch,
+      legacyTls: config.legacyTls,
     });
 
     this.client = new MtxcaClient({
-      production: isProduction,
-      soapOptions,
+      endpoint: config.endpoint ?? (production ? MTXCA_ENDPOINTS.production : MTXCA_ENDPOINTS.testing),
+      timeout: config.timeout,
+      retries: config.retries,
+      retryDelayMs: config.retryDelayMs,
       onEvent: config.onEvent,
+      fetch: config.fetch,
+      legacyTls: config.legacyTls,
     });
   }
 
-  // =========================================================================
-  // Auth helper
-  // =========================================================================
-
-  private async getAuth(): Promise<MtxcaAuth> {
-    const ticket = await this.wsaa.getAccessTicket(MTXCA_SERVICE_ID);
-    return {
-      Token: ticket.token,
-      Sign: ticket.sign,
-      Cuit: this.cuit,
-    };
+  private async auth(opts?: CallOptions): Promise<MtxcaAuth> {
+    const ticket = await this.wsaa.getAccessTicket(MTXCA_SERVICE_ID, opts);
+    return { token: ticket.token, sign: ticket.sign, cuitRepresentada: this.cuit };
   }
 
   // =========================================================================
-  // Facturacion
+  // CAE
   // =========================================================================
 
   /**
-   * Autoriza un comprobante con detalle de articulos.
-   * Obtiene automaticamente el numero de comprobante siguiente.
+   * Autoriza un comprobante con detalle de ítems (`autorizarComprobante`).
+   *
+   * - Valida contra el XSD, redondea importes y (salvo `validarImportes: false`)
+   *   valida la coherencia de importes según el manual.
+   * - Sin `numeroComprobante`, usa el último autorizado + 1. Las solicitudes
+   *   para un mismo punto de venta y tipo deben ser secuenciales (error 135).
+   * - Un rechazo devuelve `resultado: 'R'` con `errores`; `O` es aprobado con
+   *   observaciones.
+   * - Si lanza `ArcaSoapError` con `uncertain: true`, el comprobante pudo
+   *   haberse autorizado: NO reintentes a ciegas; usá `ultimoComprobante()` y
+   *   `consultarComprobante()` para saber si quedó autorizado.
    */
-  async autorizar(request: AutorizarRequest): Promise<MtxcaInvoiceResult> {
-    validateAutorizarRequest(request);
-    const auth = await this.getAuth();
-    return this.client.autorizarComprobante(auth, request);
+  async autorizar(request: AutorizarRequest, opts?: AutorizarOptions): Promise<MtxcaAutorizarResult> {
+    return this.autorizarCAE('autorizarComprobante', request, opts);
   }
 
   /**
-   * Ultimo numero de comprobante autorizado para un punto de venta y tipo.
+   * Autoriza un ajuste de IVA (`autorizarAjusteIVA`, ND/NC 2, 3, 7, 8, 52, 53).
+   * Tiene reglas propias (ej. importeSubtotal 0, sin gravado/no gravado/exento),
+   * así que solo se valida contra el XSD. Misma numeración y manejo de errores
+   * que `autorizar()`.
    */
-  async ultimoComprobante(ptoVta: number, cbteTipo: number): Promise<number> {
-    const auth = await this.getAuth();
-    return this.client.consultarUltimoComprobanteAutorizado(auth, ptoVta, cbteTipo);
+  async autorizarAjusteIVA(request: AutorizarRequest, opts?: CallOptions): Promise<MtxcaAutorizarResult> {
+    return this.autorizarCAE('autorizarAjusteIVA', request, { ...opts, validarImportes: false });
+  }
+
+  private async autorizarCAE(
+    method: 'autorizarComprobante' | 'autorizarAjusteIVA',
+    request: AutorizarRequest,
+    opts?: AutorizarOptions,
+  ): Promise<MtxcaAutorizarResult> {
+    // Valida antes de pedir el número: un error local no debe costar requests.
+    buildComprobante({ ...request, numeroComprobante: request?.numeroComprobante ?? 1 }, 'cae');
+    if (opts?.validarImportes !== false) validateComprobanteCAE(request);
+
+    const numeroComprobante =
+      request.numeroComprobante ??
+      (await this.siguienteComprobante(request.numeroPuntoVenta, request.codigoTipoComprobante, opts));
+    const auth = await this.auth(opts);
+    const comprobante = { ...request, numeroComprobante };
+    return method === 'autorizarComprobante'
+      ? this.client.autorizarComprobante(auth, comprobante, opts)
+      : this.client.autorizarAjusteIVA(auth, comprobante, opts);
   }
 
   /**
-   * Siguiente numero de comprobante (ultimo + 1).
+   * Último número autorizado o informado para un punto de venta y tipo. Si no
+   * hay ninguno (error 1502 de ARCA), devuelve 0. Cualquier otro error lanza
+   * `ArcaServiceError`.
    */
-  async siguienteComprobante(ptoVta: number, cbteTipo: number): Promise<number> {
-    const ultimo = await this.ultimoComprobante(ptoVta, cbteTipo);
-    return ultimo + 1;
+  async ultimoComprobante(ptoVta: number, cbteTipo: number, opts?: CallOptions): Promise<number> {
+    const auth = await this.auth(opts);
+    try {
+      return await this.client.consultarUltimoComprobanteAutorizado(auth, ptoVta, cbteTipo, opts);
+    } catch (e) {
+      if (e instanceof ArcaServiceError && e.errors.length > 0 && e.errors.every((x) => x.code === SIN_COMPROBANTES)) {
+        return 0;
+      }
+      throw e;
+    }
+  }
+
+  /** Siguiente número de comprobante (último + 1). */
+  async siguienteComprobante(ptoVta: number, cbteTipo: number, opts?: CallOptions): Promise<number> {
+    return (await this.ultimoComprobante(ptoVta, cbteTipo, opts)) + 1;
+  }
+
+  /** Consulta un comprobante autorizado (CAE) o informado (CAEA). Lanza `ArcaServiceError` si no existe. */
+  async consultarComprobante(cbteTipo: number, ptoVta: number, cbteNro: number, opts?: CallOptions): Promise<MtxcaConsultaComprobanteResult> {
+    const auth = await this.auth(opts);
+    return this.client.consultarComprobante(auth, cbteTipo, ptoVta, cbteNro, opts);
+  }
+
+  // =========================================================================
+  // CAEA
+  // =========================================================================
+
+  /**
+   * Solicita un CAEA para `periodo` (AAAAMM) y `orden` (1: días 1-15, 2: 16
+   * a fin de mes). Lanza `ArcaServiceError` si ARCA lo rechaza. Si lanza
+   * `ArcaSoapError` con `uncertain`, consultá `consultarCAEAEntreFechas()`.
+   */
+  async solicitarCAEA(periodo: number, orden: number, opts?: CallOptions): Promise<MtxcaCAEA> {
+    const auth = await this.auth(opts);
+    return this.client.solicitarCAEA(auth, periodo, orden, opts);
+  }
+
+  /** Consulta un CAEA otorgado. */
+  async consultarCAEA(caea: string, opts?: CallOptions): Promise<MtxcaCAEA> {
+    const auth = await this.auth(opts);
+    return this.client.consultarCAEA(auth, caea, opts);
+  }
+
+  /** CAEAs otorgados entre dos fechas. */
+  async consultarCAEAEntreFechas(fechaDesde: FechaInput, fechaHasta: FechaInput, opts?: CallOptions): Promise<MtxcaCAEA[]> {
+    const auth = await this.auth(opts);
+    return this.client.consultarCAEAEntreFechas(auth, fechaDesde, fechaHasta, opts);
   }
 
   /**
-   * Consulta un comprobante previamente autorizado.
+   * Informa un comprobante emitido con CAEA (`informarComprobanteCAEA`). Valida
+   * el XSD y las reglas excluyentes de ítems. Un rechazo devuelve
+   * `resultado: 'R'`. Ante `uncertain`, verificá con `consultarComprobante()`.
    */
-  async consultarComprobante(
-    cbteTipo: number,
-    ptoVta: number,
-    cbteNro: number,
-  ): Promise<MtxcaComprobante> {
-    const auth = await this.getAuth();
-    return this.client.consultarComprobante(auth, cbteTipo, ptoVta, cbteNro);
+  async informarComprobanteCAEA(comprobante: MtxcaComprobanteCAEA, opts?: CallOptions): Promise<MtxcaInformarCAEAResult> {
+    buildComprobante(comprobante, 'caea');
+    validateComprobanteCAEA(comprobante);
+    const auth = await this.auth(opts);
+    return this.client.informarComprobanteCAEA(auth, comprobante, opts);
+  }
+
+  /** Informa un ajuste de IVA emitido con CAEA (`informarAjusteIVACAEA`). Solo valida el XSD. */
+  async informarAjusteIVACAEA(comprobante: MtxcaComprobanteCAEA, opts?: CallOptions): Promise<MtxcaInformarCAEAResult> {
+    const auth = await this.auth(opts);
+    return this.client.informarAjusteIVACAEA(auth, comprobante, opts);
+  }
+
+  /** Informa que un CAEA no se utilizó. Un rechazo devuelve `resultado: 'R'`. */
+  async informarCAEANoUtilizado(caea: string, opts?: CallOptions): Promise<MtxcaCAEANoUtilizadoResult> {
+    const auth = await this.auth(opts);
+    return this.client.informarCAEANoUtilizado(auth, caea, opts);
+  }
+
+  /** Informa que un CAEA no se utilizó en un punto de venta. Un rechazo devuelve `resultado: 'R'`. */
+  async informarCAEANoUtilizadoPtoVta(caea: string, ptoVta: number, opts?: CallOptions): Promise<MtxcaCAEANoUtilizadoResult> {
+    const auth = await this.auth(opts);
+    return this.client.informarCAEANoUtilizadoPtoVta(auth, caea, ptoVta, opts);
+  }
+
+  /** Puntos de venta que todavía no informaron movimientos para un CAEA. */
+  async consultarPtosVtaCAEANoInformados(caea: string, opts?: CallOptions): Promise<PuntoVenta[]> {
+    const auth = await this.auth(opts);
+    return this.client.consultarPtosVtaCAEANoInformados(auth, caea, opts);
   }
 
   // =========================================================================
-  // Estado del servicio
+  // Estado
   // =========================================================================
+
+  /** Estado del servicio (`dummy`). No requiere autenticación. */
+  async status(opts?: CallOptions): Promise<ServerStatus> {
+    return this.client.dummy(opts);
+  }
+
+  // =========================================================================
+  // Parámetros
+  // =========================================================================
+
+  async getTiposComprobante(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.client.consultarTiposComprobante(await this.auth(opts), opts);
+  }
+
+  async getTiposDocumento(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.client.consultarTiposDocumento(await this.auth(opts), opts);
+  }
+
+  async getAlicuotasIVA(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.client.consultarAlicuotasIVA(await this.auth(opts), opts);
+  }
+
+  /** Condiciones de IVA de los ítems. */
+  async getCondicionesIVA(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.client.consultarCondicionesIVA(await this.auth(opts), opts);
+  }
+
+  /** Condiciones de IVA del receptor admitidas para un tipo de comprobante (RG 5616). */
+  async getCondicionesIVAReceptor(cbteTipo: number, opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.client.consultarCondicionesIVAReceptor(await this.auth(opts), cbteTipo, opts);
+  }
+
+  async getMonedas(opts?: CallOptions): Promise<CodigoDescripcionString[]> {
+    return this.client.consultarMonedas(await this.auth(opts), opts);
+  }
 
   /**
-   * Health check del servicio WSMTXCA. No requiere autenticacion.
+   * Cotización de una moneda para una fecha (default: hoy en Argentina).
+   * `cotizacion` es `null` si ARCA no tiene cotización.
    */
-  async status(): Promise<ServerStatus> {
-    return this.client.dummy();
+  async getCotizacionMoneda(codigoMoneda: string, fecha: FechaInput = formatDate(new Date()), opts?: CallOptions): Promise<CotizacionResult> {
+    return this.client.consultarCotizacionMoneda(await this.auth(opts), codigoMoneda, fecha, opts);
+  }
+
+  async getUnidadesMedida(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.client.consultarUnidadesMedida(await this.auth(opts), opts);
+  }
+
+  async getTiposTributo(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.client.consultarTiposTributo(await this.auth(opts), opts);
+  }
+
+  async getTiposDatosAdicionales(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.client.consultarTiposDatosAdicionales(await this.auth(opts), opts);
+  }
+
+  async getActividadesVigentes(opts?: CallOptions): Promise<ActividadVigente[]> {
+    return this.client.consultarActividadesVigentes(await this.auth(opts), opts);
+  }
+
+  async getPuntosVenta(opts?: CallOptions): Promise<PuntoVenta[]> {
+    return this.client.consultarPuntosVenta(await this.auth(opts), opts);
+  }
+
+  async getPuntosVentaCAE(opts?: CallOptions): Promise<PuntoVenta[]> {
+    return this.client.consultarPuntosVentaCAE(await this.auth(opts), opts);
+  }
+
+  async getPuntosVentaCAEA(opts?: CallOptions): Promise<PuntoVenta[]> {
+    return this.client.consultarPuntosVentaCAEA(await this.auth(opts), opts);
   }
 
   // =========================================================================
-  // Parametros
+  // Cache
   // =========================================================================
 
-  /** Tipos de comprobante disponibles. */
-  async getTiposComprobante(): Promise<ParamItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarTiposComprobante(auth);
-  }
-
-  /** Tipos de documento disponibles. */
-  async getTiposDocumento(): Promise<ParamItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarTiposDocumento(auth);
-  }
-
-  /** Alicuotas de IVA disponibles. */
-  async getAlicuotasIVA(): Promise<ParamItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarAlicuotasIVA(auth);
-  }
-
-  /** Condiciones de IVA disponibles. */
-  async getCondicionesIVA(): Promise<ParamItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarCondicionesIVA(auth);
-  }
-
-  /** Monedas disponibles. */
-  async getMonedas(): Promise<MonedaItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarMonedas(auth);
-  }
-
-  /** Unidades de medida disponibles. */
-  async getUnidadesMedida(): Promise<UnidadMedidaItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarUnidadesMedida(auth);
-  }
-
-  /** Puntos de venta habilitados. */
-  async getPuntosVenta(): Promise<PtoVentaItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarPuntosVenta(auth);
-  }
-
-  /** Puntos de venta habilitados para CAE. */
-  async getPuntosVentaCAE(): Promise<PtoVentaItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarPuntosVentaCAE(auth);
-  }
-
-  /** Puntos de venta habilitados para CAEA. */
-  async getPuntosVentaCAEA(): Promise<PtoVentaItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarPuntosVentaCAEA(auth);
-  }
-
-  /** Cotizacion de una moneda. */
-  async getCotizacionMoneda(monedaId: string): Promise<CotizacionResult> {
-    const auth = await this.getAuth();
-    return this.client.consultarCotizacionMoneda(auth, monedaId);
-  }
-
-  // =========================================================================
-  // Cache management
-  // =========================================================================
-
-  /** Invalida el ticket de acceso cacheado. */
-  clearAuthCache(): void {
-    this.wsaa.clearTicket(MTXCA_SERVICE_ID);
+  /** Descarta el ticket de acceso de WSMTXCA (memoria y `ticketStorage`). */
+  async clearAuthCache(): Promise<void> {
+    await this.wsaa.clearTicket(MTXCA_SERVICE_ID);
   }
 }

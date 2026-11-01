@@ -1,90 +1,90 @@
 /**
- * Ejemplo: Crear una factura con detalle de articulos (WSMTXCA)
+ * Ejemplo: Factura B con detalle de ítems (WSMTXCA, homologación).
  *
- * A diferencia de WSFE, el servicio WSMTXCA permite informar el detalle
- * de cada articulo: codigo de barras, descripcion, cantidad, precio
- * unitario e IVA por linea.
- *
- * Requisitos:
- *   - Certificado digital (.crt) y clave privada (.key) de ARCA
- *   - CUIT del contribuyente
- *   - Punto de venta habilitado para WSMTXCA
+ * En clase B el precio unitario incluye IVA y los ítems no llevan importeIVA;
+ * el SDK valida que gravado, subtotales de IVA y total sean coherentes.
  */
 
-import fs from "fs";
-import { ArcaMtxca, CbteTipo, CodigoCondicionIVA } from "@ramiidv/arca-mtxca";
+import fs from 'node:fs';
+import { ArcaMtxca, ArcaSoapError, CbteTipo, CodigoCondicionIVA, Concepto, Moneda } from '@ramiidv/arca-mtxca';
 
 async function main() {
-  // 1. Inicializar el SDK
   const mtxca = new ArcaMtxca({
-    cuit: 20123456789,
-    cert: fs.readFileSync("./certs/certificado.crt", "utf-8"),
-    key: fs.readFileSync("./certs/clave.key", "utf-8"),
+    cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+    key: fs.readFileSync('./certs/clave.key', 'utf-8'),
+    cuit: '20123456786',
     production: false,
   });
 
-  // 2. Verificar estado del servicio
-  const status = await mtxca.status();
-  console.log("Estado del servicio:", status);
+  const ptoVta = 4000;
+  const tipo = CbteTipo.FACTURA_B;
 
-  // 3. Autorizar una Factura B con detalle de articulos
-  const result = await mtxca.autorizar({
-    ptoVta: 1,
-    cbteTipo: CbteTipo.FACTURA_B,
-    invoice: {
-      concepto: 1, // Productos
-      docTipo: 99, // Consumidor final
-      docNro: 0,
-      cbteFch: "2026-03-31",
-      importeTotal: 2541,
-      importeGravado: 2100,
+  // Número explícito: si la respuesta se pierde, sabemos qué número verificar.
+  const numero = await mtxca.siguienteComprobante(ptoVta, tipo);
+
+  try {
+    const res = await mtxca.autorizar({
+      codigoTipoComprobante: tipo,
+      numeroPuntoVenta: ptoVta,
+      numeroComprobante: numero,
+      fechaEmision: new Date(),
+      condicionIVAReceptor: 5, // Consumidor Final (ver getCondicionesIVAReceptor(6))
+      importeGravado: 100,
+      importeNoGravado: 0,
+      importeExento: 100,
+      importeSubtotal: 200,
+      importeTotal: 221,
+      codigoMoneda: Moneda.PESOS,
+      cotizacionMoneda: 1,
+      codigoConcepto: Concepto.PRODUCTOS,
       items: [
         {
-          codigo: "7790001000012",
-          descripcion: "Producto A - Pack x6",
-          cantidad: 2,
-          unidadMedida: 7, // Unidades
-          precioUnitario: 500,
-          importeItem: 1000,
-          codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
-          importeIVA: 210,
-        },
-        {
-          codigo: "7790001000029",
-          descripcion: "Producto B - 1kg",
+          unidadesMtx: 1,
+          codigoMtx: '7790001000012',
+          codigo: 'P0001',
+          descripcion: 'Producto gravado 21%',
           cantidad: 1,
-          unidadMedida: 7,
-          precioUnitario: 1100,
-          importeItem: 1100,
+          codigoUnidadMedida: 7,
+          precioUnitario: 121, // con IVA
           codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
-          importeIVA: 231,
+          importeItem: 121,
         },
-      ],
-      subtotalesIVA: [
         {
-          codigo: CodigoCondicionIVA.IVA_21,
-          baseImponible: 2100,
-          importe: 441,
+          unidadesMtx: 1,
+          codigoMtx: '7790001000029',
+          codigo: 'P0002',
+          descripcion: 'Producto exento',
+          cantidad: 2,
+          codigoUnidadMedida: 7,
+          precioUnitario: 50,
+          codigoCondicionIVA: CodigoCondicionIVA.EXENTO,
+          importeItem: 100,
         },
       ],
-    },
-  });
+      subtotalesIVA: [{ codigo: CodigoCondicionIVA.IVA_21, importe: 21 }],
+    });
 
-  // 4. Evaluar resultado
-  if (result.resultado === "A") {
-    console.log("Factura aprobada!");
-    console.log(`  CAE: ${result.cae}`);
-    console.log(`  Vencimiento CAE: ${result.caeFchVto}`);
-    console.log(`  Comprobante #${result.cbteNro}`);
-  } else {
-    console.error("Factura rechazada:");
-    for (const obs of result.observaciones) {
-      console.error(`  [${obs.code}] ${obs.msg}`);
+    if (res.resultado === 'R') {
+      console.error('Rechazado:', res.errores);
+      return;
     }
-    for (const err of result.errores) {
-      console.error(`  Error [${err.code}]: ${err.msg}`);
+    console.log(`Resultado ${res.resultado}: CAE ${res.comprobante.cae}, vence ${res.comprobante.fechaVencimientoCAE}`);
+    for (const o of res.observaciones) console.warn(`Observación ${o.codigo}: ${o.descripcion}`);
+  } catch (e) {
+    if (e instanceof ArcaSoapError && e.uncertain) {
+      // No reintentar a ciegas: verificar si quedó autorizado.
+      if ((await mtxca.ultimoComprobante(ptoVta, tipo)) >= numero) {
+        const { comprobante } = await mtxca.consultarComprobante(tipo, ptoVta, numero);
+        console.log('Ya estaba autorizado. CAE:', comprobante.codigoAutorizacion);
+        return;
+      }
+      console.error('No se autorizó; se puede reenviar con el mismo número.');
     }
+    throw e;
   }
 }
 
-main().catch(console.error);
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
