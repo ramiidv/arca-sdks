@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tgz
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.p12
+.DS_Store
+coverage/
+.idea/
+.vscode/
+*.log

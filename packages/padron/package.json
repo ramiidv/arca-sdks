@@ -1,0 +1,72 @@
+{
+  "name": "@ramiidv/arca-padron",
+  "version": "0.4.0",
+  "description": "TypeScript SDK para los web services de Padrón de ARCA (ex AFIP) - Constancia de Inscripción, A4, A10, A13 y A100",
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "types": "./dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "llms.txt",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node -e \"require('fs').writeFileSync('dist/cjs/package.json', JSON.stringify({ type: 'commonjs' }))\"",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run clean && npm run build && npm test && npm run test:smoke",
+    "test:smoke": "node scripts/smoke.mjs ArcaPadron condicionIvaDesdePadron ArcaPadronServiceError ArcaValidationError ImpuestoId CollectionName FileTicketStorage"
+  },
+  "keywords": [
+    "arca",
+    "afip",
+    "padron",
+    "argentina",
+    "sdk",
+    "typescript",
+    "contribuyentes"
+  ],
+  "author": "ramiidv",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ramiidv/arca-padron.git"
+  },
+  "homepage": "https://arca-sdk.dev/padron",
+  "bugs": {
+    "url": "https://github.com/ramiidv/arca-padron/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@ramiidv/arca-common": "^0.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
+  },
+  "module": "./dist/esm/index.js",
+  "sideEffects": false
+}

@@ -1,0 +1,203 @@
+# @ramiidv/arca-padron
+
+> TypeScript SDK para los web services de Padron de ARCA (ex AFIP) - Constancia de Inscripcion (ex A5), A4, A10, A13 y A100, mas condicionIvaDesdePadron
+
+## Instalacion
+
+```bash
+npm install @ramiidv/arca-padron
+```
+
+Requisitos: Node.js >= 18 (fetch nativo). Dual ESM + CommonJS.
+
+## Configuracion
+
+```typescript
+import { ArcaPadron } from '@ramiidv/arca-padron';
+
+// ArcaPadronConfig extends ArcaBaseConfig (@ramiidv/arca-common)
+const padron = new ArcaPadron({
+  cert: string,          // PEM X.509 certificate
+  key: string,           // PEM private key
+  cuit: string | number, // CUIT representada (validated: check digit). Ej: "20123456786"
+  production?: boolean,  // default: false (homologacion)
+  timeout?: number,      // ms, default 30000
+  retries?: number,      // default: 1 (transient errors only; SOAP Faults are never retried)
+  retryDelayMs?: number, // default: 1000
+  tokenTTLMinutes?: number,
+  onEvent?: (event: ArcaEvent) => void,
+  ticketStorage?: TicketStorage, // persist WSAA tickets across restarts (recommended)
+  clockOffsetMs?: number,        // ARCA clock - local clock, ms. Default: 0
+  autoClockSkew?: boolean,       // default: true
+  loginErrorCooldownMs?: number,
+  fetch?: typeof fetch,          // custom fetch (proxy, tests)
+  legacyTls?: 'auto' | 'never' | 'always',
+  signal?: AbortSignal,          // global cancellation
+  wsaa?: WsaaClient,             // shared WSAA client (e.g. arca.wsaa from arca-facturacion)
+  endpoints?: { wsaa?, a5?, a4?, a10?, a13?, a100? }, // override URLs
+});
+```
+
+Every method accepts an optional last argument `{ signal?: AbortSignal }`.
+CUITs are accepted with or without dashes ('20-11111111-2', '20111111112', 20111111112), validated locally (check digit; ArcaValidationError without calling ARCA) and sent normalized.
+All Padron operations are read-only queries.
+Without `ticketStorage`, a restart loses the access ticket and WSAA rejects new logins until it expires (`ArcaTicketVigenteError`).
+
+## Metodos principales
+
+### getConstanciaInscripcion(cuit): Promise<PersonaA5>
+Constancia de inscripcion via ws_sr_constancia_inscripcion (getPersona_v2; replaces ws_sr_padron_a5, deprecated by ARCA). PersonaA5: idPersona, tipoPersona, nombre/apellido/razonSocial, estadoClave, domicilioFiscal, dependencia, caracterizacion[], regimenGeneral { impuestos, actividades, regimenes, categoriaAutonomo }, monotributo { impuestos, actividades, actividadMonotributista, categoria, componenteDeSociedad[] }, impuestos (both regimes), errorConstancia { error[] }, errorRegimenGeneral { error[], mensaje }, errorMonotributo { error[], mensaje }. Constancia-level problems are returned in those error fields, not thrown.
+
+### getConstanciasInscripcion(cuits[]): Promise<PersonaA5[]>
+getPersonaList_v2: 1 to 250 CUITs per call. Non-existent CUITs come back as a PersonaA5 with errorConstancia.error = ['No existe persona con ese Id'].
+
+### condicionIvaDesdePadron(persona: PersonaA5 | PersonaA4): { condicionIva: CondicionIva | null; motivo: string }
+Pure helper. Tax states: words from A4 manual TipoEstado (ACTIVO, ACTIVO EN TRAMITE, BAJA PROVISORIA, BAJA DEFINITIVA, EXENTO, EXENTO EN TRAMITE, NO APORTANTE) or SUPA ids (AC, EX, BP, BD, NA). Active = ACTIVO / ACTIVO EN TRAMITE. Monotributo (impuesto 20 active; category only if impuesto 20 is absent; impuesto 20 in BAJA never counts) → MONOTRIBUTISTA (6); categories 61/99/100/101-104 → MONOTRIBUTO_SOCIAL (13); category description "PROMOVID" → MONOTRIBUTO_INDEPENDIENTE_PROMOVIDO (16); category 98 (asociado cooperativa) → MONOTRIBUTISTA. IVA 30 active → RESPONSABLE_INSCRIPTO (1); IVA 30 EXENTO/EXENTO EN TRAMITE or impuesto 32 → EXENTO (4); impuesto 34 → IVA_NO_ALCANZADO (15). NO APORTANTE is NOT "no alcanzado". Otherwise null with motivo (never assumes consumidor final); errorRegimenGeneral/errorMonotributo are included in motivo. Use the result as `condicionIva` in @ramiidv/arca-facturacion.
+
+### getPersonaA13(cuit): Promise<PersonaA13>
+Datos basicos via ws_sr_padron_a13 getPersona (domicilio[] with calle, numero, codigoPostal, estadoDomicilio...). Throws ArcaPadronServiceError reason 'inactiva' for inactive keys.
+
+### getPersonaA13V2(cuit): Promise<PersonaA13>
+A13 getPersonaV2 (manual v1.4): also returns data for INACTIVE keys.
+
+### getIdPersonaListByDocumento(documento): Promise<string[]>
+CUIT/CUIL list for a document number via ws_sr_padron_a13. Accepts dots/spaces ('11.709.676'). Returns [] when ARCA reports none.
+
+### getPersona(cuit): Promise<PersonaA4>
+Datos completos del contribuyente via ws_sr_padron_a4. Incluye: domicilios, impuestos, actividades, regimenes, relaciones, categorias, emails, telefonos.
+
+### getPersonaBasic(cuit): Promise<PersonaA10>
+Datos basicos del contribuyente via ws_sr_padron_a10. Incluye: datos generales, dependencia y domicilios.
+
+### getParametros(collection: string): Promise<ParameterRecord[]>
+Tablas de parametros via ws_sr_padron_a100 (getParameterCollectionByName). id, descripcion and attribute values are returned exactly as sent by ARCA (xs:string: "10.50" stays "10.50"). Throws ArcaPadronError if parameterCollection is missing; an empty collection returns []. CollectionName enum (manual A100 v2.1): PROVINCIA (SUPA.E_PROVINCIA), TIPO_DOCUMENTO (SUPA.TIPO_DOCUMENTO), TIPO_DOMICILIO (SUPA.TIPO_DOMICILIO), TIPO_CLAVE (SUPA.TIPO_CLAVE_IDENTIFICACION), TIPO_EMPRESA_JURIDICA, TIPO_EMPRESA_JURIDICA_SUBGRUPO, TIPO_RELACION, TIPO_SUBTIPO_RELACION, TIPO_COMPONENTE_SOCIEDAD, TIPO_RELACION_COMPONENTE_SOC, TIPO_EMAIL, TIPO_TELEFONO, TIPO_RESIDENCIA, TIPO_DATO_ADICIONAL_DOMICILIO, ORGANISMO_INFORMANTE, ORGANISMO_CONTROL, PROVINCIA_SOCIEDAD_ORG, SEXO (E_SEXO), CALLE (PUC_PARAM.T_CALLE), LOCALIDAD (PUC_PARAM.T_LOCALIDAD), AUTONOMO_MONOTRIBUTO (SUPA.E_AUTONOMO_MONOTRIBUTO), REGIMEN (SUPA.E_REGIMEN), TIPO_REGIMEN (SUPA.TIPO_REGIMEN), CARACTERIZACION (SUPA.E_CARACTERIZACION), TIPO_ARCHIVO (SUPA.TIPO_ARCHIVO), ACTIVIDAD_RUBRO (SUPA.A_ACTIVIDAD_RUBRO), RUBRO_ACTIVIDAD (SUPA.E_RUBRO_ACTIVIDAD), ACTIVIDAD_OCUPACIONAL (SUPA.E_ACTIVIDAD_OCUPACIONAL).
+
+### status(): Promise<PadronStatus>
+Health check (dummy) of a5, a4, a10, a13, a100 in parallel with Promise.allSettled. Each value is PromiseSettledResult<ServerStatus>: `if (s.a4.status === 'fulfilled') s.a4.value.appserver`. No authentication.
+
+## Tipos principales
+
+```typescript
+interface PersonaA4 {
+  idPersona: string;
+  tipoPersona: 'FISICA' | 'JURIDICA';
+  tipoClave?: string;
+  estadoClave?: string;
+  apellido?: string;
+  nombre?: string;
+  razonSocial?: string;
+  numeroDocumento?: string;
+  tipoDocumento?: string;
+  fechaNacimiento?: string;
+  sexo?: string;
+  numeroInscripcion?: string;
+  formaJuridica?: string;
+  mesCierre?: number;
+  fechaInscripcion?: string;
+  fechaContratoSocial?: string;
+  fechaFallecimiento?: string;
+  fechaJubilado?: string;
+  fechaVencimientoMigracion?: string;
+  localidadInscripcion?: string;
+  provinciaInscripcion?: string;
+  organismoInscripcion?: string;
+  organismoOriginante?: string;
+  tipoOrganismoOriginante?: string;
+  tipoResidencia?: string;
+  porcentajeCapitalNacional?: number;
+  cantidadSociosEmpresaMono?: number;
+  leyJubilacion?: number;
+  dependencia?: DependenciaA4;
+  claveInactivaAsociada?: string[];
+  domicilio?: DomicilioA4[];
+  impuesto?: ImpuestoA4[];
+  actividad?: ActividadA4[];
+  regimen?: RegimenA4[];
+  relacion?: RelacionA4[];
+  categoria?: CategoriaA4[];
+  email?: EmailA4[];
+  telefono?: TelefonoA4[];
+}
+
+interface PersonaA10 {
+  idPersona: string;
+  tipoPersona: 'FISICA' | 'JURIDICA';
+  tipoClave?: string;
+  estadoClave?: string;
+  nombre?: string;
+  apellido?: string;
+  razonSocial?: string;
+  numeroDocumento?: string;
+  tipoDocumento?: string;
+  idActividadPrincipal?: string;
+  descripcionActividadPrincipal?: string;
+  dependencia?: DependenciaA10;
+  claveInactivaAsociada?: string[];
+  domicilio?: DomicilioA10[];
+}
+
+interface ParameterRecord {
+  id: string;
+  descripcion: string;
+  atributos?: ParameterAttribute[];
+}
+
+interface ParameterAttribute {
+  name: string;
+  value?: string; // exactly as sent by ARCA
+}
+
+interface ServerStatus {
+  appserver: string;
+  dbserver: string;
+  authserver: string;
+}
+```
+
+## Errores
+
+All extend ArcaError (from @ramiidv/arca-common), have a stable `code`, and instanceof works across duplicated package copies:
+- ArcaValidationError: invalid CUIT/document (no request sent)
+- ArcaAuthError: WSAA authentication failures
+- ArcaTicketVigenteError (extends ArcaAuthError): WSAA already issued a valid TA not available in memory/storage
+- ArcaPadronServiceError (extends ArcaServiceError): business errors. ARCA reports them as SOAP Faults; known texts are converted with a typed `reason`: 'inexistente' ("La Clave (CUIT/CUIL) consultada es inexistente", "No existe persona con ese Id"), 'inactiva' ("... se encuentra INACTIVA"), 'id_invalido' ("El Id de la persona no es valido"), 'no_autorizado' (token/sign/cuitRepresentada errors), 'otro'. `errors[0].msg` has ARCA's text, `cause` is the original ArcaSoapError. Never retried.
+- ArcaPadronError: ARCA response missing a mandatory element (e.g. personaReturn without persona).
+- ArcaSoapError: HTTP/transport errors, timeouts, aborts and unrecognized SOAP Faults (statusCode?, faultCode?, faultString?, uncertain, aborted).
+
+```typescript
+import { ArcaPadronServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-padron';
+
+try {
+  await padron.getPersona(cuit);
+} catch (error) {
+  if (error instanceof ArcaValidationError) { /* bad CUIT */ }
+  else if (error instanceof ArcaPadronServiceError && error.reason === 'inexistente') { /* CUIT does not exist */ }
+  else if (error instanceof ArcaPadronServiceError) { /* other business error: error.reason, error.errors */ }
+  else if (error instanceof ArcaSoapError) { /* HTTP/network error, error.statusCode */ }
+}
+```
+
+## Eventos
+
+Discriminated union types: auth:login, auth:cache-hit (source: memory|storage), auth:clock-skew, auth:storage-error, request:start, request:end, request:retry, request:error.
+
+## Enums
+
+- Provincia (0-24, Argentine provinces)
+- TipoDomicilio (FISCAL, LEGAL, REAL)
+- TipoPersona (FISICA, JURIDICA)
+- ImpuestoId (GANANCIAS_PH=11, MONOTRIBUTO=20, MONOTRIBUTO_AUTONOMO=21, IVA_RESPONSABLE_INSCRIPTO=30, BIENES_PERSONALES=180, EMPLEADOR=301, AUTONOMOS=308 — from ARCA manuals; GANANCIAS_PJ=10, IVA_EXENTO=32, IVA_NO_ALCANZADO=34 are not in the padron manuals; IVA_NO_INSCRIPTO=33 deprecated). Social monotributo is identified by category, not by tax id.
+- DocTipo (numeric WSFEv1 document codes, from common). TipoDocumento is a deprecated alias of DocTipo: it is NOT the padron `tipoDocumento` string ("DNI", "LC"...).
+- CondicionIva (re-exported from @ramiidv/arca-common)
+- CollectionName (see getParametros)
+
+## Clientes de bajo nivel
+
+Accesibles como propiedades publicas: padron.wsaa, padron.a5 (constancia: getPersona, getPersonaList), padron.a4, padron.a10, padron.a13 (getPersona, getPersonaV2, getIdPersonaListByDocumento), padron.a100. They take `auth: { Token, Sign, CuitRepresentada }` as first argument.
+
+## Utilidades exportadas
+
+- ensureArray<T>(value): T[] - normaliza single/array SOAP responses
+- parseXml(xml): Record<string, unknown> - parse XML with CUIT-safe options
+- buildXml(obj): string - build XML from object
+- checkServiceErrors: deprecated (Padron reports business errors as SOAP Faults)
