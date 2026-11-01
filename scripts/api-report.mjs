@@ -57,7 +57,9 @@ for (const dir of readdirSync(packagesDir).sort()) {
     const result = Extractor.invoke(config, { localBuild: local, showVerboseMessages: false });
     const name = `${pkg.name}${subpath === '.' ? '' : subpath.slice(1)}`;
     if (result.apiReportChanged && !local) {
-      console.error(`✗ ${name}: la API pública cambió. Correr \`npm run api:update\` y commitear api/${reportName}.api.md`);
+      console.error(
+        `✗ ${name}: la API pública cambió. Correr \`npm run api:update\` y commitear api/${reportName}.api.md`,
+      );
       failed++;
     } else if (!result.succeeded) {
       console.error(`✗ ${name}: api-extractor terminó con errores`);
