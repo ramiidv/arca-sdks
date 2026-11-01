@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- bed68e8: Paquetes solo ESM y Node >= 20.19. `arca-common`, `arca-facturacion` y
+  `arca-padron` dejan de publicar un build CommonJS: desde CommonJS se cargan con
+  `require()` (require(esm), Node >= 20.19 / 22.12). Todos los paquetes pasan a
+  requerir Node >= 20.19.0 (Node 18 y 20 sin soporte). El código vive ahora en el
+  monorepo `arca-sdks`.
+
+### Patch Changes
+
+- Updated dependencies [8c02c30]
+- Updated dependencies [f8bd053]
+- Updated dependencies [242fb5f]
+- Updated dependencies [fd438bc]
+- Updated dependencies [bed68e8]
+- Updated dependencies [20ecf7d]
+- Updated dependencies [b86db00]
+  - @ramiidv/arca-common@0.5.0
+
 ## 0.3.0 (2026-11-01)
 
 Reescritura del serializador según el diseño de registro oficial del
