@@ -27,6 +27,10 @@ npm run lint         # biome
 npm run lint:pkg     # publint + attw sobre cada paquete
 ```
 
+## Plan de trabajo
+
+Pendientes, próximos pasos y gotchas en [ROADMAP.md](ROADMAP.md).
+
 ## Releases
 
 Cada cambio que afecta a un paquete publicado lleva un changeset
