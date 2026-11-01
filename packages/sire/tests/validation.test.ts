@@ -8,7 +8,7 @@ import {
   formatImporte,
   formatSireDateTime,
 } from '../src/index.js';
-import type { EmitirCertificadoParams } from '../src/index.js';
+import type { AnularCertificadoParams as AnularParams, EmitirCertificadoParams } from '../src/index.js';
 
 const BASE: EmitirCertificadoParams = {
   regimen: 831,
@@ -187,6 +187,50 @@ describe('buildCertificadoRequest', () => {
     expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, cae: '1'.repeat(15) }))).toEqual(['cae']);
   });
 
+  it('rechaza campos desconocidos y textos vacíos', () => {
+    expect(
+      fieldsOf(() => buildCertificadoRequest({ ...BASE, observaciones: 'x' } as unknown as EmitirCertificadoParams)),
+    ).toEqual(['observaciones']);
+    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, codigoTrazabilidad: '   ' }))).toEqual([
+      'codigoTrazabilidad',
+    ]);
+    expect(
+      fieldsOf(() =>
+        buildCertificadoRequest({ ...BASE, tipoComprobante: TipoComprobante.ORDEN_DE_PAGO, numeroComprobante: ' ' }),
+      ),
+    ).toEqual(['numeroComprobante']);
+  });
+
+  it('acumula errores de fechas con los del schema, sin duplicar', () => {
+    expect(
+      fieldsOf(() => buildCertificadoRequest({ ...BASE, fechaRetencion: '2026-02-30', regimen: 0 })).sort(),
+    ).toEqual(['fechaRetencion', 'regimen']);
+  });
+
+  it('serializa en el orden del XSD', () => {
+    const req = buildCertificadoRequest({ ...BASE, cae: '12345678901234', codigoTrazabilidad: 'T-1' });
+    expect(Object.keys(req)).toEqual([
+      'version',
+      'codigoTrazabilidad',
+      'impuesto',
+      'regimen',
+      'fechaRetencion',
+      'condicion',
+      'imposibilidadRetencion',
+      'importeRetencion',
+      'importeBaseCalculo',
+      'regimenExclusion',
+      'tipoComprobante',
+      'fechaComprobante',
+      'numeroComprobante',
+      'cae',
+      'importeComprobante',
+      'cuitRetenido',
+    ]);
+    expect(req.imposibilidadRetencion).toBe(false);
+    expect(req.cuitRetenido).toBe(30500010912);
+  });
+
   it('no acepta motivoAnulacion en emitir', () => {
     expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, motivoAnulacion: 1 } as EmitirCertificadoParams))).toEqual(
       ['motivoAnulacion'],
@@ -203,6 +247,17 @@ describe('buildAnulacionRequest', () => {
       numeroCertificado: '123',
       motivoAnulacion: 2,
     });
+  });
+
+  it('rechaza motivoAnulacion fuera de la tabla y campos desconocidos', () => {
+    expect(fieldsOf(() => buildAnulacionRequest({ numeroCertificado: '1', motivoAnulacion: 5 }))).toEqual([
+      'motivoAnulacion',
+    ]);
+    expect(
+      fieldsOf(() =>
+        buildAnulacionRequest({ numeroCertificado: '1', motivoAnulacion: 1, motivo: 'x' } as unknown as AnularParams),
+      ),
+    ).toEqual(['motivo']);
   });
 
   it('numeroCertificado de más de 25 caracteres', () => {

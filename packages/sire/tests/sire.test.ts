@@ -178,6 +178,28 @@ describe('emitirCertificado', () => {
     });
   });
 
+  it('preserva xs:string que parecen números en la respuesta', async () => {
+    const body = envelope(
+      '<tns:emitirResponse><certificadoNro>0012</certificadoNro><codigoSeguridad>1.50</codigoSeguridad></tns:emitirResponse>',
+    );
+    await expect(makeSire(mockFetch(body)).emitirCertificado(FACTURA)).resolves.toEqual({
+      certificadoNro: '0012',
+      codigoSeguridad: '1.50',
+    });
+  });
+
+  it('respuesta con certificadoNro vacío: error incierto', async () => {
+    const body = envelope(
+      '<tns:emitirResponse><certificadoNro></certificadoNro><codigoSeguridad>1</codigoSeguridad></tns:emitirResponse>',
+    );
+    const err = await makeSire(mockFetch(body))
+      .emitirCertificado(FACTURA)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err.uncertain).toBe(true);
+    expect(err.message).toContain('certificadoNro');
+  });
+
   it('respuesta sin codigoSeguridad: error incierto', async () => {
     const body = envelope('<tns:emitirResponse><certificadoNro>1</certificadoNro></tns:emitirResponse>');
     const sire = makeSire(mockFetch(body));

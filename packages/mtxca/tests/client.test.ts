@@ -693,3 +693,111 @@ describe('CAEA', () => {
     await expect(c.consultarPtosVtaCAEANoInformados(AUTH, '36434058476543')).rejects.toBeInstanceOf(ArcaServiceError);
   });
 });
+
+describe('schemas del XSD (DSL de common)', () => {
+  const consultado = (inner: string) =>
+    soapResponse(
+      'consultarComprobanteResponse',
+      `<comprobante><codigoTipoComprobante>1</codigoTipoComprobante><numeroPuntoVenta>4000</numeroPuntoVenta>` +
+        `<numeroComprobante>1</numeroComprobante><importeSubtotal>100.00</importeSubtotal><importeTotal>121.00</importeTotal>` +
+        `<codigoMoneda>PES</codigoMoneda><codigoConcepto>1</codigoConcepto>${inner}</comprobante>`,
+    );
+
+  it('preserva los xs:string que parecen números (decimales y ceros)', async () => {
+    const m = mockFetch(
+      consultado(
+        `<observaciones>1.50</observaciones><arrayItems><item><codigoMtx>0012</codigoMtx><codigo>1.50</codigo><descripcion>10.0</descripcion>` +
+          `<codigoUnidadMedida>7</codigoUnidadMedida><codigoCondicionIVA>5</codigoCondicionIVA><importeItem>121.00</importeItem></item></arrayItems>` +
+          `<arrayDatosAdicionales><datoAdicional><t>2</t><c1>0012</c1><c2>2.10</c2></datoAdicional></arrayDatosAdicionales>` +
+          `<arrayCompradores><comprador><codigoTipoDocumento>96</codigoTipoDocumento><numeroDocumento>00012345</numeroDocumento><porcentaje>100.00</porcentaje></comprador></arrayCompradores>` +
+          `<arrayActividades><actividad><codigo>620100</codigo></actividad></arrayActividades>`,
+      ),
+    );
+    const { comprobante: c } = await client(m.fetch).consultarComprobante(AUTH, 1, 4000, 1);
+    expect(c.observaciones).toBe('1.50');
+    expect(c.items[0]).toMatchObject({ codigoMtx: '0012', codigo: '1.50', descripcion: '10.0', importeItem: 121 });
+    expect(c.datosAdicionales).toEqual([{ t: 2, c1: '0012', c2: '2.10' }]);
+    expect(c.compradores).toEqual([{ codigoTipoDocumento: 96, numeroDocumento: '00012345', porcentaje: 100 }]);
+    expect(c.actividades).toEqual([620100]);
+    expect(c.comprobantesAsociados).toEqual([]);
+  });
+
+  it('consultarComprobante sin arrayItems (obligatorio) es una respuesta inválida', async () => {
+    const m = mockFetch(consultado(''), consultado(''));
+    await expect(client(m.fetch).consultarComprobante(AUTH, 1, 4000, 1)).rejects.toBeInstanceOf(ArcaSoapError);
+  });
+
+  it('comprobanteResponse vacío en un aprobado es inválido e incierto', async () => {
+    const m = mockFetch(soapResponse('autorizarComprobanteResponse', '<resultado>A</resultado><comprobanteResponse/>'));
+    const err = await client(m.fetch)
+      .autorizarComprobante(AUTH, facturaA())
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect((err as ArcaSoapError).uncertain).toBe(true);
+  });
+
+  it('redondea mitad hacia afuera sobre el decimal (8.575 → 8.58, como roundImporte)', async () => {
+    const m = mockFetch(APROBADO);
+    await client(m.fetch).autorizarComprobante(AUTH, facturaA({ importeOtrosTributos: 8.575 }));
+    expect(m.calls[0].body).toContain('<importeOtrosTributos>8.58</importeOtrosTributos>');
+  });
+
+  it('numeroDocumento: acepta number, 0 y guiones; con tipo 80 valida el dígito verificador', async () => {
+    const m = mockFetch(APROBADO, APROBADO);
+    const c = client(m.fetch);
+    await c.autorizarComprobante(AUTH, facturaA({ codigoTipoDocumento: 80, numeroDocumento: '30-00000000-7' }));
+    expect(m.calls[0].body).toContain('<numeroDocumento>30000000007</numeroDocumento>');
+    await c.autorizarComprobante(AUTH, facturaA({ codigoTipoDocumento: 99, numeroDocumento: 0 }));
+    expect(m.calls[1].body).toContain('<numeroDocumento>0</numeroDocumento>');
+
+    const err = await c
+      .autorizarComprobante(
+        AUTH,
+        facturaA({
+          numeroDocumento: '30000000008',
+          compradores: [{ codigoTipoDocumento: 80, numeroDocumento: 20123456780, porcentaje: 100 }],
+        }),
+      )
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    expect((err as ArcaValidationError).details.map((d) => d.field)).toEqual([
+      'numeroDocumento',
+      'compradores[0].numeroDocumento',
+    ]);
+    expect(m.fn).toHaveBeenCalledTimes(2);
+  });
+
+  it('rechaza campos que no existen en el XSD (ej. datos de CAEA en un CAE) y omite arrays opcionales vacíos', async () => {
+    const m = mockFetch(APROBADO);
+    const c = client(m.fetch);
+    const err = await c.autorizarComprobante(AUTH, { ...facturaA(), caea: '36434058476543' } as never).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    expect((err as ArcaValidationError).field).toBe('caea');
+
+    await c.autorizarComprobante(AUTH, facturaA({ comprobantesAsociados: [], datosAdicionales: [] }));
+    expect(m.calls[0].body).not.toContain('arrayComprobantesAsociados');
+    expect(m.calls[0].body).not.toContain('arrayDatosAdicionales');
+    await expect(c.autorizarComprobante(AUTH, facturaA({ items: [] }))).rejects.toMatchObject({ field: 'items' });
+  });
+
+  it('fechaHoraGen como Date se envía en hora de Argentina sin offset (formato del manual)', async () => {
+    const h = hangingFetch();
+    await client(h.fetch, { timeout: 20 })
+      .informarComprobanteCAEA(AUTH, {
+        ...facturaA(),
+        caea: '36434058476543',
+        fechaHoraGen: new Date('2026-11-01T13:30:05Z'),
+      })
+      .catch(() => undefined);
+    const body = String((h.fn.mock.calls[0][1] as RequestInit).body);
+    expect(body).toContain('<fechaHoraGen>2026-11-01T10:30:05</fechaHoraGen>');
+  });
+
+  it('valida el CAEA de las consultas (14 dígitos, number o string)', async () => {
+    const m = mockFetch(soapResponse('consultarPtosVtaCAEANoInformadosResponse', '<arrayPuntosVenta/>'));
+    const c = client(m.fetch);
+    await expect(c.consultarCAEA(AUTH, '123')).rejects.toMatchObject({ field: 'caea' });
+    expect(await c.consultarPtosVtaCAEANoInformados(AUTH, 36434058476543 as unknown as string)).toEqual([]);
+    expect(m.calls[0].body).toContain('<CAEA>36434058476543</CAEA>');
+  });
+});

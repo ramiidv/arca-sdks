@@ -1,19 +1,21 @@
 import { ArcaValidationError, validateCuit } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
 import { ArcaPadronError } from './errors.js';
-import {
-  mapDomicilio,
-  optNumber as num,
-  optString as str,
-  record,
-  records as list,
-  reqNumber,
-  reqString,
-  strings,
-  type SoapRecord as R,
-} from './mapping.js';
+import { Domicilio, decode, id, int, list, must, obj, str, type Schema } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
-import type { ActividadA5, CategoriaA5, ErrorRegimenA5, ImpuestoA5, PersonaA5, WsAuth } from './types.js';
+import type {
+  ActividadA5,
+  CaracterizacionA5,
+  CategoriaA5,
+  ComponenteSociedadA5,
+  DependenciaA5,
+  DomicilioA5,
+  ErrorRegimenA5,
+  ImpuestoA5,
+  PersonaA5,
+  RegimenA5,
+  WsAuth,
+} from './types.js';
 
 export type PadronA5ClientConfig = PadronClientConfig;
 
@@ -40,7 +42,7 @@ export class PadronA5Client extends BasePadronClient {
   async getPersona(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA5> {
     const idPersona = validateCuit(cuit);
     const result = await this.call('getPersona_v2', { ...this.authParams(auth), idPersona }, opts);
-    return mapPersonaA5(result);
+    return mapPersonaA5(decode<PersonaReturn>(result, PersonaReturnSchema, 'getPersona_v2.personaReturn'));
   }
 
   /**
@@ -66,147 +68,219 @@ export class PadronA5Client extends BasePadronClient {
     }
     const idPersona = cuits.map((c) => validateCuit(c));
     const result = await this.call('getPersonaList_v2', { ...this.authParams(auth), idPersona }, opts);
-    return list(result['persona']).map(mapPersonaA5);
+    const { persona } = decode<{ persona?: PersonaReturn[] }>(
+      result,
+      { persona: list(obj(PersonaReturnSchema)) },
+      'getPersonaList_v2.personaListReturn',
+    );
+    return (persona ?? []).map(mapPersonaA5);
   }
 }
 
-function mapImpuesto(i: R): ImpuestoA5 {
-  return {
-    idImpuesto: reqNumber(i['idImpuesto'], 'impuesto.idImpuesto'),
-    descripcionImpuesto: str(i['descripcionImpuesto']),
-    estadoImpuesto: str(i['estadoImpuesto']),
-    motivo: str(i['motivo']),
-    periodo: num(i['periodo']),
+// ---------------------------------------------------------------------------
+// Schemas de la respuesta (WSDL personaServiceA5, orden del WSDL). Todos los
+// elementos son `minOccurs="0"`; los `must()` son los que el SDK exige.
+// ---------------------------------------------------------------------------
+
+const Actividad: Schema = {
+  descripcionActividad: str(),
+  idActividad: must(id()),
+  nomenclador: int(),
+  orden: int(),
+  periodo: int(),
+};
+
+const Categoria: Schema = {
+  descripcionCategoria: str(),
+  idCategoria: must(int()),
+  idImpuesto: int(),
+  periodo: int(),
+};
+
+const Impuesto: Schema = {
+  descripcionImpuesto: str(),
+  estadoImpuesto: str(),
+  idImpuesto: must(int()),
+  motivo: str(),
+  periodo: int(),
+};
+
+const ErrorRegimen: Schema = {
+  error: list(str()),
+  mensaje: str(),
+};
+
+const PersonaReturnSchema: Schema = {
+  datosGenerales: obj({
+    apellido: str(),
+    caracterizacion: list(
+      obj({
+        descripcionCaracterizacion: str(),
+        fechaSolicitud: int(),
+        idCaracterizacion: must(int()),
+        periodo: int(),
+      }),
+    ),
+    dependencia: obj({
+      codPostal: str(),
+      descripcionDependencia: str(),
+      descripcionProvincia: str(),
+      direccion: str(),
+      idDependencia: int(),
+      idProvincia: int(),
+      localidad: str(),
+    }),
+    domicilioFiscal: obj(Domicilio),
+    esSucesion: str(),
+    estadoClave: str(),
+    fechaContratoSocial: str(),
+    fechaFallecimiento: str(),
+    idPersona: id(),
+    mesCierre: int(),
+    nombre: str(),
+    razonSocial: str(),
+    tipoClave: str(),
+    tipoPersona: str(),
+  }),
+  datosMonotributo: obj({
+    actividad: list(obj(Actividad)),
+    actividadMonotributista: obj(Actividad),
+    categoriaMonotributo: obj(Categoria),
+    componenteDeSociedad: list(
+      obj({
+        apellidoPersonaAsociada: str(),
+        ffRelacion: str(),
+        ffVencimiento: str(),
+        idPersonaAsociada: id(),
+        nombrePersonaAsociada: str(),
+        razonSocialPersonaAsociada: str(),
+        tipoComponente: str(),
+      }),
+    ),
+    impuesto: list(obj(Impuesto)),
+  }),
+  datosRegimenGeneral: obj({
+    actividad: list(obj(Actividad)),
+    categoriaAutonomo: obj(Categoria),
+    impuesto: list(obj(Impuesto)),
+    regimen: list(
+      obj({
+        descripcionRegimen: str(),
+        idImpuesto: int(),
+        idRegimen: must(int()),
+        periodo: int(),
+        tipoRegimen: str(),
+      }),
+    ),
+  }),
+  errorConstancia: obj({
+    apellido: str(),
+    error: list(str()),
+    idPersona: id(),
+    nombre: str(),
+  }),
+  errorMonotributo: obj(ErrorRegimen),
+  errorRegimenGeneral: obj(ErrorRegimen),
+};
+
+/** `personaReturn` decodificado (las listas ausentes no aparecen). */
+interface PersonaReturn {
+  datosGenerales?: {
+    apellido?: string;
+    caracterizacion?: CaracterizacionA5[];
+    dependencia?: DependenciaA5;
+    domicilioFiscal?: DomicilioA5;
+    esSucesion?: string;
+    estadoClave?: string;
+    fechaContratoSocial?: string;
+    fechaFallecimiento?: string;
+    idPersona?: string;
+    mesCierre?: number;
+    nombre?: string;
+    razonSocial?: string;
+    tipoClave?: string;
+    tipoPersona?: PersonaA5['tipoPersona'];
   };
-}
-
-function mapActividad(a: R): ActividadA5 {
-  return {
-    idActividad: reqString(a['idActividad'], 'actividad.idActividad'),
-    descripcionActividad: str(a['descripcionActividad']),
-    nomenclador: num(a['nomenclador']),
-    orden: num(a['orden']),
-    periodo: num(a['periodo']),
+  datosMonotributo?: {
+    actividad?: ActividadA5[];
+    actividadMonotributista?: ActividadA5;
+    categoriaMonotributo?: CategoriaA5;
+    componenteDeSociedad?: ComponenteSociedadA5[];
+    impuesto?: ImpuestoA5[];
   };
-}
-
-function mapCategoria(v: unknown): CategoriaA5 | undefined {
-  const c = record(v);
-  if (!c) return undefined;
-  return {
-    idCategoria: reqNumber(c['idCategoria'], 'categoria.idCategoria'),
-    descripcionCategoria: str(c['descripcionCategoria']),
-    idImpuesto: num(c['idImpuesto']),
-    periodo: num(c['periodo']),
+  datosRegimenGeneral?: {
+    actividad?: ActividadA5[];
+    categoriaAutonomo?: CategoriaA5;
+    impuesto?: ImpuestoA5[];
+    regimen?: RegimenA5[];
   };
+  errorConstancia?: { apellido?: string; error?: string[]; idPersona?: string; nombre?: string };
+  errorMonotributo?: { error?: string[]; mensaje?: string };
+  errorRegimenGeneral?: { error?: string[]; mensaje?: string };
 }
 
-function mapErrorRegimen(v: unknown): ErrorRegimenA5 | undefined {
-  const e = record(v);
-  if (!e) return undefined;
-  return { error: strings(e['error']), mensaje: str(e['mensaje']) };
-}
+const errorRegimen = (e: { error?: string[]; mensaje?: string }): ErrorRegimenA5 => ({
+  error: e.error ?? [],
+  mensaje: e.mensaje,
+});
 
-/** Mapea `personaReturn` de `getPersona_v2` o un `persona` de `getPersonaList_v2`. */
-export function mapPersonaA5(raw: R): PersonaA5 {
-  const g = record(raw['datosGenerales']);
-  const rg = record(raw['datosRegimenGeneral']);
-  const mt = record(raw['datosMonotributo']);
-  const ec = record(raw['errorConstancia']);
-  const domicilioFiscal = record(g?.['domicilioFiscal']);
+/** Arma la `PersonaA5` a partir de un `personaReturn` (o un `persona` de la lista) decodificado. */
+function mapPersonaA5(raw: PersonaReturn): PersonaA5 {
+  const { datosGenerales: g, datosRegimenGeneral: rg, datosMonotributo: mt, errorConstancia: ec } = raw;
 
   if (!g && !ec) {
     throw new ArcaPadronError('Respuesta inválida de ARCA: la constancia no tiene datosGenerales ni errorConstancia');
   }
+  const idPersona = g?.idPersona ?? ec?.idPersona;
+  if (!idPersona) throw new ArcaPadronError('Respuesta inválida de ARCA: falta datosGenerales.idPersona');
 
   const persona: PersonaA5 = {
-    idPersona: reqString(g?.['idPersona'] ?? ec?.['idPersona'], 'datosGenerales.idPersona'),
-    tipoPersona: str(g?.['tipoPersona']) as PersonaA5['tipoPersona'],
-    tipoClave: str(g?.['tipoClave']),
-    estadoClave: str(g?.['estadoClave']),
-    nombre: str(g?.['nombre'] ?? ec?.['nombre']),
-    apellido: str(g?.['apellido'] ?? ec?.['apellido']),
-    razonSocial: str(g?.['razonSocial']),
-    mesCierre: num(g?.['mesCierre']),
-    fechaContratoSocial: str(g?.['fechaContratoSocial']),
-    fechaFallecimiento: str(g?.['fechaFallecimiento']),
-    esSucesion: str(g?.['esSucesion']),
-    domicilioFiscal: domicilioFiscal ? mapDomicilio(domicilioFiscal) : undefined,
+    idPersona,
+    tipoPersona: g?.tipoPersona,
+    tipoClave: g?.tipoClave,
+    estadoClave: g?.estadoClave,
+    nombre: g?.nombre ?? ec?.nombre,
+    apellido: g?.apellido ?? ec?.apellido,
+    razonSocial: g?.razonSocial,
+    mesCierre: g?.mesCierre,
+    fechaContratoSocial: g?.fechaContratoSocial,
+    fechaFallecimiento: g?.fechaFallecimiento,
+    esSucesion: g?.esSucesion,
+    domicilioFiscal: g?.domicilioFiscal,
     impuestos: [],
   };
-
-  const dep = record(g?.['dependencia']);
-  if (dep) {
-    persona.dependencia = {
-      idDependencia: num(dep['idDependencia']),
-      descripcionDependencia: str(dep['descripcionDependencia']),
-      direccion: str(dep['direccion']),
-      localidad: str(dep['localidad']),
-      codPostal: str(dep['codPostal']),
-      idProvincia: num(dep['idProvincia']),
-      descripcionProvincia: str(dep['descripcionProvincia']),
-    };
-  }
-
-  if (g?.['caracterizacion'] !== undefined) {
-    persona.caracterizacion = list(g['caracterizacion']).map((c) => ({
-      idCaracterizacion: reqNumber(c['idCaracterizacion'], 'caracterizacion.idCaracterizacion'),
-      descripcionCaracterizacion: str(c['descripcionCaracterizacion']),
-      periodo: num(c['periodo']),
-      fechaSolicitud: num(c['fechaSolicitud']),
-    }));
-  }
+  if (g?.dependencia) persona.dependencia = g.dependencia;
+  if (g?.caracterizacion) persona.caracterizacion = g.caracterizacion;
 
   if (rg) {
     persona.regimenGeneral = {
-      impuestos: list(rg['impuesto']).map(mapImpuesto),
-      actividades: list(rg['actividad']).map(mapActividad),
-      regimenes: list(rg['regimen']).map((r) => ({
-        idRegimen: reqNumber(r['idRegimen'], 'regimen.idRegimen'),
-        descripcionRegimen: str(r['descripcionRegimen']),
-        idImpuesto: num(r['idImpuesto']),
-        periodo: num(r['periodo']),
-        tipoRegimen: str(r['tipoRegimen']),
-      })),
-      categoriaAutonomo: mapCategoria(rg['categoriaAutonomo']),
+      impuestos: rg.impuesto ?? [],
+      actividades: rg.actividad ?? [],
+      regimenes: rg.regimen ?? [],
+      categoriaAutonomo: rg.categoriaAutonomo,
     };
   }
-
   if (mt) {
-    const actividadMonotributista = record(mt['actividadMonotributista']);
     persona.monotributo = {
-      impuestos: list(mt['impuesto']).map(mapImpuesto),
-      actividades: list(mt['actividad']).map(mapActividad),
-      actividadMonotributista: actividadMonotributista ? mapActividad(actividadMonotributista) : undefined,
-      categoria: mapCategoria(mt['categoriaMonotributo']),
+      impuestos: mt.impuesto ?? [],
+      actividades: mt.actividad ?? [],
+      actividadMonotributista: mt.actividadMonotributista,
+      categoria: mt.categoriaMonotributo,
     };
-    if (mt['componenteDeSociedad'] !== undefined) {
-      persona.monotributo.componenteDeSociedad = list(mt['componenteDeSociedad']).map((c) => ({
-        idPersonaAsociada: str(c['idPersonaAsociada']),
-        apellidoPersonaAsociada: str(c['apellidoPersonaAsociada']),
-        nombrePersonaAsociada: str(c['nombrePersonaAsociada']),
-        razonSocialPersonaAsociada: str(c['razonSocialPersonaAsociada']),
-        tipoComponente: str(c['tipoComponente']),
-        ffRelacion: str(c['ffRelacion']),
-        ffVencimiento: str(c['ffVencimiento']),
-      }));
-    }
+    if (mt.componenteDeSociedad) persona.monotributo.componenteDeSociedad = mt.componenteDeSociedad;
   }
-
   persona.impuestos = [...(persona.regimenGeneral?.impuestos ?? []), ...(persona.monotributo?.impuestos ?? [])];
 
   if (ec) {
     persona.errorConstancia = {
-      error: strings(ec['error']),
-      idPersona: str(ec['idPersona']),
-      nombre: str(ec['nombre']),
-      apellido: str(ec['apellido']),
+      error: ec.error ?? [],
+      idPersona: ec.idPersona,
+      nombre: ec.nombre,
+      apellido: ec.apellido,
     };
   }
-  const errorRegimenGeneral = mapErrorRegimen(raw['errorRegimenGeneral']);
-  if (errorRegimenGeneral) persona.errorRegimenGeneral = errorRegimenGeneral;
-  const errorMonotributo = mapErrorRegimen(raw['errorMonotributo']);
-  if (errorMonotributo) persona.errorMonotributo = errorMonotributo;
+  if (raw.errorRegimenGeneral) persona.errorRegimenGeneral = errorRegimen(raw.errorRegimenGeneral);
+  if (raw.errorMonotributo) persona.errorMonotributo = errorRegimen(raw.errorMonotributo);
 
   return persona;
 }

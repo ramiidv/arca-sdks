@@ -1,9 +1,8 @@
-import { ArcaValidationError, formatDate, validateCuit } from '@ramiidv/arca-common';
+import { ArcaValidationError, formatDate } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
+import { encodeRequest } from '@ramiidv/arca-common/schema';
 import {
-  Condicion,
   IMPUESTO_IVA,
-  MotivoAnulacion,
   REGIMENES_CON_CONDICION,
   SIRE_VERSION,
   TIPOS_CON_CERTIFICADO_ORIGINAL,
@@ -16,9 +15,11 @@ import type {
   EmitirCertificadoParams,
   FechaHora,
 } from './types.js';
+import { CERTIFICADO, CERTIFICADO_ANULACION } from './schemas.js';
 
-// Reglas tomadas del XSD (tipos y opcionalidad) y del manual para el
-// desarrollador v1.0.3 (longitudes, obligatoriedad condicional y tablas).
+// Tipos, orden y opcionalidad del XSD, y largos/rangos por campo del manual
+// para el desarrollador v1.0.3: en los schemas de `schemas.ts`. Acá quedan las
+// fechas (formato propio de SIRE) y las reglas del manual que combinan campos.
 
 /** Argentina no tiene horario de verano desde 2009: siempre UTC-03:00. */
 const AR_OFFSET_MS = -3 * 60 * 60 * 1000;
@@ -46,32 +47,17 @@ const NUMERO_COMPROBANTE_FORMATO: Record<number, number> = {
   [TipoComprobante.LIQUIDACION_SERVICIOS_PUBLICOS_B_NEGATIVA]: 0,
 };
 
-/** Máximo de un importe `11,2` (11 enteros + 2 decimales). */
-const IMPORTE_MAX = 99_999_999_999.99;
-
 function pad(n: number, width: number): string {
   return String(n).padStart(width, '0');
 }
 
+/** Detalle de error con el formato de `encodeRequest` (`message` empieza con el campo). */
 function detail(field: string, message: string, value: unknown): ValidationErrorDetail {
-  return { field, message, value };
+  return { field, message: `${field}: ${message}`, value };
 }
 
 function invalid(field: string, message: string, value: unknown): ArcaValidationError {
   return new ArcaValidationError(`Campo "${field}" inválido: ${message}`, [detail(field, message, value)], field);
-}
-
-/** Corre `fn` y acumula su error de validación en `errors` (con el nombre de campo dado). */
-function collect<T>(errors: ValidationErrorDetail[], field: string, fn: () => T): T | undefined {
-  try {
-    return fn();
-  } catch (e) {
-    if (e instanceof ArcaValidationError) {
-      errors.push(...e.details.map((d) => ({ ...d, field })));
-      return undefined;
-    }
-    throw e;
-  }
 }
 
 function formatInstant(ms: number): string {
@@ -132,89 +118,73 @@ export function formatSireDateTime(value: FechaHora, field = 'fecha'): string {
  * @throws ArcaValidationError si no es un número finito, es negativo o excede 11 enteros.
  */
 export function formatImporte(value: number, field = 'importe'): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw invalid(field, 'debe ser un número finito', value);
+  return encodeRequest({ [field]: value }, { [field]: CERTIFICADO.importeRetencion }, field)[field] as string;
+}
+
+/** Campos `xs:dateTime` de `certificado`. */
+const FECHAS = [
+  'fechaRetencion',
+  'fechaPublicacion',
+  'fechaComprobante',
+  'fechaRetencionCertificadoOriginal',
+] as const satisfies readonly (keyof EmitirCertificadoParams)[];
+
+const DATOS_CERTIFICADO_ORIGINAL = [
+  'numeroCertificadoOriginal',
+  'fechaRetencionCertificadoOriginal',
+  'importeCertificadoOriginal',
+] as const satisfies readonly (keyof EmitirCertificadoParams)[];
+
+/** Reglas del manual que dependen de más de un campo o de las tablas del anexo. */
+function reglasCertificado(p: Partial<EmitirCertificadoParams>, errors: ValidationErrorDetail[]): void {
+  const required = (field: keyof EmitirCertificadoParams, when: string) => {
+    if (p[field] === undefined) errors.push(detail(field, `es obligatorio ${when}`, undefined));
+  };
+  const forbidden = (field: keyof EmitirCertificadoParams, when: string) => {
+    if (p[field] !== undefined) errors.push(detail(field, `no corresponde ${when}`, p[field]));
+  };
+
+  if (p.condicion === undefined && typeof p.regimen === 'number' && REGIMENES_CON_CONDICION.includes(p.regimen)) {
+    required('condicion', `para el régimen ${p.regimen}`);
   }
-  if (value < 0) throw invalid(field, 'no puede ser negativo', value);
-  const rounded = Math.round(value * 100) / 100;
-  if (rounded > IMPORTE_MAX) throw invalid(field, 'excede 11 dígitos enteros', value);
-  return rounded.toFixed(2);
-}
+  if (p.imposibilidadRetencion === true) required('motivoNoRetencion', 'cuando imposibilidadRetencion es true');
 
-function checkInteger(
-  errors: ValidationErrorDetail[],
-  field: string,
-  value: unknown,
-  min: number,
-  max: number,
-): number | undefined {
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
-    errors.push(detail(field, `debe ser un entero entre ${min} y ${max}`, value));
-    return undefined;
+  if (typeof p.porcentajeExclusion === 'number' && p.porcentajeExclusion !== 50 && p.porcentajeExclusion !== 100) {
+    errors.push(detail('porcentajeExclusion', 'debe ser 50 o 100', p.porcentajeExclusion));
   }
-  return value;
-}
-
-function checkText(
-  errors: ValidationErrorDetail[],
-  field: string,
-  value: unknown,
-  maxLength: number,
-): string | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string' || value.trim() === '') {
-    errors.push(detail(field, 'debe ser un texto no vacío', value));
-    return undefined;
+  if (p.regimenExclusion === true) {
+    required('porcentajeExclusion', 'cuando regimenExclusion es true');
+    required('fechaPublicacion', 'cuando regimenExclusion es true');
   }
-  if (value.length > maxLength) {
-    errors.push(detail(field, `admite hasta ${maxLength} caracteres`, value));
-    return undefined;
+
+  const tipo = p.tipoComprobante;
+  if (tipo === undefined || !Number.isSafeInteger(tipo)) return; // el schema ya lo reporta
+  if (!Object.hasOwn(NUMERO_COMPROBANTE_FORMATO, tipo)) {
+    errors.push(detail('tipoComprobante', 'debe existir en la tabla TIPO_COMPROBANTE', tipo));
+    return;
   }
-  return value;
-}
+  const when = `para el tipoComprobante ${tipo}`;
 
-function checkBoolean(errors: ValidationErrorDetail[], field: string, value: unknown): boolean | undefined {
-  if (typeof value !== 'boolean') {
-    errors.push(detail(field, 'debe ser true o false', value));
-    return undefined;
-  }
-  return value;
-}
-
-function required(errors: ValidationErrorDetail[], field: string, value: unknown, when: string): void {
-  if (value === undefined) errors.push(detail(field, when ? `es obligatorio ${when}` : 'es obligatorio', value));
-}
-
-function forbidden(errors: ValidationErrorDetail[], field: string, value: unknown, when: string): void {
-  if (value !== undefined) errors.push(detail(field, `no corresponde ${when}`, value));
-}
-
-function throwIfErrors(errors: ValidationErrorDetail[], what: string): void {
-  if (errors.length === 0) return;
-  throw new ArcaValidationError(
-    `${what} inválido: ${errors.map((e) => `${e.field}: ${e.message}`).join('; ')}`,
-    errors,
-    errors[0].field,
-  );
-}
-
-/**
- * Valida el CUIT del agente de retención (dígito verificador) y lo devuelve
- * como número (`cuitAgente` es `xs:long`).
- */
-export function toCuitNumber(cuit: string | number, field = 'cuit'): number {
-  try {
-    return Number(validateCuit(cuit));
-  } catch (e) {
-    if (e instanceof ArcaValidationError) {
-      throw new ArcaValidationError(
-        e.message,
-        e.details.map((d) => ({ ...d, field })),
-        field,
-        { cause: e },
-      );
+  required('numeroComprobante', when);
+  const numero = p.numeroComprobante;
+  const maxLength = NUMERO_COMPROBANTE_FORMATO[tipo];
+  if (typeof numero === 'string') {
+    if (maxLength === 0) {
+      if (!NUMERO_PV_RE.test(numero))
+        errors.push(detail('numeroComprobante', 'formato esperado: 99999-99999999', numero));
+    } else if (numero.trim() === '') {
+      errors.push(detail('numeroComprobante', 'debe ser un texto no vacío', numero));
+    } else if (numero.length > maxLength) {
+      errors.push(detail('numeroComprobante', `admite hasta ${maxLength} caracteres ${when}`, numero));
     }
-    throw e;
+  }
+
+  if (tipo === TipoComprobante.NOTA_CREDITO) required('motivoEmisionNotaCredito', 'para una nota de crédito (tipo 3)');
+  else forbidden('motivoEmisionNotaCredito', when);
+
+  for (const f of DATOS_CERTIFICADO_ORIGINAL) {
+    if (TIPOS_CON_CERTIFICADO_ORIGINAL.includes(tipo)) required(f, when);
+    else forbidden(f, when);
   }
 }
 
@@ -225,182 +195,41 @@ export function toCuitNumber(cuit: string | number, field = 'cuit'): number {
  * @throws ArcaValidationError con un detalle por campo inválido.
  */
 export function buildCertificadoRequest(params: EmitirCertificadoParams): CertificadoRequest {
-  const errors: ValidationErrorDetail[] = [];
-  const p = params ?? ({} as EmitirCertificadoParams);
-  const date = (field: keyof EmitirCertificadoParams) => {
-    const value = p[field] as FechaHora | undefined;
-    return value === undefined ? undefined : collect(errors, field, () => formatSireDateTime(value, field));
-  };
-  const importe = (field: keyof EmitirCertificadoParams) => {
-    const value = p[field] as number | undefined;
-    return value === undefined ? undefined : collect(errors, field, () => formatImporte(value, field));
-  };
-  const req = (field: keyof EmitirCertificadoParams) => required(errors, field, p[field], '');
+  const p: Partial<EmitirCertificadoParams> = params ?? {};
+  const { motivoAnulacion, ...datos } = p as Partial<EmitirCertificadoParams> & { motivoAnulacion?: unknown };
+  const input: Record<string, unknown> = { ...datos, version: SIRE_VERSION, impuesto: IMPUESTO_IVA };
 
-  // Obligatorios del XSD
-  for (const f of [
-    'regimen',
-    'fechaRetencion',
-    'imposibilidadRetencion',
-    'importeRetencion',
-    'importeBaseCalculo',
-    'regimenExclusion',
-    'tipoComprobante',
-    'fechaComprobante',
-    'importeComprobante',
-    'cuitRetenido',
-  ] as const) {
-    req(f);
-  }
-
-  const codigoTrazabilidad = checkText(errors, 'codigoTrazabilidad', p.codigoTrazabilidad, 36);
-  const regimen = p.regimen === undefined ? undefined : checkInteger(errors, 'regimen', p.regimen, 1, 999);
-  const fechaRetencion = date('fechaRetencion');
-
-  let condicion: number | undefined;
-  if (p.condicion !== undefined) {
-    if (p.condicion !== Condicion.INSCRIPTO && p.condicion !== Condicion.NO_INSCRIPTO) {
-      errors.push(detail('condicion', 'debe existir en la tabla CONDICION (1 o 2)', p.condicion));
-    } else {
-      condicion = p.condicion;
-    }
-  } else if (regimen !== undefined && REGIMENES_CON_CONDICION.includes(regimen)) {
-    required(errors, 'condicion', undefined, `para el régimen ${regimen}`);
-  }
-
-  const imposibilidadRetencion =
-    p.imposibilidadRetencion === undefined
-      ? undefined
-      : checkBoolean(errors, 'imposibilidadRetencion', p.imposibilidadRetencion);
-  const motivoNoRetencion = checkText(errors, 'motivoNoRetencion', p.motivoNoRetencion, 30);
-  if (imposibilidadRetencion === true) {
-    required(errors, 'motivoNoRetencion', p.motivoNoRetencion, 'cuando imposibilidadRetencion es true');
-  }
-
-  const importeRetencion = importe('importeRetencion');
-  const importeBaseCalculo = importe('importeBaseCalculo');
-
-  const regimenExclusion =
-    p.regimenExclusion === undefined ? undefined : checkBoolean(errors, 'regimenExclusion', p.regimenExclusion);
-  let porcentajeExclusion: string | undefined;
-  if (p.porcentajeExclusion !== undefined) {
-    if (p.porcentajeExclusion !== 50 && p.porcentajeExclusion !== 100) {
-      errors.push(detail('porcentajeExclusion', 'debe ser 50 o 100', p.porcentajeExclusion));
-    } else {
-      porcentajeExclusion = p.porcentajeExclusion.toFixed(2);
-    }
-  }
-  const fechaPublicacion = date('fechaPublicacion');
-  if (regimenExclusion === true) {
-    required(errors, 'porcentajeExclusion', p.porcentajeExclusion, 'cuando regimenExclusion es true');
-    required(errors, 'fechaPublicacion', p.fechaPublicacion, 'cuando regimenExclusion es true');
-  }
-
-  let tipoComprobante: number | undefined;
-  if (p.tipoComprobante !== undefined) {
-    if (typeof p.tipoComprobante !== 'number' || !Object.hasOwn(NUMERO_COMPROBANTE_FORMATO, p.tipoComprobante)) {
-      errors.push(detail('tipoComprobante', 'debe existir en la tabla TIPO_COMPROBANTE', p.tipoComprobante));
-    } else {
-      tipoComprobante = p.tipoComprobante;
-    }
-  }
-  const fechaComprobante = date('fechaComprobante');
-
-  let numeroComprobante: string | undefined;
-  if (tipoComprobante !== undefined) {
-    required(errors, 'numeroComprobante', p.numeroComprobante, `para el tipoComprobante ${tipoComprobante}`);
-    const maxLength = NUMERO_COMPROBANTE_FORMATO[tipoComprobante];
-    if (p.numeroComprobante !== undefined) {
-      if (maxLength === 0) {
-        if (typeof p.numeroComprobante !== 'string' || !NUMERO_PV_RE.test(p.numeroComprobante)) {
-          errors.push(detail('numeroComprobante', 'formato esperado: 99999-99999999', p.numeroComprobante));
-        } else {
-          numeroComprobante = p.numeroComprobante;
-        }
-      } else {
-        numeroComprobante = checkText(errors, 'numeroComprobante', p.numeroComprobante, maxLength);
-      }
+  // Las fechas se serializan antes (formato propio de SIRE); sus errores se
+  // suman a los del schema. Una fecha inválida queda como '' para que el
+  // schema no la reporte de nuevo: el request no se usa porque hay errores.
+  const fechaErrors: ValidationErrorDetail[] = [];
+  for (const field of FECHAS) {
+    const value = input[field];
+    if (value === undefined || value === null) continue;
+    try {
+      input[field] = formatSireDateTime(value as FechaHora, field);
+    } catch (e) {
+      if (!(e instanceof ArcaValidationError)) throw e;
+      fechaErrors.push(...e.details);
+      input[field] = '';
     }
   }
 
-  const coe = checkText(errors, 'coe', p.coe, 12);
-  const coeOriginal = checkText(errors, 'coeOriginal', p.coeOriginal, 12);
-  const cae = checkText(errors, 'cae', p.cae, 14);
-  const importeComprobante = importe('importeComprobante');
-
-  const motivoEmisionNotaCredito = checkText(errors, 'motivoEmisionNotaCredito', p.motivoEmisionNotaCredito, 30);
-  if (tipoComprobante === TipoComprobante.NOTA_CREDITO) {
-    required(errors, 'motivoEmisionNotaCredito', p.motivoEmisionNotaCredito, 'para una nota de crédito (tipo 3)');
-  } else if (tipoComprobante !== undefined) {
-    forbidden(
-      errors,
-      'motivoEmisionNotaCredito',
-      p.motivoEmisionNotaCredito,
-      `para el tipoComprobante ${tipoComprobante}`,
-    );
-  }
-
-  const cuitRetenido =
-    p.cuitRetenido === undefined
-      ? undefined
-      : collect(errors, 'cuitRetenido', () => toCuitNumber(p.cuitRetenido, 'cuitRetenido'));
-
-  const numeroCertificadoOriginal = checkText(errors, 'numeroCertificadoOriginal', p.numeroCertificadoOriginal, 25);
-  const fechaRetencionCertificadoOriginal = date('fechaRetencionCertificadoOriginal');
-  const importeCertificadoOriginal = importe('importeCertificadoOriginal');
-  if (tipoComprobante !== undefined) {
-    const original = [
-      'numeroCertificadoOriginal',
-      'fechaRetencionCertificadoOriginal',
-      'importeCertificadoOriginal',
-    ] as const;
-    const when = `para el tipoComprobante ${tipoComprobante}`;
-    for (const f of original) {
-      if (TIPOS_CON_CERTIFICADO_ORIGINAL.includes(tipoComprobante)) required(errors, f, p[f], when);
-      else forbidden(errors, f, p[f], when);
+  const out = encodeRequest(input, CERTIFICADO, 'certificado', (_, errors) => {
+    errors.push(...fechaErrors);
+    reglasCertificado(p, errors);
+    if (Object.hasOwn(p, 'motivoAnulacion')) {
+      errors.push(detail('motivoAnulacion', 'no se debe enviar en emitir (usar anularCertificado)', motivoAnulacion));
     }
-  }
+  });
 
-  if (Object.hasOwn(p, 'motivoAnulacion')) {
-    errors.push(
-      detail(
-        'motivoAnulacion',
-        'no se debe enviar en emitir (usar anularCertificado)',
-        (p as { motivoAnulacion?: unknown }).motivoAnulacion,
-      ),
-    );
-  }
-
-  throwIfErrors(errors, 'Certificado');
-
-  // Sin errores, todos los obligatorios están definidos.
+  // `encodeRequest` serializa boolean y CUIT como texto; `CertificadoRequest` los tipa como boolean/number.
   return {
-    version: SIRE_VERSION,
-    codigoTrazabilidad,
-    impuesto: IMPUESTO_IVA,
-    regimen: regimen!,
-    fechaRetencion: fechaRetencion!,
-    condicion,
-    imposibilidadRetencion: imposibilidadRetencion!,
-    motivoNoRetencion,
-    importeRetencion: importeRetencion!,
-    importeBaseCalculo: importeBaseCalculo!,
-    regimenExclusion: regimenExclusion!,
-    porcentajeExclusion,
-    fechaPublicacion,
-    tipoComprobante: tipoComprobante!,
-    fechaComprobante: fechaComprobante!,
-    numeroComprobante,
-    coe,
-    coeOriginal,
-    cae,
-    importeComprobante: importeComprobante!,
-    motivoEmisionNotaCredito,
-    cuitRetenido: cuitRetenido!,
-    numeroCertificadoOriginal,
-    fechaRetencionCertificadoOriginal,
-    importeCertificadoOriginal,
-  };
+    ...out,
+    imposibilidadRetencion: out.imposibilidadRetencion === 'true',
+    regimenExclusion: out.regimenExclusion === 'true',
+    cuitRetenido: Number(out.cuitRetenido),
+  } as unknown as CertificadoRequest;
 }
 
 /**
@@ -409,25 +238,6 @@ export function buildCertificadoRequest(params: EmitirCertificadoParams): Certif
  * @throws ArcaValidationError con un detalle por campo inválido.
  */
 export function buildAnulacionRequest(params: AnularCertificadoParams): CertificadoAnulacionRequest {
-  const errors: ValidationErrorDetail[] = [];
-  const p = params ?? ({} as AnularCertificadoParams);
-
-  const codigoTrazabilidad = checkText(errors, 'codigoTrazabilidad', p.codigoTrazabilidad, 36);
-  required(errors, 'numeroCertificado', p.numeroCertificado, '');
-  const numeroCertificado = checkText(errors, 'numeroCertificado', p.numeroCertificado, 25);
-  required(errors, 'motivoAnulacion', p.motivoAnulacion, '');
-  const motivos: number[] = Object.values(MotivoAnulacion).filter((v): v is number => typeof v === 'number');
-  if (p.motivoAnulacion !== undefined && !motivos.includes(p.motivoAnulacion)) {
-    errors.push(detail('motivoAnulacion', 'debe existir en la tabla MOTIVO_DE_ANULACION (1 a 4)', p.motivoAnulacion));
-  }
-
-  throwIfErrors(errors, 'Anulación');
-
-  return {
-    version: SIRE_VERSION,
-    codigoTrazabilidad,
-    impuesto: IMPUESTO_IVA,
-    numeroCertificado: numeroCertificado!,
-    motivoAnulacion: p.motivoAnulacion,
-  };
+  const input = { ...(params ?? {}), version: SIRE_VERSION, impuesto: IMPUESTO_IVA };
+  return encodeRequest(input, CERTIFICADO_ANULACION, 'certificadoAnulacion') as unknown as CertificadoAnulacionRequest;
 }

@@ -1,8 +1,7 @@
-import { ArcaSdkBase } from '@ramiidv/arca-common';
+import { ArcaSdkBase, validateCuit } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
 import { ENDPOINTS } from './constants.js';
 import { FecredClient } from './fecred-client.js';
-import { cuitParam } from './validation.js';
 import type {
   AceptarFecredParams,
   ArcaFecredConfig,
@@ -62,8 +61,8 @@ export class ArcaFecred extends ArcaSdkBase<'wsfecred'> {
   public readonly fecred: FecredClient;
 
   constructor(config: ArcaFecredConfig) {
-    // `cuitParam` mantiene el error de validación con `field: 'cuit'`.
-    super({ ...config, cuit: cuitParam(config.cuit, 'cuit') }, { wsfecred: ENDPOINTS.wsfecred.serviceId });
+    // CUIT con dígito verificador (error con `field: 'cuit'`), enviado como 11 dígitos.
+    super({ ...config, cuit: validateCuit(config.cuit) }, { wsfecred: ENDPOINTS.wsfecred.serviceId });
     this.fecred = new FecredClient({
       endpoint: this.endpoint(ENDPOINTS.wsfecred, config.endpoints?.wsfecred),
       namespace: ENDPOINTS.wsfecred.namespace,

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ArcaValidationError, validateConstatarInput } from '../src/index.js';
+import { buildCmpReq } from '../src/validation.js';
 import type { ConstatarInput } from '../src/index.js';
 
 const validInput: ConstatarInput = {
@@ -89,6 +90,7 @@ describe('validateConstatarInput', () => {
 
   it('valida Opcionales', () => {
     expect(fieldsOf({ ...validInput, Opcionales: [] })).toEqual(['Opcionales']);
+    // Los errores del XSD (largos) se reportan antes que los de reglas propias (Id repetido).
     expect(
       fieldsOf({
         ...validInput,
@@ -98,10 +100,85 @@ describe('validateConstatarInput', () => {
           { Id: '12345', Valor: '' },
         ],
       }),
-    ).toEqual(['Opcionales[1].Id', 'Opcionales[2].Id', 'Opcionales[2].Valor']);
+    ).toEqual(['Opcionales[2].Id', 'Opcionales[2].Valor', 'Opcionales[1].Id']);
   });
 
   it('informa todos los errores juntos', () => {
     expect(fieldsOf({ ...validInput, PtoVta: 0, CbteNro: 0, ImpTotal: -1 })).toEqual(['PtoVta', 'CbteNro', 'ImpTotal']);
+  });
+
+  it('rechaza campos desconocidos (no existen en CmpDatos)', () => {
+    expect(fieldsOf({ ...validInput, Foo: 1 } as never)).toEqual(['Foo']);
+    expect(fieldsOf({ ...validInput, Opcionales: [{ Id: '1', Valor: 'x', Extra: 1 } as never] })).toEqual([
+      'Opcionales[0].Extra',
+    ]);
+  });
+
+  it('rechaza un Opcional que no es objeto', () => {
+    expect(fieldsOf({ ...validInput, Opcionales: [null as never] })).toEqual(['Opcionales[0]']);
+  });
+
+  it('el mensaje del error incluye cada campo', () => {
+    const err = (() => {
+      try {
+        validateConstatarInput({ ...validInput, PtoVta: 0, DocNroReceptor: undefined });
+      } catch (e) {
+        return e as ArcaValidationError;
+      }
+    })();
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    expect(err?.field).toBe('PtoVta');
+    expect(err?.message).toMatch(/^Validación de ConstatarInput fallida: PtoVta: .*; DocNroReceptor: /);
+  });
+});
+
+describe('buildCmpReq', () => {
+  it('normaliza al orden del WSDL: CUIT, fecha AAAAMMDD, ImpTotal con 2 decimales y documento como texto', () => {
+    const req = buildCmpReq({
+      ...validInput,
+      CuitEmisor: '30-71234567-1',
+      CbteFch: '2026-03-15',
+      ImpTotal: 12100.456,
+      DocTipoReceptor: ' 96 ',
+      DocNroReceptor: '0012345678',
+      Opcionales: [{ Id: '01', Valor: 'x' }],
+    });
+    expect(req).toEqual({
+      CbteModo: 'CAE',
+      CuitEmisor: '30712345671',
+      PtoVta: 1,
+      CbteTipo: 1,
+      CbteNro: 150,
+      CbteFch: '20260315',
+      ImpTotal: '12100.46',
+      CodAutorizacion: '73429843294823',
+      DocTipoReceptor: '96',
+      DocNroReceptor: '0012345678',
+      Opcionales: { Opcional: [{ Id: '01', Valor: 'x' }] },
+    });
+    expect(Object.keys(req)).toEqual([
+      'CbteModo',
+      'CuitEmisor',
+      'PtoVta',
+      'CbteTipo',
+      'CbteNro',
+      'CbteFch',
+      'ImpTotal',
+      'CodAutorizacion',
+      'DocTipoReceptor',
+      'DocNroReceptor',
+      'Opcionales',
+    ]);
+  });
+
+  it("DocTipoReceptor/DocNroReceptor vacíos ('') equivalen a no informarlos", () => {
+    const req = buildCmpReq({ ...validInput, DocTipoReceptor: '', DocNroReceptor: '' });
+    expect(req).not.toHaveProperty('DocTipoReceptor');
+    expect(req).not.toHaveProperty('DocNroReceptor');
+  });
+
+  it('acepta ImpTotal con 13 enteros y redondea al límite', () => {
+    expect(buildCmpReq({ ...validInput, ImpTotal: 9_999_999_999_999.99 }).ImpTotal).toBe('9999999999999.99');
+    expect(fieldsOf({ ...validInput, ImpTotal: 9_999_999_999_999.996 })).toEqual(['ImpTotal']);
   });
 });

@@ -1,14 +1,6 @@
 import { validateCuit } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
-import {
-  asignarDependenciaYClaves,
-  mapDomicilio,
-  mapPersonaComun,
-  optString as str,
-  records as list,
-  requirePersona,
-  type SoapRecord as R,
-} from './mapping.js';
+import { Dependencia, Domicilio, decodePersona, id, list, must, obj, str, type Schema } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
 import type { PersonaA10, WsAuth } from './types.js';
 
@@ -28,18 +20,27 @@ export class PadronA10Client extends BasePadronClient {
   async getPersona(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA10> {
     const idPersona = validateCuit(cuit);
     const result = await this.call('getPersona', { ...this.authParams(auth), idPersona }, opts);
-    return mapPersonaA10(requirePersona(result, 'getPersona'));
+    return decodePersona<PersonaA10>(result, PersonaA10Schema, 'getPersona');
   }
 }
 
-/** Mapea `persona` de A10 (WSDL personaServiceA10). */
-export function mapPersonaA10(raw: R): PersonaA10 {
-  const persona: PersonaA10 = {
-    ...mapPersonaComun(raw),
-    idActividadPrincipal: str(raw['idActividadPrincipal']),
-    descripcionActividadPrincipal: str(raw['descripcionActividadPrincipal']),
-  };
-  asignarDependenciaYClaves(persona, raw);
-  if (raw['domicilio'] !== undefined) persona.domicilio = list(raw['domicilio']).map(mapDomicilio);
-  return persona;
-}
+/**
+ * `persona` de A10 (WSDL personaServiceA10, orden del WSDL). Todos los
+ * elementos son `minOccurs="0"`; los `must()` son los que el SDK exige.
+ */
+export const PersonaA10Schema: Schema = {
+  apellido: str(),
+  claveInactivaAsociada: list(id()),
+  dependencia: obj(Dependencia),
+  descripcionActividadPrincipal: str(),
+  domicilio: list(obj(Domicilio)),
+  estadoClave: str(),
+  idActividadPrincipal: id(),
+  idPersona: must(id()),
+  nombre: str(),
+  numeroDocumento: str(),
+  razonSocial: str(),
+  tipoClave: str(),
+  tipoDocumento: str(),
+  tipoPersona: must(str({ minLen: 1 })),
+};

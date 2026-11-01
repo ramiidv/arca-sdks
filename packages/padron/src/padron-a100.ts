@@ -1,13 +1,35 @@
 import { ArcaValidationError } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
-import { ArcaPadronError } from './errors.js';
-import { optString, record, records as list, reqString, type SoapRecord as R } from './mapping.js';
+import { decode, list, must, obj, str, type Schema } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
-import type { ParameterRecord, WsAuth } from './types.js';
+import type { ParameterAttribute, ParameterRecord, WsAuth } from './types.js';
 
 export type PadronA100ClientConfig = PadronClientConfig;
 
 const METHOD = 'getParameterCollectionByName';
+
+/** Respuesta (WSDL parameterServiceA100, orden del WSDL; los `must()` son los que el SDK exige). */
+const ParameterCollectionReturnSchema: Schema = {
+  parameterCollection: must(
+    obj({
+      name: str(),
+      parameterList: list(
+        obj({
+          attributeList: list(obj({ name: must(str({ minLen: 1 })), value: str() })),
+          description: must(str()),
+          id: must(str({ minLen: 1 })),
+        }),
+      ),
+    }),
+  ),
+};
+
+interface ParameterCollectionReturn {
+  parameterCollection: {
+    name?: string;
+    parameterList?: Array<{ attributeList?: ParameterAttribute[]; description: string; id: string }>;
+  };
+}
 
 /**
  * Client for ws_sr_padron_a100 - Tablas de parámetros.
@@ -37,24 +59,15 @@ export class PadronA100Client extends BasePadronClient {
 
     const result = await this.call(METHOD, { ...this.authParams(auth), collectionName: collectionName.trim() }, opts);
 
-    const collection = record(result['parameterCollection']);
-    if (!collection) {
-      throw new ArcaPadronError(`Respuesta inválida de ARCA (${METHOD}): falta parameterCollection`);
-    }
-
-    return list(collection['parameterList']).map((p: R) => {
-      const atributos = list(p['attributeList']).map((a) => ({
-        name: reqString(a['name'], 'attributeList.name'),
-        value: optString(a['value']),
-      }));
-      const descripcion = optString(p['description']);
-      if (descripcion === undefined)
-        throw new ArcaPadronError(`Respuesta inválida de ARCA (${METHOD}): falta description`);
-      return {
-        id: reqString(p['id'], 'parameterList.id'),
-        descripcion,
-        atributos: atributos.length > 0 ? atributos : undefined,
-      };
-    });
+    const { parameterCollection } = decode<ParameterCollectionReturn>(
+      result,
+      ParameterCollectionReturnSchema,
+      `${METHOD}.parameterCollectionReturn`,
+    );
+    return (parameterCollection.parameterList ?? []).map((p) => ({
+      id: p.id,
+      descripcion: p.description,
+      atributos: p.attributeList?.length ? p.attributeList : undefined,
+    }));
   }
 }

@@ -669,3 +669,109 @@ describe('status', () => {
     expect(s.a100.status).toBe('fulfilled');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Decodificación con el DSL de schemas
+// ---------------------------------------------------------------------------
+
+describe('decodificación de respuestas (schemas)', () => {
+  const personaA10 = (inner: string) =>
+    `<personaReturn><persona>${inner}<tipoPersona>FISICA</tipoPersona></persona></personaReturn>`;
+
+  it('xs:long y xs:string con ceros a la izquierda se preservan como string', async () => {
+    const client = await padron();
+    mockFetch(
+      respuesta(
+        ENDPOINTS.a10.namespace,
+        'getPersona',
+        personaA10(
+          '<claveInactivaAsociada>00999999996</claveInactivaAsociada><domicilio><codPostal>0012</codPostal></domicilio>' +
+            '<idActividadPrincipal>011119</idActividadPrincipal><idPersona>20111111112</idPersona><numeroDocumento>0012</numeroDocumento>',
+        ),
+      ),
+    );
+    const p = await client.getPersonaBasic('20111111112');
+    expect(p.claveInactivaAsociada).toEqual(['00999999996']);
+    expect(p.domicilio).toEqual([{ codPostal: '0012' }]);
+    expect(p.idActividadPrincipal).toBe('011119');
+    expect(p.numeroDocumento).toBe('0012');
+  });
+
+  it('listas ausentes no aparecen; un único nil queda como lista vacía', async () => {
+    const client = await padron();
+    mockFetch(
+      respuesta(
+        ENDPOINTS.a10.namespace,
+        'getPersona',
+        personaA10(
+          '<domicilio xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true"/><idPersona>20111111112</idPersona>',
+        ),
+      ),
+    );
+    const p = await client.getPersonaBasic('20111111112');
+    expect(p.domicilio).toEqual([]);
+    expect('claveInactivaAsociada' in p).toBe(false);
+    expect('dependencia' in p).toBe(false);
+  });
+
+  it('idPersona vacío → ArcaPadronError con la ruta del campo', async () => {
+    const client = await padron();
+    mockFetch(respuesta(ENDPOINTS.a10.namespace, 'getPersona', personaA10('<idPersona></idPersona>')));
+    const err = await client.getPersonaBasic('20111111112').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ArcaPadronError);
+    expect((err as Error).message).toMatch(/getPersona\.personaReturn\.persona\.idPersona/);
+  });
+
+  it('un xs:int no numérico → ArcaPadronError (antes quedaba NaN)', async () => {
+    const client = await padron();
+    mockFetch(
+      respuesta(
+        ENDPOINTS.a13.namespace,
+        'getPersona',
+        personaA10('<domicilio><idProvincia>X</idProvincia></domicilio><idPersona>20111111112</idPersona>'),
+      ),
+    );
+    const err = await client.getPersonaA13('20111111112').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ArcaPadronError);
+    expect((err as Error).message).toMatch(/domicilio\[0\]\.idProvincia/);
+  });
+
+  it('getPersonaList_v2: descarta los persona nil', async () => {
+    const client = await padron();
+    mockFetch(
+      respuesta(
+        ENDPOINTS.a5.namespace,
+        'getPersonaList_v2',
+        `<personaListReturn>
+          <persona><datosGenerales><idPersona>20224107030</idPersona><tipoPersona>FISICA</tipoPersona></datosGenerales></persona>
+          <persona xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true"/>
+        </personaListReturn>`,
+      ),
+    );
+    const list = await client.getConstanciasInscripcion(['20224107030']);
+    expect(list.map((p) => p.idPersona)).toEqual(['20224107030']);
+    expect(list[0].impuestos).toEqual([]);
+  });
+
+  it('A100: id vacío → ArcaPadronError; description vacía se acepta', async () => {
+    const client = await padron();
+    const coleccion = (p: string) =>
+      `<parameterCollectionReturn><parameterCollection><parameterList>${p}</parameterList></parameterCollection></parameterCollectionReturn>`;
+    mockFetch(
+      respuesta(
+        ENDPOINTS.a100.namespace,
+        'getParameterCollectionByName',
+        coleccion('<description></description><id>1</id>'),
+      ),
+    );
+    expect(await client.getParametros('SUPA.X')).toEqual([{ id: '1', descripcion: '' }]);
+    mockFetch(
+      respuesta(
+        ENDPOINTS.a100.namespace,
+        'getParameterCollectionByName',
+        coleccion('<description>X</description><id></id>'),
+      ),
+    );
+    await expect(client.getParametros('SUPA.X')).rejects.toBeInstanceOf(ArcaPadronError);
+  });
+});

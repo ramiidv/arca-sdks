@@ -182,3 +182,24 @@ describe('ArcaMtxca', () => {
     expect(done).toBe(true);
   });
 });
+
+describe('ArcaMtxca: validación en un solo error', () => {
+  it('autorizar reporta las reglas de importes con el campo como prefijo del mensaje', async () => {
+    const m = mockFetch();
+    const err = await mtxca(m.fetch)
+      .autorizar({ ...facturaA(), importeTotal: 500 })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    const detail = (err as ArcaValidationError).details.find((d) => d.field === 'importeTotal');
+    expect(detail?.message).toMatch(/^importeTotal: debe ser/);
+    expect(m.fn).not.toHaveBeenCalled();
+  });
+
+  it('si el XSD falla, no evalúa las reglas de importes', async () => {
+    const m = mockFetch();
+    const err = await mtxca(m.fetch)
+      .autorizar({ ...facturaA(), importeTotal: 500, codigoMoneda: 'PESOS' })
+      .catch((e) => e);
+    expect((err as ArcaValidationError).details.map((d) => d.field)).toEqual(['codigoMoneda']);
+  });
+});

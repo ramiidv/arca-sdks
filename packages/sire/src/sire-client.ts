@@ -7,8 +7,11 @@ import type {
   ServiceTransport,
   SoapOperationKind,
 } from '@ramiidv/arca-common';
+import { decodeResponse } from '@ramiidv/arca-common/schema';
+import type { Schema } from '@ramiidv/arca-common/schema';
 import { SIRE_NAMESPACE } from './constants.js';
 import { ArcaSireServiceError } from './errors.js';
+import { CERTIFICADO, CERTIFICADO_ANULACION, CERTIFICADO_RESULT } from './schemas.js';
 import type { CertificadoAnulacionRequest, CertificadoRequest, CertificadoResult, WsAuth } from './types.js';
 
 /** Configuración del cliente SOAP de bajo nivel. */
@@ -30,45 +33,6 @@ export interface SireClientConfig {
    */
   transport?: ServiceTransport;
 }
-
-/** Orden de los hijos de `certificado` en el XSD (`xs:sequence`). */
-const CERTIFICADO_ORDER = [
-  'version',
-  'codigoTrazabilidad',
-  'impuesto',
-  'regimen',
-  'fechaRetencion',
-  'condicion',
-  'imposibilidadRetencion',
-  'motivoNoRetencion',
-  'importeRetencion',
-  'importeBaseCalculo',
-  'regimenExclusion',
-  'porcentajeExclusion',
-  'fechaPublicacion',
-  'tipoComprobante',
-  'fechaComprobante',
-  'numeroComprobante',
-  'coe',
-  'coeOriginal',
-  'cae',
-  'importeComprobante',
-  'motivoEmisionNotaCredito',
-  'cuitRetenido',
-  'numeroCertificadoOriginal',
-  'fechaRetencionCertificadoOriginal',
-  'importeCertificadoOriginal',
-  'motivoAnulacion',
-] as const satisfies readonly (keyof CertificadoRequest)[];
-
-/** Orden de los hijos de `certificadoAnulacion` en el XSD. */
-const ANULACION_ORDER = [
-  'version',
-  'codigoTrazabilidad',
-  'impuesto',
-  'numeroCertificado',
-  'motivoAnulacion',
-] as const satisfies readonly (keyof CertificadoAnulacionRequest)[];
 
 /**
  * Faults con `faultcode` `soapenv:Server` que, según lo observado en
@@ -99,30 +63,14 @@ function faultCodeName(faultCode: string | undefined): string | undefined {
   return faultCode?.trim().split(':').pop();
 }
 
-function pick(source: object, order: readonly string[]): Record<string, unknown> {
+/** Copia los campos definidos de `source` en el orden del schema (`xs:sequence`). */
+function pick(source: object, schema: Schema): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const key of order) {
+  for (const key of Object.keys(schema)) {
     const value = (source as Record<string, unknown>)[key];
     if (value !== undefined && value !== null) out[key] = value;
   }
   return out;
-}
-
-/** Campo string obligatorio de una respuesta: si falta, la respuesta es inválida. */
-function requiredString(
-  result: Record<string, unknown>,
-  field: string,
-  method: string,
-  kind: SoapOperationKind,
-): string {
-  const value = result[field];
-  if (value === undefined || value === null || value === '' || typeof value === 'object') {
-    throw new ArcaSoapError(`Respuesta inválida de ${method}: falta ${field}`, {
-      // En una emisión la operación pudo haberse realizado igual.
-      uncertain: kind === 'emision',
-    });
-  }
-  return String(value);
 }
 
 /**
@@ -163,7 +111,7 @@ export class SireClient extends SoapServiceClient {
   ): Promise<CertificadoResult> {
     const result = await this.call(
       'emitir',
-      { token: auth.token, sign: auth.sign, cuitAgente, certificado: pick(certificado, CERTIFICADO_ORDER) },
+      { token: auth.token, sign: auth.sign, cuitAgente, certificado: pick(certificado, CERTIFICADO) },
       'emision',
       opts,
     );
@@ -186,7 +134,7 @@ export class SireClient extends SoapServiceClient {
         token: auth.token,
         sign: auth.sign,
         cuitAgente,
-        certificadoAnulacion: pick(certificadoAnulacion, ANULACION_ORDER),
+        certificadoAnulacion: pick(certificadoAnulacion, CERTIFICADO_ANULACION),
       },
       'emision',
       opts,
@@ -195,10 +143,13 @@ export class SireClient extends SoapServiceClient {
   }
 
   private parseCertificado(result: Record<string, unknown>, method: string): CertificadoResult {
-    return {
-      certificadoNro: requiredString(result, 'certificadoNro', method, 'emision'),
-      codigoSeguridad: requiredString(result, 'codigoSeguridad', method, 'emision'),
-    };
+    // En una emisión/anulación la operación pudo haberse realizado igual.
+    const error = (message: string) => new ArcaSoapError(`${method}: ${message}`, { uncertain: true });
+    const res = decodeResponse<CertificadoResult>(result, CERTIFICADO_RESULT, `${method}Response`, { error });
+    for (const field of ['certificadoNro', 'codigoSeguridad'] as const) {
+      if (res[field] === '') throw error(`Respuesta inválida: ${method}Response.${field} vacío`);
+    }
+    return res;
   }
 
   /**
@@ -212,7 +163,8 @@ export class SireClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<Record<string, unknown>> {
     try {
-      return await this.soapCall(method, params, { kind, signal: opts?.signal });
+      // Texto sin convertir: `certificadoNro`/`codigoSeguridad` son `xs:string`.
+      return await this.soapCall(method, params, { kind, signal: opts?.signal, parseNumbers: false });
     } catch (err) {
       throw toRejection(err, method) ?? err;
     }

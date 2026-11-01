@@ -1,5 +1,4 @@
 ---
-
 '@ramiidv/arca-common': minor
 '@ramiidv/arca-facturacion': major
 '@ramiidv/arca-padron': minor

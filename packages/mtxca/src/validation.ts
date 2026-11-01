@@ -1,7 +1,7 @@
-import { ArcaValidationError, parseAfipDate } from '@ramiidv/arca-common';
+import { ArcaValidationError, formatDate, parseAfipDate } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
 import { ALICUOTAS_IVA } from './constants.js';
-import { roundDecimal, roundImporte, toXsdDate } from './format.js';
+import { roundDecimal, roundImporte } from './format.js';
 import type { FechaInput, MtxcaComprobanteBase, MtxcaItem } from './types.js';
 
 // Validaciones de negocio del manual del desarrollador de WSMTXCA (v0.25.8).
@@ -109,6 +109,12 @@ function itemsDe(c: MtxcaComprobanteBase): MtxcaItem[] {
  */
 export function validateComprobanteCAEA(c: MtxcaComprobanteBase): void {
   const errors: ValidationErrorDetail[] = [];
+  reglasComprobanteCAEA(c, errors);
+  throwIfErrors(errors, 'Comprobante CAEA inválido');
+}
+
+/** Igual que `validateComprobanteCAEA`, pero agrega los errores a `errors` en lugar de lanzar. */
+export function reglasComprobanteCAEA(c: MtxcaComprobanteBase, errors: ValidationErrorDetail[]): void {
   itemsDe(c).forEach((item, i) => validarItemEstructura(item, i, c.codigoTipoComprobante, errors));
   if ((c.codigoTipoDocumento === undefined) !== (c.numeroDocumento === undefined)) {
     errors.push({
@@ -116,7 +122,6 @@ export function validateComprobanteCAEA(c: MtxcaComprobanteBase): void {
       message: 'codigoTipoDocumento y numeroDocumento se informan juntos (707)',
     });
   }
-  throwIfErrors(errors, 'Comprobante CAEA inválido');
 }
 
 /**
@@ -134,6 +139,12 @@ export function validateComprobanteCAEA(c: MtxcaComprobanteBase): void {
  */
 export function validateComprobanteCAE(c: MtxcaComprobanteBase): void {
   const errors: ValidationErrorDetail[] = [];
+  reglasComprobanteCAE(c, errors);
+  throwIfErrors(errors, 'Comprobante inválido');
+}
+
+/** Igual que `validateComprobanteCAE`, pero agrega los errores a `errors` en lugar de lanzar. */
+export function reglasComprobanteCAE(c: MtxcaComprobanteBase, errors: ValidationErrorDetail[]): void {
   const add = (field: string, message: string, value?: unknown) => errors.push({ field, message, value });
   const tipo = c.codigoTipoComprobante;
   const items = itemsDe(c);
@@ -156,22 +167,22 @@ export function validateComprobanteCAE(c: MtxcaComprobanteBase): void {
     if (servicios && !presente) add(campo, 'es obligatoria si codigoConcepto es 2 o 3 (122-124)');
     if (!servicios && presente) add(campo, 'solo corresponde si codigoConcepto es 2 o 3 (122-124)', c[campo]);
   }
-  const fecha = (v: FechaInput | undefined, field: string) => {
+  const fecha = (v: FechaInput | undefined) => {
     if (v === undefined) return undefined;
     try {
-      return parseAfipDate(toXsdDate(v, field)).getTime();
+      return parseAfipDate(formatDate(v)).getTime();
     } catch (e) {
       if (e instanceof ArcaValidationError) return undefined; // ya lo reporta la validación del XSD
       throw e;
     }
   };
-  const desde = fecha(c.fechaServicioDesde, 'fechaServicioDesde');
-  const hasta = fecha(c.fechaServicioHasta, 'fechaServicioHasta');
+  const desde = fecha(c.fechaServicioDesde);
+  const hasta = fecha(c.fechaServicioHasta);
   if (desde !== undefined && hasta !== undefined && desde > hasta) {
     add('fechaServicioHasta', 'debe ser posterior o igual a fechaServicioDesde (133)');
   }
-  const emision = fecha(c.fechaEmision, 'fechaEmision');
-  const vto = fecha(c.fechaVencimientoPago, 'fechaVencimientoPago');
+  const emision = fecha(c.fechaEmision);
+  const vto = fecha(c.fechaVencimientoPago);
   if (emision !== undefined && vto !== undefined && vto < emision) {
     add('fechaVencimientoPago', 'debe ser posterior o igual a fechaEmision (125)');
   }
@@ -397,6 +408,4 @@ export function validateComprobanteCAE(c: MtxcaComprobanteBase): void {
       c.importeTotal,
     );
   }
-
-  throwIfErrors(errors, 'Comprobante inválido');
 }

@@ -3,7 +3,7 @@ import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
 import { MTXCA_ENDPOINTS, MTXCA_SERVICE_ID } from './constants.js';
 import { MtxcaClient } from './mtxca-client.js';
 import { buildComprobante } from './serialize.js';
-import { validateComprobanteCAE, validateComprobanteCAEA } from './validation.js';
+import { reglasComprobanteCAE, reglasComprobanteCAEA } from './validation.js';
 import type {
   ActividadVigente,
   ArcaMtxcaConfig,
@@ -94,8 +94,11 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
     opts?: AutorizarOptions,
   ): Promise<MtxcaAutorizarResult> {
     // Valida antes de pedir el número: un error local no debe costar requests.
-    buildComprobante({ ...request, numeroComprobante: request?.numeroComprobante ?? 1 }, 'cae');
-    if (opts?.validarImportes !== false) validateComprobanteCAE(request);
+    buildComprobante(
+      { ...request, numeroComprobante: request?.numeroComprobante ?? 1 },
+      'cae',
+      opts?.validarImportes !== false ? reglasComprobanteCAE : undefined,
+    );
 
     const numeroComprobante =
       request.numeroComprobante ??
@@ -179,8 +182,7 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
     comprobante: MtxcaComprobanteCAEA,
     opts?: CallOptions,
   ): Promise<MtxcaInformarCAEAResult> {
-    buildComprobante(comprobante, 'caea');
-    validateComprobanteCAEA(comprobante);
+    buildComprobante(comprobante, 'caea', reglasComprobanteCAEA);
     const auth = await this.auth(opts);
     return this.client.informarComprobanteCAEA(auth, comprobante, this.callOptions(opts));
   }

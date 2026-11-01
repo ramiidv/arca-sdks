@@ -29,8 +29,9 @@ export interface PadronClientConfig {
  * clave inactiva, token no autorizado...) se lanzan como `ArcaPadronServiceError`.
  *
  * Las respuestas se parsean con `parseNumbers: false`: todos los valores llegan
- * como string tal cual los envía ARCA, y `mapping.ts` convierte explícitamente
- * los campos numéricos del WSDL (`optNumber`/`reqNumber`). Así los `xs:string`
+ * como string tal cual los envía ARCA, y los schemas de cada servicio (DSL de
+ * `@ramiidv/arca-common/schema`, ver `mapping.ts`) convierten los campos
+ * numéricos del WSDL. Así los `xs:string`
  * con contenido numérico (`datoAdicional`, `codPostal`, `piso`, los campos del
  * A100...) no pierden ceros ni decimales (`"10.50"`, `"1E3"`).
  */

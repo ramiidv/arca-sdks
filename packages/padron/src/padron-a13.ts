@@ -1,17 +1,8 @@
 import { ArcaValidationError, validateCuit } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
-import {
-  optNumber as num,
-  optString as str,
-  records as list,
-  reqString,
-  requirePersona,
-  strings,
-  tipoPersona,
-  type SoapRecord as R,
-} from './mapping.js';
+import { decode, decodePersona, id, int, list, must, obj, str, type Schema } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
-import type { DomicilioA13, PersonaA13, WsAuth } from './types.js';
+import type { PersonaA13, WsAuth } from './types.js';
 
 export type PadronA13ClientConfig = PadronClientConfig;
 
@@ -29,7 +20,7 @@ export class PadronA13Client extends BasePadronClient {
   async getPersona(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA13> {
     const idPersona = validateCuit(cuit);
     const result = await this.call('getPersona', { ...this.authParams(auth), idPersona }, opts);
-    return mapPersonaA13(requirePersona(result, 'getPersona'));
+    return decodePersona<PersonaA13>(result, PersonaA13Schema, 'getPersona');
   }
 
   /**
@@ -39,7 +30,7 @@ export class PadronA13Client extends BasePadronClient {
   async getPersonaV2(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA13> {
     const idPersona = validateCuit(cuit);
     const result = await this.call('getPersonaV2', { ...this.authParams(auth), idPersona }, opts);
-    return mapPersonaA13(requirePersona(result, 'getPersonaV2'));
+    return decodePersona<PersonaA13>(result, PersonaA13Schema, 'getPersonaV2');
   }
 
   /**
@@ -53,7 +44,10 @@ export class PadronA13Client extends BasePadronClient {
       { ...this.authParams(auth), documento: normalizarDocumento(documento) },
       opts,
     );
-    return strings(result['idPersona']);
+    return (
+      decode<{ idPersona?: string[] }>(result, IdPersonaListReturn, 'getIdPersonaListByDocumento.idPersonaListReturn')
+        .idPersona ?? []
+    );
   }
 }
 
@@ -70,49 +64,53 @@ export function normalizarDocumento(documento: string | number): string {
   return normalized;
 }
 
-function mapDomicilio(d: R): DomicilioA13 {
-  return {
-    direccion: str(d['direccion']),
-    calle: str(d['calle']),
-    numero: num(d['numero']),
-    piso: str(d['piso']),
-    oficinaDptoLocal: str(d['oficinaDptoLocal']),
-    sector: str(d['sector']),
-    torre: str(d['torre']),
-    manzana: str(d['manzana']),
-    codigoPostal: str(d['codigoPostal']),
-    localidad: str(d['localidad']),
-    idProvincia: num(d['idProvincia']),
-    descripcionProvincia: str(d['descripcionProvincia']),
-    tipoDomicilio: str(d['tipoDomicilio']),
-    estadoDomicilio: str(d['estadoDomicilio']),
-    datoAdicional: str(d['datoAdicional']),
-    tipoDatoAdicional: str(d['tipoDatoAdicional']),
-  };
-}
+// ---------------------------------------------------------------------------
+// Schemas de la respuesta (WSDL personaServiceA13, orden del WSDL). Todos los
+// elementos son `minOccurs="0"`; los `must()` son los que el SDK exige.
+// ---------------------------------------------------------------------------
 
-/** Mapea `persona` de A13 (`getPersona` y `getPersonaV2`). */
-export function mapPersonaA13(raw: R): PersonaA13 {
-  const persona: PersonaA13 = {
-    idPersona: reqString(raw['idPersona'], 'persona.idPersona'),
-    tipoPersona: tipoPersona(raw['tipoPersona']),
-    tipoClave: str(raw['tipoClave']),
-    estadoClave: str(raw['estadoClave']),
-    nombre: str(raw['nombre']),
-    apellido: str(raw['apellido']),
-    razonSocial: str(raw['razonSocial']),
-    numeroDocumento: str(raw['numeroDocumento']),
-    tipoDocumento: str(raw['tipoDocumento']),
-    formaJuridica: str(raw['formaJuridica']),
-    mesCierre: num(raw['mesCierre']),
-    fechaNacimiento: str(raw['fechaNacimiento']),
-    fechaFallecimiento: str(raw['fechaFallecimiento']),
-    fechaContratoSocial: str(raw['fechaContratoSocial']),
-    idActividadPrincipal: str(raw['idActividadPrincipal']),
-    descripcionActividadPrincipal: str(raw['descripcionActividadPrincipal']),
-    periodoActividadPrincipal: num(raw['periodoActividadPrincipal']),
-  };
-  if (raw['claveInactivaAsociada'] !== undefined) persona.claveInactivaAsociada = strings(raw['claveInactivaAsociada']);
-  if (raw['domicilio'] !== undefined) persona.domicilio = list(raw['domicilio']).map(mapDomicilio);
-  return persona;
-}
+const Domicilio: Schema = {
+  calle: str(),
+  codigoPostal: str(),
+  datoAdicional: str(),
+  descripcionProvincia: str(),
+  direccion: str(),
+  estadoDomicilio: str(),
+  idProvincia: int(),
+  localidad: str(),
+  manzana: str(),
+  numero: int(),
+  oficinaDptoLocal: str(),
+  piso: str(),
+  sector: str(),
+  tipoDatoAdicional: str(),
+  tipoDomicilio: str(),
+  torre: str(),
+};
+
+/** `persona` de A13 (`getPersona` y `getPersonaV2`). */
+export const PersonaA13Schema: Schema = {
+  apellido: str(),
+  claveInactivaAsociada: list(id()),
+  descripcionActividadPrincipal: str(),
+  domicilio: list(obj(Domicilio)),
+  estadoClave: str(),
+  fechaContratoSocial: str(),
+  fechaFallecimiento: str(),
+  fechaNacimiento: str(),
+  formaJuridica: str(),
+  idActividadPrincipal: id(),
+  idPersona: must(id()),
+  mesCierre: int(),
+  nombre: str(),
+  numeroDocumento: str(),
+  periodoActividadPrincipal: int(),
+  razonSocial: str(),
+  tipoClave: str(),
+  tipoDocumento: str(),
+  tipoPersona: must(str({ minLen: 1 })),
+};
+
+const IdPersonaListReturn: Schema = {
+  idPersona: list(id()),
+};

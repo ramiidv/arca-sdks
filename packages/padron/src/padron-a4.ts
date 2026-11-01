@@ -1,17 +1,6 @@
 import { validateCuit } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
-import {
-  asignarDependenciaYClaves,
-  mapDomicilio,
-  mapPersonaComun,
-  optNumber as num,
-  optString as str,
-  records as list,
-  reqNumber,
-  reqString,
-  requirePersona,
-  type SoapRecord as R,
-} from './mapping.js';
+import { Dependencia, dec, decodePersona, id, int, list, must, obj, str, type Schema } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
 import type { PersonaA4, WsAuth } from './types.js';
 
@@ -31,103 +20,123 @@ export class PadronA4Client extends BasePadronClient {
   async getPersona(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA4> {
     const idPersona = validateCuit(cuit);
     const result = await this.call('getPersona', { ...this.authParams(auth), idPersona }, opts);
-    return mapPersonaA4(requirePersona(result, 'getPersona'));
+    return decodePersona<PersonaA4>(result, PersonaA4Schema, 'getPersona');
   }
 }
 
-/** Mapea `persona` de A4 (WSDL personaServiceA4: estructura plana). */
-export function mapPersonaA4(raw: R): PersonaA4 {
-  const persona: PersonaA4 = {
-    ...mapPersonaComun(raw),
-    fechaNacimiento: str(raw['fechaNacimiento']),
-    sexo: str(raw['sexo']),
-    numeroInscripcion: str(raw['numeroInscripcion']),
-    formaJuridica: str(raw['formaJuridica']),
-    mesCierre: num(raw['mesCierre']),
-    fechaInscripcion: str(raw['fechaInscripcion']),
-    fechaContratoSocial: str(raw['fechaContratoSocial']),
-    fechaFallecimiento: str(raw['fechaFallecimiento']),
-    fechaJubilado: str(raw['fechaJubilado']),
-    fechaVencimientoMigracion: str(raw['fechaVencimientoMigracion']),
-    localidadInscripcion: str(raw['localidadInscripcion']),
-    provinciaInscripcion: str(raw['provinciaInscripcion']),
-    organismoInscripcion: str(raw['organismoInscripcion']),
-    organismoOriginante: str(raw['organismoOriginante']),
-    tipoOrganismoOriginante: str(raw['tipoOrganismoOriginante']),
-    tipoResidencia: str(raw['tipoResidencia']),
-    porcentajeCapitalNacional: num(raw['porcentajeCapitalNacional']),
-    cantidadSociosEmpresaMono: num(raw['cantidadSociosEmpresaMono']),
-    leyJubilacion: num(raw['leyJubilacion']),
-  };
+// ---------------------------------------------------------------------------
+// Schemas de la respuesta (WSDL personaServiceA4, orden del WSDL). Todos los
+// elementos son `minOccurs="0"`; los `must()` son los que el SDK exige.
+// ---------------------------------------------------------------------------
 
-  asignarDependenciaYClaves(persona, raw);
+const Actividad: Schema = {
+  descripcionActividad: str(),
+  idActividad: must(id()),
+  nomenclador: int(),
+  orden: int(),
+  periodo: int(),
+};
 
-  if (raw['domicilio'] !== undefined) {
-    persona.domicilio = list(raw['domicilio']).map((d) => ({ ...mapDomicilio(d), orden: num(d['orden']) }));
-  }
-  if (raw['impuesto'] !== undefined) {
-    persona.impuesto = list(raw['impuesto']).map((i) => ({
-      idImpuesto: reqNumber(i['idImpuesto'], 'impuesto.idImpuesto'),
-      descripcionImpuesto: str(i['descripcionImpuesto']),
-      estado: str(i['estado']),
-      periodo: num(i['periodo']),
-      diaPeriodo: num(i['diaPeriodo']),
-      ffInscripcion: str(i['ffInscripcion']),
-    }));
-  }
-  if (raw['actividad'] !== undefined) {
-    persona.actividad = list(raw['actividad']).map((a) => ({
-      idActividad: reqString(a['idActividad'], 'actividad.idActividad'),
-      descripcionActividad: str(a['descripcionActividad']),
-      nomenclador: num(a['nomenclador']),
-      orden: num(a['orden']),
-      periodo: num(a['periodo']),
-    }));
-  }
-  if (raw['regimen'] !== undefined) {
-    persona.regimen = list(raw['regimen']).map((r) => ({
-      idRegimen: reqNumber(r['idRegimen'], 'regimen.idRegimen'),
-      descripcionRegimen: str(r['descripcionRegimen']),
-      estado: str(r['estado']),
-      periodo: num(r['periodo']),
-      diaPeriodo: num(r['diaPeriodo']),
-      tipoRegimen: str(r['tipoRegimen']),
-      idImpuesto: num(r['idImpuesto']),
-    }));
-  }
-  if (raw['relacion'] !== undefined) {
-    persona.relacion = list(raw['relacion']).map((r) => ({
-      idPersona: reqString(r['idPersona'], 'relacion.idPersona'),
-      idPersonaAsociada: str(r['idPersonaAsociada']),
-      tipoRelacion: str(r['tipoRelacion']),
-      subtipoRelacion: str(r['subtipoRelacion']),
-      ffRelacion: str(r['ffRelacion']),
-      ffVencimiento: str(r['ffVencimiento']),
-    }));
-  }
-  if (raw['categoria'] !== undefined) {
-    persona.categoria = list(raw['categoria']).map((c) => ({
-      idCategoria: reqNumber(c['idCategoria'], 'categoria.idCategoria'),
-      descripcionCategoria: str(c['descripcionCategoria']),
-      idImpuesto: num(c['idImpuesto']),
-      estado: str(c['estado']),
-      periodo: num(c['periodo']),
-    }));
-  }
-  if (raw['email'] !== undefined) {
-    persona.email = list(raw['email']).map((e) => ({
-      direccion: reqString(e['direccion'], 'email.direccion'),
-      tipoEmail: str(e['tipoEmail']),
-      estado: str(e['estado']),
-    }));
-  }
-  if (raw['telefono'] !== undefined) {
-    persona.telefono = list(raw['telefono']).map((t) => ({
-      numero: reqString(t['numero'], 'telefono.numero'),
-      tipoTelefono: str(t['tipoTelefono']),
-      tipoLinea: str(t['tipoLinea']),
-    }));
-  }
+const Categoria: Schema = {
+  descripcionCategoria: str(),
+  estado: str(),
+  idCategoria: must(int()),
+  idImpuesto: int(),
+  periodo: int(),
+};
 
-  return persona;
-}
+const Domicilio: Schema = {
+  codPostal: str(),
+  datoAdicional: str(),
+  descripcionProvincia: str(),
+  direccion: str(),
+  idProvincia: int(),
+  localidad: str(),
+  orden: int(),
+  tipoDatoAdicional: str(),
+  tipoDomicilio: str(),
+};
+
+const Email: Schema = {
+  direccion: must(str({ minLen: 1 })),
+  estado: str(),
+  tipoEmail: str(),
+};
+
+const Impuesto: Schema = {
+  descripcionImpuesto: str(),
+  diaPeriodo: int(),
+  /** Manual A4 §5.3: ACTIVO, ACTIVO EN TRAMITE, BAJA PROVISORIA, BAJA DEFINITIVA, EXENTO, EXENTO EN TRAMITE, NO APORTANTE. */
+  estado: str(),
+  ffInscripcion: str(),
+  idImpuesto: must(int()),
+  periodo: int(),
+};
+
+const Regimen: Schema = {
+  descripcionRegimen: str(),
+  diaPeriodo: int(),
+  estado: str(),
+  idImpuesto: int(),
+  idRegimen: must(int()),
+  periodo: int(),
+  tipoRegimen: str(),
+};
+
+const Relacion: Schema = {
+  ffRelacion: str(),
+  ffVencimiento: str(),
+  idPersona: must(id()),
+  idPersonaAsociada: id(),
+  subtipoRelacion: str(),
+  tipoRelacion: str(),
+};
+
+const Telefono: Schema = {
+  numero: must(id()),
+  tipoLinea: str(),
+  tipoTelefono: str(),
+};
+
+/** `persona` de A4 (estructura plana). */
+export const PersonaA4Schema: Schema = {
+  actividad: list(obj(Actividad)),
+  apellido: str(),
+  cantidadSociosEmpresaMono: int(),
+  categoria: list(obj(Categoria)),
+  claveInactivaAsociada: list(id()),
+  dependencia: obj(Dependencia),
+  domicilio: list(obj(Domicilio)),
+  email: list(obj(Email)),
+  estadoClave: str(),
+  fechaContratoSocial: str(),
+  fechaFallecimiento: str(),
+  fechaInscripcion: str(),
+  fechaJubilado: str(),
+  fechaNacimiento: str(),
+  fechaVencimientoMigracion: str(),
+  formaJuridica: str(),
+  idPersona: must(id()),
+  impuesto: list(obj(Impuesto)),
+  leyJubilacion: int(),
+  localidadInscripcion: str(),
+  mesCierre: int(),
+  nombre: str(),
+  numeroDocumento: str(),
+  numeroInscripcion: str(),
+  organismoInscripcion: str(),
+  organismoOriginante: str(),
+  /** `xs:double` */
+  porcentajeCapitalNacional: dec(2),
+  provinciaInscripcion: str(),
+  razonSocial: str(),
+  regimen: list(obj(Regimen)),
+  relacion: list(obj(Relacion)),
+  sexo: str(),
+  telefono: list(obj(Telefono)),
+  tipoClave: str(),
+  tipoDocumento: str(),
+  tipoOrganismoOriginante: str(),
+  tipoPersona: must(str({ minLen: 1 })),
+  tipoResidencia: str(),
+};

@@ -70,7 +70,7 @@ async function main() {
     }
   } catch (e) {
     if (e instanceof ArcaValidationError) {
-      for (const d of e.details) console.error(`Dato inválido ${d.field}: ${d.message}`);
+      for (const d of e.details) console.error(`Dato inválido (${d.field}): ${d.message}`);
     } else if (e instanceof ArcaServiceError) {
       for (const err of e.errors) console.error(`Error de ARCA [${err.code}] ${err.msg}`);
     } else if (e instanceof ArcaSoapError) {

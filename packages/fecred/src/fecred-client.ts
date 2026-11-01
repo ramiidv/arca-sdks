@@ -1,4 +1,10 @@
-import { SoapServiceClient, parseServerStatus } from '@ramiidv/arca-common';
+import {
+  ArcaServiceError,
+  SoapServiceClient,
+  checkServiceErrors,
+  extractServiceErrors,
+  parseServerStatus,
+} from '@ramiidv/arca-common';
 import type {
   ArcaEvent,
   CallOptions,
@@ -7,55 +13,8 @@ import type {
   SoapOperationKind,
   SoapServiceClientConfig,
 } from '@ramiidv/arca-common';
-import {
-  checkFecredErrors,
-  invalidResponse,
-  parseCodigosDescripciones,
-  parseComprobante,
-  parseCuentaCorriente,
-  parseCuentaEnAgente,
-  parseEstadoCmp,
-  parseEstadoCtaCte,
-  parseIdComprobante,
-  parseIdCtaCte,
-  parseInfo,
-  parseInfoAgtDptoCltv,
-  parseInfoCtaCte,
-  parseItems,
-  parseNum,
-  parseOptNum,
-  parseOptSiNo,
-  parseOptStr,
-  parseSiNo,
-  parseStr,
-  resultadoAprobado,
-} from './parsers.js';
-import {
-  ajustesParam,
-  cbuParam,
-  codeParam,
-  confirmarNotasParam,
-  cotizacionParam,
-  ctaAgenteParam,
-  cuitParam,
-  dateParam,
-  estadoCmpParam,
-  estadoCtaCteParam,
-  fechaParam,
-  formasCancelacionParam,
-  idComprobanteParam,
-  idCtaCteParam,
-  importeParam,
-  intParam,
-  longParam,
-  monedaParam,
-  motivosRechazoParam,
-  opcionTransferenciaParam,
-  retencionesParam,
-  rolParam,
-  siNoParam,
-  tipoCancelacionParam,
-} from './validation.js';
+import { decode, encode, REQ, RESP, SERVICE } from './schemas.js';
+import type { Schema } from '@ramiidv/arca-common/schema';
 import type {
   AceptarFecredParams,
   CodigoDescripcion,
@@ -73,6 +32,7 @@ import type {
   IdComprobante,
   IdComprobanteInput,
   IdCtaCteInput,
+  InfoRespuesta,
   InformarCancelacionTotalParams,
   InformarFacturaAgtDptoCltvParams,
   ModificarOpcionTransferenciaParams,
@@ -117,11 +77,6 @@ type Xml = Record<string, unknown>;
  */
 export type WsAuthSource = WsAuth | (() => Promise<WsAuth>);
 
-/** Agrega al objeto solo los valores definidos (respetando el orden de inserción = orden del XSD). */
-function put(target: Xml, key: string, value: unknown): void {
-  if (value !== undefined) target[key] = value;
-}
-
 // ---------------------------------------------------------------------------
 // FecredClient
 // ---------------------------------------------------------------------------
@@ -146,12 +101,14 @@ export class FecredClient extends SoapServiceClient {
   }
 
   // -------------------------------------------------------------------------
-  // Helper
+  // Helpers
   // -------------------------------------------------------------------------
 
   /**
    * Llama a `method` con el wrapper `<method>Request` (o Body vacío si `auth`
-   * es `null`), `SOAPAction = namespace + method`, y chequea errores de negocio.
+   * es `null`), `SOAPAction = namespace + method`, y chequea errores de negocio
+   * (`arrayErrores`/`arrayErroresFormato`). La respuesta queda como texto
+   * (`parseNumbers: false`) para decodificarla con los schemas.
    */
   private async call(
     method: string,
@@ -173,32 +130,49 @@ export class FecredClient extends SoapServiceClient {
       kind,
       requestElement: auth ? `${method}Request` : null,
       soapActionFromMethod: true,
+      parseNumbers: false,
     });
-    checkFecredErrors(result);
+    checkServiceErrors(result, SERVICE);
     return result;
   }
 
-  private async operacion(
+  /** Consulta: valida el request con `reqSchema` (si hay) y decodifica la respuesta con `respSchema`. */
+  private async consulta<T>(
     method: string,
     auth: WsAuthSource,
-    fields: Xml,
+    params: [input: unknown, schema: Schema] | null,
+    respSchema: Schema,
     opts?: CallOptions,
-  ): Promise<OperacionFecredResult> {
-    const r = await this.call(method, auth, fields, 'emision', opts);
-    return {
-      resultado: resultadoAprobado(r, method),
-      idCtaCte: parseIdCtaCte(r['idCtaCte'], `${method}.idCtaCte`),
-      ...parseInfo(r, method),
-    };
+  ): Promise<T> {
+    const fields = params ? encode(params[0], params[1], method) : {};
+    return decode<T>(await this.call(method, auth, fields, 'consulta', opts), respSchema, method);
   }
 
-  private async codigosDescripciones(
+  /**
+   * Emisión con `resultado`: `R` sin errores informados (no debería pasar)
+   * también se lanza como `ArcaServiceError`, con las observaciones como detalle.
+   */
+  private async emision<T>(
     method: string,
     auth: WsAuthSource,
+    input: unknown,
+    reqSchema: Schema,
+    respSchema: Schema,
     opts?: CallOptions,
-  ): Promise<CodigoDescripcion[]> {
-    const r = await this.call(method, auth, {}, 'consulta', opts);
-    return parseCodigosDescripciones(r, 'arrayCodigoDescripcion', method);
+  ): Promise<T> {
+    const r = await this.call(method, auth, encode(input, reqSchema, method), 'emision', opts);
+    if (r['resultado'] === 'R') {
+      const { observaciones } = decode<InfoRespuesta>(r, RESP.info, method);
+      const details = [
+        ...extractServiceErrors(r),
+        ...observaciones.map((o) => ({ code: o.codigo, msg: o.descripcion })),
+      ];
+      throw new ArcaServiceError(
+        `${SERVICE}: operación rechazada (resultado R)${details.length ? `: ${details.map((d) => `[${d.code}] ${d.msg}`).join(', ')}` : ''}`,
+        details,
+      );
+    }
+    return decode<T>(r, respSchema, method);
   }
 
   // -------------------------------------------------------------------------
@@ -221,20 +195,7 @@ export class FecredClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<MontoObligadoRecepcionResult> {
     const m = 'consultarMontoObligadoRecepcion';
-    const r = await this.call(
-      m,
-      auth,
-      {
-        cuitConsultada: cuitParam(params?.cuitConsultada, 'cuitConsultada'),
-        fechaEmision: dateParam(params?.fechaEmision, 'fechaEmision'),
-      },
-      'consulta',
-      opts,
-    );
-    const out: MontoObligadoRecepcionResult = { obligado: parseSiNo(r, 'obligado', m), ...parseInfo(r, m) };
-    const monto = parseOptNum(r, 'montoDesde', m);
-    if (monto !== undefined) out.montoDesde = monto;
-    return out;
+    return this.consulta(m, auth, [params, REQ[m]], RESP[m], opts);
   }
 
   /** `consultarObligadoRecepcion`: si la CUIT está obligada a recibir FCE (campo `respuesta`) y desde cuándo. */
@@ -244,17 +205,7 @@ export class FecredClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<ObligadoRecepcionResult> {
     const m = 'consultarObligadoRecepcion';
-    const r = await this.call(
-      m,
-      auth,
-      { cuitConsultada: cuitParam(cuitConsultada, 'cuitConsultada') },
-      'consulta',
-      opts,
-    );
-    const out: ObligadoRecepcionResult = { obligado: parseSiNo(r, 'respuesta', m), ...parseInfo(r, m) };
-    const desde = parseOptStr(r, 'desde', m);
-    if (desde !== undefined) out.desde = desde;
-    return out;
+    return this.consulta(m, auth, [{ cuitConsultada }, REQ[m]], RESP[m], opts);
   }
 
   // -------------------------------------------------------------------------
@@ -268,26 +219,7 @@ export class FecredClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<ConsultarCtasCtesResult> {
     const m = 'consultarCtasCtes';
-    const f: Xml = { rolCUITRepresentada: rolParam(params?.rol) };
-    if (params.cuitContraparte !== undefined) f.CUITContraparte = cuitParam(params.cuitContraparte, 'cuitContraparte');
-    if (params.fecha !== undefined) f.fecha = fechaParam(params.fecha);
-    if (params.estadoCtaCte !== undefined) f.estadoCtaCte = estadoCtaCteParam(params.estadoCtaCte);
-    if (params.nroPagina !== undefined) f.nroPagina = intParam(params.nroPagina, 'nroPagina', 1, 32767);
-    if (params.opcionTransferencia !== undefined) {
-      f.opcionTransferencia = opcionTransferenciaParam(params.opcionTransferencia);
-    }
-    const r = await this.call(m, auth, f, 'consulta', opts);
-    const out: ConsultarCtasCtesResult = {
-      ctasCtes: parseItems(r, 'arrayInfosCtaCte', 'infoCtaCte', m).map((x, i) =>
-        parseInfoCtaCte(x, `${m}.arrayInfosCtaCte.infoCtaCte[${i}]`),
-      ),
-      ...parseInfo(r, m),
-    };
-    const nroPagina = parseOptNum(r, 'nroPagina', m);
-    if (nroPagina !== undefined) out.nroPagina = nroPagina;
-    const hayMas = parseOptSiNo(r, 'hayMas', m);
-    if (hayMas !== undefined) out.hayMas = hayMas;
-    return out;
+    return this.consulta(m, auth, [params, REQ[m]], RESP[m], opts);
   }
 
   /** `consultarCtaCte`: detalle de una cuenta corriente. */
@@ -297,9 +229,7 @@ export class FecredClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<ConsultarCtaCteResult> {
     const m = 'consultarCtaCte';
-    const r = await this.call(m, auth, { idCtaCte: idCtaCteParam(idCtaCte) }, 'consulta', opts);
-    if (r['ctaCte'] === undefined || r['ctaCte'] === null || r['ctaCte'] === '') invalidResponse(`${m}.ctaCte`);
-    return { ctaCte: parseCuentaCorriente(r['ctaCte'], `${m}.ctaCte`), ...parseInfo(r, m) };
+    return this.consulta(m, auth, [{ idCtaCte }, REQ.idCtaCte], RESP[m], opts);
   }
 
   /** `consultarComprobantes`: facturas y notas FCE (paginado). */
@@ -309,26 +239,7 @@ export class FecredClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<ConsultarComprobantesResult> {
     const m = 'consultarComprobantes';
-    const f: Xml = { rolCUITRepresentada: rolParam(params?.rol) };
-    if (params.cuitContraparte !== undefined) f.CUITContraparte = cuitParam(params.cuitContraparte, 'cuitContraparte');
-    if (params.codTipoCmp !== undefined) f.codTipoCmp = codeParam(params.codTipoCmp, 'codTipoCmp');
-    if (params.estadoCmp !== undefined) f.estadoCmp = estadoCmpParam(params.estadoCmp);
-    if (params.fecha !== undefined) f.fecha = fechaParam(params.fecha);
-    if (params.codCtaCte !== undefined) f.codCtaCte = longParam(params.codCtaCte, 'codCtaCte');
-    if (params.estadoCtaCte !== undefined) f.estadoCtaCte = estadoCtaCteParam(params.estadoCtaCte);
-    if (params.nroPagina !== undefined) f.nroPagina = intParam(params.nroPagina, 'nroPagina', 1, 32767);
-    const r = await this.call(m, auth, f, 'consulta', opts);
-    const out: ConsultarComprobantesResult = {
-      comprobantes: parseItems(r, 'arrayComprobantes', 'comprobante', m).map((x, i) =>
-        parseComprobante(x, `${m}.arrayComprobantes.comprobante[${i}]`),
-      ),
-      ...parseInfo(r, m),
-    };
-    const nroPagina = parseOptNum(r, 'nroPagina', m);
-    if (nroPagina !== undefined) out.nroPagina = nroPagina;
-    const hayMas = parseOptSiNo(r, 'hayMas', m);
-    if (hayMas !== undefined) out.hayMas = hayMas;
-    return out;
+    return this.consulta(m, auth, [params, REQ[m]], RESP[m], opts);
   }
 
   /** `consultarHistorialEstadosComprobante`. */
@@ -338,20 +249,7 @@ export class FecredClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<HistorialEstadosComprobanteResult> {
     const m = 'consultarHistorialEstadosComprobante';
-    const r = await this.call(
-      m,
-      auth,
-      { idComprobante: idComprobanteParam(idComprobante, 'idComprobante') },
-      'consulta',
-      opts,
-    );
-    if (r['arrayHistorialEstados'] === undefined) invalidResponse(`${m}.arrayHistorialEstados`);
-    return {
-      idComprobante: parseIdComprobante(r['idComprobante'], `${m}.idComprobante`),
-      estados: parseItems(r, 'arrayHistorialEstados', 'estadoHistorico', m).map((x, i) =>
-        parseEstadoCmp(x, `${m}.arrayHistorialEstados.estadoHistorico[${i}]`),
-      ),
-    };
+    return this.consulta(m, auth, [{ idComprobante }, REQ.idComprobante], RESP[m], opts);
   }
 
   /** `consultarHistorialEstadosCtaCte`. */
@@ -361,14 +259,7 @@ export class FecredClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<HistorialEstadosCtaCteResult> {
     const m = 'consultarHistorialEstadosCtaCte';
-    const r = await this.call(m, auth, { idCtaCte: idCtaCteParam(idCtaCte) }, 'consulta', opts);
-    if (r['arrayHistorialEstados'] === undefined) invalidResponse(`${m}.arrayHistorialEstados`);
-    return {
-      idCtaCte: parseIdCtaCte(r['idCtaCte'], `${m}.idCtaCte`),
-      estados: parseItems(r, 'arrayHistorialEstados', 'estadoHistorico', m).map((x, i) =>
-        parseEstadoCtaCte(x, `${m}.arrayHistorialEstados.estadoHistorico[${i}]`),
-      ),
-    };
+    return this.consulta(m, auth, [{ idCtaCte }, REQ.idCtaCte], RESP[m], opts);
   }
 
   /** `obtenerRemitos`: remitos asociados a un comprobante. */
@@ -378,16 +269,14 @@ export class FecredClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<IdComprobante[]> {
     const m = 'obtenerRemitos';
-    const r = await this.call(
+    const r = await this.consulta<{ remitos: IdComprobante[] }>(
       m,
       auth,
-      { idComprobante: idComprobanteParam(idComprobante, 'idComprobante') },
-      'consulta',
+      [{ idComprobante }, REQ.idComprobante],
+      RESP[m],
       opts,
     );
-    return parseItems(r, 'arrayIdsRemitos', 'idsComprobantes', m).map((x, i) =>
-      parseIdComprobante(x, `${m}.arrayIdsRemitos.idsComprobantes[${i}]`),
-    );
+    return r.remitos;
   }
 
   // -------------------------------------------------------------------------
@@ -400,26 +289,8 @@ export class FecredClient extends SoapServiceClient {
     params: AceptarFecredParams,
     opts?: CallOptions,
   ): Promise<OperacionFecredResult> {
-    const f: Xml = { idCtaCte: idCtaCteParam(params?.idCtaCte) };
-    put(f, 'arrayConfirmarNotasDC', confirmarNotasParam(params.confirmarNotasDC));
-    put(f, 'arrayFormasCancelacion', formasCancelacionParam(params.formasCancelacion, 'formasCancelacion', false));
-    put(f, 'arrayRetenciones', retencionesParam(params.retenciones));
-    put(f, 'arrayAjustesOperacion', ajustesParam(params.ajustesOperacion));
-    if (params.tipoCancelacion !== undefined) f.tipoCancelacion = tipoCancelacionParam(params.tipoCancelacion);
-    if (params.importeCancelado !== undefined)
-      f.importeCancelado = importeParam(params.importeCancelado, 'importeCancelado');
-    if (params.importeTotalRetPesos !== undefined) {
-      f.importeTotalRetPesos = importeParam(params.importeTotalRetPesos, 'importeTotalRetPesos');
-    }
-    if (params.importeEmbargoPesos !== undefined) {
-      f.importeEmbargoPesos = importeParam(params.importeEmbargoPesos, 'importeEmbargoPesos');
-    }
-    f.saldoAceptado = importeParam(params.saldoAceptado, 'saldoAceptado');
-    f.codMoneda = monedaParam(params.codMoneda);
-    f.cotizacionMonedaUlt = cotizacionParam(params.cotizacionMonedaUlt, 'cotizacionMonedaUlt');
-    if (params.informaCBU !== undefined) f.informaCBU = siNoParam(params.informaCBU, 'informaCBU');
-    if (params.cbuComprador !== undefined) f.CBUComprador = cbuParam(params.cbuComprador, 'cbuComprador');
-    return this.operacion('aceptarFECred', auth, f, opts);
+    const m = 'aceptarFECred';
+    return this.emision(m, auth, params, REQ[m], RESP.operacion, opts);
   }
 
   /** `rechazarFECred`: rechaza una factura de crédito. */
@@ -428,12 +299,8 @@ export class FecredClient extends SoapServiceClient {
     params: RechazarFecredParams,
     opts?: CallOptions,
   ): Promise<OperacionFecredResult> {
-    return this.operacion(
-      'rechazarFECred',
-      auth,
-      { idCtaCte: idCtaCteParam(params?.idCtaCte), arrayMotivosRechazo: motivosRechazoParam(params.motivos) },
-      opts,
-    );
+    const m = 'rechazarFECred';
+    return this.emision(m, auth, params, REQ[m], RESP.operacion, opts);
   }
 
   /** `informarCancelacionTotalFECred`: informa la cancelación total de una FCE aceptada. */
@@ -442,16 +309,8 @@ export class FecredClient extends SoapServiceClient {
     params: InformarCancelacionTotalParams,
     opts?: CallOptions,
   ): Promise<OperacionFecredResult> {
-    return this.operacion(
-      'informarCancelacionTotalFECred',
-      auth,
-      {
-        idCtaCte: idCtaCteParam(params?.idCtaCte),
-        arrayFormasCancelacion: formasCancelacionParam(params.formasCancelacion),
-        importeCancelacion: importeParam(params.importeCancelacion, 'importeCancelacion'),
-      },
-      opts,
-    );
+    const m = 'informarCancelacionTotalFECred';
+    return this.emision(m, auth, params, REQ[m], RESP.operacion, opts);
   }
 
   /** `modificarOpcionTransferencia`: cambia la opción de transferencia (SCA/ADC). */
@@ -460,15 +319,8 @@ export class FecredClient extends SoapServiceClient {
     params: ModificarOpcionTransferenciaParams,
     opts?: CallOptions,
   ): Promise<OperacionFecredResult> {
-    return this.operacion(
-      'modificarOpcionTransferencia',
-      auth,
-      {
-        idCtaCte: idCtaCteParam(params?.idCtaCte),
-        opcionTransferencia: opcionTransferenciaParam(params.opcionTransferencia),
-      },
-      opts,
-    );
+    const m = 'modificarOpcionTransferencia';
+    return this.emision(m, auth, params, REQ[m], RESP.operacion, opts);
   }
 
   /** `informarFacturaAgtDptoCltv`: informa la factura a un Agente de Depósito Colectivo. */
@@ -477,12 +329,8 @@ export class FecredClient extends SoapServiceClient {
     params: InformarFacturaAgtDptoCltvParams,
     opts?: CallOptions,
   ): Promise<OperacionFecredResult> {
-    return this.operacion(
-      'informarFacturaAgtDptoCltv',
-      auth,
-      { idCtaCte: idCtaCteParam(params?.idCtaCte), ctaAgente: ctaAgenteParam(params.ctaAgente) },
-      opts,
-    );
+    const m = 'informarFacturaAgtDptoCltv';
+    return this.emision(m, auth, params, REQ[m], RESP.operacion, opts);
   }
 
   /** `rechazarNotaDC`: rechaza una nota de débito/crédito. */
@@ -492,21 +340,7 @@ export class FecredClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<RechazarNotaDCResult> {
     const m = 'rechazarNotaDC';
-    const r = await this.call(
-      m,
-      auth,
-      {
-        idComprobante: idComprobanteParam(params?.idComprobante, 'idComprobante'),
-        arrayMotivosRechazo: motivosRechazoParam(params.motivos),
-      },
-      'emision',
-      opts,
-    );
-    return {
-      resultado: resultadoAprobado(r, m),
-      idComprobante: parseIdComprobante(r['idComprobante'], `${m}.idComprobante`),
-      ...parseInfo(r, m),
-    };
+    return this.emision(m, auth, params, REQ[m], RESP[m], opts);
   }
 
   // -------------------------------------------------------------------------
@@ -519,13 +353,7 @@ export class FecredClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<ConsultarCuentasEnAgtDptoCltvResult> {
     const m = 'consultarCuentasEnAgtDptoCltv';
-    const r = await this.call(m, auth, {}, 'consulta', opts);
-    return {
-      cuentas: parseItems(r, 'arrayCuentasEnAgente', 'cuentaEnAgente', m).map((x, i) =>
-        parseCuentaEnAgente(x, `${m}.arrayCuentasEnAgente.cuentaEnAgente[${i}]`),
-      ),
-      ...parseInfo(r, m),
-    };
+    return this.consulta(m, auth, null, RESP[m], opts);
   }
 
   /** `consultarFacturasAgtDptoCltv`: facturas informadas a Agentes de Depósito Colectivo. */
@@ -535,20 +363,7 @@ export class FecredClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<ConsultarFacturasAgtDptoCltvResult> {
     const m = 'consultarFacturasAgtDptoCltv';
-    const f: Xml = {};
-    if (params.idCtaCte !== undefined) f.idCtaCte = idCtaCteParam(params.idCtaCte);
-    if (params.fecha !== undefined) f.filtroFecha = fechaParam(params.fecha);
-    const r = await this.call(m, auth, f, 'consulta', opts);
-    return {
-      facturas: parseItems(r, 'arrayFacturasAgtDptoCltv', 'facturaInformada', m).map((x, i) => {
-        const p = `${m}.arrayFacturasAgtDptoCltv.facturaInformada[${i}]`;
-        return {
-          idFactura: parseIdComprobante(x['idFactura'], `${p}.idFactura`),
-          infoAgtDptoCltv: parseInfoAgtDptoCltv(x['infoAgtDptoCltv'], `${p}.infoAgtDptoCltv`),
-        };
-      }),
-      ...parseInfo(r, m),
-    };
+    return this.consulta(m, auth, [params, REQ[m]], RESP[m], opts);
   }
 
   // -------------------------------------------------------------------------
@@ -558,15 +373,22 @@ export class FecredClient extends SoapServiceClient {
   /** `consultarTiposRetenciones`. */
   async consultarTiposRetenciones(auth: WsAuthSource, opts?: CallOptions): Promise<TipoRetencion[]> {
     const m = 'consultarTiposRetenciones';
-    const r = await this.call(m, auth, {}, 'consulta', opts);
-    return parseItems(r, 'arrayTiposRetenciones', 'tipoRetencion', m).map((x, i) => {
-      const p = `${m}.arrayTiposRetenciones.tipoRetencion[${i}]`;
-      return {
-        codigoJurisdiccion: parseNum(x, 'codigoJurisdiccion', p),
-        descripcionJurisdiccion: parseStr(x, 'descripcionJurisdiccion', p),
-        porcentajeRetencion: parseNum(x, 'porcentajeRetencion', p),
-      };
-    });
+    return (await this.consulta<{ tipos: TipoRetencion[] }>(m, auth, null, RESP[m], opts)).tipos;
+  }
+
+  private async codigosDescripciones(
+    method: string,
+    auth: WsAuthSource,
+    opts?: CallOptions,
+  ): Promise<CodigoDescripcion[]> {
+    const r = await this.consulta<{ codigos: CodigoDescripcion[] }>(
+      method,
+      auth,
+      null,
+      RESP.codigosDescripciones,
+      opts,
+    );
+    return r.codigos;
   }
 
   /** `consultarTiposFormasCancelacion`. */

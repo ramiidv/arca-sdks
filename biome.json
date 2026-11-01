@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/CHANGELOG.md"]
+    "includes": ["**", "!**/dist", "!**/*.md"]
   },
   "formatter": {
     "enabled": true,

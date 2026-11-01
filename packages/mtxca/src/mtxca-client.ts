@@ -1,9 +1,29 @@
-import { checkServiceErrors, parseServerStatus, SoapServiceClient } from '@ramiidv/arca-common';
+import { ArcaSoapError, checkServiceErrors, parseServerStatus, SoapServiceClient } from '@ramiidv/arca-common';
 import type { ArcaEvent, CallOptions, LegacyTlsMode, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
+import { date, dec, decodeResponse, encodeRequest, int, must, obj, opt, wrapped } from '@ramiidv/arca-common/schema';
+import type { Schema } from '@ramiidv/arca-common/schema';
 import { MTXCA_NAMESPACE } from './constants.js';
-import { buildComprobante, XsdFields } from './serialize.js';
-import { ResponseReader } from './parse.js';
-import type { R } from './parse.js';
+import {
+  ACTIVIDAD_VIGENTE,
+  CAEA_NO_UTILIZADO,
+  CAEA_RESPONSE,
+  CODIGOS,
+  CODIGOS_STRING,
+  COMPROBANTE_CAE_RESPONSE,
+  COMPROBANTE_CAEA_RESPONSE,
+  COMPROBANTE_CONSULTADO,
+  CONSULTA_COMPROBANTE,
+  CONSULTA_CONDICIONES_IVA,
+  CONSULTA_ULTIMO,
+  COTIZACION,
+  ENTRE_FECHAS,
+  EVENTO,
+  PTO_VTA,
+  PUNTO_VENTA,
+  RESULTADO,
+  SOLICITUD_CAEA,
+} from './schemas.js';
+import { buildComprobante, encodeCaea } from './serialize.js';
 import type {
   ActividadVigente,
   CodigoDescripcion,
@@ -16,12 +36,16 @@ import type {
   MtxcaCAEANoUtilizadoResult,
   MtxcaComprobanteCAE,
   MtxcaComprobanteCAEA,
+  MtxcaComprobanteCAEAResponse,
+  MtxcaComprobanteCAEResponse,
   MtxcaComprobanteConsultado,
   MtxcaConsultaComprobanteResult,
   MtxcaInformarCAEAResult,
   MtxcaResultado,
   PuntoVenta,
 } from './types.js';
+
+type R = Record<string, unknown>;
 
 export interface MtxcaClientConfig {
   /** URL del servicio (ver `MTXCA_ENDPOINTS`). */
@@ -43,15 +67,63 @@ function isResultado(value: string): value is MtxcaResultado {
   return value === 'A' || value === 'O' || value === 'R';
 }
 
-function validated<T>(build: (f: XsdFields) => T): T {
-  const f = new XsdFields();
-  const value = build(f);
-  f.throwIfErrors('Parámetros inválidos');
-  return value;
+/**
+ * Respuesta ilegible: `ArcaSoapError` (`uncertain` en emisiones: el
+ * comprobante pudo haberse procesado aunque la respuesta no se pueda leer).
+ */
+function invalid(message: string, kind: SoapOperationKind): ArcaSoapError {
+  return new ArcaSoapError(message, { uncertain: kind === 'emision' });
 }
 
-function validCaea(caea: string | number): string {
-  return validated((f) => f.codigoAutorizacion('caea', caea, true)) as string;
+function decode<T>(node: unknown, schema: Schema, path: string, kind: SoapOperationKind): T {
+  return decodeResponse<T>(node, schema, path, { error: (m) => invalid(m, kind) });
+}
+
+/**
+ * Elemento obligatorio del XSD que el DSL no verifica: un contenedor de lista
+ * (`[]` si viene vacío) o un elemento complejo (`complex`: tiene que tener hijos).
+ */
+function requerido(node: R, key: string, path: string, kind: SoapOperationKind, complex = false): void {
+  const v = node[key];
+  const ok = complex ? v !== null && typeof v === 'object' && !Array.isArray(v) : v !== undefined && v !== null;
+  if (!ok) throw invalid(`Respuesta inválida: falta ${path}.${key}`, kind);
+}
+
+interface ResultadoRaw {
+  resultado?: string;
+  arrayObservaciones: CodigoDescripcion[];
+  arrayErrores: CodigoDescripcion[];
+  evento?: CodigoDescripcion;
+}
+
+interface CAEARaw extends Omit<MtxcaCAEA, 'caea' | 'observaciones'> {
+  CAEA: string;
+  arrayObservaciones: CodigoDescripcion[];
+}
+
+function toCAEA({ CAEA, arrayObservaciones, ...rest }: CAEARaw): MtxcaCAEA {
+  return { ...rest, caea: CAEA, observaciones: arrayObservaciones };
+}
+
+/** `ComprobanteType` decodificado, con los nombres del XML. */
+interface ComprobanteRaw
+  extends Omit<
+    MtxcaComprobanteConsultado,
+    | 'comprobantesAsociados'
+    | 'otrosTributos'
+    | 'items'
+    | 'subtotalesIVA'
+    | 'datosAdicionales'
+    | 'compradores'
+    | 'actividades'
+  > {
+  arrayComprobantesAsociados: MtxcaComprobanteConsultado['comprobantesAsociados'];
+  arrayOtrosTributos: MtxcaComprobanteConsultado['otrosTributos'];
+  arrayItems: MtxcaComprobanteConsultado['items'];
+  arraySubtotalesIVA: MtxcaComprobanteConsultado['subtotalesIVA'];
+  arrayDatosAdicionales: MtxcaComprobanteConsultado['datosAdicionales'];
+  arrayCompradores: MtxcaComprobanteConsultado['compradores'];
+  arrayActividades: Array<{ codigo: number }>;
 }
 
 /**
@@ -88,6 +160,8 @@ export class MtxcaClient extends SoapServiceClient {
       requestElement,
       responseElement: `${method}Response`,
       soapActionFromMethod: true,
+      // Todo como texto: los schemas convierten cada campo según el XSD.
+      parseNumbers: false,
     });
   }
 
@@ -156,43 +230,43 @@ export class MtxcaClient extends SoapServiceClient {
   ): Promise<MtxcaAutorizarResult> {
     const comprobanteCAERequest = buildComprobante(comprobante, 'cae');
     const result = await this.callAuth(method, auth, { comprobanteCAERequest }, 'emision', opts);
-    const r = new ResponseReader(method, 'emision');
-    const resultado = this.resultado(r, result, method);
-    const base = {
-      observaciones: r.codigosDescripciones(result['arrayObservaciones'], 'arrayObservaciones'),
-      errores: r.codigosDescripciones(result['arrayErrores'], 'arrayErrores'),
-      evento: r.evento(result),
-    };
+    const { resultado, base } = this.resultado(result, method);
     if (resultado === 'R') return { resultado, ...base };
-    const cr = r.obj(result, 'comprobanteResponse');
-    return {
-      resultado,
-      comprobante: {
-        cuit: r.str(cr, 'cuit', 'comprobanteResponse.cuit'),
-        codigoTipoComprobante: r.num(cr, 'codigoTipoComprobante', 'comprobanteResponse.codigoTipoComprobante'),
-        numeroPuntoVenta: r.num(cr, 'numeroPuntoVenta', 'comprobanteResponse.numeroPuntoVenta'),
-        numeroComprobante: r.num(cr, 'numeroComprobante', 'comprobanteResponse.numeroComprobante'),
-        fechaEmision: r.str(cr, 'fechaEmision', 'comprobanteResponse.fechaEmision'),
-        cae: r.str(cr, 'CAE', 'comprobanteResponse.CAE'),
-        fechaVencimientoCAE: r.str(cr, 'fechaVencimientoCAE', 'comprobanteResponse.fechaVencimientoCAE'),
-      },
-      ...base,
-    };
+    requerido(result, 'comprobanteResponse', method, 'emision', true);
+    const { CAE, ...cr } = decode<Omit<MtxcaComprobanteCAEResponse, 'cae'> & { CAE: string }>(
+      result['comprobanteResponse'],
+      COMPROBANTE_CAE_RESPONSE,
+      `${method}.comprobanteResponse`,
+      'emision',
+    );
+    return { resultado, comprobante: { ...cr, cae: CAE }, ...base };
   }
 
   /**
-   * `resultado` es obligatorio. Si falta y hay `arrayErrores`, es un rechazo
+   * Decodifica `resultado`, `arrayObservaciones`, `arrayErrores` y `evento`.
+   * `resultado` es obligatorio: si falta y hay `arrayErrores`, es un rechazo
    * (`ArcaServiceError`); si falta sin errores, la respuesta es ilegible
    * (`ArcaSoapError` con `uncertain`).
    */
-  private resultado(r: ResponseReader, result: R, method: string): MtxcaResultado {
-    if (!r.has(result, 'resultado')) {
+  private resultado(
+    result: R,
+    method: string,
+  ): {
+    resultado: MtxcaResultado;
+    base: { observaciones: CodigoDescripcion[]; errores: CodigoDescripcion[]; evento?: CodigoDescripcion };
+  } {
+    const r = decode<ResultadoRaw>(result, RESULTADO, method, 'emision');
+    if (!r.resultado) {
       checkServiceErrors(result, `${SERVICE} ${method}`);
-      throw r.invalid('resultado');
+      throw invalid(`Respuesta inválida: falta ${method}.resultado`, 'emision');
     }
-    const resultado = r.str(result, 'resultado');
-    if (!isResultado(resultado)) throw r.invalid('resultado', `valor "${resultado}" inesperado en`);
-    return resultado;
+    if (!isResultado(r.resultado)) {
+      throw invalid(`Respuesta inválida: valor "${r.resultado}" inesperado en ${method}.resultado`, 'emision');
+    }
+    return {
+      resultado: r.resultado,
+      base: { observaciones: r.arrayObservaciones, errores: r.arrayErrores, evento: r.evento },
+    };
   }
 
   // =========================================================================
@@ -205,22 +279,28 @@ export class MtxcaClient extends SoapServiceClient {
    * resultado es incierto, recuperalo con `consultarCAEAEntreFechas`.
    */
   async solicitarCAEA(auth: MtxcaAuth, periodo: number, orden: number, opts?: CallOptions): Promise<MtxcaCAEA> {
-    const solicitudCAEA = validated((f) => {
-      const p = f.int('periodo', periodo, true, 190001, 999912);
-      if (p !== undefined && (p % 100 < 1 || p % 100 > 12)) f.fail('periodo', 'formato AAAAMM', periodo);
-      return { periodo: p, orden: f.int('orden', orden, true, 1, 2) };
+    const solicitudCAEA = encodeRequest({ periodo, orden }, SOLICITUD_CAEA, 'solicitarCAEA', (i, errors) => {
+      const p = i['periodo'];
+      if (Number.isInteger(p) && ((p as number) % 100 < 1 || (p as number) % 100 > 12)) {
+        errors.push({ field: 'periodo', message: 'periodo: debe tener formato AAAAMM (mes 01 a 12)', value: p });
+      }
     });
     const result = await this.callAuth('solicitarCAEA', auth, { solicitudCAEA }, 'emision', opts);
     checkServiceErrors(result, `${SERVICE} solicitarCAEA`);
-    const r = new ResponseReader('solicitarCAEA', 'emision');
-    return this.parseCAEA(r, r.obj(result, 'CAEAResponse'), 'CAEAResponse');
+    return this.parseCAEA(result, 'solicitarCAEA', 'emision');
   }
 
   /** `consultarCAEA`: datos de un CAEA otorgado. */
   async consultarCAEA(auth: MtxcaAuth, caea: string, opts?: CallOptions): Promise<MtxcaCAEA> {
-    const result = await this.consulta('consultarCAEA', auth, { CAEA: validCaea(caea) }, opts);
-    const r = new ResponseReader('consultarCAEA', 'consulta');
-    return this.parseCAEA(r, r.obj(result, 'CAEAResponse'), 'CAEAResponse');
+    const CAEA = encodeCaea(caea, 'consultarCAEA');
+    const result = await this.consulta('consultarCAEA', auth, { CAEA }, opts);
+    return this.parseCAEA(result, 'consultarCAEA', 'consulta');
+  }
+
+  /** `CAEAResponse` obligatorio de `solicitarCAEA` / `consultarCAEA`. */
+  private parseCAEA(result: R, method: string, kind: SoapOperationKind): MtxcaCAEA {
+    requerido(result, 'CAEAResponse', method, kind, true);
+    return toCAEA(decode<CAEARaw>(result['CAEAResponse'], CAEA_RESPONSE, `${method}.CAEAResponse`, kind));
   }
 
   /** `consultarCAEAEntreFechas`: CAEAs otorgados con vigencia entre dos fechas. */
@@ -230,28 +310,15 @@ export class MtxcaClient extends SoapServiceClient {
     fechaHasta: FechaInput,
     opts?: CallOptions,
   ): Promise<MtxcaCAEA[]> {
-    const params = validated((f) => ({
-      fechaDesde: f.date('fechaDesde', fechaDesde, true),
-      fechaHasta: f.date('fechaHasta', fechaHasta, true),
-    }));
+    const params = encodeRequest({ fechaDesde, fechaHasta }, ENTRE_FECHAS, 'consultarCAEAEntreFechas');
     const result = await this.consulta('consultarCAEAEntreFechas', auth, params, opts);
-    const r = new ResponseReader('consultarCAEAEntreFechas', 'consulta');
-    return r
-      .list(result['arrayCAEAResponse'], 'CAEAResponse')
-      .map((c, i) => this.parseCAEA(r, c, `arrayCAEAResponse.CAEAResponse[${i}]`));
-  }
-
-  private parseCAEA(r: ResponseReader, c: R, path: string): MtxcaCAEA {
-    return {
-      fechaProceso: r.str(c, 'fechaProceso', `${path}.fechaProceso`),
-      caea: r.str(c, 'CAEA', `${path}.CAEA`),
-      periodo: r.num(c, 'periodo', `${path}.periodo`),
-      orden: r.num(c, 'orden', `${path}.orden`),
-      fechaDesde: r.str(c, 'fechaDesde', `${path}.fechaDesde`),
-      fechaHasta: r.str(c, 'fechaHasta', `${path}.fechaHasta`),
-      fechaTopeInforme: r.str(c, 'fechaTopeInforme', `${path}.fechaTopeInforme`),
-      observaciones: r.codigosDescripciones(c['arrayObservaciones'], `${path}.arrayObservaciones`),
-    };
+    const { arrayCAEAResponse } = decode<{ arrayCAEAResponse: CAEARaw[] }>(
+      result,
+      { arrayCAEAResponse: wrapped('CAEAResponse', obj(CAEA_RESPONSE), 0) },
+      'consultarCAEAEntreFechas',
+      'consulta',
+    );
+    return arrayCAEAResponse.map(toCAEA);
   }
 
   /** `informarComprobanteCAEA`. Un rechazo devuelve `resultado: 'R'` con `errores`. */
@@ -280,26 +347,23 @@ export class MtxcaClient extends SoapServiceClient {
   ): Promise<MtxcaInformarCAEAResult> {
     const comprobanteCAEARequest = buildComprobante(comprobante, 'caea');
     const result = await this.callAuth(method, auth, { comprobanteCAEARequest }, 'emision', opts);
-    const r = new ResponseReader(method, 'emision');
-    const resultado = this.resultado(r, result, method);
-    const base = {
-      observaciones: r.codigosDescripciones(result['arrayObservaciones'], 'arrayObservaciones'),
-      errores: r.codigosDescripciones(result['arrayErrores'], 'arrayErrores'),
-      evento: r.evento(result),
-    };
-    if (resultado === 'R') return { resultado, fechaProceso: r.optStr(result, 'fechaProceso'), ...base };
-    const cr = r.obj(result, 'comprobanteCAEAResponse');
-    return {
-      resultado,
-      fechaProceso: r.str(result, 'fechaProceso'),
-      comprobante: {
-        caea: r.str(cr, 'CAEA', 'comprobanteCAEAResponse.CAEA'),
-        codigoTipoComprobante: r.num(cr, 'codigoTipoComprobante', 'comprobanteCAEAResponse.codigoTipoComprobante'),
-        numeroPuntoVenta: r.num(cr, 'numeroPuntoVenta', 'comprobanteCAEAResponse.numeroPuntoVenta'),
-        numeroComprobante: r.num(cr, 'numeroComprobante', 'comprobanteCAEAResponse.numeroComprobante'),
-      },
-      ...base,
-    };
+    const { resultado, base } = this.resultado(result, method);
+    const { fechaProceso } = decode<{ fechaProceso?: string }>(
+      result,
+      { fechaProceso: opt(date()) },
+      method,
+      'emision',
+    );
+    if (resultado === 'R') return { resultado, fechaProceso, ...base };
+    if (fechaProceso === undefined) throw invalid(`Respuesta inválida: falta ${method}.fechaProceso`, 'emision');
+    requerido(result, 'comprobanteCAEAResponse', method, 'emision', true);
+    const { CAEA, ...cr } = decode<Omit<MtxcaComprobanteCAEAResponse, 'caea'> & { CAEA: string }>(
+      result['comprobanteCAEAResponse'],
+      COMPROBANTE_CAEA_RESPONSE,
+      `${method}.comprobanteCAEAResponse`,
+      'emision',
+    );
+    return { resultado, fechaProceso, comprobante: { caea: CAEA, ...cr }, ...base };
   }
 
   /** `informarCAEANoUtilizado`: informa que un CAEA no se usó en ningún punto de venta. */
@@ -308,7 +372,8 @@ export class MtxcaClient extends SoapServiceClient {
     caea: string,
     opts?: CallOptions,
   ): Promise<MtxcaCAEANoUtilizadoResult> {
-    return this.caeaNoUtilizado('informarCAEANoUtilizado', auth, { CAEA: validCaea(caea) }, opts);
+    const CAEA = encodeCaea(caea, 'informarCAEANoUtilizado');
+    return this.caeaNoUtilizado('informarCAEANoUtilizado', auth, { CAEA }, opts);
   }
 
   /** `informarCAEANoUtilizadoPtoVta`: informa que un CAEA no se usó en un punto de venta. */
@@ -318,13 +383,10 @@ export class MtxcaClient extends SoapServiceClient {
     numeroPuntoVenta: number,
     opts?: CallOptions,
   ): Promise<MtxcaCAEANoUtilizadoResult> {
-    const ptoVta = validated((f) => f.int('numeroPuntoVenta', numeroPuntoVenta, true, 1, 99998));
-    return this.caeaNoUtilizado(
-      'informarCAEANoUtilizadoPtoVta',
-      auth,
-      { CAEA: validCaea(caea), numeroPuntoVenta: ptoVta },
-      opts,
-    );
+    const method = 'informarCAEANoUtilizadoPtoVta';
+    const CAEA = encodeCaea(caea, method);
+    const params = encodeRequest({ numeroPuntoVenta }, { numeroPuntoVenta: PTO_VTA }, method);
+    return this.caeaNoUtilizado(method, auth, { CAEA, ...params }, opts);
   }
 
   private async caeaNoUtilizado(
@@ -334,27 +396,36 @@ export class MtxcaClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<MtxcaCAEANoUtilizadoResult> {
     const result = await this.callAuth(method, auth, params, 'emision', opts);
-    const r = new ResponseReader(method, 'emision');
-    const resultado = this.resultado(r, result, method);
-    const aprobado = resultado !== 'R';
+    const { resultado, base } = this.resultado(result, method);
+    const r = decode<{ fechaProceso?: string; CAEA?: string; numeroPuntoVenta?: number }>(
+      result,
+      CAEA_NO_UTILIZADO,
+      method,
+      'emision',
+    );
     const conPtoVta = 'numeroPuntoVenta' in params;
+    // Obligatorios en el XSD; en un rechazo se toleran ausentes.
+    const faltante = [
+      r.fechaProceso === undefined && 'fechaProceso',
+      r.CAEA === undefined && 'CAEA',
+      conPtoVta && r.numeroPuntoVenta === undefined && 'numeroPuntoVenta',
+    ].find(Boolean);
+    if (resultado !== 'R' && faltante) throw invalid(`Respuesta inválida: falta ${method}.${faltante}`, 'emision');
     return {
       resultado,
-      fechaProceso: aprobado ? r.str(result, 'fechaProceso') : r.optStr(result, 'fechaProceso'),
-      caea: aprobado ? r.str(result, 'CAEA') : r.optStr(result, 'CAEA'),
-      ...(conPtoVta
-        ? { numeroPuntoVenta: aprobado ? r.num(result, 'numeroPuntoVenta') : r.optNum(result, 'numeroPuntoVenta') }
-        : {}),
-      errores: r.codigosDescripciones(result['arrayErrores'], 'arrayErrores'),
-      evento: r.evento(result),
+      fechaProceso: r.fechaProceso,
+      caea: r.CAEA,
+      ...(conPtoVta ? { numeroPuntoVenta: r.numeroPuntoVenta } : {}),
+      errores: base.errores,
+      evento: base.evento,
     };
   }
 
   /** `consultarPtosVtaCAEANoInformados`: puntos de venta que todavía no informaron movimientos para el CAEA. */
   async consultarPtosVtaCAEANoInformados(auth: MtxcaAuth, caea: string, opts?: CallOptions): Promise<PuntoVenta[]> {
-    const result = await this.consulta('consultarPtosVtaCAEANoInformados', auth, { CAEA: validCaea(caea) }, opts);
-    const r = new ResponseReader('consultarPtosVtaCAEANoInformados', 'consulta');
-    return this.parsePuntosVenta(r, r.list(result['arrayPuntosVenta'], 'puntoVenta'));
+    const method = 'consultarPtosVtaCAEANoInformados';
+    const result = await this.consulta(method, auth, { CAEA: encodeCaea(caea, method) }, opts);
+    return this.parsePuntosVenta(result, method);
   }
 
   // =========================================================================
@@ -372,17 +443,15 @@ export class MtxcaClient extends SoapServiceClient {
     cbteTipo: number,
     opts?: CallOptions,
   ): Promise<number> {
-    const consultaUltimoComprobanteAutorizadoRequest = validated((f) => ({
-      codigoTipoComprobante: f.int('cbteTipo', cbteTipo, true),
-      numeroPuntoVenta: f.int('ptoVta', ptoVta, true, 1, 99998),
-    }));
-    const result = await this.consulta(
-      'consultarUltimoComprobanteAutorizado',
-      auth,
-      { consultaUltimoComprobanteAutorizadoRequest },
-      opts,
+    const method = 'consultarUltimoComprobanteAutorizado';
+    const consultaUltimoComprobanteAutorizadoRequest = encodeRequest(
+      { codigoTipoComprobante: cbteTipo, numeroPuntoVenta: ptoVta },
+      CONSULTA_ULTIMO,
+      method,
     );
-    return new ResponseReader('consultarUltimoComprobanteAutorizado', 'consulta').num(result, 'numeroComprobante');
+    const result = await this.consulta(method, auth, { consultaUltimoComprobanteAutorizadoRequest }, opts);
+    return decode<{ numeroComprobante: number }>(result, { numeroComprobante: must(int()) }, method, 'consulta')
+      .numeroComprobante;
   }
 
   /** `consultarComprobante`: datos de un comprobante autorizado (CAE) o informado (CAEA). */
@@ -393,17 +462,48 @@ export class MtxcaClient extends SoapServiceClient {
     cbteNro: number,
     opts?: CallOptions,
   ): Promise<MtxcaConsultaComprobanteResult> {
-    const consultaComprobanteRequest = validated((f) => ({
-      codigoTipoComprobante: f.int('cbteTipo', cbteTipo, true),
-      numeroPuntoVenta: f.int('ptoVta', ptoVta, true, 1, 99998),
-      numeroComprobante: f.int('cbteNro', cbteNro, true, 1, 99999999),
-    }));
-    const result = await this.consulta('consultarComprobante', auth, { consultaComprobanteRequest }, opts);
-    const r = new ResponseReader('consultarComprobante', 'consulta');
+    const method = 'consultarComprobante';
+    const consultaComprobanteRequest = encodeRequest(
+      { codigoTipoComprobante: cbteTipo, numeroPuntoVenta: ptoVta, numeroComprobante: cbteNro },
+      CONSULTA_COMPROBANTE,
+      method,
+    );
+    const result = await this.consulta(method, auth, { consultaComprobanteRequest }, opts);
+    requerido(result, 'comprobante', method, 'consulta', true);
+    requerido(result['comprobante'] as R, 'arrayItems', `${method}.comprobante`, 'consulta');
+    const r = decode<{
+      comprobante: ComprobanteRaw;
+      arrayObservaciones: CodigoDescripcion[];
+      evento?: CodigoDescripcion;
+    }>(
+      result,
+      { comprobante: obj(COMPROBANTE_CONSULTADO), arrayObservaciones: CODIGOS, evento: EVENTO },
+      method,
+      'consulta',
+    );
+    const {
+      arrayComprobantesAsociados,
+      arrayOtrosTributos,
+      arrayItems,
+      arraySubtotalesIVA,
+      arrayDatosAdicionales,
+      arrayCompradores,
+      arrayActividades,
+      ...c
+    } = r.comprobante;
     return {
-      comprobante: parseComprobante(r, r.obj(result, 'comprobante')),
-      observaciones: r.codigosDescripciones(result['arrayObservaciones'], 'arrayObservaciones'),
-      evento: r.evento(result),
+      comprobante: {
+        ...c,
+        comprobantesAsociados: arrayComprobantesAsociados,
+        otrosTributos: arrayOtrosTributos,
+        items: arrayItems,
+        subtotalesIVA: arraySubtotalesIVA,
+        datosAdicionales: arrayDatosAdicionales,
+        compradores: arrayCompradores,
+        actividades: arrayActividades.map((a) => a.codigo),
+      },
+      observaciones: r.arrayObservaciones,
+      evento: r.evento,
     };
   }
 
@@ -411,18 +511,17 @@ export class MtxcaClient extends SoapServiceClient {
   // Parámetros
   // =========================================================================
 
-  private async codigos(
+  /** Consulta cuya respuesta es un `ArrayCodigosDescripcionesType` obligatorio. */
+  private async codigos<T = CodigoDescripcion>(
     method: string,
     container: string,
     auth: MtxcaAuth,
     opts?: CallOptions,
-    params: R = {},
-  ): Promise<CodigoDescripcion[]> {
-    const result = await this.consulta(method, auth, params, opts);
-    const r = new ResponseReader(method, 'consulta');
-    return r
-      .requiredList(result, container, 'codigoDescripcion')
-      .map((cd, i) => r.codigoDescripcion(cd, `${container}[${i}]`));
+    lista = CODIGOS,
+  ): Promise<T[]> {
+    const result = await this.consulta(method, auth, {}, opts);
+    requerido(result, container, method, 'consulta');
+    return decode<Record<string, T[]>>(result, { [container]: lista }, method, 'consulta')[container];
   }
 
   consultarTiposComprobante(auth: MtxcaAuth, opts?: CallOptions): Promise<CodigoDescripcion[]> {
@@ -447,17 +546,19 @@ export class MtxcaClient extends SoapServiceClient {
     cbteTipo: number,
     opts?: CallOptions,
   ): Promise<CodigoDescripcion[]> {
-    const consultaCondicionesIVAReceptorRequest = validated((f) => ({
-      codigoTipoComprobante: f.int('cbteTipo', cbteTipo, true),
-    }));
-    const result = await this.consulta(
-      'consultarCondicionesIVAReceptor',
-      auth,
-      { consultaCondicionesIVAReceptorRequest },
-      opts,
+    const method = 'consultarCondicionesIVAReceptor';
+    const consultaCondicionesIVAReceptorRequest = encodeRequest(
+      { codigoTipoComprobante: cbteTipo },
+      CONSULTA_CONDICIONES_IVA,
+      method,
     );
-    const r = new ResponseReader('consultarCondicionesIVAReceptor', 'consulta');
-    return r.codigosDescripciones(result['arrayCondicionesIVAReceptor'], 'arrayCondicionesIVAReceptor');
+    const result = await this.consulta(method, auth, { consultaCondicionesIVAReceptorRequest }, opts);
+    return decode<{ arrayCondicionesIVAReceptor: CodigoDescripcion[] }>(
+      result,
+      { arrayCondicionesIVAReceptor: CODIGOS },
+      method,
+      'consulta',
+    ).arrayCondicionesIVAReceptor;
   }
 
   consultarUnidadesMedida(auth: MtxcaAuth, opts?: CallOptions): Promise<CodigoDescripcion[]> {
@@ -472,13 +573,8 @@ export class MtxcaClient extends SoapServiceClient {
     return this.codigos('consultarTiposDatosAdicionales', 'arrayTiposDatosAdicionales', auth, opts);
   }
 
-  async consultarMonedas(auth: MtxcaAuth, opts?: CallOptions): Promise<CodigoDescripcionString[]> {
-    const result = await this.consulta('consultarMonedas', auth, {}, opts);
-    const r = new ResponseReader('consultarMonedas', 'consulta');
-    return r.requiredList(result, 'arrayMonedas', 'codigoDescripcion').map((m, i) => ({
-      codigo: r.str(m, 'codigo', `arrayMonedas[${i}].codigo`),
-      descripcion: r.str(m, 'descripcion', `arrayMonedas[${i}].descripcion`),
-    }));
+  consultarMonedas(auth: MtxcaAuth, opts?: CallOptions): Promise<CodigoDescripcionString[]> {
+    return this.codigos<CodigoDescripcionString>('consultarMonedas', 'arrayMonedas', auth, opts, CODIGOS_STRING);
   }
 
   /**
@@ -491,31 +587,35 @@ export class MtxcaClient extends SoapServiceClient {
     fechaCotizacion: FechaInput,
     opts?: CallOptions,
   ): Promise<CotizacionResult> {
-    const params = validated((f) => ({
-      codigoMoneda: f.text('codigoMoneda', codigoMoneda, true, 3),
-      fechaCotizacion: f.date('fechaCotizacion', fechaCotizacion, true),
-    }));
-    const result = await this.consulta('consultarCotizacionMoneda', auth, params, opts);
-    const r = new ResponseReader('consultarCotizacionMoneda', 'consulta');
+    const method = 'consultarCotizacionMoneda';
+    const params = encodeRequest({ codigoMoneda, fechaCotizacion }, COTIZACION, method);
+    const result = await this.consulta(method, auth, params, opts);
+    const { cotizacionMoneda } = decode<{ cotizacionMoneda?: number }>(
+      result,
+      { cotizacionMoneda: opt(dec(6)) },
+      method,
+      'consulta',
+    );
     return {
-      codigoMoneda: params.codigoMoneda as string,
-      fechaCotizacion: params.fechaCotizacion as string,
-      cotizacion: r.optNum(result, 'cotizacionMoneda') ?? null,
+      codigoMoneda: params['codigoMoneda'] as string,
+      fechaCotizacion: params['fechaCotizacion'] as string,
+      cotizacion: cotizacionMoneda ?? null,
     };
   }
 
-  private async puntosVenta(method: string, auth: MtxcaAuth, opts?: CallOptions): Promise<PuntoVenta[]> {
-    const result = await this.consulta(method, auth, {}, opts);
-    const r = new ResponseReader(method, 'consulta');
-    return this.parsePuntosVenta(r, r.requiredList(result, 'arrayPuntosVenta', 'puntoVenta'));
+  /** `ArrayPuntosVentaType` (obligatorio salvo en `consultarPtosVtaCAEANoInformados`). */
+  private parsePuntosVenta(result: R, method: string, obligatorio = false): PuntoVenta[] {
+    if (obligatorio) requerido(result, 'arrayPuntosVenta', method, 'consulta');
+    return decode<{ arrayPuntosVenta: PuntoVenta[] }>(
+      result,
+      { arrayPuntosVenta: wrapped('puntoVenta', PUNTO_VENTA, 0) },
+      method,
+      'consulta',
+    ).arrayPuntosVenta;
   }
 
-  private parsePuntosVenta(r: ResponseReader, list: R[]): PuntoVenta[] {
-    return list.map((pv, i) => ({
-      numeroPuntoVenta: r.num(pv, 'numeroPuntoVenta', `puntoVenta[${i}].numeroPuntoVenta`),
-      bloqueado: r.str(pv, 'bloqueado', `puntoVenta[${i}].bloqueado`),
-      fechaBaja: r.optStr(pv, 'fechaBaja'),
-    }));
+  private async puntosVenta(method: string, auth: MtxcaAuth, opts?: CallOptions): Promise<PuntoVenta[]> {
+    return this.parsePuntosVenta(await this.consulta(method, auth, {}, opts), method, true);
   }
 
   consultarPuntosVenta(auth: MtxcaAuth, opts?: CallOptions): Promise<PuntoVenta[]> {
@@ -532,109 +632,13 @@ export class MtxcaClient extends SoapServiceClient {
 
   /** `consultarActividadesVigentes`: actividades vigentes del emisor. */
   async consultarActividadesVigentes(auth: MtxcaAuth, opts?: CallOptions): Promise<ActividadVigente[]> {
-    const result = await this.consulta('consultarActividadesVigentes', auth, {}, opts);
-    const r = new ResponseReader('consultarActividadesVigentes', 'consulta');
-    return r.list(result['arrayActividades'], 'actividad').map((a, i) => ({
-      codigo: r.num(a, 'codigo', `arrayActividades[${i}].codigo`),
-      orden: r.num(a, 'orden', `arrayActividades[${i}].orden`),
-      descripcion: r.str(a, 'descripcion', `arrayActividades[${i}].descripcion`),
-    }));
+    const method = 'consultarActividadesVigentes';
+    const result = await this.consulta(method, auth, {}, opts);
+    return decode<{ arrayActividades: ActividadVigente[] }>(
+      result,
+      { arrayActividades: wrapped('actividad', ACTIVIDAD_VIGENTE, 0) },
+      method,
+      'consulta',
+    ).arrayActividades;
   }
-}
-
-/** Parsea un `ComprobanteType` de `consultarComprobante`. */
-function parseComprobante(r: ResponseReader, c: R): MtxcaComprobanteConsultado {
-  const periodo = r.optObj(c, 'periodoComprobantesAsociados');
-  return {
-    codigoTipoComprobante: r.num(c, 'codigoTipoComprobante', 'comprobante.codigoTipoComprobante'),
-    numeroPuntoVenta: r.num(c, 'numeroPuntoVenta', 'comprobante.numeroPuntoVenta'),
-    numeroComprobante: r.num(c, 'numeroComprobante', 'comprobante.numeroComprobante'),
-    fechaEmision: r.optStr(c, 'fechaEmision'),
-    codigoTipoAutorizacion: r.optStr(c, 'codigoTipoAutorizacion'),
-    codigoAutorizacion: r.optStr(c, 'codigoAutorizacion'),
-    fechaVencimiento: r.optStr(c, 'fechaVencimiento'),
-    codigoTipoDocumento: r.optNum(c, 'codigoTipoDocumento'),
-    numeroDocumento: r.optStr(c, 'numeroDocumento'),
-    condicionIVAReceptor: r.optNum(c, 'condicionIVAReceptor'),
-    importeGravado: r.optNum(c, 'importeGravado'),
-    importeNoGravado: r.optNum(c, 'importeNoGravado'),
-    importeExento: r.optNum(c, 'importeExento'),
-    importeSubtotal: r.num(c, 'importeSubtotal', 'comprobante.importeSubtotal'),
-    importeOtrosTributos: r.optNum(c, 'importeOtrosTributos'),
-    importeTotal: r.num(c, 'importeTotal', 'comprobante.importeTotal'),
-    codigoMoneda: r.str(c, 'codigoMoneda', 'comprobante.codigoMoneda'),
-    cotizacionMoneda: r.optNum(c, 'cotizacionMoneda'),
-    cancelaEnMismaMonedaExtranjera: r.optStr(c, 'cancelaEnMismaMonedaExtranjera'),
-    observaciones: r.optStr(c, 'observaciones'),
-    codigoConcepto: r.num(c, 'codigoConcepto', 'comprobante.codigoConcepto'),
-    fechaServicioDesde: r.optStr(c, 'fechaServicioDesde'),
-    fechaServicioHasta: r.optStr(c, 'fechaServicioHasta'),
-    fechaVencimientoPago: r.optStr(c, 'fechaVencimientoPago'),
-    fechaHoraGen: r.optStr(c, 'fechaHoraGen'),
-    comprobantesAsociados: r.list(c['arrayComprobantesAsociados'], 'comprobanteAsociado').map((a, i) => {
-      const p = `comprobante.arrayComprobantesAsociados[${i}]`;
-      return {
-        codigoTipoComprobante: r.num(a, 'codigoTipoComprobante', `${p}.codigoTipoComprobante`),
-        numeroPuntoVenta: r.num(a, 'numeroPuntoVenta', `${p}.numeroPuntoVenta`),
-        numeroComprobante: r.num(a, 'numeroComprobante', `${p}.numeroComprobante`),
-        cuit: r.optStr(a, 'cuit'),
-        fechaEmision: r.optStr(a, 'fechaEmision'),
-      };
-    }),
-    periodoComprobantesAsociados: periodo
-      ? {
-          fechaDesde: r.str(periodo, 'fechaDesde', 'comprobante.periodoComprobantesAsociados.fechaDesde'),
-          fechaHasta: r.str(periodo, 'fechaHasta', 'comprobante.periodoComprobantesAsociados.fechaHasta'),
-        }
-      : undefined,
-    otrosTributos: r.list(c['arrayOtrosTributos'], 'otroTributo').map((t, i) => {
-      const p = `comprobante.arrayOtrosTributos[${i}]`;
-      return {
-        codigo: r.num(t, 'codigo', `${p}.codigo`),
-        descripcion: r.optStr(t, 'descripcion'),
-        baseImponible: r.num(t, 'baseImponible', `${p}.baseImponible`),
-        importe: r.num(t, 'importe', `${p}.importe`),
-      };
-    }),
-    items: r.requiredList(c, 'arrayItems', 'item').map((it, i) => {
-      const p = `comprobante.arrayItems[${i}]`;
-      return {
-        unidadesMtx: r.optNum(it, 'unidadesMtx'),
-        codigoMtx: r.optStr(it, 'codigoMtx'),
-        codigo: r.optStr(it, 'codigo'),
-        descripcion: r.str(it, 'descripcion', `${p}.descripcion`),
-        cantidad: r.optNum(it, 'cantidad'),
-        codigoUnidadMedida: r.num(it, 'codigoUnidadMedida', `${p}.codigoUnidadMedida`),
-        precioUnitario: r.optNum(it, 'precioUnitario'),
-        importeBonificacion: r.optNum(it, 'importeBonificacion'),
-        codigoCondicionIVA: r.num(it, 'codigoCondicionIVA', `${p}.codigoCondicionIVA`),
-        importeIVA: r.optNum(it, 'importeIVA'),
-        importeItem: r.num(it, 'importeItem', `${p}.importeItem`),
-      };
-    }),
-    subtotalesIVA: r.list(c['arraySubtotalesIVA'], 'subtotalIVA').map((s, i) => ({
-      codigo: r.num(s, 'codigo', `comprobante.arraySubtotalesIVA[${i}].codigo`),
-      importe: r.num(s, 'importe', `comprobante.arraySubtotalesIVA[${i}].importe`),
-    })),
-    datosAdicionales: r.list(c['arrayDatosAdicionales'], 'datoAdicional').map((d, i) => ({
-      t: r.num(d, 't', `comprobante.arrayDatosAdicionales[${i}].t`),
-      c1: r.optStr(d, 'c1'),
-      c2: r.optStr(d, 'c2'),
-      c3: r.optStr(d, 'c3'),
-      c4: r.optStr(d, 'c4'),
-      c5: r.optStr(d, 'c5'),
-      c6: r.optStr(d, 'c6'),
-    })),
-    compradores: r.list(c['arrayCompradores'], 'comprador').map((x, i) => {
-      const p = `comprobante.arrayCompradores[${i}]`;
-      return {
-        codigoTipoDocumento: r.num(x, 'codigoTipoDocumento', `${p}.codigoTipoDocumento`),
-        numeroDocumento: r.str(x, 'numeroDocumento', `${p}.numeroDocumento`),
-        porcentaje: r.num(x, 'porcentaje', `${p}.porcentaje`),
-      };
-    }),
-    actividades: r
-      .list(c['arrayActividades'], 'actividad')
-      .map((a, i) => r.num(a, 'codigo', `comprobante.arrayActividades[${i}].codigo`)),
-  };
 }

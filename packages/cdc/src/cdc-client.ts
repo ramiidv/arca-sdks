@@ -1,12 +1,9 @@
-import {
-  ArcaSoapError,
-  checkServiceErrors,
-  ensureArray,
-  parseServerStatus,
-  SoapServiceClient,
-} from '@ramiidv/arca-common';
+import { ArcaSoapError, checkServiceErrors, parseServerStatus, SoapServiceClient } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus, ServiceTransport } from '@ramiidv/arca-common';
+import { decodeResponse, obj, wrapped } from '@ramiidv/arca-common/schema';
+import type { Schema } from '@ramiidv/arca-common/schema';
 import { WSCDC_NAMESPACE } from './constants.js';
+import * as S from './schemas.js';
 import { buildCmpReq } from './validation.js';
 import type {
   CdcAuth,
@@ -28,69 +25,38 @@ export interface CdcClientConfig extends ServiceTransport {
   endpoint: string;
 }
 
-function invalidResponse(method: string, detail: string): ArcaSoapError {
-  return new ArcaSoapError(`Respuesta inválida de WSCDC ${method}: ${detail}`);
+const responseError = (message: string) => new ArcaSoapError(`WSCDC ${message}`);
+
+function isRecord(value: unknown): value is Raw {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function isPresent(value: unknown): boolean {
-  return value !== undefined && value !== null && value !== '';
+/**
+ * Quita los elementos vacíos (`<FchHasta/>`, ítems `nillable` como `<Obs/>`):
+ * ARCA los omite o los manda vacíos indistintamente, y vacío equivale a ausente.
+ */
+function dropEmpty(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(dropEmpty).filter((v) => v !== '');
+  if (!isRecord(value)) return value;
+  const out: Raw = {};
+  for (const [k, v] of Object.entries(value)) {
+    const clean = dropEmpty(v);
+    if (clean !== '') out[k] = clean;
+  }
+  return out;
 }
 
-function requireValue(obj: Raw, key: string, method: string): unknown {
-  const value = obj[key];
-  if (!isPresent(value)) throw invalidResponse(method, `falta ${key}`);
-  return value;
+function decode<T>(node: unknown, schema: Schema, path: string): T {
+  return decodeResponse<T>(dropEmpty(node), schema, path, { error: responseError });
 }
 
-function optionalString(value: unknown): string | undefined {
-  return isPresent(value) ? String(value) : undefined;
-}
-
-function asRecord(value: unknown): Raw | undefined {
-  return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Raw) : undefined;
-}
-
-/** Ítems de un `ArrayOfX`: `ensureArray` sobre el hijo, nunca sobre el contenedor. */
-function items(container: unknown, child: string): Raw[] {
-  const rec = asRecord(container);
-  if (!rec) return [];
-  return ensureArray(rec[child] as Raw | Raw[] | undefined).filter((x): x is Raw => asRecord(x) !== undefined);
-}
-
-function parseMensajes(container: unknown, child: 'Obs' | 'Evt', method: string): CdcMensaje[] {
-  return items(container, child).map((m) => {
-    const code = Number(requireValue(m, 'Code', method));
-    if (!Number.isInteger(code)) throw invalidResponse(method, `${child}.Code no numérico`);
-    return { Code: code, Msg: m['Msg'] === undefined || m['Msg'] === null ? '' : String(m['Msg']) };
-  });
-}
+type MensajeRaw = { Code: number; Msg?: string };
+const mensajes = (list: MensajeRaw[]): CdcMensaje[] => list.map((m) => ({ Code: m.Code, Msg: m.Msg ?? '' }));
 
 function parseCmpResp(raw: Raw, method: string): ComprobanteConstatado {
-  const num = (key: string): number => {
-    const n = Number(requireValue(raw, key, method));
-    if (!Number.isFinite(n)) throw invalidResponse(method, `CmpResp.${key} no numérico`);
-    return n;
-  };
-  const cmp: ComprobanteConstatado = {
-    CbteModo: String(requireValue(raw, 'CbteModo', method)),
-    CuitEmisor: String(requireValue(raw, 'CuitEmisor', method)),
-    PtoVta: num('PtoVta'),
-    CbteTipo: num('CbteTipo'),
-    CbteNro: num('CbteNro'),
-    CbteFch: String(requireValue(raw, 'CbteFch', method)),
-    ImpTotal: num('ImpTotal'),
-    CodAutorizacion: String(requireValue(raw, 'CodAutorizacion', method)),
-  };
-  const docTipo = optionalString(raw['DocTipoReceptor']);
-  if (docTipo !== undefined) cmp.DocTipoReceptor = docTipo;
-  const docNro = optionalString(raw['DocNroReceptor']);
-  if (docNro !== undefined) cmp.DocNroReceptor = docNro;
-  const opcionales = items(raw['Opcionales'], 'Opcional').map((o) => ({
-    Id: String(requireValue(o, 'Id', method)),
-    Valor: o['Valor'] === undefined || o['Valor'] === null ? '' : String(o['Valor']),
-  }));
-  if (opcionales.length > 0) cmp.Opcionales = opcionales;
-  return cmp;
+  const { Opcionales, ...cmp } = decode<ComprobanteConstatado>(raw, S.CMP_RESP, `${method}.CmpResp`);
+  if (!Opcionales?.length) return cmp;
+  return { ...cmp, Opcionales: Opcionales.map((o) => ({ Id: o.Id, Valor: o.Valor ?? '' })) };
 }
 
 /**
@@ -102,16 +68,30 @@ export class CdcClient extends SoapServiceClient {
     super({ endpoint, namespace: WSCDC_NAMESPACE, transport });
   }
 
-  /** Única llamada SOAP: ASMX con hijos calificados y SOAPAction = namespace + método. Todas son consultas. */
+  /**
+   * Única llamada SOAP: ASMX con hijos calificados y SOAPAction = namespace + método. Todas son consultas.
+   * La respuesta queda como texto (`parseNumbers: false`): la convierte el schema de cada operación.
+   */
   private call(method: string, params: Raw, opts?: CallOptions): Promise<Raw> {
-    return this.soapCall(method, params, { qualified: true, soapActionFromMethod: true, signal: opts?.signal });
+    return this.soapCall(method, params, {
+      qualified: true,
+      soapActionFromMethod: true,
+      parseNumbers: false,
+      signal: opts?.signal,
+    });
   }
 
-  /** Llama a un método de tabla (`ResultGet/<child>`) y verifica `Errors`. */
-  private async consultarTabla(method: string, child: string, auth: CdcAuth, opts?: CallOptions): Promise<Raw[]> {
+  /** Llama a un método de tabla (`ResultGet/<child>`), verifica `Errors` y decodifica los ítems. */
+  private async consultarTabla<T>(
+    method: string,
+    child: string,
+    item: Schema,
+    auth: CdcAuth,
+    opts?: CallOptions,
+  ): Promise<T[]> {
     const result = await this.call(method, { Auth: auth }, opts);
     checkServiceErrors(result, `WSCDC ${method}`);
-    return items(result['ResultGet'], child);
+    return decode<{ ResultGet: T[] }>(result, { ResultGet: wrapped(child, obj(item), 0) }, method).ResultGet;
   }
 
   /**
@@ -127,18 +107,21 @@ export class CdcClient extends SoapServiceClient {
 
     checkServiceErrors(result, `WSCDC ${method}`);
 
-    const resultado = requireValue(result, 'Resultado', method);
-    if (resultado !== 'A' && resultado !== 'R') {
-      throw invalidResponse(method, `Resultado desconocido "${String(resultado)}"`);
+    const r = decode<{ Resultado: string; FchProceso: string; Observaciones: MensajeRaw[]; Events: MensajeRaw[] }>(
+      result,
+      S.CONSTATAR_RESP,
+      method,
+    );
+    if (r.Resultado !== 'A' && r.Resultado !== 'R') {
+      throw responseError(`Respuesta inválida: ${method}.Resultado desconocido "${r.Resultado}"`);
     }
     const out: ConstatarResult = {
-      Resultado: resultado,
-      FchProceso: String(requireValue(result, 'FchProceso', method)),
-      Observaciones: parseMensajes(result['Observaciones'], 'Obs', method),
-      Events: parseMensajes(result['Events'], 'Evt', method),
+      Resultado: r.Resultado,
+      FchProceso: r.FchProceso,
+      Observaciones: mensajes(r.Observaciones),
+      Events: mensajes(r.Events),
     };
-    const cmpResp = asRecord(result['CmpResp']);
-    if (cmpResp) out.CmpResp = parseCmpResp(cmpResp, method);
+    if (isRecord(result['CmpResp'])) out.CmpResp = parseCmpResp(result['CmpResp'], method);
     return out;
   }
 
@@ -150,49 +133,21 @@ export class CdcClient extends SoapServiceClient {
 
   /** `ComprobantesModalidadConsultar`: modalidades de autorización (CAE, CAI, CAEA). */
   async getModalidades(auth: CdcAuth, opts?: CallOptions): Promise<ModalidadItem[]> {
-    const method = 'ComprobantesModalidadConsultar';
-    const rows = await this.consultarTabla(method, 'FacModTipo', auth, opts);
-    return rows.map((raw) => {
-      const item: ModalidadItem = {
-        Cod: String(requireValue(raw, 'Cod', method)),
-        Desc: String(requireValue(raw, 'Desc', method)),
-      };
-      const desde = optionalString(raw['FchDesde']);
-      if (desde !== undefined) item.FchDesde = desde;
-      const hasta = optionalString(raw['FchHasta']);
-      if (hasta !== undefined) item.FchHasta = hasta;
-      return item;
-    });
+    return this.consultarTabla('ComprobantesModalidadConsultar', 'FacModTipo', S.FAC_MOD_TIPO, auth, opts);
   }
 
   /** `ComprobantesTipoConsultar`: tipos de comprobante habilitados. */
   async getTiposCbte(auth: CdcAuth, opts?: CallOptions): Promise<TipoCbteItem[]> {
-    const method = 'ComprobantesTipoConsultar';
-    const rows = await this.consultarTabla(method, 'CbteTipo', auth, opts);
-    return rows.map((raw) => {
-      const id = Number(requireValue(raw, 'Id', method));
-      if (!Number.isInteger(id)) throw invalidResponse(method, 'CbteTipo.Id no numérico');
-      return { Id: id, Desc: String(requireValue(raw, 'Desc', method)) };
-    });
+    return this.consultarTabla('ComprobantesTipoConsultar', 'CbteTipo', S.CBTE_TIPO, auth, opts);
   }
 
   /** `DocumentosTipoConsultar`: tipos de documento habilitados. */
   async getDocTipos(auth: CdcAuth, opts?: CallOptions): Promise<DocTipoItem[]> {
-    const method = 'DocumentosTipoConsultar';
-    const rows = await this.consultarTabla(method, 'DocTipo', auth, opts);
-    return rows.map((raw) => ({
-      Id: String(requireValue(raw, 'Id', method)),
-      Desc: String(requireValue(raw, 'Desc', method)),
-    }));
+    return this.consultarTabla('DocumentosTipoConsultar', 'DocTipo', S.ID_DESC, auth, opts);
   }
 
   /** `OpcionalesTipoConsultar`: identificadores válidos para `Opcionales`. */
   async getTiposOpcionales(auth: CdcAuth, opts?: CallOptions): Promise<OpcionalTipoItem[]> {
-    const method = 'OpcionalesTipoConsultar';
-    const rows = await this.consultarTabla(method, 'OpcionalTipo', auth, opts);
-    return rows.map((raw) => ({
-      Id: String(requireValue(raw, 'Id', method)),
-      Desc: String(requireValue(raw, 'Desc', method)),
-    }));
+    return this.consultarTabla('OpcionalesTipoConsultar', 'OpcionalTipo', S.ID_DESC, auth, opts);
   }
 }

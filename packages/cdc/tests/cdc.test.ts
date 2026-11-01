@@ -401,3 +401,93 @@ describe('ArcaCdc', () => {
     await expect(makeCdc(fetch).status({ signal: ac.signal })).rejects.toBeInstanceOf(ArcaSoapError);
   });
 });
+
+describe('Decodificación de respuestas (texto, sin perder ceros)', () => {
+  it('preserva ceros a la izquierda de los xs:string (Id de tablas, documento, CAE)', async () => {
+    const fetch = mockFetch(
+      asmxResponse(
+        'OpcionalesTipoConsultar',
+        '<ResultGet><OpcionalTipo><Id>0012</Id><Desc>Doce</Desc></OpcionalTipo></ResultGet>',
+      ),
+      asmxResponse(
+        'DocumentosTipoConsultar',
+        '<ResultGet><DocTipo><Id>080</Id><Desc>CUIT</Desc></DocTipo></ResultGet>',
+      ),
+      asmxResponse(
+        'ComprobanteConstatar',
+        '<CmpResp><CbteModo>CAE</CbteModo><CuitEmisor>30712345671</CuitEmisor><PtoVta>00001</PtoVta>' +
+          '<CbteTipo>1</CbteTipo><CbteNro>150</CbteNro><CbteFch>20260315</CbteFch><ImpTotal>100.50</ImpTotal>' +
+          '<CodAutorizacion>07342984329482</CodAutorizacion><DocTipoReceptor>96</DocTipoReceptor>' +
+          '<DocNroReceptor>0012345678</DocNroReceptor>' +
+          '<Opcionales><Opcional><Id>01</Id><Valor>0099</Valor></Opcional><Opcional><Id>2</Id></Opcional></Opcionales>' +
+          '</CmpResp><Resultado>A</Resultado><FchProceso>20261101120000</FchProceso>',
+      ),
+    );
+    const cdc = makeCdc(fetch);
+    expect(await cdc.getTiposOpcionales()).toEqual([{ Id: '0012', Desc: 'Doce' }]);
+    expect(await cdc.getDocTipos()).toEqual([{ Id: '080', Desc: 'CUIT' }]);
+    const r = await cdc.constatar(input);
+    expect(r.CmpResp).toEqual({
+      CbteModo: 'CAE',
+      CuitEmisor: '30712345671',
+      PtoVta: 1,
+      CbteTipo: 1,
+      CbteNro: 150,
+      CbteFch: '20260315',
+      ImpTotal: 100.5,
+      CodAutorizacion: '07342984329482',
+      DocTipoReceptor: '96',
+      DocNroReceptor: '0012345678',
+      Opcionales: [
+        { Id: '01', Valor: '0099' },
+        { Id: '2', Valor: '' },
+      ],
+    });
+  });
+
+  it('ignora elementos vacíos e ítems nil; Msg ausente es ""', async () => {
+    const fetch = mockFetch(
+      asmxResponse(
+        'ComprobantesModalidadConsultar',
+        '<ResultGet><FacModTipo><Cod>CAE</Cod><Desc>CAE</Desc><FchDesde /><FchHasta></FchHasta></FacModTipo><FacModTipo /></ResultGet>',
+      ),
+      asmxResponse(
+        'ComprobanteConstatar',
+        '<CmpResp /><Resultado>R</Resultado><Observaciones><Obs /><Obs><Code>100</Code></Obs></Observaciones>' +
+          '<FchProceso>20261101120000</FchProceso><Events><Evt /></Events>',
+      ),
+    );
+    const cdc = makeCdc(fetch);
+    expect(await cdc.getModalidades()).toEqual([{ Cod: 'CAE', Desc: 'CAE' }]);
+    expect(await cdc.constatar(input)).toEqual({
+      Resultado: 'R',
+      FchProceso: '20261101120000',
+      Observaciones: [{ Code: 100, Msg: '' }],
+      Events: [],
+    });
+  });
+
+  it('respuestas con forma inválida lanzan ArcaSoapError', async () => {
+    const fetch = mockFetch(
+      asmxResponse('ComprobantesTipoConsultar', '<ResultGet><CbteTipo><Id>X</Id><Desc>A</Desc></CbteTipo></ResultGet>'),
+      asmxResponse('DocumentosTipoConsultar', '<ResultGet><DocTipo><Id>80</Id><Desc /></DocTipo></ResultGet>'),
+      asmxResponse('ComprobanteConstatar', '<Resultado>X</Resultado><FchProceso>20261101120000</FchProceso>'),
+      asmxResponse(
+        'ComprobanteConstatar',
+        '<CmpResp><CbteModo>CAE</CbteModo></CmpResp><Resultado>A</Resultado><FchProceso>1</FchProceso>',
+      ),
+    );
+    const cdc = makeCdc(fetch);
+    const cases: [() => Promise<unknown>, RegExp][] = [
+      [() => cdc.getTiposCbte(), /ComprobantesTipoConsultar\.ResultGet\[0\]\.Id no es numérico/],
+      [() => cdc.getDocTipos(), /falta DocumentosTipoConsultar\.ResultGet\[0\]\.Desc/],
+      [() => cdc.constatar(input), /Resultado desconocido "X"/],
+      [() => cdc.constatar(input), /falta ComprobanteConstatar\.CmpResp\.CuitEmisor/],
+    ];
+    for (const [call, message] of cases) {
+      const err = await call().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ArcaSoapError);
+      expect((err as Error).message).toMatch(message);
+    }
+  });
+});

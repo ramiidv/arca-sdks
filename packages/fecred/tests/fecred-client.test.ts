@@ -481,7 +481,9 @@ describe('emisiones', () => {
     const c = client(mockFetch());
     const base = { idCtaCte: { codCtaCte: 1 }, saldoAceptado: 1, codMoneda: 'PES', cotizacionMonedaUlt: 1 };
     await expect(c.aceptarFECred(AUTH, { ...base, saldoAceptado: Number.NaN })).rejects.toThrow(/saldoAceptado/);
-    await expect(c.aceptarFECred(AUTH, { ...base, saldoAceptado: -1 })).rejects.toThrow(/negativo/);
+    await expect(c.aceptarFECred(AUTH, { ...base, saldoAceptado: -1 })).rejects.toThrow(
+      /saldoAceptado: debe ser mayor o igual a 0/,
+    );
     await expect(c.aceptarFECred(AUTH, { ...base, cotizacionMonedaUlt: 0 })).rejects.toThrow(/cotizacion/);
     await expect(c.aceptarFECred(AUTH, { ...base, cbuComprador: '123' })).rejects.toThrow(/cbuComprador/);
   });
@@ -701,5 +703,113 @@ describe('Agente de Depósito Colectivo', () => {
     );
     const r = await client(fetch).consultarCuentasEnAgtDptoCltv(AUTH);
     expect(r.cuentas).toEqual([{ cuitAgente: '30500012346', idCuenta: 'CTA-001' }]);
+  });
+});
+
+describe('respuestas decodificadas con el schema del XSD', () => {
+  const cmpCon = (extra: string) => COMPROBANTE_XML.replace('</comprobante>', `${extra}</comprobante>`);
+
+  it('los xs:string numéricos no pierden ceros ni decimales', async () => {
+    const item =
+      '<arrayItems><item><orden>1</orden><codigoMtx>0779123456789</codigoMtx><codigo>0012</codigo>' +
+      '<descripcion>100</descripcion><cantidad>1.500</cantidad><codigoCondicionIVA>5</codigoCondicionIVA>' +
+      '<importeItem>10.10</importeItem></item></arrayItems>';
+    const fetch = mockFetch(
+      ok(
+        'consultarComprobantes',
+        `<consultarCmpReturn><arrayComprobantes>${COMPROBANTE_XML.replace('<codCtaCte>', `${item}<codCtaCte>`)}</arrayComprobantes></consultarCmpReturn>`,
+      ),
+      ok(
+        'consultarCuentasEnAgtDptoCltv',
+        '<consultarCuentasEnAgtDptoCltvReturn><arrayCuentasEnAgente><cuentaEnAgente><cuitAgente>30500012346</cuitAgente><idCuenta>007</idCuenta></cuentaEnAgente></arrayCuentasEnAgente></consultarCuentasEnAgtDptoCltvReturn>',
+      ),
+    );
+    const c = client(fetch);
+    const [cmp] = (await c.consultarComprobantes(AUTH, { rol: 'Receptor' })).comprobantes;
+    expect(cmp.items).toEqual([
+      {
+        orden: 1,
+        codigoMtx: '0779123456789',
+        codigo: '0012',
+        descripcion: '100',
+        cantidad: 1.5,
+        codigoCondicionIVA: 5,
+        importeItem: 10.1,
+      },
+    ]);
+    expect((await c.consultarCuentasEnAgtDptoCltv(AUTH)).cuentas[0].idCuenta).toBe('007');
+  });
+
+  it('infoTransferencia (xsd:choice), S/N y referenciasComerciales', async () => {
+    const extra =
+      '<infoTransferencia><infoSCA><fechaAceptacionFactura>2026-10-03</fechaAceptacionFactura>' +
+      '<informaCBUReceptor>S</informaCBUReceptor><CBUReceptor>0110599520000001234567</CBUReceptor><CBUValidada>N</CBUValidada>' +
+      '</infoSCA></infoTransferencia>';
+    const fetch = mockFetch(
+      ok(
+        'consultarComprobantes',
+        `<consultarCmpReturn><arrayComprobantes>${cmpCon(extra).replace('<codCtaCte>', '<referenciasComerciales><texto>OC 0001</texto></referenciasComerciales><codCtaCte>')}</arrayComprobantes></consultarCmpReturn>`,
+      ),
+      ok(
+        'consultarComprobantes',
+        `<consultarCmpReturn><arrayComprobantes>${cmpCon('<infoTransferencia></infoTransferencia>')}</arrayComprobantes></consultarCmpReturn>`,
+      ),
+    );
+    const c = client(fetch);
+    const [cmp] = (await c.consultarComprobantes(AUTH, { rol: 'Receptor' })).comprobantes;
+    expect(cmp.referenciasComerciales).toEqual(['OC 0001']);
+    expect(cmp.infoTransferencia).toEqual({
+      infoSCA: {
+        fechaAceptacionFactura: '2026-10-03',
+        informaCBUReceptor: true,
+        cbuReceptor: '0110599520000001234567',
+        cbuValidada: false,
+      },
+    });
+    // infoTransferencia vacío: falta la opción del choice.
+    await expect(c.consultarComprobantes(AUTH, { rol: 'Receptor' })).rejects.toThrow(/infoAgtDptoCltv\|infoSCA/);
+  });
+
+  it('valores fuera de la enumeración o S/N inválido → ArcaSoapError', async () => {
+    const fetch = mockFetch(
+      ok(
+        'consultarCtasCtes',
+        `<consultarCtasCtesReturn><arrayInfosCtaCte>${infoCtaCte('1').replace('>SCA<', '>XYZ<')}</arrayInfosCtaCte></consultarCtasCtesReturn>`,
+      ),
+      ok('consultarCtasCtes', '<consultarCtasCtesReturn><hayMas>X</hayMas></consultarCtasCtesReturn>'),
+    );
+    const c = client(fetch);
+    const err = await c.consultarCtasCtes(AUTH, { rol: 'Emisor' }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err.message).toMatch(/ctasCtes\[0\]\.opcionTransferencia vale "XYZ"/);
+    await expect(c.consultarCtasCtes(AUTH, { rol: 'Emisor' })).rejects.toThrow(/hayMas vale "X" \(se esperaba S\/N\)/);
+  });
+
+  it('arrayHistorialEstados es obligatorio', async () => {
+    const fetch = mockFetch(
+      ok(
+        'consultarHistorialEstadosCtaCte',
+        '<consultarHistorialEstadosCtaCteReturn><idCtaCte><codCtaCte>5</codCtaCte></idCtaCte></consultarHistorialEstadosCtaCteReturn>',
+      ),
+    );
+    const err = await client(fetch)
+      .consultarHistorialEstadosCtaCte(AUTH, { codCtaCte: 5 })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err.message).toMatch(/falta consultarHistorialEstadosCtaCte\.estados/);
+  });
+
+  it('un request con varios errores los informa todos', async () => {
+    const err = await client(mockFetch())
+      .rechazarFECred(AUTH, {
+        idCtaCte: { codCtaCte: 1 },
+        motivos: [{ codMotivo: -1, descMotivo: 'ab', justificacion: 'abc' }],
+      })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    expect(err.details.map((d: { field: string }) => d.field)).toEqual([
+      'motivos[0].codMotivo',
+      'motivos[0].descMotivo',
+    ]);
   });
 });

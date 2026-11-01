@@ -1,14 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import { ArcaValidationError } from '@ramiidv/arca-common';
-import { cuitParam, dateParam, idCtaCteParam, importeParam, longParam, porcentajeParam } from '../src/validation.js';
+import { cuit, date, id, type Field } from '@ramiidv/arca-common/schema';
+import { REQ, encode, importe, importePositivo, porcentaje } from '../src/schemas.js';
+
+/** Codifica un solo campo con el tipo `f` (como lo haría un request con ese elemento). */
+const enc = (f: Field, v: unknown, name = 'x') => encode({ [name]: v }, { [name]: f }, 'test')[name];
 
 describe('validación local', () => {
-  it('cuitParam usa el dígito verificador y devuelve 11 dígitos', () => {
-    expect(cuitParam('20-12345678-6', 'cuit')).toBe('20123456786');
-    expect(cuitParam(20123456786, 'cuit')).toBe('20123456786');
+  it('cuit usa el dígito verificador y devuelve 11 dígitos', () => {
+    expect(enc(cuit(), '20-12345678-6')).toBe('20123456786');
+    expect(enc(cuit(), 20123456786)).toBe('20123456786');
     const err = (() => {
       try {
-        cuitParam('20123456780', 'cuitContraparte');
+        enc(cuit(), '20123456780', 'cuitContraparte');
       } catch (e) {
         return e as ArcaValidationError;
       }
@@ -17,42 +21,93 @@ describe('validación local', () => {
     expect(err?.field).toBe('cuitContraparte');
   });
 
-  it('dateParam devuelve xsd:date y rechaza fechas inexistentes', () => {
-    expect(dateParam('20261101', 'f')).toBe('2026-11-01');
-    expect(dateParam('2026-11-01', 'f')).toBe('2026-11-01');
-    expect(() => dateParam('2026-02-30', 'f')).toThrow(ArcaValidationError);
-    expect(() => dateParam(20261101, 'f')).toThrow(ArcaValidationError);
+  it('date devuelve xsd:date y rechaza fechas inexistentes', () => {
+    expect(enc(date(), '20261101')).toBe('2026-11-01');
+    expect(enc(date(), '2026-11-01')).toBe('2026-11-01');
+    expect(() => enc(date(), '2026-02-30')).toThrow(ArcaValidationError);
+    expect(() => enc(date(), 20261101)).toThrow(ArcaValidationError);
   });
 
-  it('importeParam redondea a 2 decimales y rechaza NaN/Infinity/negativos', () => {
-    expect(importeParam(10, 'x')).toBe('10.00');
-    expect(importeParam(1.005 + 1e-9, 'x')).toBe('1.01');
-    expect(importeParam(-5, 'x', true)).toBe('-5.00');
-    expect(() => importeParam(Number.NaN, 'x')).toThrow(ArcaValidationError);
-    expect(() => importeParam(Infinity, 'x')).toThrow(ArcaValidationError);
-    expect(() => importeParam(-1, 'x')).toThrow(/negativo/);
-    expect(() => importeParam(1e14, 'x')).toThrow(/máximo/);
+  it('importe redondea a 2 decimales y rechaza NaN/Infinity/negativos', () => {
+    expect(enc(importePositivo(), 10)).toBe('10.00');
+    expect(enc(importePositivo(), 1.005 + 1e-9)).toBe('1.01');
+    expect(enc(importe(), -5)).toBe('-5.00');
+    expect(() => enc(importePositivo(), Number.NaN)).toThrow(ArcaValidationError);
+    expect(() => enc(importePositivo(), Infinity)).toThrow(ArcaValidationError);
+    expect(() => enc(importePositivo(), -1)).toThrow(/mayor o igual a 0/);
+    expect(() => enc(importePositivo(), 1e14)).toThrow(/menor o igual a 9999999999999.99/);
   });
 
-  it('porcentajeParam 0..100', () => {
-    expect(porcentajeParam(3.5, 'p')).toBe('3.5');
-    expect(() => porcentajeParam(101, 'p')).toThrow(ArcaValidationError);
+  it('porcentaje 0..100', () => {
+    expect(enc(porcentaje(), 3.5)).toBe('3.50');
+    expect(() => enc(porcentaje(), 101)).toThrow(ArcaValidationError);
   });
 
-  it('longParam acepta number o string de dígitos', () => {
-    expect(longParam(123, 'c')).toBe('123');
-    expect(longParam('00123', 'c')).toBe('123');
-    expect(() => longParam(0, 'c')).toThrow(ArcaValidationError);
-    expect(() => longParam('12a', 'c')).toThrow(ArcaValidationError);
-    expect(() => longParam(1.5, 'c')).toThrow(ArcaValidationError);
+  it('long (codCtaCte) acepta number o string de dígitos', () => {
+    expect(enc(id(), 123)).toBe('123');
+    // Se envía tal cual: "00123" es un xsd:long válido.
+    expect(enc(id(), '00123')).toBe('00123');
+    expect(() => enc(id(), 0)).toThrow(ArcaValidationError);
+    expect(() => enc(id(), '12a')).toThrow(ArcaValidationError);
+    expect(() => enc(id(), 1.5)).toThrow(ArcaValidationError);
   });
 
-  it('idCtaCteParam valida la factura', () => {
+  it('idCtaCte valida la factura', () => {
     expect(() =>
-      idCtaCteParam({ idFactura: { cuitEmisor: '30712345671', codTipoCmp: 201, ptoVta: 0, nroCmp: 1 } }),
+      encode(
+        { idCtaCte: { idFactura: { cuitEmisor: '30712345671', codTipoCmp: 201, ptoVta: 0, nroCmp: 1 } } },
+        REQ.idCtaCte,
+        'test',
+      ),
     ).toThrow(/ptoVta/);
     expect(() =>
-      idCtaCteParam({ idFactura: { cuitEmisor: '30712345671', codTipoCmp: 201, ptoVta: 1, nroCmp: 100000000 } }),
+      encode(
+        { idCtaCte: { idFactura: { cuitEmisor: '30712345671', codTipoCmp: 201, ptoVta: 1, nroCmp: 100000000 } } },
+        REQ.idCtaCte,
+        'test',
+      ),
     ).toThrow(/nroCmp/);
+  });
+
+  it('reporta todos los errores juntos, con la ruta de cada campo', () => {
+    const err = (() => {
+      try {
+        encode(
+          {
+            idCtaCte: { codCtaCte: 1 },
+            saldoAceptado: -1,
+            codMoneda: 'PES',
+            cotizacionMonedaUlt: 0,
+            retenciones: [{ codTipo: 1, importe: 1, porcentaje: 200 }],
+          },
+          REQ.aceptarFECred,
+          'aceptarFECred',
+        );
+      } catch (e) {
+        return e as ArcaValidationError;
+      }
+    })();
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    expect(err?.details.map((d) => d.field)).toEqual([
+      'retenciones[0].porcentaje',
+      'saldoAceptado',
+      'cotizacionMonedaUlt',
+    ]);
+  });
+
+  it('rechaza campos que no existen en el XSD', () => {
+    expect(() => encode({ cuitConsultada: 20123456786, otro: 1 }, REQ.consultarObligadoRecepcion, 'test')).toThrow(
+      /otro: campo desconocido/,
+    );
+  });
+
+  it('CBU: 22 dígitos y dígitos verificadores', () => {
+    const base = { idCtaCte: { codCtaCte: 1 }, saldoAceptado: 1, codMoneda: 'PES', cotizacionMonedaUlt: 1 };
+    expect(encode({ ...base, cbuComprador: '2850590940090418135201' }, REQ.aceptarFECred, 't').CBUComprador).toBe(
+      '2850590940090418135201',
+    );
+    expect(() => encode({ ...base, cbuComprador: '2850590940090418135202' }, REQ.aceptarFECred, 't')).toThrow(
+      /cbuComprador/,
+    );
   });
 });
