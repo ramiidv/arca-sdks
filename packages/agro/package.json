@@ -1,6 +1,6 @@
 {
   "name": "@ramiidv/arca-agro",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "SDK para servicios agropecuarios de ARCA (ex AFIP) - WSCPE (Carta de Porte Electrónica) y WSLPG (Liquidación Primaria de Granos)",
   "author": "ramiidv",
   "license": "MIT",
@@ -62,6 +62,6 @@
     "node": ">=20.19.0"
   },
   "dependencies": {
-    "@ramiidv/arca-common": "^0.4.0"
+    "@ramiidv/arca-common": "^0.5.0"
   }
 }

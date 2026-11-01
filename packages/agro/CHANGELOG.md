@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- 8c02c30: API uniforme entre los SDKs (los nombres anteriores siguen funcionando,
+  marcados `@deprecated`, hasta la próxima major):
+  
+  - arca-facturacion: la clase principal es `ArcaFacturacion` (`Arca` queda como
+    alias). Nuevo `status()` → `{ wsfe, wsfex }` con `ServiceStatus` y el
+    `ServerStatus` de arca-common (`appserver`/`dbserver`/`authserver`);
+    `serverStatus()`/`serverStatusExpo()` y su `ServerStatus` en mayúsculas
+    quedan deprecados.
+  - arca-agro: `status()` (antes `serverStatus()`).
+  - arca-fecred: el cliente de bajo nivel es `client` (antes `fecred`).
+  - arca-common: `ServiceStatus` y `statusOf()` para el estado de varios servicios.
+- bed68e8: Paquetes solo ESM y Node >= 20.19. `arca-common`, `arca-facturacion` y
+  `arca-padron` dejan de publicar un build CommonJS: desde CommonJS se cargan con
+  `require()` (require(esm), Node >= 20.19 / 22.12). Todos los paquetes pasan a
+  requerir Node >= 20.19.0 (Node 18 y 20 sin soporte). El código vive ahora en el
+  monorepo `arca-sdks`.
+- f8bd053: Las clases principales extienden `ArcaSdkBase` de arca-common, así que todos
+  los SDKs tienen la misma base: `wsaa`, `cuit`, `production`, `on()`/`off()`,
+  `clearAuthCache()`, `config.wsaa` (WsaaClient compartido) y `config.signal`
+  (signal global). arca-mtxca acepta `endpoints: { mtxca, wsaa }` (`endpoint` y
+  `wsaaEndpoint` quedan deprecados). Los `dummy`/`status` validan la respuesta con
+  `parseServerStatus`: si falta un campo lanzan `ArcaSoapError`.
+
+### Patch Changes
+
+- 20ecf7d: DSL de schemas, segunda versión:
+  
+  - Corrección: `dec()` redondea sobre el valor decimal escrito (`8.575` →
+    `8.58`; antes daba `8.57` por la representación binaria). Afecta los importes
+    que los SDKs envían redondeados.
+  - `must()` rechaza también el valor vacío; los elementos `xsi:nil` cuentan
+    como ausentes (en una lista, como lista vacía); `must()` en listas exige el
+    elemento; un objeto opcional vacío se omite y uno obligatorio valida sus hijos.
+  - Al decodificar se validan enteros (`int()`) y valores permitidos
+    (`str({ values })`).
+  - Nuevos: `siNo()` (S/N ↔ boolean), `double()`, `xml(nombre, campo)` (nombre
+    distinto en el XML), `custom(encode, decode)`, `roundHalfUp()` y
+    `decodeResponse(..., { emptyLists: 'omit' })`.
+- b86db00: Nuevo subpath `@ramiidv/arca-common/schema`: el DSL para describir los tipos
+  del XSD de un servicio y, con la misma descripción, validar y serializar
+  requests en el orden del XSD (`encodeRequest`) y decodificar respuestas con
+  tipos (`decodeResponse`). Nuevo error `ArcaResponseError` (respuesta con forma
+  inválida, con `uncertain`).
+  
+  arca-agro usa el DSL de common (`ArcaAgroResponseError` extiende
+  `ArcaResponseError`) y parsea las respuestas sin conversión numérica: los
+  `xs:string` con contenido numérico (ej: `"0012"`, `"10.50"`) ya no pierden ceros
+  ni decimales.
+- Updated dependencies [8c02c30]
+- Updated dependencies [f8bd053]
+- Updated dependencies [242fb5f]
+- Updated dependencies [fd438bc]
+- Updated dependencies [bed68e8]
+- Updated dependencies [20ecf7d]
+- Updated dependencies [b86db00]
+  - @ramiidv/arca-common@0.5.0
+
 ## 0.3.0 (2026-11-01)
 
 Reescritura de los clientes contra los WSDL/XSD oficiales. La versión anterior no funcionaba contra ARCA en ningún servicio (endpoints, namespaces, elementos y campos incorrectos).

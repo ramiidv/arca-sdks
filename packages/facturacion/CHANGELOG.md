@@ -1,5 +1,46 @@
 # Changelog
 
+## 5.0.0
+
+### Major Changes
+
+- bed68e8: Paquetes solo ESM y Node >= 20.19. `arca-common`, `arca-facturacion` y
+  `arca-padron` dejan de publicar un build CommonJS: desde CommonJS se cargan con
+  `require()` (require(esm), Node >= 20.19 / 22.12). Todos los paquetes pasan a
+  requerir Node >= 20.19.0 (Node 18 y 20 sin soporte). El código vive ahora en el
+  monorepo `arca-sdks`.
+
+### Minor Changes
+
+- 8c02c30: API uniforme entre los SDKs (los nombres anteriores siguen funcionando,
+  marcados `@deprecated`, hasta la próxima major):
+  
+  - arca-facturacion: la clase principal es `ArcaFacturacion` (`Arca` queda como
+    alias). Nuevo `status()` → `{ wsfe, wsfex }` con `ServiceStatus` y el
+    `ServerStatus` de arca-common (`appserver`/`dbserver`/`authserver`);
+    `serverStatus()`/`serverStatusExpo()` y su `ServerStatus` en mayúsculas
+    quedan deprecados.
+  - arca-agro: `status()` (antes `serverStatus()`).
+  - arca-fecred: el cliente de bajo nivel es `client` (antes `fecred`).
+  - arca-common: `ServiceStatus` y `statusOf()` para el estado de varios servicios.
+- f8bd053: Las clases principales extienden `ArcaSdkBase` de arca-common, así que todos
+  los SDKs tienen la misma base: `wsaa`, `cuit`, `production`, `on()`/`off()`,
+  `clearAuthCache()`, `config.wsaa` (WsaaClient compartido) y `config.signal`
+  (signal global). arca-mtxca acepta `endpoints: { mtxca, wsaa }` (`endpoint` y
+  `wsaaEndpoint` quedan deprecados). Los `dummy`/`status` validan la respuesta con
+  `parseServerStatus`: si falta un campo lanzan `ArcaSoapError`.
+
+### Patch Changes
+
+- Updated dependencies [8c02c30]
+- Updated dependencies [f8bd053]
+- Updated dependencies [242fb5f]
+- Updated dependencies [fd438bc]
+- Updated dependencies [bed68e8]
+- Updated dependencies [20ecf7d]
+- Updated dependencies [b86db00]
+  - @ramiidv/arca-common@0.5.0
+
 ## 4.0.0 (2026-11-01)
 
 Correcciones contra el WSDL de WSFEv1/WSFEX, el manual WSFEv1 v4.7, el manual WSFEX 3.1.1 y la
