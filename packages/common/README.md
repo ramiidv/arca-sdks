@@ -322,6 +322,29 @@ console.log(Provincia.CORDOBA); // 3
 console.log(Provincia.CHACO); // 16 (no existe el 15)
 ```
 
+## Schemas del XSD (`@ramiidv/arca-common/schema`)
+
+Mini-DSL con el que los SDKs describen los tipos complejos de cada WSDL. Con el mismo schema se
+valida y codifica un request (orden del XSD, obligatorios, rangos, CUIT, decimales, fechas) y se
+decodifica una respuesta pedida con `parseNumbers: false` (`xs:string` → `string` sin perder
+ceros, números → `number`, listas → arrays).
+
+```typescript
+import { choice, decodeResponse, encodeRequest, id, int, must, obj, opt, str, wrapped } from '@ramiidv/arca-common/schema';
+
+const Request = {
+  // xsd:choice: en un request va exactamente una opción; en una respuesta, al menos una.
+  idCtaCte: choice({ codCtaCte: id(), idFactura: obj({ nro: int(1) }) }),
+  obs: opt(str({ maxLen: 250, pattern: /\S/, patternMessage: 'no puede estar vacío' })),
+};
+const body = encodeRequest(input, Request, 'consultarCtaCte'); // ArcaValidationError con todos los errores
+const resp = decodeResponse(result, { items: wrapped('item', obj({ codigo: must(str()) }), 0) }, 'consultarResponse');
+```
+
+`@ramiidv/arca-common/testing` incluye `loadXsdTypes` y `checkSchemaAgainstXsd` para tests de
+contrato contra el WSDL oficial: nombres, orden de la `xsd:sequence` (un `xsd:all` no tiene
+orden), obligatorios, cardinalidad y `xsd:choice` marcados con `choice()`.
+
 ## API
 
 ### `new WsaaClient(config)`

@@ -74,17 +74,12 @@ nombres de AFIP (`CbteModo`, PascalCase) y padron tiene métodos en inglés
 (`getConstanciaInscripcion`). Decidir si se unifican o se documenta la regla
 (por ejemplo, PascalCase en los servicios ASMX y camelCase en los Java).
 
-### 3. Mejoras al DSL y al comparador de contratos (common)
+### 3. ~~Mejoras al DSL y al comparador de contratos (common)~~ (hecho, pendiente de release)
 
-- `xsd:choice` nativo en el DSL. fecred tiene su propio `choice()` en
-  `src/schemas.ts`; moverlo a common.
-- El comparador trata `xsd:all` como secuencia ordenada (más estricto de lo
-  necesario) y en respuestas no verifica que un `choice` traiga al menos una
-  opción.
-- Un `str()` con mensaje propio para `pattern` (ej: "no puede estar vacío" en
-  lugar de `formato inválido (\S)`).
-- Que el orden de los errores de `extraCheck` se intercale con el de los del
-  schema (hoy van al final).
+Rama `feat/dsl-choice` (desde `main`): `choice()` nativo en common (fecred lo
+usa en lugar del suyo), `str({ patternMessage })` (mtxca y sire lo usan para
+"no puede estar vacío"), errores de `extraCheck` intercalados y, en el
+comparador, `xsd:all` sin orden y `xsd:choice` ↔ `choice()`.
 
 ### 4. Tests de integración contra homologación
 

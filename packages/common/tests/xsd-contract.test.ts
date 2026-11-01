@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dec, int, list, must, obj, opt, str, wrapped, xml } from '../src/schema.js';
+import { choice, dec, int, list, must, obj, opt, str, wrapped, xml } from '../src/schema.js';
 import { checkSchemaAgainstXsd, loadXsdTypes } from '../src/testing.js';
 
 const WSDL = `<?xml version="1.0"?>
@@ -35,6 +35,10 @@ const WSDL = `<?xml version="1.0"?>
         <xs:element name="a" type="xs:string"/>
         <xs:element name="b" type="xs:string"/>
       </xs:choice></xs:complexType>
+      <xs:complexType name="SinOrden"><xs:all>
+        <xs:element name="x" type="xs:string"/>
+        <xs:element name="y" type="xs:string"/>
+      </xs:all></xs:complexType>
     </xs:schema>
   </wsdl:types>
 </wsdl:definitions>`;
@@ -46,7 +50,7 @@ const Comprobante = {
   importe: dec(2),
   obs: opt(str()),
   items: opt(wrapped('item', obj({ codigo: str() }))),
-  tributos: xml('tributo', opt(list(obj({ a: opt(str()), b: opt(str()) }), 0))),
+  tributos: xml('tributo', opt(list(choice({ a: str(), b: str() }), 0))),
 };
 
 describe('checkSchemaAgainstXsd', () => {
@@ -80,7 +84,7 @@ describe('checkSchemaAgainstXsd', () => {
 
   it('detecta listas que no se repiten y repetidos que no son lista', () => {
     const problems = checkSchemaAgainstXsd(
-      { ptoVta: list(int()), importe: dec(2), tributo: opt(obj({ a: opt(str()) })) },
+      { ptoVta: list(int()), importe: dec(2), tributo: opt(choice({ a: str() })) },
       'Comprobante',
       types,
       { direction: 'response' },
@@ -89,6 +93,26 @@ describe('checkSchemaAgainstXsd', () => {
       expect.stringMatching(/ptoVta: es una lista en el schema pero no se repite/),
       expect.stringMatching(/tributo: se repite en el XSD .* pero no es una lista/),
     ]);
+  });
+
+  it('xsd:all no exige orden, pero sí los obligatorios', () => {
+    expect(checkSchemaAgainstXsd({ y: str(), x: str() }, 'SinOrden', types, { direction: 'request' })).toEqual([]);
+    expect(checkSchemaAgainstXsd({ y: str() }, 'SinOrden', types, { direction: 'request' })).toEqual([
+      'SinOrden.x: obligatorio en el XSD (minOccurs=1) y no está en el schema',
+    ]);
+  });
+
+  it('xsd:choice tiene que ser choice() en el schema (y al revés)', () => {
+    expect(
+      checkSchemaAgainstXsd({ tributo: list(obj({ a: opt(str()) }), 0) }, 'Comprobante', types, {
+        direction: 'response',
+      }),
+    ).toEqual([expect.stringMatching(/tributo: es un xsd:choice en el XSD; usar choice\(\)/)]);
+    expect(
+      checkSchemaAgainstXsd({ items: opt(wrapped('item', choice({ codigo: str() }), 0)) }, 'Comprobante', types, {
+        direction: 'response',
+      }),
+    ).toEqual([expect.stringMatching(/items: es choice\(\) en el schema pero no un xsd:choice/)]);
   });
 
   it('tipo inexistente', () => {
