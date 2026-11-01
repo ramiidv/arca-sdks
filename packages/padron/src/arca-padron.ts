@@ -1,7 +1,6 @@
-import { WsaaClient, anySignal, validateCuit } from '@ramiidv/arca-common';
-import type { ArcaEvent, CallOptions } from '@ramiidv/arca-common';
+import { ArcaSdkBase } from '@ramiidv/arca-common';
+import type { CallOptions } from '@ramiidv/arca-common';
 import { ENDPOINTS } from './constants.js';
-import type { PadronSoapOptions } from './base-client.js';
 import { PadronA4Client } from './padron-a4.js';
 import { PadronA5Client } from './padron-a5.js';
 import { PadronA10Client } from './padron-a10.js';
@@ -43,9 +42,7 @@ import type {
  * const { condicionIva, motivo } = condicionIvaDesdePadron(persona);
  * ```
  */
-export class ArcaPadron {
-  /** Low-level WSAA client for direct access (se puede compartir con arca-facturacion) */
-  public readonly wsaa: WsaaClient;
+export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
   /** Low-level Constancia de Inscripción (ex Padrón A5) client */
   public readonly a5: PadronA5Client;
   /** Low-level Padrón A4 client for direct access */
@@ -57,46 +54,19 @@ export class ArcaPadron {
   /** Low-level Padrón A100 client for direct access */
   public readonly a100: PadronA100Client;
 
-  private readonly cuit: string;
-  private readonly signal?: AbortSignal;
-
+  /** @throws ArcaValidationError si la CUIT representada es inválida. */
   constructor(config: ArcaPadronConfig) {
-    const isProduction = config.production ?? false;
-    const env = isProduction ? 'production' : 'testing';
-    this.cuit = validateCuit(config.cuit);
-    this.signal = config.signal;
-    const onEvent: ((event: ArcaEvent) => void) | undefined = config.onEvent;
+    super(config, {
+      a5: ENDPOINTS.a5.serviceId,
+      a4: ENDPOINTS.a4.serviceId,
+      a10: ENDPOINTS.a10.serviceId,
+      a13: ENDPOINTS.a13.serviceId,
+      a100: ENDPOINTS.a100.serviceId,
+    });
 
-    const soapOptions: PadronSoapOptions = {
-      timeout: config.timeout,
-      retries: config.retries,
-      retryDelayMs: config.retryDelayMs,
-      fetch: config.fetch,
-      legacyTls: config.legacyTls,
-    };
-
-    this.wsaa =
-      config.wsaa ??
-      new WsaaClient({
-        cert: config.cert,
-        key: config.key,
-        production: isProduction,
-        endpoint: config.endpoints?.wsaa,
-        tokenTTLMinutes: config.tokenTTLMinutes,
-        timeout: config.timeout,
-        retries: config.retries,
-        retryDelayMs: config.retryDelayMs,
-        onEvent,
-        ticketStorage: config.ticketStorage,
-        clockOffsetMs: config.clockOffsetMs,
-        autoClockSkew: config.autoClockSkew,
-        loginErrorCooldownMs: config.loginErrorCooldownMs,
-        fetch: config.fetch,
-        legacyTls: config.legacyTls,
-      });
-
+    const { onEvent, ...soapOptions } = this.transport;
     const clientConfig = (svc: PadronServicio) => ({
-      endpoint: config.endpoints?.[svc] ?? ENDPOINTS[svc][env],
+      endpoint: this.endpoint(ENDPOINTS[svc], config.endpoints?.[svc]),
       namespace: ENDPOINTS[svc].namespace,
       soapOptions,
       onEvent,
@@ -118,8 +88,8 @@ export class ArcaPadron {
    * @throws ArcaPadronServiceError si ARCA informa la CUIT inexistente, inactiva, etc.
    */
   async getConstanciaInscripcion(cuit: string | number, call?: CallOptions): Promise<PersonaA5> {
-    const opts = this.opts(call);
-    const auth = await this.getAuth(ENDPOINTS.a5.serviceId, opts);
+    const opts = this.callOptions(call);
+    const auth = await this.getAuth('a5', call);
     return this.a5.getPersona(auth, cuit, opts);
   }
 
@@ -129,8 +99,8 @@ export class ArcaPadron {
    * ("No existe persona con ese Id") en lugar de hacer fallar la consulta.
    */
   async getConstanciasInscripcion(cuits: Array<string | number>, call?: CallOptions): Promise<PersonaA5[]> {
-    const opts = this.opts(call);
-    const auth = await this.getAuth(ENDPOINTS.a5.serviceId, opts);
+    const opts = this.callOptions(call);
+    const auth = await this.getAuth('a5', call);
     return this.a5.getPersonaList(auth, cuits, opts);
   }
 
@@ -139,8 +109,8 @@ export class ArcaPadron {
    * @param cuit - CUIT/CUIL a consultar (con o sin guiones)
    */
   async getPersona(cuit: string | number, call?: CallOptions): Promise<PersonaA4> {
-    const opts = this.opts(call);
-    const auth = await this.getAuth(ENDPOINTS.a4.serviceId, opts);
+    const opts = this.callOptions(call);
+    const auth = await this.getAuth('a4', call);
     return this.a4.getPersona(auth, cuit, opts);
   }
 
@@ -149,8 +119,8 @@ export class ArcaPadron {
    * @param cuit - CUIT/CUIL a consultar (con o sin guiones)
    */
   async getPersonaBasic(cuit: string | number, call?: CallOptions): Promise<PersonaA10> {
-    const opts = this.opts(call);
-    const auth = await this.getAuth(ENDPOINTS.a10.serviceId, opts);
+    const opts = this.callOptions(call);
+    const auth = await this.getAuth('a10', call);
     return this.a10.getPersona(auth, cuit, opts);
   }
 
@@ -160,8 +130,8 @@ export class ArcaPadron {
    * @param cuit - CUIT/CUIL a consultar (con o sin guiones)
    */
   async getPersonaA13(cuit: string | number, call?: CallOptions): Promise<PersonaA13> {
-    const opts = this.opts(call);
-    const auth = await this.getAuth(ENDPOINTS.a13.serviceId, opts);
+    const opts = this.callOptions(call);
+    const auth = await this.getAuth('a13', call);
     return this.a13.getPersona(auth, cuit, opts);
   }
 
@@ -170,8 +140,8 @@ export class ArcaPadron {
    * también si la clave está INACTIVA (manual A13 v1.4).
    */
   async getPersonaA13V2(cuit: string | number, call?: CallOptions): Promise<PersonaA13> {
-    const opts = this.opts(call);
-    const auth = await this.getAuth(ENDPOINTS.a13.serviceId, opts);
+    const opts = this.callOptions(call);
+    const auth = await this.getAuth('a13', call);
     return this.a13.getPersonaV2(auth, cuit, opts);
   }
 
@@ -180,8 +150,8 @@ export class ArcaPadron {
    * @param documento - Número de documento (DNI); se aceptan puntos y espacios
    */
   async getIdPersonaListByDocumento(documento: string | number, call?: CallOptions): Promise<string[]> {
-    const opts = this.opts(call);
-    const auth = await this.getAuth(ENDPOINTS.a13.serviceId, opts);
+    const opts = this.callOptions(call);
+    const auth = await this.getAuth('a13', call);
     return this.a13.getIdPersonaListByDocumento(auth, documento, opts);
   }
 
@@ -190,8 +160,8 @@ export class ArcaPadron {
    * @param collection - Nombre de la colección (ej: CollectionName.PROVINCIA)
    */
   async getParametros(collection: string, call?: CallOptions): Promise<ParameterRecord[]> {
-    const opts = this.opts(call);
-    const auth = await this.getAuth(ENDPOINTS.a100.serviceId, opts);
+    const opts = this.callOptions(call);
+    const auth = await this.getAuth('a100', call);
     return this.a100.getParameterCollectionByName(auth, collection, opts);
   }
 
@@ -208,7 +178,7 @@ export class ArcaPadron {
    * ```
    */
   async status(call?: CallOptions): Promise<PadronStatus> {
-    const opts = this.opts(call);
+    const opts = this.callOptions(call);
     const [a5, a4, a10, a13, a100] = await Promise.allSettled([
       this.a5.dummy(opts),
       this.a4.dummy(opts),
@@ -223,12 +193,8 @@ export class ArcaPadron {
   // Private helpers
   // -------------------------------------------------------------------------
 
-  private opts(call?: CallOptions): CallOptions {
-    return { signal: anySignal(this.signal, call?.signal) };
-  }
-
-  private async getAuth(serviceId: string, opts?: CallOptions): Promise<WsAuth> {
-    const ticket = await this.wsaa.getAccessTicket(serviceId, opts);
+  private async getAuth(service: PadronServicio, call?: CallOptions): Promise<WsAuth> {
+    const ticket = await this.ticket(service, call);
     return {
       Token: ticket.token,
       Sign: ticket.sign,

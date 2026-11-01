@@ -1,4 +1,4 @@
-import { afipSoapCall } from '@ramiidv/arca-common';
+import { SoapServiceClient, parseServerStatus } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
 import { CPE_NAMESPACE } from './constants.js';
 import type { ServiceContext } from './context.js';
@@ -55,11 +55,12 @@ const listOf = (name: string, item: Schema): Schema => ({ [name]: list(obj(item)
  * reintentan y, si la respuesta se pierde, el `ArcaSoapError` tiene
  * `uncertain: true` (ver README, "Recuperar una emisión incierta").
  */
-export class CpeClient {
+export class CpeClient extends SoapServiceClient {
   readonly #ctx: ServiceContext;
 
   /** @internal Se construye desde `ArcaAgro`. */
   constructor(ctx: ServiceContext) {
+    super({ endpoint: ctx.endpoint, namespace: CPE_NAMESPACE, transport: ctx.transport });
     this.#ctx = ctx;
   }
 
@@ -85,10 +86,9 @@ export class CpeClient {
   ): Promise<Record<string, unknown>> {
     const element = method.charAt(0).toUpperCase() + method.slice(1);
     const params = body === null ? {} : { auth: await this.#auth(opts), ...body };
-    const result = await afipSoapCall(this.#ctx.endpoint, CPE_NAMESPACE, method, params, {
-      ...this.#ctx.soap,
+    const result = await this.soapCall(method, params, {
       kind,
-      signal: opts?.signal,
+      signal: this.#ctx.callOptions(opts).signal,
       requestElement: body === null ? null : `${element}Req`,
       responseElement: `${element}Resp`,
       soapActionFromMethod: true,
@@ -396,7 +396,6 @@ export class CpeClient {
 
   /** Estado de los servidores de WSCPE (no requiere autenticación). */
   async dummy(opts?: CallOptions): Promise<ServerStatus> {
-    const r = await this.#call('dummy', null, 'consulta', opts);
-    return this.#decode<ServerStatus>(r, S.R_DUMMY, 'dummy', 'consulta');
+    return parseServerStatus(await this.#call('dummy', null, 'consulta', opts));
   }
 }

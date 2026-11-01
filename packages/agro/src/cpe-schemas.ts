@@ -590,6 +590,3 @@ export const R_LOCALIDAD_PRODUCTOR: Schema = {
 
 /** CodigoDescripcionGrano */
 export const R_VARIEDAD_SEMILLA: Schema = { codigo: must(str()), descripcion: must(str()), grano: must(int()) };
-
-/** DummyRespuesta */
-export const R_DUMMY: Schema = { appserver: must(str()), authserver: must(str()), dbserver: must(str()) };

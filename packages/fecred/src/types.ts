@@ -1,4 +1,4 @@
-import type { ArcaBaseConfig, WsaaClient } from '@ramiidv/arca-common';
+import type { ArcaSdkConfig } from '@ramiidv/arca-common';
 import type {
   EstadoComprobante,
   EstadoCtaCte,
@@ -22,12 +22,7 @@ import type {
 // Configuración
 // ---------------------------------------------------------------------------
 
-export interface ArcaFecredConfig extends ArcaBaseConfig {
-  /**
-   * `WsaaClient` propio (por ejemplo, para compartir tickets con otros SDKs).
-   * Si se pasa, se ignoran las opciones de WSAA de esta config.
-   */
-  wsaa?: WsaaClient;
+export interface ArcaFecredConfig extends ArcaSdkConfig {
   /** Sobrescribe los endpoints (por defecto, según `production`). */
   endpoints?: {
     /** URL de FECredService. */

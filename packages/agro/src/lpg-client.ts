@@ -1,4 +1,4 @@
-import { afipSoapCall } from '@ramiidv/arca-common';
+import { SoapServiceClient, parseServerStatus } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
 import { LPG_NAMESPACE } from './constants.js';
 import type { ServiceContext } from './context.js';
@@ -70,11 +70,12 @@ const OPS = {
  * reintentan y, si la respuesta se pierde, el `ArcaSoapError` tiene
  * `uncertain: true` (ver README, "Recuperar una emisión incierta").
  */
-export class LpgClient {
+export class LpgClient extends SoapServiceClient {
   readonly #ctx: ServiceContext;
 
   /** @internal Se construye desde `ArcaAgro`. */
   constructor(ctx: ServiceContext) {
+    super({ endpoint: ctx.endpoint, namespace: LPG_NAMESPACE, transport: ctx.transport });
     this.#ctx = ctx;
   }
 
@@ -99,10 +100,9 @@ export class LpgClient {
     opts?: CallOptions,
   ): Promise<Record<string, unknown>> {
     const params = body === null ? {} : { auth: await this.#auth(opts), ...body };
-    const result = await afipSoapCall(this.#ctx.endpoint, LPG_NAMESPACE, o.method, params, {
-      ...this.#ctx.soap,
+    const result = await this.soapCall(o.method, params, {
       kind,
-      signal: opts?.signal,
+      signal: this.#ctx.callOptions(opts).signal,
       requestElement: body === null ? null : o.req,
       responseElement: o.resp,
       soapActionFromMethod: true,
@@ -339,7 +339,6 @@ export class LpgClient {
 
   /** Estado de los servidores de WSLPG (no requiere autenticación). */
   async dummy(opts?: CallOptions): Promise<ServerStatus> {
-    const r = await this.#call(OPS.dummy, null, 'consulta', opts);
-    return this.#decode<ServerStatus>(r, S.R_DUMMY, 'dummy', 'consulta');
+    return parseServerStatus(await this.#call(OPS.dummy, null, 'consulta', opts));
   }
 }

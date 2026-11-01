@@ -1,7 +1,8 @@
-import { afipSoapCall, ensureArray } from '@ramiidv/arca-common';
+import { SoapServiceClient, ensureArray } from '@ramiidv/arca-common';
 import type { CallOptions, SoapOperationKind } from '@ramiidv/arca-common';
 import { ENDPOINTS, WSFEX_ERRORES_INTERNOS, WSFEX_NAMESPACE } from './constants.js';
 import { ArcaResultadoInciertoExpo, ArcaSoapError, ArcaWSFEError } from './errors.js';
+import { serverStatusDe, transportDe } from './wsfe.js';
 import type { WsClientOptions } from './wsfe.js';
 import type {
   WsfeAuth,
@@ -112,26 +113,18 @@ export function buildFexCmp(inv: WsfexInvoice): R {
 }
 
 /** Cliente de bajo nivel de WSFEX (Factura electrónica de exportación). */
-export class WsfexClient {
-  private readonly endpoint: string;
-  private readonly soapOpts: Omit<WsClientOptions, 'endpoint' | 'timeoutMs'> & { timeout?: number };
-
+export class WsfexClient extends SoapServiceClient {
   constructor(production: boolean, opts: WsClientOptions = {}) {
-    this.endpoint = opts.endpoint ?? (production ? ENDPOINTS.wsfex.production : ENDPOINTS.wsfex.testing);
-    this.soapOpts = {
-      timeout: opts.timeoutMs,
-      retries: opts.retries,
-      retryDelayMs: opts.retryDelayMs,
-      onEvent: opts.onEvent,
-      fetch: opts.fetch,
-      legacyTls: opts.legacyTls,
-    };
+    super({
+      endpoint: opts.endpoint ?? (production ? ENDPOINTS.wsfex.production : ENDPOINTS.wsfex.testing),
+      namespace: WSFEX_NAMESPACE,
+      transport: transportDe(opts),
+    });
   }
 
   /** WSFEX es ASMX con `elementFormDefault="qualified"`, como WSFEv1. */
   private call(method: string, params: R, opts?: CallOptions & { kind?: SoapOperationKind }): Promise<R> {
-    return afipSoapCall(this.endpoint, WSFEX_NAMESPACE, method, params, {
-      ...this.soapOpts,
+    return this.soapCall(method, params, {
       qualified: true,
       soapActionFromMethod: true,
       kind: opts?.kind,
@@ -225,7 +218,7 @@ export class WsfexClient {
 
   /** Estado de los servidores de WSFEX (`FEXDummy`). */
   async serverStatus(opts?: CallOptions): Promise<ServerStatus> {
-    return (await this.call('FEXDummy', {}, opts)) as ServerStatus;
+    return serverStatusDe(await this.call('FEXDummy', {}, opts), 'FEXDummy');
   }
 
   /** Cotización de una moneda (`FEXGetPARAM_Ctz`). */

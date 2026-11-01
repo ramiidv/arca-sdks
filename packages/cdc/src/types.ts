@@ -9,19 +9,19 @@ export type {
   TicketStorage,
   ValidationErrorDetail,
 } from '@ramiidv/arca-common';
-import type { ArcaBaseConfig } from '@ramiidv/arca-common';
+import type { ArcaSdkConfig } from '@ramiidv/arca-common';
 import type { CBTE_MODOS } from './constants.js';
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
-export interface ArcaCdcConfig extends ArcaBaseConfig {
+export interface ArcaCdcConfig extends ArcaSdkConfig {
   /** Endpoints propios (ej: un proxy). Si se indican, tienen prioridad sobre `production`. */
   endpoints?: {
     /** URL del WSCDC (`.../WSCDC/service.asmx`). */
     wscdc?: string;
-    /** URL del WSAA (`.../ws/services/LoginCms`). */
+    /** URL del WSAA (`.../ws/services/LoginCms`). Se ignora si se pasa `wsaa`. */
     wsaa?: string;
   };
 }

@@ -16,8 +16,9 @@ const mtxca = new ArcaMtxca({
   key: string,               // PEM
   cuit: number | string,     // CUIT representada; se valida el dígito verificador
   production?: boolean,      // default false (homologación)
-  endpoint?: string,         // override de WSMTXCA
-  wsaaEndpoint?: string,     // override de WSAA
+  endpoints?: { mtxca?: string, wsaa?: string }, // overrides (endpoint/wsaaEndpoint: deprecated)
+  wsaa?: WsaaClient,         // WsaaClient compartido
+  signal?: AbortSignal,      // cancela todas las llamadas
   timeout?: number, retries?: number, retryDelayMs?: number,
   ticketStorage?: TicketStorage, tokenTTLMinutes?: number,
   clockOffsetMs?: number, autoClockSkew?: boolean, loginErrorCooldownMs?: number,

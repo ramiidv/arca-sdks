@@ -1,5 +1,11 @@
-import { afipSoapCall, ArcaSoapError, checkServiceErrors, ensureArray } from '@ramiidv/arca-common';
-import type { ArcaEvent, CallOptions, LegacyTlsMode, ServerStatus } from '@ramiidv/arca-common';
+import {
+  ArcaSoapError,
+  checkServiceErrors,
+  ensureArray,
+  parseServerStatus,
+  SoapServiceClient,
+} from '@ramiidv/arca-common';
+import type { CallOptions, ServerStatus, ServiceTransport } from '@ramiidv/arca-common';
 import { WSCDC_NAMESPACE } from './constants.js';
 import { buildCmpReq } from './validation.js';
 import type {
@@ -16,16 +22,10 @@ import type {
 
 type Raw = Record<string, unknown>;
 
-/** Opciones de transporte del cliente de bajo nivel. */
-export interface CdcClientConfig {
+/** Endpoint y opciones de transporte del cliente de bajo nivel. */
+export interface CdcClientConfig extends ServiceTransport {
   /** URL del WSCDC. */
   endpoint: string;
-  timeout?: number;
-  retries?: number;
-  retryDelayMs?: number;
-  onEvent?: (event: ArcaEvent) => void;
-  fetch?: typeof fetch;
-  legacyTls?: LegacyTlsMode;
 }
 
 function invalidResponse(method: string, detail: string): ArcaSoapError {
@@ -97,23 +97,14 @@ function parseCmpResp(raw: Raw, method: string): ComprobanteConstatado {
  * Cliente de bajo nivel: un método por operación del WSCDC. No maneja la
  * autenticación: el caller pasa el bloque `Auth`.
  */
-export class CdcClient {
-  private readonly config: CdcClientConfig;
-
-  constructor(config: CdcClientConfig) {
-    this.config = config;
+export class CdcClient extends SoapServiceClient {
+  constructor({ endpoint, ...transport }: CdcClientConfig) {
+    super({ endpoint, namespace: WSCDC_NAMESPACE, transport });
   }
 
   /** Única llamada SOAP: ASMX con hijos calificados y SOAPAction = namespace + método. Todas son consultas. */
   private call(method: string, params: Raw, opts?: CallOptions): Promise<Raw> {
-    const { endpoint, ...transport } = this.config;
-    return afipSoapCall(endpoint, WSCDC_NAMESPACE, method, params, {
-      ...transport,
-      qualified: true,
-      soapActionFromMethod: true,
-      kind: 'consulta',
-      signal: opts?.signal,
-    });
+    return this.soapCall(method, params, { qualified: true, soapActionFromMethod: true, signal: opts?.signal });
   }
 
   /** Llama a un método de tabla (`ResultGet/<child>`) y verifica `Errors`. */
@@ -154,12 +145,7 @@ export class CdcClient {
   /** `ComprobanteDummy`: estado de la infraestructura. No requiere autenticación. */
   async dummy(opts?: CallOptions): Promise<ServerStatus> {
     const method = 'ComprobanteDummy';
-    const result = await this.call(method, {}, opts);
-    return {
-      appserver: String(requireValue(result, 'AppServer', method)),
-      dbserver: String(requireValue(result, 'DbServer', method)),
-      authserver: String(requireValue(result, 'AuthServer', method)),
-    };
+    return parseServerStatus(await this.call(method, {}, opts), `WSCDC ${method}`);
   }
 
   /** `ComprobantesModalidadConsultar`: modalidades de autorización (CAE, CAI, CAEA). */

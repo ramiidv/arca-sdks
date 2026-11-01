@@ -65,8 +65,10 @@ describe('ArcaAgro', () => {
   it('los internos de los sub-clientes no son accesibles', () => {
     const { agro } = setup(() => '');
     expect((agro.cpe as unknown as Record<string, unknown>)['getAuth']).toBeUndefined();
-    expect(Object.keys(agro.cpe)).toEqual([]);
-    expect(Object.keys(agro)).toEqual(['cpe', 'lpg']);
+    // Sólo los campos de SoapServiceClient / ArcaSdkBase: el contexto (getTicket, cuit) queda privado.
+    expect(Object.keys(agro.cpe)).toEqual(['endpoint', 'namespace', 'transport']);
+    expect(Object.keys(agro.lpg)).toEqual(['endpoint', 'namespace', 'transport']);
+    expect(Object.keys(agro)).toEqual(['wsaa', 'cuit', 'production', 'transport', 'cpe', 'lpg']);
   });
 
   it('el signal aborta antes de enviar', async () => {
@@ -76,5 +78,20 @@ describe('ArcaAgro', () => {
     const e = await agro.cpe.consultarProvincias({ signal: ctrl.signal }).catch((err) => err);
     expect(e).toBeInstanceOf(Error);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it('config.signal global aborta todas las llamadas', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const { agro, fetchMock } = setup(() => CPE_DUMMY, { signal: ctrl.signal });
+    await expect(agro.cpe.dummy()).rejects.toBeInstanceOf(Error);
+    await expect(agro.lpg.dummy()).rejects.toBeInstanceOf(Error);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('config.wsaa comparte el cliente WSAA', () => {
+    const { agro } = setup(() => CPE_DUMMY);
+    const otro = new ArcaAgro({ cuit: '20123456786', cert: 'c', key: 'k', wsaa: agro.wsaa });
+    expect(otro.wsaa).toBe(agro.wsaa);
+    expect(otro.cuit).toBe('20123456786');
   });
 });

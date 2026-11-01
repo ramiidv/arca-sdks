@@ -83,7 +83,8 @@ export class WsaaClient {
   readonly #key: string;
   /** Tickets en memoria (token y sign son credenciales). */
   readonly #ticketCache = new Map<string, AccessTicket>();
-  private readonly endpoint: string;
+  /** URL de WSAA (LoginCms) que usa este cliente. */
+  public readonly endpoint: string;
   private readonly tokenTTLMinutes: number;
   private readonly soapOpts: Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs' | 'fetch' | 'legacyTls'>;
   private readonly onEvent?: (event: ArcaEvent) => void;

@@ -1,11 +1,12 @@
-import { EventEmitter } from 'node:events';
-import { WsaaClient, safeEmit, validateCuit } from '@ramiidv/arca-common';
-import type { ArcaEvent, CallOptions } from '@ramiidv/arca-common';
+import { ArcaSdkBase } from '@ramiidv/arca-common';
+import type { CallOptions } from '@ramiidv/arca-common';
 import { CpeClient } from './cpe-client.js';
 import { LpgClient } from './lpg-client.js';
 import { CPE_ENDPOINTS, LPG_ENDPOINTS, WSAA_SERVICES } from './constants.js';
 import type { ServiceContext } from './context.js';
 import type { AgroServiceStatus, ArcaAgroConfig } from './types.js';
+
+type AgroService = keyof typeof WSAA_SERVICES;
 
 /**
  * Cliente de los servicios agropecuarios de ARCA: WSCPE (Carta de Porte
@@ -24,80 +25,24 @@ import type { AgroServiceStatus, ArcaAgroConfig } from './types.js';
  * const liq = await agro.lpg.liquidacionAutorizar({ liquidacion: { ... } });
  * ```
  */
-export class ArcaAgro {
+export class ArcaAgro extends ArcaSdkBase<AgroService> {
   /** WSCPE: Carta de Porte Electrónica (automotor y ferroviaria). */
   public readonly cpe: CpeClient;
   /** WSLPG: Liquidación Primaria de Granos y certificaciones. */
   public readonly lpg: LpgClient;
 
-  readonly #wsaa: WsaaClient;
-  readonly #emitter = new EventEmitter();
-
   /** @throws ArcaValidationError si el CUIT es inválido. */
   constructor(config: ArcaAgroConfig) {
-    const cuit = validateCuit(config.cuit);
-    const production = config.production ?? false;
-
-    const emit = (event: ArcaEvent) => {
-      safeEmit(config.onEvent, event);
-      safeEmit((e) => this.#emitter.emit(e.type, e), event);
-    };
-
-    this.#wsaa = new WsaaClient({
-      cert: config.cert,
-      key: config.key,
-      production,
-      endpoint: config.endpoints?.wsaa,
-      tokenTTLMinutes: config.tokenTTLMinutes,
-      timeout: config.timeout,
-      retries: config.retries,
-      retryDelayMs: config.retryDelayMs,
-      onEvent: emit,
-      ticketStorage: config.ticketStorage,
-      clockOffsetMs: config.clockOffsetMs,
-      autoClockSkew: config.autoClockSkew,
-      loginErrorCooldownMs: config.loginErrorCooldownMs,
-      fetch: config.fetch,
-      legacyTls: config.legacyTls,
+    super(config, WSAA_SERVICES);
+    const context = (service: AgroService, endpoint: string): ServiceContext => ({
+      endpoint,
+      cuit: this.cuit,
+      transport: this.transport,
+      getTicket: (opts) => this.ticket(service, opts),
+      callOptions: (opts) => this.callOptions(opts),
     });
-
-    const soap: ServiceContext['soap'] = {
-      timeout: config.timeout,
-      retries: config.retries,
-      retryDelayMs: config.retryDelayMs,
-      onEvent: emit,
-      fetch: config.fetch,
-      legacyTls: config.legacyTls,
-    };
-    const env = production ? 'production' : 'testing';
-
-    this.cpe = new CpeClient({
-      endpoint: config.endpoints?.cpe ?? CPE_ENDPOINTS[env],
-      cuit,
-      soap,
-      getTicket: (opts) => this.#wsaa.getAccessTicket(WSAA_SERVICES.cpe, opts),
-    });
-    this.lpg = new LpgClient({
-      endpoint: config.endpoints?.lpg ?? LPG_ENDPOINTS[env],
-      cuit,
-      soap,
-      getTicket: (opts) => this.#wsaa.getAccessTicket(WSAA_SERVICES.lpg, opts),
-    });
-  }
-
-  /**
-   * Suscribirse a eventos del SDK (`auth:*`, `request:*`).
-   * Los errores de los handlers se ignoran.
-   */
-  on(event: ArcaEvent['type'], handler: (event: ArcaEvent) => void): this {
-    this.#emitter.on(event, handler);
-    return this;
-  }
-
-  /** Desuscribirse de un evento. */
-  off(event: ArcaEvent['type'], handler: (event: ArcaEvent) => void): this {
-    this.#emitter.off(event, handler);
-    return this;
+    this.cpe = new CpeClient(context('cpe', this.endpoint(CPE_ENDPOINTS, config.endpoints?.cpe)));
+    this.lpg = new LpgClient(context('lpg', this.endpoint(LPG_ENDPOINTS, config.endpoints?.lpg)));
   }
 
   /**
@@ -111,10 +56,5 @@ export class ArcaAgro {
         ? { ok: true, status: r.value }
         : { ok: false, error: r.reason instanceof Error ? r.reason : new Error(String(r.reason)) };
     return { cpe: toStatus(cpe), lpg: toStatus(lpg) };
-  }
-
-  /** Invalida los tickets de acceso (memoria y `ticketStorage`) de WSCPE y WSLPG. */
-  async clearAuthCache(): Promise<void> {
-    await Promise.all([this.#wsaa.clearTicket(WSAA_SERVICES.cpe), this.#wsaa.clearTicket(WSAA_SERVICES.lpg)]);
   }
 }

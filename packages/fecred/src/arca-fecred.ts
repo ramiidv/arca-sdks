@@ -1,4 +1,4 @@
-import { WsaaClient } from '@ramiidv/arca-common';
+import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
 import { ENDPOINTS } from './constants.js';
 import { FecredClient } from './fecred-client.js';
@@ -57,50 +57,17 @@ import type {
  * });
  * ```
  */
-export class ArcaFecred {
-  /** Cliente WSAA (se puede compartir con otros SDKs). */
-  public readonly wsaa: WsaaClient;
+export class ArcaFecred extends ArcaSdkBase<'wsfecred'> {
   /** Cliente de bajo nivel de FECredService. */
   public readonly fecred: FecredClient;
 
-  /** CUIT representada (11 dígitos). */
-  private readonly cuit: string;
-
   constructor(config: ArcaFecredConfig) {
-    const production = config.production ?? false;
-    this.cuit = cuitParam(config.cuit, 'cuit');
-
-    this.wsaa =
-      config.wsaa ??
-      new WsaaClient({
-        cert: config.cert,
-        key: config.key,
-        production,
-        endpoint: config.endpoints?.wsaa,
-        tokenTTLMinutes: config.tokenTTLMinutes,
-        timeout: config.timeout,
-        retries: config.retries,
-        retryDelayMs: config.retryDelayMs,
-        onEvent: config.onEvent,
-        ticketStorage: config.ticketStorage,
-        clockOffsetMs: config.clockOffsetMs,
-        autoClockSkew: config.autoClockSkew,
-        loginErrorCooldownMs: config.loginErrorCooldownMs,
-        fetch: config.fetch,
-        legacyTls: config.legacyTls,
-      });
-
+    // `cuitParam` mantiene el error de validación con `field: 'cuit'`.
+    super({ ...config, cuit: cuitParam(config.cuit, 'cuit') }, { wsfecred: ENDPOINTS.wsfecred.serviceId });
     this.fecred = new FecredClient({
-      endpoint: config.endpoints?.wsfecred ?? (production ? ENDPOINTS.wsfecred.production : ENDPOINTS.wsfecred.testing),
+      endpoint: this.endpoint(ENDPOINTS.wsfecred, config.endpoints?.wsfecred),
       namespace: ENDPOINTS.wsfecred.namespace,
-      soapOptions: {
-        timeout: config.timeout,
-        retries: config.retries,
-        retryDelayMs: config.retryDelayMs,
-        fetch: config.fetch,
-        legacyTls: config.legacyTls,
-      },
-      onEvent: config.onEvent,
+      transport: this.transport,
     });
   }
 
@@ -110,7 +77,7 @@ export class ArcaFecred {
 
   /** Estado de los servidores de WSFECRED (`dummy`, sin autenticación). */
   status(opts?: CallOptions): Promise<ServerStatus> {
-    return this.fecred.dummy(opts);
+    return this.fecred.dummy(this.callOptions(opts));
   }
 
   // =========================================================================
@@ -122,12 +89,12 @@ export class ArcaFecred {
     params: ConsultarMontoObligadoRecepcionParams,
     opts?: CallOptions,
   ): Promise<MontoObligadoRecepcionResult> {
-    return this.fecred.consultarMontoObligadoRecepcion(this.auth(opts), params, opts);
+    return this.fecred.consultarMontoObligadoRecepcion(this.auth(opts), params, this.callOptions(opts));
   }
 
   /** Si una CUIT está obligada a recibir FCE y desde qué fecha. */
   consultarObligadoRecepcion(cuitConsultada: number | string, opts?: CallOptions): Promise<ObligadoRecepcionResult> {
-    return this.fecred.consultarObligadoRecepcion(this.auth(opts), cuitConsultada, opts);
+    return this.fecred.consultarObligadoRecepcion(this.auth(opts), cuitConsultada, this.callOptions(opts));
   }
 
   // =========================================================================
@@ -136,17 +103,17 @@ export class ArcaFecred {
 
   /** Cuentas corrientes de FCE (paginado: ver `hayMas` / `nroPagina`). */
   consultarCtasCtes(params: ConsultarCtasCtesParams, opts?: CallOptions): Promise<ConsultarCtasCtesResult> {
-    return this.fecred.consultarCtasCtes(this.auth(opts), params, opts);
+    return this.fecred.consultarCtasCtes(this.auth(opts), params, this.callOptions(opts));
   }
 
   /** Detalle de una cuenta corriente. */
   consultarCtaCte(idCtaCte: IdCtaCteInput, opts?: CallOptions): Promise<ConsultarCtaCteResult> {
-    return this.fecred.consultarCtaCte(this.auth(opts), idCtaCte, opts);
+    return this.fecred.consultarCtaCte(this.auth(opts), idCtaCte, this.callOptions(opts));
   }
 
   /** Comprobantes FCE (paginado: ver `hayMas` / `nroPagina`). */
   consultarComprobantes(params: ConsultarComprobantesParams, opts?: CallOptions): Promise<ConsultarComprobantesResult> {
-    return this.fecred.consultarComprobantes(this.auth(opts), params, opts);
+    return this.fecred.consultarComprobantes(this.auth(opts), params, this.callOptions(opts));
   }
 
   /** Historial de estados de un comprobante. */
@@ -154,17 +121,17 @@ export class ArcaFecred {
     idComprobante: IdComprobanteInput,
     opts?: CallOptions,
   ): Promise<HistorialEstadosComprobanteResult> {
-    return this.fecred.consultarHistorialEstadosComprobante(this.auth(opts), idComprobante, opts);
+    return this.fecred.consultarHistorialEstadosComprobante(this.auth(opts), idComprobante, this.callOptions(opts));
   }
 
   /** Historial de estados de una cuenta corriente. */
   consultarHistorialEstadosCtaCte(idCtaCte: IdCtaCteInput, opts?: CallOptions): Promise<HistorialEstadosCtaCteResult> {
-    return this.fecred.consultarHistorialEstadosCtaCte(this.auth(opts), idCtaCte, opts);
+    return this.fecred.consultarHistorialEstadosCtaCte(this.auth(opts), idCtaCte, this.callOptions(opts));
   }
 
   /** Remitos asociados a un comprobante. */
   obtenerRemitos(idComprobante: IdComprobanteInput, opts?: CallOptions): Promise<IdComprobante[]> {
-    return this.fecred.obtenerRemitos(this.auth(opts), idComprobante, opts);
+    return this.fecred.obtenerRemitos(this.auth(opts), idComprobante, this.callOptions(opts));
   }
 
   // =========================================================================
@@ -177,12 +144,12 @@ export class ArcaFecred {
    * `uncertain`), consultá el estado con `consultarCtaCte` antes de reintentar.
    */
   aceptarFECred(params: AceptarFecredParams, opts?: CallOptions): Promise<OperacionFecredResult> {
-    return this.fecred.aceptarFECred(this.auth(opts), params, opts);
+    return this.fecred.aceptarFECred(this.auth(opts), params, this.callOptions(opts));
   }
 
   /** Rechaza una FCE (motivos de `consultarTiposMotivosRechazo`). */
   rechazarFECred(params: RechazarFecredParams, opts?: CallOptions): Promise<OperacionFecredResult> {
-    return this.fecred.rechazarFECred(this.auth(opts), params, opts);
+    return this.fecred.rechazarFECred(this.auth(opts), params, this.callOptions(opts));
   }
 
   /** Informa la cancelación total de una FCE aceptada. */
@@ -190,12 +157,12 @@ export class ArcaFecred {
     params: InformarCancelacionTotalParams,
     opts?: CallOptions,
   ): Promise<OperacionFecredResult> {
-    return this.fecred.informarCancelacionTotalFECred(this.auth(opts), params, opts);
+    return this.fecred.informarCancelacionTotalFECred(this.auth(opts), params, this.callOptions(opts));
   }
 
   /** Rechaza una nota de débito/crédito asociada a una FCE. */
   rechazarNotaDC(params: RechazarNotaDCParams, opts?: CallOptions): Promise<RechazarNotaDCResult> {
-    return this.fecred.rechazarNotaDC(this.auth(opts), params, opts);
+    return this.fecred.rechazarNotaDC(this.auth(opts), params, this.callOptions(opts));
   }
 
   /** Cambia la opción de transferencia (SCA/ADC) de una cuenta corriente. */
@@ -203,7 +170,7 @@ export class ArcaFecred {
     params: ModificarOpcionTransferenciaParams,
     opts?: CallOptions,
   ): Promise<OperacionFecredResult> {
-    return this.fecred.modificarOpcionTransferencia(this.auth(opts), params, opts);
+    return this.fecred.modificarOpcionTransferencia(this.auth(opts), params, this.callOptions(opts));
   }
 
   /** Informa una factura a un Agente de Depósito Colectivo. */
@@ -211,7 +178,7 @@ export class ArcaFecred {
     params: InformarFacturaAgtDptoCltvParams,
     opts?: CallOptions,
   ): Promise<OperacionFecredResult> {
-    return this.fecred.informarFacturaAgtDptoCltv(this.auth(opts), params, opts);
+    return this.fecred.informarFacturaAgtDptoCltv(this.auth(opts), params, this.callOptions(opts));
   }
 
   // =========================================================================
@@ -220,7 +187,7 @@ export class ArcaFecred {
 
   /** Cuentas de la CUIT representada en Agentes de Depósito Colectivo. */
   consultarCuentasEnAgtDptoCltv(opts?: CallOptions): Promise<ConsultarCuentasEnAgtDptoCltvResult> {
-    return this.fecred.consultarCuentasEnAgtDptoCltv(this.auth(opts), opts);
+    return this.fecred.consultarCuentasEnAgtDptoCltv(this.auth(opts), this.callOptions(opts));
   }
 
   /** Facturas informadas a Agentes de Depósito Colectivo. */
@@ -228,7 +195,7 @@ export class ArcaFecred {
     params?: ConsultarFacturasAgtDptoCltvParams,
     opts?: CallOptions,
   ): Promise<ConsultarFacturasAgtDptoCltvResult> {
-    return this.fecred.consultarFacturasAgtDptoCltv(this.auth(opts), params, opts);
+    return this.fecred.consultarFacturasAgtDptoCltv(this.auth(opts), params, this.callOptions(opts));
   }
 
   // =========================================================================
@@ -237,37 +204,28 @@ export class ArcaFecred {
 
   /** Tipos de retenciones (jurisdicción y porcentaje). */
   consultarTiposRetenciones(opts?: CallOptions): Promise<TipoRetencion[]> {
-    return this.fecred.consultarTiposRetenciones(this.auth(opts), opts);
+    return this.fecred.consultarTiposRetenciones(this.auth(opts), this.callOptions(opts));
   }
 
   /** Formas de cancelación (para `aceptarFECred` / `informarCancelacionTotalFECred`). */
   consultarTiposFormasCancelacion(opts?: CallOptions): Promise<CodigoDescripcion[]> {
-    return this.fecred.consultarTiposFormasCancelacion(this.auth(opts), opts);
+    return this.fecred.consultarTiposFormasCancelacion(this.auth(opts), this.callOptions(opts));
   }
 
   /** Motivos de rechazo (para `rechazarFECred` / `rechazarNotaDC`). */
   consultarTiposMotivosRechazo(opts?: CallOptions): Promise<CodigoDescripcion[]> {
-    return this.fecred.consultarTiposMotivosRechazo(this.auth(opts), opts);
+    return this.fecred.consultarTiposMotivosRechazo(this.auth(opts), this.callOptions(opts));
   }
 
   /** Tipos de ajustes de operación (para `aceptarFECred`). */
   consultarTiposAjustesOperacion(opts?: CallOptions): Promise<CodigoDescripcion[]> {
-    return this.fecred.consultarTiposAjustesOperacion(this.auth(opts), opts);
-  }
-
-  // =========================================================================
-  // Tickets
-  // =========================================================================
-
-  /** Descarta el Ticket de Acceso de WSFECRED (memoria y `ticketStorage`). */
-  clearAuthCache(): Promise<void> {
-    return this.wsaa.clearTicket(ENDPOINTS.wsfecred.serviceId);
+    return this.fecred.consultarTiposAjustesOperacion(this.auth(opts), this.callOptions(opts));
   }
 
   /** Credenciales diferidas: el cliente las pide después de validar los parámetros. */
   private auth(opts?: CallOptions): () => Promise<WsAuth> {
     return async () => {
-      const ticket = await this.wsaa.getAccessTicket(ENDPOINTS.wsfecred.serviceId, opts);
+      const ticket = await this.ticket('wsfecred', opts);
       return { token: ticket.token, sign: ticket.sign, cuitRepresentada: this.cuit };
     };
   }

@@ -1,16 +1,16 @@
 // Re-export from common
 export type { AccessTicket, ArcaEvent, TicketStorage, CallOptions, LegacyTlsMode } from '@ramiidv/arca-common';
-import type { ArcaBaseConfig, WsaaClient } from '@ramiidv/arca-common';
+import type { ArcaSdkConfig } from '@ramiidv/arca-common';
 
 // ============================================================
 // Configuración
 // ============================================================
 
 /**
- * Configuración de `Arca`. Extiende `ArcaBaseConfig` de `@ramiidv/arca-common`
+ * Configuración de `Arca`. Extiende `ArcaSdkConfig` de `@ramiidv/arca-common`
  * (cert, key, cuit, production, timeout, retries, retryDelayMs,
  * tokenTTLMinutes, onEvent, ticketStorage, clockOffsetMs, autoClockSkew,
- * loginErrorCooldownMs, fetch, legacyTls).
+ * loginErrorCooldownMs, fetch, legacyTls, wsaa, signal).
  *
  * - `retries`: reintentos en consultas ante errores transitorios (default: 1).
  *   Las emisiones (FECAESolicitar, FECAEARegInformativo,
@@ -20,7 +20,7 @@ import type { ArcaBaseConfig, WsaaClient } from '@ramiidv/arca-common';
  *   negocia DH de 1024 bits, que Node >= 17 rechaza; con `auto` (default) el
  *   SDK reintenta ese handshake con el transporte TLS legacy de arca-common.
  */
-export interface ArcaConfig extends ArcaBaseConfig {
+export interface ArcaConfig extends ArcaSdkConfig {
   /**
    * CUIT del contribuyente (con o sin guiones). Se valida el dígito
    * verificador y se envía como número.
@@ -34,15 +34,6 @@ export interface ArcaConfig extends ArcaBaseConfig {
    * cotizaciones no se cachean.
    */
   paramCacheTTLMs?: number;
-  /** Signal global: cancela todas las llamadas de esta instancia (ej: al apagar la app). */
-  signal?: AbortSignal;
-  /**
-   * WsaaClient a usar en lugar de crear uno. Permite compartir los tickets con
-   * otras instancias (ej: `ArcaPadron`) que usan el mismo certificado.
-   * Si se provee, se ignoran `cert`, `key`, `tokenTTLMinutes`, `ticketStorage`,
-   * `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs` y `endpoints.wsaa`.
-   */
-  wsaa?: WsaaClient;
   /** URLs propias de los servicios (ej: un proxy). Si no se indican, se usan las de ARCA según `production`. */
   endpoints?: {
     wsaa?: string;

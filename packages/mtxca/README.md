@@ -74,15 +74,17 @@ if (res.resultado === 'R') {
 
 ## Configuración
 
-`ArcaMtxcaConfig` extiende `ArcaBaseConfig` de `@ramiidv/arca-common`:
+`ArcaMtxcaConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`:
 
 | Opción                                                                      | Descripción                                                                              |
 | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `cert`, `key`                                                               | Certificado y clave privada PEM.                                                         |
 | `cuit`                                                                      | CUIT representada (número o string, con o sin guiones). Se valida el dígito verificador. |
 | `production`                                                                | `false` (default) = homologación.                                                        |
-| `endpoint`                                                                  | URL de WSMTXCA. Si se indica, ignora `production`.                                       |
-| `wsaaEndpoint`                                                              | URL de WSAA. Si se indica, ignora `production` para el login.                            |
+| `endpoints`                                                                 | `{ mtxca?, wsaa? }`: URLs propias (proxy, mock). Ignoran `production`.                   |
+| `endpoint`, `wsaaEndpoint`                                                  | Deprecated: usar `endpoints.mtxca` / `endpoints.wsaa`.                                   |
+| `wsaa`                                                                      | `WsaaClient` compartido con otros SDKs del mismo certificado.                            |
+| `signal`                                                                    | `AbortSignal` global: cancela todas las llamadas de la instancia.                        |
 | `timeout`, `retries`, `retryDelayMs`                                        | Transporte. `retries` solo aplica a consultas.                                           |
 | `ticketStorage`                                                             | Storage persistente de tickets WSAA (recomendado en producción).                         |
 | `tokenTTLMinutes`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs` | Opciones de WSAA.                                                                        |

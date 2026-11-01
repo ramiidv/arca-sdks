@@ -1,5 +1,12 @@
-import { afipSoapCall } from '@ramiidv/arca-common';
-import type { ArcaEvent, CallOptions, LegacyTlsMode, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
+import { SoapServiceClient, parseServerStatus } from '@ramiidv/arca-common';
+import type {
+  ArcaEvent,
+  CallOptions,
+  LegacyTlsMode,
+  ServerStatus,
+  SoapOperationKind,
+  SoapServiceClientConfig,
+} from '@ramiidv/arca-common';
 import {
   checkFecredErrors,
   invalidResponse,
@@ -83,12 +90,11 @@ import type {
 // Client config
 // ---------------------------------------------------------------------------
 
-export interface FecredClientConfig {
-  /** URL de FECredService. */
-  endpoint: string;
-  /** Namespace del servicio (`http://ar.gob.afip.wsfecred/FECredService/`). */
-  namespace: string;
-  /** Opciones de transporte SOAP. */
+export interface FecredClientConfig extends SoapServiceClientConfig {
+  /**
+   * Opciones de transporte SOAP.
+   * @deprecated Usá `transport` (se ignora si se pasa `transport`).
+   */
   soapOptions?: {
     timeout?: number;
     retries?: number;
@@ -96,7 +102,10 @@ export interface FecredClientConfig {
     fetch?: typeof fetch;
     legacyTls?: LegacyTlsMode;
   };
-  /** Callback de eventos. */
+  /**
+   * Callback de eventos.
+   * @deprecated Usá `transport.onEvent` (se ignora si se pasa `transport`).
+   */
   onEvent?: (event: ArcaEvent) => void;
 }
 
@@ -127,17 +136,13 @@ function put(target: Xml, key: string, value: unknown): void {
  * modificar) se envían como `kind: 'emision'`: nunca se reintentan y, si la
  * respuesta se pierde, el `ArcaSoapError` tiene `uncertain = true`.
  */
-export class FecredClient {
-  protected readonly endpoint: string;
-  protected readonly namespace: string;
-  protected readonly soapOptions: NonNullable<FecredClientConfig['soapOptions']>;
-  protected readonly onEvent?: (event: ArcaEvent) => void;
-
+export class FecredClient extends SoapServiceClient {
   constructor(config: FecredClientConfig) {
-    this.endpoint = config.endpoint;
-    this.namespace = config.namespace;
-    this.soapOptions = config.soapOptions ?? {};
-    this.onEvent = config.onEvent;
+    super({
+      endpoint: config.endpoint,
+      namespace: config.namespace,
+      transport: config.transport ?? { ...config.soapOptions, onEvent: config.onEvent },
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -163,9 +168,7 @@ export class FecredClient {
           ...fields,
         }
       : {};
-    const result = await afipSoapCall(this.endpoint, this.namespace, method, params, {
-      ...this.soapOptions,
-      onEvent: this.onEvent,
+    const result = await this.soapCall(method, params, {
       signal: opts?.signal,
       kind,
       requestElement: auth ? `${method}Request` : null,
@@ -204,12 +207,7 @@ export class FecredClient {
 
   /** `dummy`: estado de los servidores (sin autenticación). */
   async dummy(opts?: CallOptions): Promise<ServerStatus> {
-    const r = await this.call('dummy', null, {}, 'consulta', opts);
-    return {
-      appserver: parseStr(r, 'appserver', 'dummy'),
-      dbserver: parseStr(r, 'dbserver', 'dummy'),
-      authserver: parseStr(r, 'authserver', 'dummy'),
-    };
+    return parseServerStatus(await this.call('dummy', null, {}, 'consulta', opts));
   }
 
   // -------------------------------------------------------------------------

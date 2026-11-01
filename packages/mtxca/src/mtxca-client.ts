@@ -1,4 +1,4 @@
-import { afipSoapCall, checkServiceErrors } from '@ramiidv/arca-common';
+import { checkServiceErrors, parseServerStatus, SoapServiceClient } from '@ramiidv/arca-common';
 import type { ArcaEvent, CallOptions, LegacyTlsMode, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
 import { MTXCA_NAMESPACE } from './constants.js';
 import { buildComprobante, XsdFields } from './serialize.js';
@@ -64,16 +64,15 @@ function validCaea(caea: string | number): string {
  *   `kind: 'emision'`: no se reintentan y, si no hay respuesta, el
  *   `ArcaSoapError` tiene `uncertain: true`.
  */
-export class MtxcaClient {
-  private readonly config: MtxcaClientConfig;
-
+export class MtxcaClient extends SoapServiceClient {
   constructor(config: MtxcaClientConfig) {
     if (!config?.endpoint) throw new TypeError('MtxcaClient: endpoint es obligatorio');
-    this.config = config;
-  }
-
-  get endpoint(): string {
-    return this.config.endpoint;
+    const { endpoint, timeout, retries, retryDelayMs, onEvent, fetch, legacyTls } = config;
+    super({
+      endpoint,
+      namespace: MTXCA_NAMESPACE,
+      transport: { timeout, retries, retryDelayMs, onEvent, fetch, legacyTls },
+    });
   }
 
   private call(
@@ -83,14 +82,7 @@ export class MtxcaClient {
     opts?: CallOptions,
     requestElement: string | null = `${method}Request`,
   ): Promise<R> {
-    const { endpoint, timeout, retries, retryDelayMs, onEvent, fetch, legacyTls } = this.config;
-    return afipSoapCall(endpoint, MTXCA_NAMESPACE, method, params, {
-      timeout,
-      retries,
-      retryDelayMs,
-      onEvent,
-      fetch,
-      legacyTls,
+    return this.soapCall(method, params, {
       kind,
       signal: opts?.signal,
       requestElement,
@@ -127,13 +119,7 @@ export class MtxcaClient {
 
   /** `dummy`: estado de los servidores. No requiere autenticación. */
   async dummy(opts?: CallOptions): Promise<ServerStatus> {
-    const result = await this.call('dummy', {}, 'consulta', opts, null);
-    const r = new ResponseReader('dummy', 'consulta');
-    return {
-      appserver: r.str(result, 'appserver'),
-      authserver: r.str(result, 'authserver'),
-      dbserver: r.str(result, 'dbserver'),
-    };
+    return parseServerStatus(await this.call('dummy', {}, 'consulta', opts, null));
   }
 
   // =========================================================================

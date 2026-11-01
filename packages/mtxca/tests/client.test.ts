@@ -86,7 +86,7 @@ describe('dummy', () => {
     );
     const status = await client(m.fetch).dummy();
     expect(status).toEqual({ appserver: 'OK', authserver: 'OK', dbserver: 'OK' });
-    expect(m.calls[0].soapAction).toBe(`"${NS}dummy"`);
+    expect(m.calls[0].headers.soapaction).toBe(`"${NS}dummy"`);
     expect(m.calls[0].body).toContain('<soapenv:Body></soapenv:Body>');
   });
 
@@ -120,7 +120,7 @@ describe('autorizarComprobante', () => {
     expect(res.resultado).toBe('A');
 
     const call = m.calls[0];
-    expect(call.soapAction).toBe(`"${NS}autorizarComprobante"`);
+    expect(call.headers.soapaction).toBe(`"${NS}autorizarComprobante"`);
     const req = requestBody(call);
     expect(req.name).toBe('ser:autorizarComprobanteRequest');
     expect(req.ns).toBe(NS);
@@ -337,7 +337,7 @@ describe('consultarUltimoComprobanteAutorizado', () => {
     expect(await client(m.fetch).consultarUltimoComprobanteAutorizado(AUTH, 4000, 1)).toBe(41);
     const req = requestBody(m.calls[0]);
     expect(req.name).toBe('ser:consultarUltimoComprobanteAutorizadoRequest');
-    expect(m.calls[0].soapAction).toBe(`"${NS}consultarUltimoComprobanteAutorizado"`);
+    expect(m.calls[0].headers.soapaction).toBe(`"${NS}consultarUltimoComprobanteAutorizado"`);
     expect(childOrder(req.raw, 'consultaUltimoComprobanteAutorizadoRequest')).toEqual([
       'codigoTipoComprobante',
       'numeroPuntoVenta',
@@ -570,7 +570,7 @@ describe('CAEA', () => {
     });
     const req = requestBody(m.calls[0]);
     expect(req.name).toBe('ser:solicitarCAEARequest');
-    expect(m.calls[0].soapAction).toBe(`"${NS}solicitarCAEA"`);
+    expect(m.calls[0].headers.soapaction).toBe(`"${NS}solicitarCAEA"`);
     expect(childOrder(req.raw, 'solicitudCAEA')).toEqual(['periodo', 'orden']);
   });
 

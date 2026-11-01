@@ -1,6 +1,6 @@
 ---
-'@ramiidv/arca-common': minor
----
+
+## '@ramiidv/arca-common': minor
 
 Nueva base para los SDKs: `ArcaSdkBase` (CUIT, `WsaaClient` propio o
 compartido, transporte, eventos `on`/`off`, `signal` global, endpoints por

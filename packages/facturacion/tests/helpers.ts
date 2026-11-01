@@ -1,8 +1,17 @@
 import { afterEach, vi } from 'vitest';
-import { MemoryTicketStorage, parseXml } from '@ramiidv/arca-common';
+import { parseXml } from '@ramiidv/arca-common';
+import {
+  fakeTicketStorage,
+  mockFetchByMethod,
+  soapResponse as soapResponseXml,
+  xmlResponse,
+} from '@ramiidv/arca-common/testing';
+import type { MockReply } from '@ramiidv/arca-common/testing';
 import { Arca } from '../src/arca.js';
 import { ENDPOINTS, WSFE_NAMESPACE, WSFEX_NAMESPACE } from '../src/constants.js';
 import type { ArcaConfig } from '../src/types.js';
+
+export { networkError } from '@ramiidv/arca-common/testing';
 
 export const CUIT_EMISOR = 20123456786;
 
@@ -25,6 +34,9 @@ function servicioDe(method: string): { endpoint: string; ns: string } | undefine
   return undefined;
 }
 
+/** Métodos de Padrón: se registran en el mock con la clave "" (no tienen SOAPAction). */
+const METODOS_PADRON = ['getPersona', 'getPersona_v2'];
+
 /** Violaciones del contrato (endpoint, namespace, wrapper, SOAPAction) detectadas por el mock. */
 const violaciones: string[] = [];
 
@@ -45,44 +57,46 @@ function bodyElement(body: string): { name: string; el: Record<string, any> } | 
 }
 
 /**
- * Mock de fetch. Despacha por método (último segmento del SOAPAction; "" para
- * Padrón) y verifica que cada request de WSFEv1/WSFEX vaya al endpoint de
- * homologación del servicio, con SOAPAction `"namespace + método"` y el
+ * Mock de fetch (sobre `mockFetchByMethod` de arca-common). Despacha por método
+ * ("" para Padrón) y verifica que cada request de WSFEv1/WSFEX vaya al endpoint
+ * de homologación del servicio, con SOAPAction `"namespace + método"` y el
  * elemento del método con el namespace por defecto del servicio.
  * Cada método tiene una cola de respuestas; la última se repite.
  *
  * Con `{ global: false }` no reemplaza `globalThis.fetch` (para pasarlo en la config).
  */
 export function mockArcaFetch(handlers: Record<string, Handler | Handler[]>, opts: { global?: boolean } = {}) {
-  const queues = new Map(Object.entries(handlers).map(([k, v]) => [k, Array.isArray(v) ? [...v] : [v]]));
+  const replies: Record<string, MockReply[]> = {};
+  for (const [method, value] of Object.entries(handlers)) {
+    const queue = (Array.isArray(value) ? value : [value]).map(
+      (h): MockReply => (typeof h === 'function' ? (req) => h(req.body) : h),
+    );
+    for (const m of method === '' ? METODOS_PADRON : [method]) replies[m] = [...queue];
+  }
+  const inner = mockFetchByMethod(replies);
   const calls: LlamadaMock[] = [];
 
-  const fn = vi.fn(async (url: string, init: RequestInit) => {
-    const soapAction = String((init.headers as Record<string, string>)['SOAPAction'] ?? '').replace(/^"|"$/g, '');
-    const method = soapAction.split('/').pop() ?? '';
-    const body = String(init.body);
-    const el = bodyElement(body);
+  const fn = vi.fn((url: string, init: RequestInit) => {
+    const response = inner(url, init);
+    // mockFetchByMethod graba el request antes de su primer await.
+    const req = inner.calls[inner.calls.length - 1];
+    const method = req.soapAction.split('/').pop() ?? '';
+    const el = bodyElement(req.body);
     const params: Record<string, any> = {};
     for (const [k, v] of Object.entries(el?.el ?? {})) if (!k.startsWith('@_')) params[k] = v;
-    calls.push({ method, url, soapAction, body, params });
+    calls.push({ method, url, soapAction: req.soapAction, body: req.body, params });
 
     const svc = servicioDe(method);
     if (svc) {
       if (url !== svc.endpoint) violaciones.push(`${method}: endpoint ${url} (esperado ${svc.endpoint})`);
-      if (soapAction !== `${svc.ns}${method}`) violaciones.push(`${method}: SOAPAction "${soapAction}"`);
+      if (req.soapAction !== `${svc.ns}${method}`) violaciones.push(`${method}: SOAPAction "${req.soapAction}"`);
       if (el?.name !== method) violaciones.push(`${method}: wrapper <${el?.name}>`);
       if (el?.el?.['@_xmlns'] !== svc.ns)
         violaciones.push(`${method}: xmlns ${el?.el?.['@_xmlns']} (esperado ${svc.ns})`);
     } else if (method === '' && !/sr-padron/.test(url)) {
       violaciones.push(`request sin SOAPAction a ${url}`);
     }
-
-    const queue = queues.get(method);
-    if (!queue || queue.length === 0) throw new Error(`fetch inesperado: ${method}`);
-    const next = queue.length > 1 ? queue.shift()! : queue[0];
-    if (next instanceof Error) throw next;
-    if (typeof next === 'function') return next(body);
-    return next.clone();
+    return response;
   });
   if (opts.global !== false) vi.stubGlobal('fetch', fn);
   return {
@@ -94,15 +108,9 @@ export function mockArcaFetch(handlers: Record<string, Handler | Handler[]>, opt
   };
 }
 
+/** Respuesta ASMX: `<{method}Response xmlns="{ns}"><{method}Result>{inner}</...></...>`. */
 function soapResponse(method: string, ns: string, inner: string, status = 200): Response {
-  const xml =
-    '<?xml version="1.0" encoding="utf-8"?>' +
-    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" ' +
-    'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">' +
-    `<soap:Body><${method}Response xmlns="${ns}">` +
-    `<${method}Result>${inner}</${method}Result>` +
-    `</${method}Response></soap:Body></soap:Envelope>`;
-  return new Response(xml, { status, headers: { 'content-type': 'text/xml' } });
+  return xmlResponse(soapResponseXml(`${method}Response`, `<${method}Result>${inner}</${method}Result>`, ns), status);
 }
 
 export function wsfeResponse(method: string, inner: string, status = 200): Response {
@@ -178,27 +186,17 @@ export function comprobanteConsultado(o: {
   );
 }
 
-/** Arca con un ticket ya guardado en el storage (los tests no pasan por WSAA). */
+/** Arca con un ticket vigente en el storage (los tests no pasan por WSAA). */
 export async function arcaDePrueba(extra: Partial<ArcaConfig> = {}): Promise<Arca> {
-  const storage = new MemoryTicketStorage();
-  const arca = new Arca({
+  return new Arca({
     cuit: CUIT_EMISOR,
     cert: '-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----',
     key: 'KEY',
-    ticketStorage: storage,
+    ticketStorage: fakeTicketStorage(),
     retries: 3,
     retryDelayMs: 1,
     ...extra,
   });
-  const expirationTime = new Date(Date.now() + 12 * 3_600_000).toISOString();
-  for (const service of ['wsfe', 'wsfex', 'ws_sr_padron_a13', 'ws_sr_constancia_inscripcion']) {
-    await storage.set(arca.wsaa.ticketKey(service), { token: 'TOKEN', sign: 'SIGN', expirationTime });
-  }
-  return arca;
-}
-
-export function networkError(code: string): TypeError {
-  return new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) });
 }
 
 /** Timeout simulado: la respuesta nunca llega antes del `timeout` del SDK. */

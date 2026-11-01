@@ -28,18 +28,18 @@ describe('ArcaFecred', () => {
       ...base,
       cuit: '20-12345678-6',
       wsaa,
-      fetch: fetch as unknown as typeof globalThis.fetch,
+      fetch: fetch,
     });
     const r = await fecred.consultarObligadoRecepcion(30712345671);
     expect(r.obligado).toBe(true);
-    expect(wsaa.getAccessTicket).toHaveBeenCalledWith('wsfecred', undefined);
+    expect(wsaa.getAccessTicket).toHaveBeenCalledWith('wsfecred', {});
     const { body } = sentRequest(fetch);
     expect(body['ser:consultarObligadoRecepcionRequest'].authRequest).toEqual({
       token: 'T',
       sign: 'S',
       cuitRepresentada: '20123456786',
     });
-    expect(fetch.mock.calls[0][0]).toBe(ENDPOINTS.wsfecred.testing);
+    expect(fetch.calls[0].url).toBe(ENDPOINTS.wsfecred.testing);
   });
 
   it('valida los parámetros antes de pedir el ticket a WSAA', async () => {
@@ -49,13 +49,13 @@ describe('ArcaFecred', () => {
       ...base,
       cuit: 20123456786,
       wsaa,
-      fetch: fetch as unknown as typeof globalThis.fetch,
+      fetch: fetch,
     });
     await expect(fecred.consultarCtasCtes({ rol: 'Emisor', cuitContraparte: '123' })).rejects.toThrow(
       ArcaValidationError,
     );
     expect(wsaa.getAccessTicket).not.toHaveBeenCalled();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetch.calls).toHaveLength(0);
   });
 
   it('producción y endpoints sobrescritos', async () => {
@@ -67,7 +67,7 @@ describe('ArcaFecred', () => {
         ),
       );
     const fetch = mockFetch(dummy(), dummy());
-    const f = fetch as unknown as typeof globalThis.fetch;
+    const f = fetch;
     await new ArcaFecred({ ...base, cuit: 20123456786, production: true, fetch: f }).status();
     await new ArcaFecred({
       ...base,
@@ -75,8 +75,8 @@ describe('ArcaFecred', () => {
       fetch: f,
       endpoints: { wsfecred: 'https://proxy.local/fecred' },
     }).status();
-    expect(fetch.mock.calls[0][0]).toBe(ENDPOINTS.wsfecred.production);
-    expect(fetch.mock.calls[1][0]).toBe('https://proxy.local/fecred');
+    expect(fetch.calls[0].url).toBe(ENDPOINTS.wsfecred.production);
+    expect(fetch.calls[1].url).toBe('https://proxy.local/fecred');
   });
 
   it('pasa el signal de CallOptions', async () => {
@@ -90,9 +90,37 @@ describe('ArcaFecred', () => {
     );
     const ctrl = new AbortController();
     ctrl.abort();
-    const fecred = new ArcaFecred({ ...base, cuit: 20123456786, fetch: fetch as unknown as typeof globalThis.fetch });
+    const fecred = new ArcaFecred({ ...base, cuit: 20123456786, fetch: fetch });
     await expect(fecred.status({ signal: ctrl.signal })).rejects.toThrow();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  it('config.signal cancela todas las llamadas', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const fetch = mockFetch();
+    const fecred = new ArcaFecred({ ...base, cuit: 20123456786, fetch, signal: ctrl.signal });
+    await expect(fecred.status()).rejects.toThrow();
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  it('emite eventos de request a config.onEvent y a on()', async () => {
+    const fetch = mockFetch(
+      xmlResponse(
+        soapResponse(
+          'dummy',
+          '<dummyReturn><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></dummyReturn>',
+        ),
+      ),
+    );
+    const onEvent = vi.fn();
+    const handler = vi.fn();
+    const fecred = new ArcaFecred({ ...base, cuit: 20123456786, fetch, onEvent });
+    fecred.on('request:end', handler);
+    await fecred.status();
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'request:end', method: 'dummy' }));
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(fecred.cuit).toBe('20123456786');
   });
 
   it('clearAuthCache descarta el ticket de wsfecred', async () => {

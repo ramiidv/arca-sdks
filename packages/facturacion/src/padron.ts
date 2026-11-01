@@ -1,7 +1,9 @@
 import { afipSoapCall as unqualifiedSoapCall, ensureArray as toArray } from '@ramiidv/arca-common';
-import type { CallOptions, LegacyTlsMode } from '@ramiidv/arca-common';
+import type { CallOptions, ServiceTransport } from '@ramiidv/arca-common';
 import { ENDPOINTS, PADRON_A5_NAMESPACE, PADRON_A13_NAMESPACE } from './constants.js';
-import type { WsfeAuth, Contribuyente, ArcaEvent } from './types.js';
+import type { WsfeAuth, Contribuyente } from './types.js';
+import { transportDe } from './wsfe.js';
+import type { WsClientOptions } from './wsfe.js';
 
 type R = Record<string, any>;
 
@@ -70,39 +72,19 @@ export function parsePersonaA5(result: R): Contribuyente {
  * va a quitar en una próxima major.
  */
 export class PadronClient {
-  private production: boolean;
-  private endpoints: { padronA5?: string; padronA13?: string };
-  private soapOpts: {
-    timeout?: number;
-    retries?: number;
-    retryDelayMs?: number;
-    onEvent?: (event: ArcaEvent) => void;
-    fetch?: typeof fetch;
-    legacyTls?: LegacyTlsMode;
-  };
+  private readonly endpoints: { padronA5: string; padronA13: string };
+  private readonly transport: ServiceTransport;
 
   constructor(
     production: boolean,
-    opts: {
-      timeoutMs?: number;
-      retries?: number;
-      retryDelayMs?: number;
-      onEvent?: (event: ArcaEvent) => void;
-      fetch?: typeof fetch;
-      legacyTls?: LegacyTlsMode;
-      endpoints?: { padronA5?: string; padronA13?: string };
-    } = {},
+    opts: Omit<WsClientOptions, 'endpoint'> & { endpoints?: { padronA5?: string; padronA13?: string } } = {},
   ) {
-    this.production = production;
-    this.endpoints = opts.endpoints ?? {};
-    this.soapOpts = {
-      timeout: opts.timeoutMs,
-      retries: opts.retries,
-      retryDelayMs: opts.retryDelayMs,
-      onEvent: opts.onEvent,
-      fetch: opts.fetch,
-      legacyTls: opts.legacyTls,
+    const env = production ? 'production' : 'testing';
+    this.endpoints = {
+      padronA5: opts.endpoints?.padronA5 ?? ENDPOINTS.padronA5[env],
+      padronA13: opts.endpoints?.padronA13 ?? ENDPOINTS.padronA13[env],
     };
+    this.transport = transportDe(opts);
   }
 
   /**
@@ -130,7 +112,7 @@ export class PadronClient {
         cuitRepresentada: auth.Cuit,
         idPersona: cuit,
       },
-      { ...this.soapOpts, signal: opts?.signal },
+      { ...this.transport, signal: opts?.signal },
     );
   }
 
@@ -139,9 +121,14 @@ export class PadronClient {
    * Requiere cert con acceso a `ws_sr_padron_a13`.
    */
   async getPersonaA13(auth: WsfeAuth, cuit: number, opts?: CallOptions): Promise<Contribuyente> {
-    const endpoint =
-      this.endpoints.padronA13 ?? (this.production ? ENDPOINTS.padronA13.production : ENDPOINTS.padronA13.testing);
-    const result = await this.getPersona(endpoint, PADRON_A13_NAMESPACE, 'getPersona', auth, cuit, opts);
+    const result = await this.getPersona(
+      this.endpoints.padronA13,
+      PADRON_A13_NAMESPACE,
+      'getPersona',
+      auth,
+      cuit,
+      opts,
+    );
     return parsePersonaA13(result);
   }
 
@@ -151,9 +138,14 @@ export class PadronClient {
    * `ws_sr_constancia_inscripcion`.
    */
   async getPersonaA5(auth: WsfeAuth, cuit: number, opts?: CallOptions): Promise<Contribuyente> {
-    const endpoint =
-      this.endpoints.padronA5 ?? (this.production ? ENDPOINTS.padronA5.production : ENDPOINTS.padronA5.testing);
-    const result = await this.getPersona(endpoint, PADRON_A5_NAMESPACE, 'getPersona_v2', auth, cuit, opts);
+    const result = await this.getPersona(
+      this.endpoints.padronA5,
+      PADRON_A5_NAMESPACE,
+      'getPersona_v2',
+      auth,
+      cuit,
+      opts,
+    );
     return parsePersonaA5(result);
   }
 }

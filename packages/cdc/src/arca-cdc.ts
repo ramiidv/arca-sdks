@@ -1,4 +1,4 @@
-import { validateCuit, WsaaClient } from '@ramiidv/arca-common';
+import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
 import { WSCDC_ENDPOINTS, WSCDC_SERVICE_ID } from './constants.js';
 import { CdcClient } from './cdc-client.js';
@@ -36,44 +36,16 @@ import type {
  * r.Resultado; // 'A' | 'R'
  * ```
  */
-export class ArcaCdc {
-  /** Cliente WSAA (acceso directo). */
-  public readonly wsaa: WsaaClient;
+export class ArcaCdc extends ArcaSdkBase<'wscdc'> {
   /** Cliente WSCDC de bajo nivel (acceso directo). */
   public readonly client: CdcClient;
 
-  private readonly cuit: string;
-
+  /** @throws ArcaValidationError si la CUIT es inválida. */
   constructor(config: ArcaCdcConfig) {
-    this.cuit = validateCuit(config.cuit);
-    const production = config.production ?? false;
-
-    this.wsaa = new WsaaClient({
-      cert: config.cert,
-      key: config.key,
-      production,
-      endpoint: config.endpoints?.wsaa,
-      tokenTTLMinutes: config.tokenTTLMinutes,
-      timeout: config.timeout,
-      retries: config.retries,
-      retryDelayMs: config.retryDelayMs,
-      onEvent: config.onEvent,
-      ticketStorage: config.ticketStorage,
-      clockOffsetMs: config.clockOffsetMs,
-      autoClockSkew: config.autoClockSkew,
-      loginErrorCooldownMs: config.loginErrorCooldownMs,
-      fetch: config.fetch,
-      legacyTls: config.legacyTls,
-    });
-
+    super(config, { wscdc: WSCDC_SERVICE_ID });
     this.client = new CdcClient({
-      endpoint: config.endpoints?.wscdc ?? WSCDC_ENDPOINTS[production ? 'production' : 'testing'],
-      timeout: config.timeout,
-      retries: config.retries,
-      retryDelayMs: config.retryDelayMs,
-      onEvent: config.onEvent,
-      fetch: config.fetch,
-      legacyTls: config.legacyTls,
+      endpoint: this.endpoint(WSCDC_ENDPOINTS, config.endpoints?.wscdc),
+      ...this.transport,
     });
   }
 
@@ -88,41 +60,36 @@ export class ArcaCdc {
    */
   async constatar(input: ConstatarInput, opts?: CallOptions): Promise<ConstatarResult> {
     validateConstatarInput(input);
-    return this.client.constatar(await this.auth(opts), input, opts);
+    return this.client.constatar(await this.auth(opts), input, this.callOptions(opts));
   }
 
   /** Estado del servicio (`ComprobanteDummy`). No requiere autenticación. */
   async status(opts?: CallOptions): Promise<ServerStatus> {
-    return this.client.dummy(opts);
+    return this.client.dummy(this.callOptions(opts));
   }
 
   /** Modalidades de autorización habilitadas (`ComprobantesModalidadConsultar`). */
   async getModalidades(opts?: CallOptions): Promise<ModalidadItem[]> {
-    return this.client.getModalidades(await this.auth(opts), opts);
+    return this.client.getModalidades(await this.auth(opts), this.callOptions(opts));
   }
 
   /** Tipos de comprobante habilitados (`ComprobantesTipoConsultar`). */
   async getTiposCbte(opts?: CallOptions): Promise<TipoCbteItem[]> {
-    return this.client.getTiposCbte(await this.auth(opts), opts);
+    return this.client.getTiposCbte(await this.auth(opts), this.callOptions(opts));
   }
 
   /** Tipos de documento habilitados (`DocumentosTipoConsultar`). */
   async getDocTipos(opts?: CallOptions): Promise<DocTipoItem[]> {
-    return this.client.getDocTipos(await this.auth(opts), opts);
+    return this.client.getDocTipos(await this.auth(opts), this.callOptions(opts));
   }
 
   /** Identificadores válidos para `Opcionales` (`OpcionalesTipoConsultar`). */
   async getTiposOpcionales(opts?: CallOptions): Promise<OpcionalTipoItem[]> {
-    return this.client.getTiposOpcionales(await this.auth(opts), opts);
-  }
-
-  /** Descarta los tickets WSAA cacheados (memoria y `ticketStorage`). */
-  async clearAuthCache(): Promise<void> {
-    await this.wsaa.clearAllTickets();
+    return this.client.getTiposOpcionales(await this.auth(opts), this.callOptions(opts));
   }
 
   private async auth(opts?: CallOptions): Promise<CdcAuth> {
-    const ticket = await this.wsaa.getAccessTicket(WSCDC_SERVICE_ID, opts);
+    const ticket = await this.ticket('wscdc', opts);
     return { Token: ticket.token, Sign: ticket.sign, Cuit: this.cuit };
   }
 }

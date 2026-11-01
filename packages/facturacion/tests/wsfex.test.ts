@@ -422,3 +422,27 @@ describe('WSFEX: consultas', () => {
     expect(orden(mock.last('FEXCheck_Permiso').params)).toEqual(['Auth', 'ID_Permiso', 'Dst_merc']);
   });
 });
+
+describe('serverStatusExpo', () => {
+  it('FEXDummy → AppServer/DbServer/AuthServer', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FEXDummy: wsfexResponse(
+        'FEXDummy',
+        '<AppServer>OK</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer>',
+      ),
+    });
+    expect(await arca.serverStatusExpo()).toEqual({ AppServer: 'OK', DbServer: 'OK', AuthServer: 'OK' });
+  });
+
+  it('usa endpoints.wsfex', async () => {
+    const urls: string[] = [];
+    const fetchPropio = vi.fn(async (url: string) => {
+      urls.push(url);
+      return wsfexResponse('FEXDummy', '<AppServer>OK</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer>');
+    }) as unknown as typeof fetch;
+    const arca = await arcaDePrueba({ fetch: fetchPropio, endpoints: { wsfex: 'https://proxy.local/wsfex' } });
+    await arca.serverStatusExpo();
+    expect(urls).toEqual(['https://proxy.local/wsfex']);
+  });
+});

@@ -54,6 +54,7 @@ export type MockFetch = typeof fetch & {
 };
 
 const xmlParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
+const xmlTextParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true, parseTagValue: false });
 const orderedParser = new XMLParser({ ignoreAttributes: true, preserveOrder: true });
 
 function headersOf(init: RequestInit | undefined): Record<string, string> {
@@ -125,6 +126,20 @@ export function mockFetchByMethod(handlers: Record<string, MockReply | MockReply
     if (!queue || queue.length === 0) throw new Error(`mockFetchByMethod: método inesperado ${request.method}`);
     const next = queue.length > 1 ? (queue.shift() as MockReply) : queue[0];
     return toResponse(next, request);
+  };
+  return Object.assign(fn, { calls }) as MockFetch;
+}
+
+/**
+ * `fetch` simulado que responde llamando a `responder` con cada request (para
+ * respuestas que dependen del request). Graba los requests en `.calls`.
+ */
+export function mockFetchWith(responder: (request: RecordedRequest) => MockReply | Promise<MockReply>): MockFetch {
+  const calls: RecordedRequest[] = [];
+  const fn = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const request = record(input, init);
+    calls.push(request);
+    return toResponse(await responder(request), request);
   };
   return Object.assign(fn, { calls }) as MockFetch;
 }
@@ -250,12 +265,20 @@ export function testCert(): { cert: string; key: string } {
 // Inspección del XML enviado
 // ---------------------------------------------------------------------------
 
+/** Opciones de `requestParams`. */
+export interface RequestParamsOptions {
+  /** `false`: los valores quedan como string tal cual se enviaron (ej: CUIT `"20123456786"`). Default: `true`. */
+  parseNumbers?: boolean;
+}
+
 /**
  * Contenido del elemento del método en el Body de un request, sin prefijos de
- * namespace (`<ser:dummy>` → contenido de `dummy`). `{}` si está vacío.
+ * namespace (`<ser:dummy>` → contenido de `dummy`). Los atributos quedan como
+ * `@_nombre` (ej: `@_xmlns`). `{}` si está vacío.
  */
-export function requestParams(xml: string): Record<string, unknown> {
-  const body = xmlParser.parse(xml)?.Envelope?.Body;
+export function requestParams(xml: string, options: RequestParamsOptions = {}): Record<string, unknown> {
+  const parser = options.parseNumbers === false ? xmlTextParser : xmlParser;
+  const body = parser.parse(xml)?.Envelope?.Body;
   const method = body && typeof body === 'object' ? Object.keys(body).find((k) => !k.startsWith('@_')) : undefined;
   if (!method) throw new Error('requestParams: el request no tiene Body');
   const value = body[method];

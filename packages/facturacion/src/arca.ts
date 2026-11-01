@@ -1,8 +1,7 @@
-import { EventEmitter } from 'node:events';
-import { anySignal, ensureArray, formatDate, safeEmit, validateCuit } from '@ramiidv/arca-common';
+import { ArcaSdkBase, ensureArray, formatDate } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
-import { WsaaClient } from './wsaa.js';
 import { WsfeClient } from './wsfe.js';
+import type { WsClientOptions } from './wsfe.js';
 import { WsfexClient } from './wsfex.js';
 import { PadronClient } from './padron.js';
 import {
@@ -20,7 +19,6 @@ import { ArcaResultadoInciertoExpo, ArcaSoapError } from './errors.js';
 import { fail, validateFacturarOpts, validateFacturarExpoOpts, validateInvoiceRequest } from './validation.js';
 import type {
   ArcaConfig,
-  ArcaEvent,
   WsfeAuth,
   InvoiceRequest,
   InvoiceDetail,
@@ -64,82 +62,60 @@ import type {
 } from './types.js';
 import { generarUrlQR, urlQRDesdeFactura } from './qr.js';
 import type { DatosQR } from './qr.js';
-import { CbteTipo, NOTA_CREDITO_MAP, NOTA_DEBITO_MAP, TipoExpo, WSAA_SERVICES, isTipoC, isTipoE } from './constants.js';
+import {
+  CbteTipo,
+  ENDPOINTS,
+  NOTA_CREDITO_MAP,
+  NOTA_DEBITO_MAP,
+  TipoExpo,
+  WSAA_SERVICES,
+  isTipoC,
+  isTipoE,
+} from './constants.js';
 
 /** TTL por defecto del cache de parámetros (24 horas). */
 const DEFAULT_PARAM_CACHE_TTL_MS = 24 * 60 * 60_000;
 
-export class Arca {
-  /**
-   * Cliente WSAA de esta instancia. Se puede pasar a otras instancias que usan
-   * el mismo certificado (ej: `new ArcaPadron({ ..., wsaa: arca.wsaa })`) para
-   * compartir los tickets.
-   */
-  public readonly wsaa: WsaaClient;
-  private wsfe: WsfeClient;
-  private wsfex: WsfexClient;
-  private padron: PadronClient;
-  private readonly cuit: number;
-  private production: boolean;
-  private signal?: AbortSignal;
-  private emitter = new EventEmitter();
-  private onEventCb?: (event: ArcaEvent) => void;
-  private paramCache = new Map<string, { data: unknown; expires: number }>();
-  private paramCacheTTLMs: number;
+/** Servicios de WSAA que usa `Arca` (nombre corto → id de WSAA). */
+type ArcaService = keyof typeof WSAA_SERVICES;
+
+/**
+ * Cliente principal: WSFEv1 (facturación, CAEA), WSFEX (exportación) y
+ * Padrón (deprecado).
+ *
+ * Hereda de `ArcaSdkBase` de arca-common: `wsaa`, `cuit` (string de 11
+ * dígitos), `production`, `on`/`off` y `clearAuthCache`.
+ */
+export class Arca extends ArcaSdkBase<ArcaService> {
+  private readonly wsfe: WsfeClient;
+  private readonly wsfex: WsfexClient;
+  private readonly padron: PadronClient;
+  /** CUIT como número, como se envía en `Auth.Cuit` y en el QR. */
+  private readonly cuitNum: number;
+  private readonly paramCache = new Map<string, { data: unknown; expires: number }>();
+  private readonly paramCacheTTLMs: number;
 
   /**
    * @throws ArcaValidationError si el CUIT no es válido (dígito verificador).
    */
   constructor(config: ArcaConfig) {
-    this.cuit = Number(validateCuit(config.cuit));
-    this.production = config.production ?? false;
-    this.onEventCb = config.onEvent;
-    this.signal = config.signal;
+    // Los defaults (timeout 30s, 1 reintento, 1s de backoff, TTL 12h) los aplica arca-common.
+    super({ ...config, timeout: config.timeout ?? config.requestTimeoutMs }, WSAA_SERVICES);
+    this.cuitNum = Number(this.cuit);
     this.paramCacheTTLMs = config.paramCacheTTLMs ?? DEFAULT_PARAM_CACHE_TTL_MS;
 
-    // Los defaults (timeout 30s, 1 reintento, 1s de backoff, TTL 12h) los aplica arca-common.
-    const timeoutMs = config.timeout ?? config.requestTimeoutMs;
-    const retries = config.retries;
-    const retryDelayMs = config.retryDelayMs;
     const endpoints = config.endpoints ?? {};
+    const { timeout: timeoutMs, ...transport } = this.transport;
+    const clientOpts: WsClientOptions = { ...transport, timeoutMs };
 
-    // Un listener que lanza nunca debe convertir una respuesta de ARCA en error.
-    const emit = (event: ArcaEvent) => {
-      safeEmit(this.onEventCb, event);
-      safeEmit((e) => this.emitter.emit(e.type, e), event);
-    };
-
-    const clientOpts = {
-      timeoutMs,
-      retries,
-      retryDelayMs,
-      onEvent: emit,
-      fetch: config.fetch,
-      legacyTls: config.legacyTls,
-    };
-
-    this.wsaa =
-      config.wsaa ??
-      new WsaaClient({
-        cert: config.cert,
-        key: config.key,
-        production: this.production,
-        tokenTTLMinutes: config.tokenTTLMinutes,
-        timeout: timeoutMs,
-        retries,
-        retryDelayMs,
-        onEvent: emit,
-        ticketStorage: config.ticketStorage,
-        clockOffsetMs: config.clockOffsetMs,
-        autoClockSkew: config.autoClockSkew,
-        loginErrorCooldownMs: config.loginErrorCooldownMs,
-        fetch: config.fetch,
-        legacyTls: config.legacyTls,
-        endpoint: endpoints.wsaa,
-      });
-
-    this.wsfe = new WsfeClient(this.production, { ...clientOpts, endpoint: endpoints.wsfe });
-    this.wsfex = new WsfexClient(this.production, { ...clientOpts, endpoint: endpoints.wsfex });
+    this.wsfe = new WsfeClient(this.production, {
+      ...clientOpts,
+      endpoint: this.endpoint(ENDPOINTS.wsfe, endpoints.wsfe),
+    });
+    this.wsfex = new WsfexClient(this.production, {
+      ...clientOpts,
+      endpoint: this.endpoint(ENDPOINTS.wsfex, endpoints.wsfex),
+    });
     this.padron = new PadronClient(this.production, {
       ...clientOpts,
       endpoints: { padronA5: endpoints.padronA5, padronA13: endpoints.padronA13 },
@@ -147,45 +123,24 @@ export class Arca {
   }
 
   // ============================================================
-  // Eventos
-  // ============================================================
-
-  /**
-   * Suscribirse a eventos del SDK.
-   *
-   * @example
-   * ```ts
-   * arca.on("request:end", (e) => console.log(`${e.method} took ${e.durationMs}ms`));
-   * arca.on("auth:login", (e) => console.log(`Login ${e.service} in ${e.durationMs}ms`));
-   * arca.on("request:retry", (e) => console.warn(`Retry #${e.attempt}: ${e.error}`));
-   * ```
-   */
-  on(event: ArcaEvent['type'], handler: (event: ArcaEvent) => void): this {
-    this.emitter.on(event, handler);
-    return this;
-  }
-
-  /** Desuscribirse de un evento. */
-  off(event: ArcaEvent['type'], handler: (event: ArcaEvent) => void): this {
-    this.emitter.off(event, handler);
-    return this;
-  }
-
-  // ============================================================
   // Auth helpers
   // ============================================================
 
-  /** Combina el signal global de la config con el de la llamada. */
+  /**
+   * Combina el signal global de la config con el de la llamada. Sólo pasa el
+   * `signal`: las opciones propias de cada método (`fecha`, `claseCmp`) no
+   * llegan a los clientes de bajo nivel.
+   */
   private opts(call?: CallOptions): CallOptions {
-    return { signal: anySignal(this.signal, call?.signal) };
+    return this.callOptions({ signal: call?.signal });
   }
 
-  private async getAuth(service: string, call?: CallOptions): Promise<WsfeAuth> {
-    const ticket = await this.wsaa.getAccessTicket(service, call);
+  private async getAuth(service: ArcaService, call?: CallOptions): Promise<WsfeAuth> {
+    const ticket = await this.ticket(service, call);
     return {
       Token: ticket.token,
       Sign: ticket.sign,
-      Cuit: this.cuit,
+      Cuit: this.cuitNum,
     };
   }
 
@@ -202,14 +157,14 @@ export class Arca {
   async crearFactura(request: InvoiceRequest, call?: CallOptions): Promise<FECAESolicitarResult> {
     validateInvoiceRequest(request);
     const opts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfe, opts);
+    const auth = await this.getAuth('wsfe', opts);
     return this.wsfe.solicitarCAE(auth, request, opts);
   }
 
   /** Último número de comprobante autorizado. */
   async ultimoComprobante(ptoVta: number, cbteTipo: number, call?: CallOptions): Promise<number> {
     const opts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfe, opts);
+    const auth = await this.getAuth('wsfe', opts);
     return this.wsfe.ultimoComprobante(auth, ptoVta, cbteTipo, opts);
   }
 
@@ -367,7 +322,7 @@ export class Arca {
     call?: CallOptions,
   ): Promise<FECompConsultarResult> {
     const opts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfe, opts);
+    const auth = await this.getAuth('wsfe', opts);
     return this.wsfe.consultarComprobante(auth, cbteTipo, ptoVta, cbteNro, opts);
   }
 
@@ -385,14 +340,14 @@ export class Arca {
    */
   async crearFacturaExportacion(invoice: WsfexInvoice, call?: CallOptions): Promise<WsfexAuthResult> {
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfex, callOpts);
+    const auth = await this.getAuth('wsfex', callOpts);
     return this.wsfex.authorize(auth, invoice, callOpts);
   }
 
   /** Último número de comprobante de exportación autorizado. */
   async ultimoComprobanteExpo(ptoVta: number, cbteTipo: number, call?: CallOptions): Promise<number> {
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfex, callOpts);
+    const auth = await this.getAuth('wsfex', callOpts);
     return this.wsfex.getLastCmp(auth, ptoVta, cbteTipo, callOpts);
   }
 
@@ -405,7 +360,7 @@ export class Arca {
   /** Último ID de request WSFEX. */
   async ultimoIdExpo(call?: CallOptions): Promise<number> {
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfex, callOpts);
+    const auth = await this.getAuth('wsfex', callOpts);
     return this.wsfex.getLastId(auth, callOpts);
   }
 
@@ -417,7 +372,7 @@ export class Arca {
     call?: CallOptions,
   ): Promise<WsfexGetCmpResult> {
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfex, callOpts);
+    const auth = await this.getAuth('wsfex', callOpts);
     return this.wsfex.getCmp(auth, cbteTipo, ptoVta, cbteNro, callOpts);
   }
 
@@ -428,7 +383,7 @@ export class Arca {
 
   private async expo<T>(fn: (auth: WsfeAuth, opts: CallOptions) => Promise<T>, call?: CallOptions): Promise<T> {
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfex, callOpts);
+    const auth = await this.getAuth('wsfex', callOpts);
     return fn(auth, callOpts);
   }
 
@@ -518,7 +473,7 @@ export class Arca {
   async facturarExpo(opts: FacturarExpoOpts, call?: CallOptions): Promise<FacturaExpoResult> {
     validateFacturarExpoOpts(opts);
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfex, callOpts);
+    const auth = await this.getAuth('wsfex', callOpts);
     const [id, cbteNro] = await Promise.all([
       opts.id ?? this.wsfex.getLastId(auth, callOpts).then((n) => n + 1),
       opts.cbteNro ?? this.wsfex.getLastCmp(auth, opts.ptoVta, opts.cbteTipo, callOpts).then((n) => n + 1),
@@ -634,7 +589,7 @@ export class Arca {
   async solicitarCAEA(periodo: string, orden: number, call?: CallOptions): Promise<CaeaSolicitarResult> {
     this.validarPeriodoCAEA(periodo, orden);
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfe, callOpts);
+    const auth = await this.getAuth('wsfe', callOpts);
     return this.wsfe.solicitarCAEA(auth, periodo, orden, callOpts);
   }
 
@@ -642,7 +597,7 @@ export class Arca {
   async consultarCAEA(periodo: string, orden: number, call?: CallOptions): Promise<CaeaSolicitarResult> {
     this.validarPeriodoCAEA(periodo, orden);
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfe, callOpts);
+    const auth = await this.getAuth('wsfe', callOpts);
     return this.wsfe.consultarCAEA(auth, periodo, orden, callOpts);
   }
 
@@ -662,7 +617,7 @@ export class Arca {
       formatFechaHora(inv.CbteFchHsGen, `invoices[${i}].CbteFchHsGen`);
     });
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfe, callOpts);
+    const auth = await this.getAuth('wsfe', callOpts);
     return this.wsfe.registrarCAEA(auth, request, callOpts);
   }
 
@@ -726,14 +681,14 @@ export class Arca {
    */
   async sinMovimientoCAEA(caea: string, ptoVta: number, call?: CallOptions): Promise<CaeaSinMovResult> {
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfe, callOpts);
+    const auth = await this.getAuth('wsfe', callOpts);
     return this.wsfe.sinMovimientoCAEA(auth, caea, ptoVta, callOpts);
   }
 
   /** Consulta los puntos de venta informados "sin movimiento" para un CAEA. */
   async consultarSinMovimientoCAEA(caea: string, ptoVta: number, call?: CallOptions): Promise<CaeaSinMovItem[]> {
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfe, callOpts);
+    const auth = await this.getAuth('wsfe', callOpts);
     return this.wsfe.consultarSinMovimientoCAEA(auth, caea, ptoVta, callOpts);
   }
 
@@ -749,7 +704,7 @@ export class Arca {
    */
   async consultarCuit(cuit: number, call?: CallOptions): Promise<Contribuyente> {
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.padronA13, callOpts);
+    const auth = await this.getAuth('padronA13', callOpts);
     return this.padron.getPersonaA13(auth, cuit, callOpts);
   }
 
@@ -763,7 +718,7 @@ export class Arca {
    */
   async consultarCuitDetalle(cuit: number, call?: CallOptions): Promise<Contribuyente> {
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.padronA5, callOpts);
+    const auth = await this.getAuth('padronA5', callOpts);
     return this.padron.getPersonaA5(auth, cuit, callOpts);
   }
 
@@ -789,7 +744,7 @@ export class Arca {
     call?: CallOptions,
   ): Promise<T> {
     const callOpts = this.opts(call);
-    return this.cachedParam(key, async () => fn(await this.getAuth(WSAA_SERVICES.wsfe, callOpts), callOpts));
+    return this.cachedParam(key, async () => fn(await this.getAuth('wsfe', callOpts), callOpts));
   }
 
   /** Estado de los servidores WSFE. No requiere autenticación. */
@@ -857,7 +812,7 @@ export class Arca {
    */
   async getPuntosVenta(call?: CallOptions): Promise<PtoVentaItem[]> {
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfe, callOpts);
+    const auth = await this.getAuth('wsfe', callOpts);
     return this.wsfe.getPuntosVenta(auth, callOpts);
   }
 
@@ -873,14 +828,14 @@ export class Arca {
   async getCotizacion(monedaId: string, call?: CallOptions & { fecha?: Date | string }): Promise<CotizacionResult> {
     const fecha = call?.fecha !== undefined ? formatDate(call.fecha) : undefined;
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfe, callOpts);
+    const auth = await this.getAuth('wsfe', callOpts);
     return this.wsfe.getCotizacion(auth, monedaId, { ...callOpts, fchCotiz: fecha });
   }
 
   /** Cantidad máxima de registros por request de FECAESolicitar. */
   async getCantMaxRegistros(call?: CallOptions): Promise<number> {
     const callOpts = this.opts(call);
-    const auth = await this.getAuth(WSAA_SERVICES.wsfe, callOpts);
+    const auth = await this.getAuth('wsfe', callOpts);
     return this.wsfe.getCantMaxRegistros(auth, callOpts);
   }
 
@@ -919,7 +874,7 @@ export class Arca {
    * usando el CUIT de esta instancia.
    */
   urlQR(factura: FacturaResult, datos?: Omit<DatosQR, 'cuit'>, options?: QROptions): string {
-    return urlQRDesdeFactura(factura, { ...datos, cuit: this.cuit }, options);
+    return urlQRDesdeFactura(factura, { ...datos, cuit: this.cuitNum }, options);
   }
 
   // ============================================================
@@ -964,11 +919,6 @@ export class Arca {
     opts?: { tributos?: { Importe: number }[]; tipoC?: boolean; descuentoGlobal?: number },
   ) {
     return calcularTotales(items, opts);
-  }
-
-  /** Invalida los tickets de acceso (en memoria y en el `ticketStorage`). */
-  async clearAuthCache(): Promise<void> {
-    await Promise.all(Object.values(WSAA_SERVICES).map((service) => this.wsaa.clearTicket(service)));
   }
 
   /** Invalida el cache de parámetros (getTipos*, getMonedas, etc.). */

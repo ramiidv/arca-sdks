@@ -38,14 +38,14 @@ export function formatCuit(cuit: string | number): string {
  * Retorna el CUIT/CUIL normalizado (11 dígitos).
  * @throws ArcaValidationError si el CUIT/CUIL es inválido.
  */
-export function validateCuit(cuit: string | number): string {
+export function validateCuit(cuit: string | number, field = 'cuit'): string {
   const normalized = normalizeCuit(cuit);
 
   if (!/^\d{11}$/.test(normalized)) {
     throw new ArcaValidationError(
       `CUIT inválido: "${cuit}". Debe tener 11 dígitos.`,
-      [{ field: 'cuit', message: 'El CUIT debe tener 11 dígitos numéricos', value: cuit }],
-      'cuit',
+      [{ field, message: 'El CUIT debe tener 11 dígitos numéricos', value: cuit }],
+      field,
     );
   }
 
@@ -53,8 +53,8 @@ export function validateCuit(cuit: string | number): string {
   if (!VALID_PREFIXES.includes(prefix)) {
     throw new ArcaValidationError(
       `CUIT inválido: "${cuit}". Prefijo ${prefix} no es válido.`,
-      [{ field: 'cuit', message: `Prefijo ${prefix} no es un prefijo CUIT válido`, value: cuit }],
-      'cuit',
+      [{ field, message: `Prefijo ${prefix} no es un prefijo CUIT válido`, value: cuit }],
+      field,
     );
   }
 
@@ -72,8 +72,8 @@ export function validateCuit(cuit: string | number): string {
   } else if (remainder === 1) {
     throw new ArcaValidationError(
       `CUIT inválido: "${cuit}". Dígito verificador no puede ser calculado (remainder=1).`,
-      [{ field: 'cuit', message: 'CUIT con dígito verificador inválido (remainder=1)', value: cuit }],
-      'cuit',
+      [{ field, message: 'CUIT con dígito verificador inválido (remainder=1)', value: cuit }],
+      field,
     );
   } else {
     expectedCheck = 11 - remainder;
@@ -84,12 +84,12 @@ export function validateCuit(cuit: string | number): string {
       `CUIT inválido: "${cuit}". Dígito verificador incorrecto (esperado: ${expectedCheck}, recibido: ${digits[10]}).`,
       [
         {
-          field: 'cuit',
+          field,
           message: `Dígito verificador incorrecto (esperado: ${expectedCheck}, recibido: ${digits[10]})`,
           value: cuit,
         },
       ],
-      'cuit',
+      field,
     );
   }
 

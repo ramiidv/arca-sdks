@@ -1,5 +1,12 @@
-import { afipSoapCall, ArcaSoapError } from '@ramiidv/arca-common';
-import type { ArcaEvent, CallOptions, LegacyTlsMode, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
+import { ArcaSoapError, parseServerStatus, SoapServiceClient } from '@ramiidv/arca-common';
+import type {
+  ArcaEvent,
+  CallOptions,
+  LegacyTlsMode,
+  ServerStatus,
+  ServiceTransport,
+  SoapOperationKind,
+} from '@ramiidv/arca-common';
 import { SIRE_NAMESPACE } from './constants.js';
 import { ArcaSireServiceError } from './errors.js';
 import type { CertificadoAnulacionRequest, CertificadoRequest, CertificadoResult, WsAuth } from './types.js';
@@ -17,6 +24,11 @@ export interface SireClientConfig {
   onEvent?: (event: ArcaEvent) => void;
   fetch?: typeof fetch;
   legacyTls?: LegacyTlsMode;
+  /**
+   * Opciones de transporte ya armadas (ej: las de `ArcaSire`). Si se pasa, se
+   * ignoran `timeout`, `retries`, `retryDelayMs`, `onEvent`, `fetch` y `legacyTls`.
+   */
+  transport?: ServiceTransport;
 }
 
 /** Orden de los hijos de `certificado` en el XSD (`xs:sequence`). */
@@ -118,21 +130,25 @@ function requiredString(
  * No autentica ni valida: recibe el token/sign y los datos ya serializados.
  * Usar `ArcaSire` salvo que necesites controlar esos pasos.
  */
-export class SireClient {
-  private readonly config: SireClientConfig;
-
+export class SireClient extends SoapServiceClient {
   constructor(config: SireClientConfig) {
-    this.config = config;
+    super({
+      endpoint: config.endpoint,
+      namespace: SIRE_NAMESPACE,
+      transport: config.transport ?? {
+        timeout: config.timeout,
+        retries: config.retries,
+        retryDelayMs: config.retryDelayMs,
+        onEvent: config.onEvent,
+        fetch: config.fetch,
+        legacyTls: config.legacyTls,
+      },
+    });
   }
 
   /** Estado de los servidores de SIRE (no requiere autenticación). */
   async dummy(opts?: CallOptions): Promise<ServerStatus> {
-    const result = await this.call('dummy', {}, 'consulta', opts);
-    return {
-      appserver: requiredString(result, 'appserver', 'dummy', 'consulta'),
-      dbserver: requiredString(result, 'dbserver', 'dummy', 'consulta'),
-      authserver: requiredString(result, 'authserver', 'dummy', 'consulta'),
-    };
+    return parseServerStatus(await this.call('dummy', {}, 'consulta', opts));
   }
 
   /**
@@ -196,16 +212,7 @@ export class SireClient {
     opts?: CallOptions,
   ): Promise<Record<string, unknown>> {
     try {
-      return await afipSoapCall(this.config.endpoint, SIRE_NAMESPACE, method, params, {
-        kind,
-        timeout: this.config.timeout,
-        retries: this.config.retries,
-        retryDelayMs: this.config.retryDelayMs,
-        onEvent: this.config.onEvent,
-        fetch: this.config.fetch,
-        legacyTls: this.config.legacyTls,
-        signal: opts?.signal,
-      });
+      return await this.soapCall(method, params, { kind, signal: opts?.signal });
     } catch (err) {
       throw toRejection(err, method) ?? err;
     }

@@ -1,8 +1,8 @@
-import { WsaaClient } from '@ramiidv/arca-common';
+import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
 import { ENDPOINTS, SIRE_SERVICE_ID } from './constants.js';
 import { SireClient } from './sire-client.js';
-import { buildAnulacionRequest, buildCertificadoRequest, toCuitNumber } from './validation.js';
+import { buildAnulacionRequest, buildCertificadoRequest } from './validation.js';
 import type {
   AnularCertificadoParams,
   ArcaSireConfig,
@@ -37,44 +37,20 @@ import type {
  * });
  * ```
  */
-export class ArcaSire {
-  /** Cliente WSAA (ej: `await sire.wsaa.clearTicket('sire-ws')`). */
-  public readonly wsaa: WsaaClient;
+export class ArcaSire extends ArcaSdkBase<'sire'> {
   /** Cliente SOAP de bajo nivel. */
   public readonly client: SireClient;
 
+  /** CUIT del agente como número (`cuitAgente` es `xs:long` en el WSDL). */
   private readonly cuitAgente: number;
 
+  /** @throws ArcaValidationError si la CUIT es inválida. */
   constructor(config: ArcaSireConfig) {
-    this.cuitAgente = toCuitNumber(config.cuit, 'cuit');
-    const env = config.production ? 'production' : 'testing';
-
-    this.wsaa = new WsaaClient({
-      cert: config.cert,
-      key: config.key,
-      production: config.production,
-      endpoint: config.endpoints?.wsaa,
-      tokenTTLMinutes: config.tokenTTLMinutes,
-      timeout: config.timeout,
-      retries: config.retries,
-      retryDelayMs: config.retryDelayMs,
-      onEvent: config.onEvent,
-      ticketStorage: config.ticketStorage,
-      clockOffsetMs: config.clockOffsetMs,
-      autoClockSkew: config.autoClockSkew,
-      loginErrorCooldownMs: config.loginErrorCooldownMs,
-      fetch: config.fetch,
-      legacyTls: config.legacyTls,
-    });
-
+    super(config, { sire: SIRE_SERVICE_ID });
+    this.cuitAgente = Number(this.cuit);
     this.client = new SireClient({
-      endpoint: config.endpoints?.sire ?? ENDPOINTS.sire[env],
-      timeout: config.timeout,
-      retries: config.retries,
-      retryDelayMs: config.retryDelayMs,
-      onEvent: config.onEvent,
-      fetch: config.fetch,
-      legacyTls: config.legacyTls,
+      endpoint: this.endpoint(ENDPOINTS.sire, config.endpoints?.sire),
+      transport: this.transport,
     });
   }
 
@@ -89,7 +65,7 @@ export class ArcaSire {
   async emitirCertificado(params: EmitirCertificadoParams, opts?: CallOptions): Promise<CertificadoResult> {
     const certificado = buildCertificadoRequest(params);
     const auth = await this.auth(opts);
-    return this.client.emitir(auth, this.cuitAgente, certificado, opts);
+    return this.client.emitir(auth, this.cuitAgente, certificado, this.callOptions(opts));
   }
 
   /**
@@ -100,16 +76,16 @@ export class ArcaSire {
   async anularCertificado(params: AnularCertificadoParams, opts?: CallOptions): Promise<CertificadoResult> {
     const certificadoAnulacion = buildAnulacionRequest(params);
     const auth = await this.auth(opts);
-    return this.client.anular(auth, this.cuitAgente, certificadoAnulacion, opts);
+    return this.client.anular(auth, this.cuitAgente, certificadoAnulacion, this.callOptions(opts));
   }
 
   /** Estado de los servidores de SIRE (`dummy`, sin autenticación). */
   async status(opts?: CallOptions): Promise<ServerStatus> {
-    return this.client.dummy(opts);
+    return this.client.dummy(this.callOptions(opts));
   }
 
   private async auth(opts?: CallOptions): Promise<WsAuth> {
-    const ticket = await this.wsaa.getAccessTicket(SIRE_SERVICE_ID, opts);
+    const ticket = await this.ticket('sire', opts);
     return { token: ticket.token, sign: ticket.sign };
   }
 }

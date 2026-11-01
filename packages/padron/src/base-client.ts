@@ -1,7 +1,6 @@
-import { afipSoapCall, validateCuit } from '@ramiidv/arca-common';
+import { SoapServiceClient, parseServerStatus, validateCuit } from '@ramiidv/arca-common';
 import type { ArcaEvent, CallOptions, ServerStatus, SoapCallOptions } from '@ramiidv/arca-common';
 import { toPadronError } from './errors.js';
-import { reqString } from './mapping.js';
 import type { WsAuth } from './types.js';
 
 /** Opciones de transporte que se pasan a cada llamada SOAP. */
@@ -35,15 +34,16 @@ export interface PadronClientConfig {
  * con contenido numérico (`datoAdicional`, `codPostal`, `piso`, los campos del
  * A100...) no pierden ceros ni decimales (`"10.50"`, `"1E3"`).
  */
-export abstract class BasePadronClient {
-  protected readonly endpoint: string;
-  protected readonly namespace: string;
+export abstract class BasePadronClient extends SoapServiceClient {
   protected readonly soapOptions?: PadronSoapOptions;
   protected readonly onEvent?: (event: ArcaEvent) => void;
 
   constructor(config: PadronClientConfig) {
-    this.endpoint = config.endpoint;
-    this.namespace = config.namespace;
+    super({
+      endpoint: config.endpoint,
+      namespace: config.namespace,
+      transport: { ...config.soapOptions, onEvent: config.onEvent },
+    });
     this.soapOptions = config.soapOptions;
     this.onEvent = config.onEvent;
   }
@@ -55,13 +55,7 @@ export abstract class BasePadronClient {
     opts?: CallOptions,
   ): Promise<Record<string, unknown>> {
     try {
-      return await afipSoapCall(this.endpoint, this.namespace, method, params, {
-        ...this.soapOptions,
-        parseNumbers: false,
-        kind: 'consulta',
-        onEvent: this.onEvent,
-        signal: opts?.signal,
-      });
+      return await this.soapCall(method, params, { parseNumbers: false, signal: opts?.signal });
     } catch (err) {
       throw toPadronError(err, method);
     }
@@ -78,11 +72,6 @@ export abstract class BasePadronClient {
 
   /** Health check for this service. */
   async dummy(opts?: CallOptions): Promise<ServerStatus> {
-    const result = await this.call('dummy', {}, opts);
-    return {
-      appserver: reqString(result['appserver'], 'dummy.appserver'),
-      dbserver: reqString(result['dbserver'], 'dummy.dbserver'),
-      authserver: reqString(result['authserver'], 'dummy.authserver'),
-    };
+    return parseServerStatus(await this.call('dummy', {}, opts));
   }
 }

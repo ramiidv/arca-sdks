@@ -8,7 +8,8 @@ import {
   LPG_ENDPOINTS,
 } from '../src/index.js';
 import type { ArcaAgro, AjusteUnificadoParams, CgAutorizarParams, LiquidacionAutorizarParams } from '../src/index.js';
-import { CUIT, CUIT2, CUIT3, LPG_NS, hang, http503, keys, lpgResp, setup, soapFault } from './helpers.js';
+import { CUIT, CUIT2, CUIT3, LPG_NS, hang, http503, keys, lpgResp, setup } from './helpers.js';
+import { soapFaultResponse } from '@ramiidv/arca-common/testing';
 
 function liquidacion(): LiquidacionAutorizarParams {
   return {
@@ -199,7 +200,7 @@ describe('WSLPG: liquidacionAutorizar', () => {
   });
 
   it('SOAP Fault en emisión → uncertain', async () => {
-    const { agro, fetchMock } = setup(() => new Response(soapFault('Error interno'), { status: 500 }));
+    const { agro, fetchMock } = setup(() => soapFaultResponse('S:Server', 'Error interno'));
     const e = await agro.lpg.liquidacionAutorizar(liquidacion()).catch((err) => err);
     expect(e).toBeInstanceOf(ArcaSoapError);
     expect(e.faultString).toBe('Error interno');

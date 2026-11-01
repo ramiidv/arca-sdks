@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { FecredClient } from '../src/fecred-client.js';
 import { ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
 import {
   AUTH,
@@ -7,6 +8,7 @@ import {
   URL,
   childOrder,
   client,
+  hangingReply,
   mockFetch,
   sentRequest,
   soapResponse,
@@ -62,9 +64,28 @@ describe('dummy', () => {
     const status = await client(fetch).dummy();
     expect(status).toEqual({ appserver: 'OK', dbserver: 'OK', authserver: 'OK' });
     const req = sentRequest(fetch);
-    expect(fetch.mock.calls[0][0]).toBe(URL);
+    expect(fetch.calls[0].url).toBe(URL);
     expect(req.soapAction).toBe(`"${NS}dummy"`);
     expect(req.xml).toMatch(/<soapenv:Body>\s*<\/soapenv:Body>|<soapenv:Body\/>/);
+  });
+});
+
+describe('config', () => {
+  it('sigue aceptando soapOptions y onEvent (deprecados)', async () => {
+    const fetch = mockFetch(
+      xmlResponse('Service Unavailable', 503),
+      ok('consultarCtasCtes', '<consultarCtasCtesReturn/>'),
+    );
+    const onEvent = vi.fn();
+    const c = new FecredClient({
+      endpoint: URL,
+      namespace: NS,
+      soapOptions: { fetch, retries: 1, retryDelayMs: 1 },
+      onEvent,
+    });
+    await c.consultarCtasCtes(AUTH, { rol: 'Emisor' });
+    expect(fetch.calls).toHaveLength(2);
+    expect(onEvent).toHaveBeenCalled();
   });
 });
 
@@ -88,7 +109,7 @@ describe('auth y namespace', () => {
     expect(err).toBeInstanceOf(ArcaValidationError);
     expect(err.field).toBe('cuitConsultada');
     expect(called).toBe(false);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetch.calls).toHaveLength(0);
   });
 });
 
@@ -553,24 +574,20 @@ describe('emisiones', () => {
   it('una emisión ante 503 hace 1 solo fetch y el error es uncertain', async () => {
     const fetch = mockFetch(xmlResponse('Service Unavailable', 503), ok('aceptarFECred', OPERACION_OK()));
     const err = await emitir(client(fetch, { retries: 3 })).catch((e) => e);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.calls).toHaveLength(1);
     expect(err).toBeInstanceOf(ArcaSoapError);
     expect(err.uncertain).toBe(true);
   });
 
   it('una emisión ante timeout hace 1 solo fetch y el error es uncertain', async () => {
-    const hang = (init: RequestInit) =>
-      new Promise<Response>((_, reject) => {
-        init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
-      });
-    const fetch = mockFetch(hang, ok('rechazarFECred', OPERACION_OK()));
+    const fetch = mockFetch(hangingReply(), ok('rechazarFECred', OPERACION_OK()));
     const err = await client(fetch, { retries: 3, timeout: 20 })
       .rechazarFECred(AUTH, {
         idCtaCte: { codCtaCte: 1 },
         motivos: [{ codMotivo: 1, descMotivo: 'Motivo', justificacion: 'Justificación' }],
       })
       .catch((e) => e);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.calls).toHaveLength(1);
     expect(err).toBeInstanceOf(ArcaSoapError);
     expect(err.uncertain).toBe(true);
   });
@@ -581,7 +598,7 @@ describe('emisiones', () => {
       ok('consultarCtasCtes', '<consultarCtasCtesReturn/>'),
     );
     await client(fetch, { retries: 1 }).consultarCtasCtes(AUTH, { rol: 'Emisor' });
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.calls).toHaveLength(2);
   });
 });
 
@@ -667,7 +684,7 @@ describe('Agente de Depósito Colectivo', () => {
         ctaAgente: { cuitAgente: '30500012346', idCuenta: 'CTA-001' },
       })
       .catch((e) => e);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.calls).toHaveLength(1);
     expect(err.uncertain).toBe(true);
     expect(sentRequest(fetch).body['ser:informarFacturaAgtDptoCltvRequest'].ctaAgente).toEqual({
       cuitAgente: '30500012346',

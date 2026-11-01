@@ -566,6 +566,3 @@ export const R_CG_ANULACION_RETURN: Schema = {
   estadoCertificado: must(str()),
   pdf: opt(base64()),
 };
-
-/** returnDummyRespType */
-export const R_DUMMY: Schema = { appserver: must(str()), authserver: must(str()), dbserver: must(str()) };

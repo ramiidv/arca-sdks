@@ -75,7 +75,10 @@ export function createWsaaClient(
 }
 
 /** Opciones de transporte de una config de SDK. */
-export function transportOptions(config: ArcaBaseConfig, onEvent?: (event: ArcaEvent) => void): ServiceTransport {
+export function transportOptions(
+  config: Pick<ArcaBaseConfig, 'timeout' | 'retries' | 'retryDelayMs' | 'onEvent' | 'fetch' | 'legacyTls'>,
+  onEvent?: (event: ArcaEvent) => void,
+): ServiceTransport {
   return {
     timeout: config.timeout,
     retries: config.retries,
@@ -136,10 +139,14 @@ export abstract class ArcaSdkBase<TService extends string = string> {
     return override ?? (this.production ? defaults.production : defaults.testing);
   }
 
-  /** Opciones de llamada con el `signal` global combinado con el de la llamada. */
+  /**
+   * Opciones de llamada para los clientes de bajo nivel: sólo el `signal`, con
+   * el global combinado con el de la llamada (las demás claves de `opts`, ej:
+   * opciones propias de un método, no se reenvían).
+   */
   protected callOptions(opts?: CallOptions): CallOptions {
-    if (!this.#signal) return opts ?? {};
-    return { ...opts, signal: anySignal(this.#signal, opts?.signal) };
+    const signal = anySignal(this.#signal, opts?.signal);
+    return signal ? { signal } : {};
   }
 
   /** Ticket de Acceso del servicio (de cache, storage o login a WSAA). */
@@ -233,7 +240,7 @@ export function parseServerStatus(result: Record<string, unknown>, method = 'dum
   const byLower = new Map(Object.keys(result).map((k) => [k.toLowerCase(), result[k]]));
   const field = (name: keyof ServerStatus): string => {
     const value = byLower.get(name);
-    if (value === undefined || value === null || typeof value === 'object') {
+    if (value === undefined || value === null || value === '' || typeof value === 'object') {
       throw new ArcaSoapError(`Respuesta inválida de ${method}: falta ${name}`);
     }
     return String(value);

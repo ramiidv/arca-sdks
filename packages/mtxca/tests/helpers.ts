@@ -1,7 +1,11 @@
 import { vi } from 'vitest';
 import { parseXml } from '@ramiidv/arca-common';
+import { hangingReply, mockFetch as commonMockFetch, soapEnvelope, xmlResponse } from '@ramiidv/arca-common/testing';
+import type { MockReply, RecordedRequest } from '@ramiidv/arca-common/testing';
 import { MtxcaClient } from '../src/mtxca-client.js';
 import type { MtxcaAuth, MtxcaComprobanteCAE } from '../src/types.js';
+
+export { childOrder } from '@ramiidv/arca-common/testing';
 
 export const NS = 'http://impl.service.wsmtxca.afip.gov.ar/service/';
 export const ENDPOINT = 'https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService';
@@ -10,41 +14,26 @@ export const AUTH: MtxcaAuth = { token: 'TOKEN', sign: 'SIGN', cuitRepresentada:
 
 /** Respuesta SOAP como la devuelve Axis2 (prefijo ns1, hijos sin namespace). */
 export function soapResponse(element: string, inner: string): string {
-  return (
-    `<?xml version='1.0' encoding='utf-8'?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">` +
-    `<soapenv:Body><ns1:${element} xmlns:ns1="${NS}">${inner}</ns1:${element}></soapenv:Body></soapenv:Envelope>`
-  );
+  return soapEnvelope(`<ns1:${element} xmlns:ns1="${NS}">${inner}</ns1:${element}>`);
 }
 
-export interface Captured {
-  url: string;
-  soapAction: string | null;
-  body: string;
-}
-
-/** `fetch` mockeado que responde en orden con los bodies dados y registra los requests. */
+/**
+ * `fetch` mockeado (`mockFetch` de common) que responde en orden y registra los
+ * requests en `calls`; `fn` es un `vi.fn` para contar llamadas.
+ */
 export function mockFetch(...responses: Array<string | { status: number; body: string }>) {
-  const calls: Captured[] = [];
-  const fn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-    const headers = new Headers(init?.headers);
-    calls.push({ url: String(url), soapAction: headers.get('SOAPAction'), body: String(init?.body) });
-    const next = responses.shift();
-    if (next === undefined) throw new Error('mockFetch: no hay más respuestas');
-    const { status, body } = typeof next === 'string' ? { status: 200, body: next } : next;
-    return new Response(body, { status, headers: { 'Content-Type': 'text/xml' } });
-  });
-  return { fetch: fn as unknown as typeof fetch, calls, fn };
+  const replies: MockReply[] = responses.map((r) => (typeof r === 'string' ? r : xmlResponse(r.body, r.status)));
+  return spied(commonMockFetch(...replies));
 }
 
 /** `fetch` que nunca responde (respeta el abort del timeout). */
 export function hangingFetch() {
-  const fn = vi.fn(
-    (_url: string | URL | Request, init?: RequestInit) =>
-      new Promise<Response>((_resolve, reject) => {
-        init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
-      }),
-  );
-  return { fetch: fn as unknown as typeof fetch, fn };
+  return spied(commonMockFetch(hangingReply()));
+}
+
+function spied(mock: ReturnType<typeof commonMockFetch>) {
+  const fn = vi.fn(mock);
+  return { fetch: fn as unknown as typeof fetch, calls: mock.calls, fn };
 }
 
 export function client(
@@ -55,7 +44,7 @@ export function client(
 }
 
 /** Elemento del request dentro del Body (con su prefijo `ser:`), parseado. */
-export function requestBody(captured: Captured): {
+export function requestBody(captured: RecordedRequest): {
   name: string;
   ns: unknown;
   content: Record<string, unknown>;
@@ -65,25 +54,6 @@ export function requestBody(captured: Captured): {
   const body = parsed['soapenv:Envelope']['soapenv:Body'] as Record<string, any>;
   const name = Object.keys(body)[0];
   return { name, ns: body[name]['@_xmlns:ser'], content: body[name], raw: captured.body };
-}
-
-/** Nombres de los hijos directos de `<tag>` en el XML crudo, en orden. */
-export function childOrder(xml: string, tag: string): string[] {
-  const open = new RegExp(`<${tag}(\\s[^>]*)?>`).exec(xml);
-  const end = open ? xml.indexOf(`</${tag}>`, open.index) : -1;
-  if (!open || end < 0) throw new Error(`no se encontró <${tag}>`);
-  const inner = xml.slice(open.index + open[0].length, end);
-  const names: string[] = [];
-  let depth = 0;
-  for (const m of inner.matchAll(/<(\/?)([A-Za-z0-9_]+)[^>]*?(\/?)>/g)) {
-    const [, closing, name, selfClosing] = m;
-    if (closing) depth--;
-    else {
-      if (depth === 0) names.push(name);
-      if (!selfClosing) depth++;
-    }
-  }
-  return names;
 }
 
 /** Factura A válida (manual, "Ejemplo Factura A" con un ítem 21%). */

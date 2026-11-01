@@ -1,4 +1,5 @@
 import { parseXml } from '@ramiidv/arca-common';
+import { soapEnvelope } from '@ramiidv/arca-common/testing';
 import { vi } from 'vitest';
 import { ArcaSire } from '../src/index.js';
 import type { ArcaSireConfig } from '../src/index.js';
@@ -6,45 +7,22 @@ import type { ArcaSireConfig } from '../src/index.js';
 export const NS = 'http://www.afip.gob.ar/sire/c2005/';
 export const CUIT_AGENTE = '20267565393';
 
-export interface Captured {
-  url: string;
-  body: string;
-  headers: Record<string, string>;
-}
-
+/** Envelope como los de SIRE: declara el prefijo `tns` en el `Envelope`. */
 export function envelope(body: string, header = ''): string {
-  return (
-    `<soapenv:Envelope xmlns:tns="${NS}" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">` +
-    `<soapenv:Header>${header}</soapenv:Header><soapenv:Body>${body}</soapenv:Body></soapenv:Envelope>`
-  );
+  return soapEnvelope(body, header).replace('<soapenv:Envelope ', `<soapenv:Envelope xmlns:tns="${NS}" `);
 }
 
 export const HEADER_INFO =
   '<tns:HeaderInfo><ambiente>homologacion - 207</ambiente><fecha>2026-11-01T14:43:01.733-03:00</fecha>' +
   '<vCore>2020.4</vCore><v2005>2020.7</v2005></tns:HeaderInfo>';
 
+/** SOAP Fault con el formato real de SIRE (`faultactor`, `detail` y `HeaderInfo`). */
 export function fault(code: string, message: string): string {
   return envelope(
     `<soapenv:Fault><faultcode>${code}</faultcode><faultstring>${message}</faultstring>` +
       `<faultactor></faultactor><detail>${message}</detail></soapenv:Fault>`,
     HEADER_INFO,
   );
-}
-
-/** `fetch` mockeado que responde en orden y guarda los requests. */
-export function mockFetch(...responses: Array<{ status?: number; body: string } | (() => Promise<Response>)>) {
-  const calls: Captured[] = [];
-  const fn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-    calls.push({
-      url: String(url),
-      body: String(init?.body ?? ''),
-      headers: (init?.headers ?? {}) as Record<string, string>,
-    });
-    const next = responses[Math.min(calls.length - 1, responses.length - 1)];
-    if (typeof next === 'function') return next();
-    return new Response(next.body, { status: next.status ?? 200, headers: { 'Content-Type': 'text/xml' } });
-  });
-  return { fetch: fn as unknown as typeof fetch, calls, fn };
 }
 
 export function makeSire(fetchImpl: typeof fetch, extra: Partial<ArcaSireConfig> = {}): ArcaSire {

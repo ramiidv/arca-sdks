@@ -1,5 +1,5 @@
-import { afipSoapCall, ensureArray, extractServiceErrors } from '@ramiidv/arca-common';
-import type { ArcaEvent, CallOptions, LegacyTlsMode, SoapOperationKind } from '@ramiidv/arca-common';
+import { SoapServiceClient, ensureArray, extractServiceErrors, parseServerStatus } from '@ramiidv/arca-common';
+import type { ArcaEvent, CallOptions, LegacyTlsMode, ServiceTransport, SoapOperationKind } from '@ramiidv/arca-common';
 import { ENDPOINTS, WSFE_ERRORES_INTERNOS, WSFE_NAMESPACE } from './constants.js';
 import { ArcaResultadoIncierto, ArcaSoapError, ArcaWSFEError } from './errors.js';
 import type { OperacionEmision } from './errors.js';
@@ -56,21 +56,37 @@ function sinCampo(method: string, campo: string): ArcaSoapError {
   return new ArcaSoapError(`Respuesta de ${method} sin ${campo}`);
 }
 
-/** Cliente de bajo nivel de WSFEv1 (Factura electrónica, mercado interno). */
-export class WsfeClient {
-  private readonly endpoint: string;
-  private readonly soapOpts: Omit<WsClientOptions, 'endpoint' | 'timeoutMs'> & { timeout?: number };
+/** Opciones de transporte de arca-common a partir de `WsClientOptions` (`timeoutMs` → `timeout`). */
+export function transportDe(opts: WsClientOptions): ServiceTransport {
+  return {
+    timeout: opts.timeoutMs,
+    retries: opts.retries,
+    retryDelayMs: opts.retryDelayMs,
+    onEvent: opts.onEvent,
+    fetch: opts.fetch,
+    legacyTls: opts.legacyTls,
+  };
+}
 
+/**
+ * `ServerStatus` (`AppServer`/`DbServer`/`AuthServer`) de la respuesta de un
+ * `dummy` de WSFEv1/WSFEX.
+ *
+ * @throws ArcaSoapError si falta alguno de los tres campos.
+ */
+export function serverStatusDe(result: R, method: string): ServerStatus {
+  const s = parseServerStatus(result, method);
+  return { AppServer: s.appserver, DbServer: s.dbserver, AuthServer: s.authserver };
+}
+
+/** Cliente de bajo nivel de WSFEv1 (Factura electrónica, mercado interno). */
+export class WsfeClient extends SoapServiceClient {
   constructor(production: boolean, opts: WsClientOptions = {}) {
-    this.endpoint = opts.endpoint ?? (production ? ENDPOINTS.wsfe.production : ENDPOINTS.wsfe.testing);
-    this.soapOpts = {
-      timeout: opts.timeoutMs,
-      retries: opts.retries,
-      retryDelayMs: opts.retryDelayMs,
-      onEvent: opts.onEvent,
-      fetch: opts.fetch,
-      legacyTls: opts.legacyTls,
-    };
+    super({
+      endpoint: opts.endpoint ?? (production ? ENDPOINTS.wsfe.production : ENDPOINTS.wsfe.testing),
+      namespace: WSFE_NAMESPACE,
+      transport: transportDe(opts),
+    });
   }
 
   /**
@@ -79,8 +95,7 @@ export class WsfeClient {
    * `namespace + método`.
    */
   private call(method: string, params: R, opts?: CallOptions & { kind?: SoapOperationKind }): Promise<R> {
-    return afipSoapCall(this.endpoint, WSFE_NAMESPACE, method, params, {
-      ...this.soapOpts,
+    return this.soapCall(method, params, {
       qualified: true,
       soapActionFromMethod: true,
       kind: opts?.kind,
@@ -196,7 +211,7 @@ export class WsfeClient {
   // ============================================================
 
   async serverStatus(opts?: CallOptions): Promise<ServerStatus> {
-    return (await this.call('FEDummy', {}, opts)) as ServerStatus;
+    return serverStatusDe(await this.call('FEDummy', {}, opts), 'FEDummy');
   }
 
   private async getParam<T>(auth: WsfeAuth, method: string, itemKey: string, opts?: CallOptions): Promise<T[]> {

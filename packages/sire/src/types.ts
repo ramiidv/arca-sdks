@@ -1,4 +1,4 @@
-import type { ArcaBaseConfig } from '@ramiidv/arca-common';
+import type { ArcaSdkConfig } from '@ramiidv/arca-common';
 import type { Condicion, MotivoAnulacion, TipoComprobante } from './constants.js';
 
 // ---------------------------------------------------------------------------
@@ -6,7 +6,7 @@ import type { Condicion, MotivoAnulacion, TipoComprobante } from './constants.js
 // ---------------------------------------------------------------------------
 
 /** Configuración de `ArcaSire`. `cuit` es el CUIT del agente de retención (`cuitAgente`). */
-export interface ArcaSireConfig extends ArcaBaseConfig {
+export interface ArcaSireConfig extends ArcaSdkConfig {
   /** Endpoints propios (ej: proxy). Si se omiten se usan los de `ENDPOINTS` según `production`. */
   endpoints?: {
     /** URL del servicio SIRE C2005. */

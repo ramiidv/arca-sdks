@@ -90,7 +90,7 @@ describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => 
       const cap = mockFetch(respuesta(ENDPOINTS[c.svc].namespace, c.method, c.inner));
       await c.run(client);
       expect(cap.urls[0]).toBe(ENDPOINTS[c.svc].testing);
-      expect(cap.headers[0]['SOAPAction']).toBe('""');
+      expect(cap.headers[0]['soapaction']).toBe('""');
       expect(cap.bodies[0]).toContain(`<ser:${c.method} xmlns:ser="${ENDPOINTS[c.svc].namespace}">`);
       const body = requestBody(cap.bodies[0], c.method);
       expect(Object.keys(body).filter((k) => !k.startsWith('@_'))).toEqual([...AUTH_KEYS, ...Object.keys(c.campos)]);

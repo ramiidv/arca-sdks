@@ -1,4 +1,4 @@
-import type { ArcaBaseConfig, CallOptions } from '@ramiidv/arca-common';
+import type { ArcaSdkConfig, CallOptions } from '@ramiidv/arca-common';
 
 // Tipos compartidos de common que forman parte de la API pública.
 export type {
@@ -14,10 +14,21 @@ export type {
 // Configuración
 // ---------------------------------------------------------------------------
 
-export interface ArcaMtxcaConfig extends ArcaBaseConfig {
-  /** URL de WSMTXCA. Si se indica, ignora `production`. */
+export interface ArcaMtxcaConfig extends ArcaSdkConfig {
+  /**
+   * URLs propias (proxy, mock). Si se indican, ignoran `production`; las que no
+   * se indiquen usan las oficiales.
+   */
+  endpoints?: { mtxca?: string; wsaa?: string };
+  /**
+   * URL de WSMTXCA. Si se indica, ignora `production`.
+   * @deprecated Usar `endpoints.mtxca` (tiene prioridad si se indican ambas).
+   */
   endpoint?: string;
-  /** URL de WSAA. Si se indica, ignora `production` para el login. */
+  /**
+   * URL de WSAA. Si se indica, ignora `production` para el login.
+   * @deprecated Usar `endpoints.wsaa` (tiene prioridad si se indican ambas).
+   */
   wsaaEndpoint?: string;
 }
 

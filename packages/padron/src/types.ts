@@ -7,7 +7,7 @@ export type {
   TicketStorage,
   CallOptions,
 } from '@ramiidv/arca-common';
-import type { ArcaBaseConfig, ArcaEvent, CondicionIva, ServerStatus, WsaaClient } from '@ramiidv/arca-common';
+import type { ArcaEvent, ArcaSdkConfig, CondicionIva, ServerStatus } from '@ramiidv/arca-common';
 
 // ---------------------------------------------------------------------------
 // Backward-compatible alias
@@ -25,19 +25,11 @@ export type PadronServicio = 'a5' | 'a4' | 'a10' | 'a13' | 'a100';
 
 /**
  * Configuración de `ArcaPadron`. Extiende la configuración común de los SDKs
- * de ARCA (`ArcaBaseConfig`: cert, key, cuit, production, timeout, retries,
+ * de ARCA (`ArcaSdkConfig`: cert, key, cuit, production, timeout, retries,
  * ticketStorage, clockOffsetMs, autoClockSkew, loginErrorCooldownMs, fetch,
- * legacyTls, etc.).
+ * legacyTls, `wsaa` compartido, `signal` global, etc.).
  */
-export interface ArcaPadronConfig extends ArcaBaseConfig {
-  /** Signal global: cancela todas las llamadas de esta instancia. */
-  signal?: AbortSignal;
-  /**
-   * WsaaClient compartido (ej: `arca.wsaa` de arca-facturacion, mismo
-   * certificado). Si se provee, se ignoran `cert`, `key`, `ticketStorage`,
-   * `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs` y `tokenTTLMinutes`.
-   */
-  wsaa?: WsaaClient;
+export interface ArcaPadronConfig extends ArcaSdkConfig {
   /**
    * Endpoints propios (proxy, mock, etc.). Los que no se indiquen usan los
    * oficiales según `production` (ver `ENDPOINTS`).

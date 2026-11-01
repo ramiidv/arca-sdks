@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 import { parseXml } from '@ramiidv/arca-common';
-import type { AccessTicket, TicketStorage } from '@ramiidv/arca-common';
+import { fakeTicketStorage } from '@ramiidv/arca-common/testing';
 import { ArcaAgro } from '../src/index.js';
 import type { ArcaAgroConfig } from '../src/index.js';
 
@@ -14,17 +14,7 @@ export const CPE_NS = 'https://serviciosjava.afip.gob.ar/wscpe/';
 export const LPG_NS = 'http://serviciosjava.afip.gob.ar/wslpg/';
 
 /** Storage que siempre devuelve un ticket vigente: los tests no pasan por WSAA. */
-export const ticketStorage: TicketStorage = {
-  async get(key: string): Promise<AccessTicket> {
-    return {
-      token: 'TOKEN',
-      sign: 'SIGN',
-      expirationTime: new Date(Date.now() + 3_600_000).toISOString(),
-      service: key.split(':').pop(),
-    };
-  },
-  async set() {},
-};
+export const ticketStorage = fakeTicketStorage();
 
 export interface SentCall {
   url: string;
@@ -87,9 +77,6 @@ export const cpeResp = (element: string, respuesta: string) =>
 
 export const lpgResp = (element: string, ret: string, inner: string) =>
   envelope(element, LPG_NS, `<${ret}>${inner}</${ret}>`);
-
-export const soapFault = (msg: string) =>
-  `<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body><S:Fault><faultcode>S:Server</faultcode><faultstring>${msg}</faultstring></S:Fault></S:Body></S:Envelope>`;
 
 /** Claves de un nodo parseado sin atributos, en orden de documento. */
 export const keys = (o: unknown) => Object.keys(o as object).filter((k) => !k.startsWith('@_'));

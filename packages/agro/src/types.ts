@@ -1,4 +1,4 @@
-import type { ArcaBaseConfig, ServerStatus } from '@ramiidv/arca-common';
+import type { ArcaSdkConfig, ServerStatus } from '@ramiidv/arca-common';
 
 // Re-export de tipos de common usados en la API pública.
 export type { AccessTicket, ArcaEvent, CallOptions, ServerStatus, TicketStorage } from '@ramiidv/arca-common';
@@ -8,7 +8,7 @@ export type { AccessTicket, ArcaEvent, CallOptions, ServerStatus, TicketStorage 
 // ============================================================
 
 /** Configuración de `ArcaAgro`. */
-export interface ArcaAgroConfig extends ArcaBaseConfig {
+export interface ArcaAgroConfig extends ArcaSdkConfig {
   /** Endpoints propios (ej: un proxy). Si no se indican, se usan los oficiales según `production`. */
   endpoints?: {
     cpe?: string;
