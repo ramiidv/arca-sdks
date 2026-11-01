@@ -272,7 +272,7 @@ try {
 ## Estado de los servicios
 
 ```ts
-const estado = await agro.serverStatus();
+const estado = await agro.status();
 // { cpe: { ok: true, status: { appserver, dbserver, authserver } }, lpg: { ok: false, error } }
 ```
 

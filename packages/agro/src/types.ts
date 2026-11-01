@@ -1,4 +1,4 @@
-import type { ArcaSdkConfig, ServerStatus } from '@ramiidv/arca-common';
+import type { ArcaSdkConfig, ServiceStatus } from '@ramiidv/arca-common';
 
 // Re-export de tipos de common usados en la API pública.
 export type { AccessTicket, ArcaEvent, CallOptions, ServerStatus, TicketStorage } from '@ramiidv/arca-common';
@@ -40,4 +40,5 @@ export interface CodigoDescripcion {
 }
 
 /** Resultado de `serverStatus()` para un servicio. */
-export type AgroServiceStatus = { ok: true; status: ServerStatus } | { ok: false; error: Error };
+/** Estado de un servicio en `status()` (`ServiceStatus` de arca-common). */
+export type AgroServiceStatus = ServiceStatus;

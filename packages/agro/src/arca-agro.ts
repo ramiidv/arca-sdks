@@ -1,4 +1,4 @@
-import { ArcaSdkBase } from '@ramiidv/arca-common';
+import { ArcaSdkBase, statusOf } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
 import { CpeClient } from './cpe-client.js';
 import { LpgClient } from './lpg-client.js';
@@ -49,12 +49,12 @@ export class ArcaAgro extends ArcaSdkBase<AgroService> {
    * Estado de los servidores de WSCPE y WSLPG (`dummy`, sin autenticación).
    * Una falla de un servicio no impide conocer el estado del otro.
    */
-  async serverStatus(opts?: CallOptions): Promise<{ cpe: AgroServiceStatus; lpg: AgroServiceStatus }> {
-    const [cpe, lpg] = await Promise.allSettled([this.cpe.dummy(opts), this.lpg.dummy(opts)]);
-    const toStatus = (r: PromiseSettledResult<Awaited<ReturnType<CpeClient['dummy']>>>): AgroServiceStatus =>
-      r.status === 'fulfilled'
-        ? { ok: true, status: r.value }
-        : { ok: false, error: r.reason instanceof Error ? r.reason : new Error(String(r.reason)) };
-    return { cpe: toStatus(cpe), lpg: toStatus(lpg) };
+  status(opts?: CallOptions): Promise<{ cpe: AgroServiceStatus; lpg: AgroServiceStatus }> {
+    return statusOf({ cpe: () => this.cpe.dummy(opts), lpg: () => this.lpg.dummy(opts) });
+  }
+
+  /** @deprecated Usá `status()` (mismo resultado). */
+  serverStatus(opts?: CallOptions): Promise<{ cpe: AgroServiceStatus; lpg: AgroServiceStatus }> {
+    return this.status(opts);
   }
 }

@@ -86,7 +86,7 @@ async function main() {
   }
 
   // Estado de los servicios: una falla no oculta el estado del otro.
-  const estado = await agro.serverStatus();
+  const estado = await agro.status();
   console.log('WSCPE:', estado.cpe.ok ? estado.cpe.status : estado.cpe.error.message);
   console.log('WSLPG:', estado.lpg.ok ? estado.lpg.status : estado.lpg.error.message);
 }

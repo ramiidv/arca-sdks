@@ -32,9 +32,9 @@ Requires Node.js >= 18. Uses native `fetch` (no axios/node-fetch dependency). Pu
 
 ```typescript
 import fs from "fs";
-import { Arca, CbteTipo, IvaTipo, DocTipo, Moneda } from "@ramiidv/arca-facturacion";
+import { ArcaFacturacion, CbteTipo, IvaTipo, DocTipo, Moneda } from "@ramiidv/arca-facturacion";
 
-const arca = new Arca({
+const arca = new ArcaFacturacion({
   cuit: 20123456786,
   cert: fs.readFileSync("./cert.crt", "utf-8"),
   key: fs.readFileSync("./key.key", "utf-8"),
@@ -67,7 +67,7 @@ Internally:
 ## Configuration
 
 ```typescript
-new Arca({                   // ArcaConfig extends ArcaBaseConfig (@ramiidv/arca-common)
+new ArcaFacturacion({                   // ArcaConfig extends ArcaBaseConfig (@ramiidv/arca-common)
   cuit: number | string,      // CUIT, with or without hyphens. Check digit validated (ArcaValidationError)
   cert: string,               // X.509 certificate PEM content
   key: string,                // Private key PEM content
@@ -244,17 +244,17 @@ Export (class E) NC/ND are issued through WSFEX: `notaCredito`/`notaDebito` with
 ## Static utilities
 
 ```typescript
-// Preview totals without submitting to ARCA (function export; Arca.calcularTotales is @deprecated)
+// Preview totals without submitting to ARCA (function export; ArcaFacturacion.calcularTotales is @deprecated)
 const { importes, iva } = calcularTotales(
   [{ neto: 1000, iva: IvaTipo.IVA_21 }],
   { tributos: [...], tipoC: false }
 );
 
-// Dates: use formatDate from @ramiidv/arca-common (Arca.formatDate / toDateString are @deprecated aliases)
+// Dates: use formatDate from @ramiidv/arca-common (ArcaFacturacion.formatDate / toDateString are @deprecated aliases)
 formatDate(new Date()); // "20260328" (Argentina timezone)
 formatFechaHora(new Date()); // "20260328143210" (CbteFchHsGen format)
 
-// Arca.extractCAE(rawResult) is @deprecated
+// ArcaFacturacion.extractCAE(rawResult) is @deprecated
 ```
 
 ## Raw API (advanced)
@@ -287,7 +287,7 @@ const rawResult2 = await arca.crearFacturaAuto(1, CbteTipo.FACTURA_B, { ...invoi
 ## Query methods
 
 ```typescript
-await arca.serverStatus();                          // { AppServer, DbServer, AuthServer }
+await arca.status();  // { wsfe, wsfex }: { ok: true, status: { appserver, dbserver, authserver } } | { ok: false, error }. serverStatus()/serverStatusExpo() are @deprecated
 await arca.ultimoComprobante(ptoVta, cbteTipo);     // number
 await arca.consultarComprobante(cbteTipo, ptoVta, cbteNro);
 await arca.getPuntosVenta();
@@ -482,7 +482,7 @@ Two ways to subscribe:
 
 ```typescript
 // 1. Config callback (receives all events)
-const arca = new Arca({
+const arca = new ArcaFacturacion({
   ...,
   onEvent: (e) => console.log(e.type, e),
 });
@@ -513,7 +513,7 @@ ARCA requires a QR code on printed invoices. Per the current ARCA spec: base URL
 // From a FacturaResult (facturar / notaCredito / notaDebito / registrarFacturaCAEA / recuperarComprobante)
 const url = arca.urlQR(result);   // or urlQRDesdeFactura(result, { cuit })
 
-const url2 = Arca.generateQRUrl({ // or generarUrlQR(input, options?)
+const url2 = ArcaFacturacion.generateQRUrl({ // or generarUrlQR(input, options?)
   fecha: "20260328",      // YYYYMMDD, YYYY-MM-DD or Date → sent as YYYY-MM-DD
   cuit: 20123456786,
   ptoVta: 1,

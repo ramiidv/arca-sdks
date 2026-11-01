@@ -247,3 +247,31 @@ export function parseServerStatus(result: Record<string, unknown>, method = 'dum
   };
   return { appserver: field('appserver'), dbserver: field('dbserver'), authserver: field('authserver') };
 }
+
+// ---------------------------------------------------------------------------
+// Estado de varios servicios
+// ---------------------------------------------------------------------------
+
+/** Estado de un servicio dentro de un `status()` de varios servicios. */
+export type ServiceStatus = { ok: true; status: ServerStatus } | { ok: false; error: Error };
+
+/**
+ * Consulta el estado de varios servicios en paralelo. Una falla de uno no
+ * impide conocer el de los demás: cada uno queda como `{ ok, status }` o
+ * `{ ok: false, error }`.
+ */
+export async function statusOf<K extends string>(
+  checks: Record<K, () => Promise<ServerStatus>>,
+): Promise<Record<K, ServiceStatus>> {
+  const keys = Object.keys(checks) as K[];
+  const results = await Promise.allSettled(keys.map((k) => checks[k]()));
+  const out = {} as Record<K, ServiceStatus>;
+  keys.forEach((k, i) => {
+    const r = results[i];
+    out[k] =
+      r.status === 'fulfilled'
+        ? { ok: true, status: r.value }
+        : { ok: false, error: r.reason instanceof Error ? r.reason : new Error(String(r.reason)) };
+  });
+  return out;
+}

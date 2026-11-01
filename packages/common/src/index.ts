@@ -99,11 +99,13 @@ export {
   createWsaaClient,
   transportOptions,
   parseServerStatus,
+  statusOf,
 } from './service.js';
 export type {
   ArcaSdkConfig,
   EnvEndpoints,
   ServiceTransport,
   ServiceCallOptions,
+  ServiceStatus,
   SoapServiceClientConfig,
 } from './service.js';

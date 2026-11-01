@@ -1,5 +1,5 @@
-import { ArcaSdkBase, ensureArray, formatDate } from '@ramiidv/arca-common';
-import type { CallOptions } from '@ramiidv/arca-common';
+import { ArcaSdkBase, ensureArray, formatDate, statusOf } from '@ramiidv/arca-common';
+import type { CallOptions, ServiceStatus } from '@ramiidv/arca-common';
 import { WsfeClient } from './wsfe.js';
 import type { WsClientOptions } from './wsfe.js';
 import { WsfexClient } from './wsfex.js';
@@ -86,7 +86,7 @@ type ArcaService = keyof typeof WSAA_SERVICES;
  * Hereda de `ArcaSdkBase` de arca-common: `wsaa`, `cuit` (string de 11
  * dígitos), `production`, `on`/`off` y `clearAuthCache`.
  */
-export class Arca extends ArcaSdkBase<ArcaService> {
+export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
   private readonly wsfe: WsfeClient;
   private readonly wsfex: WsfexClient;
   private readonly padron: PadronClient;
@@ -376,7 +376,11 @@ export class Arca extends ArcaSdkBase<ArcaService> {
     return this.wsfex.getCmp(auth, cbteTipo, ptoVta, cbteNro, callOpts);
   }
 
-  /** Estado de los servidores WSFEX. */
+  /**
+   * Estado de los servidores WSFEX.
+   * @deprecated Usá `status()`, que devuelve el de WSFE y WSFEX con el
+   *   `ServerStatus` de arca-common (`appserver`/`dbserver`/`authserver`).
+   */
   async serverStatusExpo(call?: CallOptions): Promise<ServerStatus> {
     return this.wsfex.serverStatus(this.opts(call));
   }
@@ -747,7 +751,24 @@ export class Arca extends ArcaSdkBase<ArcaService> {
     return this.cachedParam(key, async () => fn(await this.getAuth('wsfe', callOpts), callOpts));
   }
 
-  /** Estado de los servidores WSFE. No requiere autenticación. */
+  /**
+   * Estado de los servidores de WSFE y WSFEX (`FEDummy`/`FEXDummy`, sin
+   * autenticación). Una falla de un servicio no impide conocer el del otro.
+   */
+  status(call?: CallOptions): Promise<{ wsfe: ServiceStatus; wsfex: ServiceStatus }> {
+    const opts = this.opts(call);
+    const lower = (s: ServerStatus) => ({ appserver: s.AppServer, dbserver: s.DbServer, authserver: s.AuthServer });
+    return statusOf({
+      wsfe: async () => lower(await this.wsfe.serverStatus(opts)),
+      wsfex: async () => lower(await this.wsfex.serverStatus(opts)),
+    });
+  }
+
+  /**
+   * Estado de los servidores WSFE. No requiere autenticación.
+   * @deprecated Usá `status()`, que devuelve el de WSFE y WSFEX con el
+   *   `ServerStatus` de arca-common (`appserver`/`dbserver`/`authserver`).
+   */
   async serverStatus(call?: CallOptions): Promise<ServerStatus> {
     return this.wsfe.serverStatus(this.opts(call));
   }
@@ -926,3 +947,12 @@ export class Arca extends ArcaSdkBase<ArcaService> {
     this.paramCache.clear();
   }
 }
+
+/**
+ * Nombre anterior de `ArcaFacturacion`.
+ * @deprecated Usá `ArcaFacturacion` (mismo cliente; el nombre sigue la
+ *   convención del resto de los SDKs: `ArcaPadron`, `ArcaCdc`...).
+ */
+export const Arca = ArcaFacturacion;
+/** @deprecated Usá `ArcaFacturacion`. */
+export type Arca = ArcaFacturacion;

@@ -14,11 +14,11 @@
  */
 
 import fs from 'node:fs';
-import { Arca, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
+import { ArcaFacturacion, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {
   // 1. Inicializar el SDK
-  const arca = new Arca({
+  const arca = new ArcaFacturacion({
     cuit: 20123456786, // Tu CUIT sin guiones
     cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
     key: fs.readFileSync('./certs/clave.key', 'utf-8'),
@@ -26,7 +26,7 @@ async function main() {
   });
 
   // 2. Verificar que los servidores estén activos
-  const status = await arca.serverStatus();
+  const status = await arca.status();
   console.log('Estado servidores:', status);
 
   // 3. Crear la factura (número, fecha, totales e IVA se calculan automáticamente)

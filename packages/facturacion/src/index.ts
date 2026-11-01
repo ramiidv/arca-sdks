@@ -1,4 +1,4 @@
-export { Arca } from './arca.js';
+export { Arca, ArcaFacturacion } from './arca.js';
 
 // Funciones puras (sin red)
 export {

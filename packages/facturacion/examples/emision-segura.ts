@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import { formatDate } from '@ramiidv/arca-common';
 import {
-  Arca,
+  ArcaFacturacion,
   ArcaResultadoIncierto,
   ArcaWSFEError,
   CbteTipo,
@@ -24,7 +24,7 @@ import {
 } from '@ramiidv/arca-facturacion';
 import type { FacturarOpts, IntentoComprobante } from '@ramiidv/arca-facturacion';
 
-const arca = new Arca({
+const arca = new ArcaFacturacion({
   cuit: 20123456786,
   cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
   key: fs.readFileSync('./certs/clave.key', 'utf-8'),

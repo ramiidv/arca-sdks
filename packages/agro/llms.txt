@@ -38,7 +38,7 @@ cuit (number|string, validated with check digit), cert, key, production=false, t
 ## ArcaAgro
 
 - `cpe: CpeClient`, `lpg: LpgClient`
-- `serverStatus(opts?)` → `{ cpe: AgroServiceStatus, lpg: AgroServiceStatus }` where `AgroServiceStatus = { ok: true, status: ServerStatus } | { ok: false, error: Error }` (Promise.allSettled)
+- `status(opts?)` → `{ cpe: AgroServiceStatus, lpg: AgroServiceStatus }` where `AgroServiceStatus = { ok: true, status: ServerStatus } | { ok: false, error: Error }` (Promise.allSettled). `serverStatus()` is a @deprecated alias.
 - `clearAuthCache(): Promise<void>`
 - `on(type, handler)`, `off(type, handler)`
 

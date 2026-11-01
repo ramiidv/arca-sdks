@@ -15,19 +15,24 @@ describe('ArcaAgro', () => {
     expect(() => new ArcaAgro({ cuit: 20123456789, cert: 'c', key: 'k' })).toThrow(ArcaValidationError);
   });
 
-  it('serverStatus usa allSettled: una falla no oculta el otro servicio', async () => {
+  it('status usa allSettled: una falla no oculta el otro servicio', async () => {
     const { agro } = setup((call) => (call.url.includes('wscpe') ? CPE_DUMMY : http503()), { retries: 0 });
-    const r = await agro.serverStatus();
+    const r = await agro.status();
     expect(r.cpe).toEqual({ ok: true, status: { appserver: 'Ok', authserver: 'Ok', dbserver: 'Ok' } });
     expect(r.lpg.ok).toBe(false);
     expect(!r.lpg.ok && r.lpg.error).toBeInstanceOf(ArcaSoapError);
   });
 
-  it('serverStatus con ambos servicios OK', async () => {
+  it('status con ambos servicios OK', async () => {
     const { agro, calls } = setup((call) => (call.url.includes('wscpe') ? CPE_DUMMY : LPG_DUMMY));
-    const r = await agro.serverStatus();
+    const r = await agro.status();
     expect(r.cpe.ok && r.lpg.ok).toBe(true);
     expect(calls.map((c) => c.soapAction).sort()).toEqual([`"${LPG_NS}dummy"`, `"${CPE_NS}dummy"`]);
+  });
+
+  it('serverStatus (deprecado) es un alias de status', async () => {
+    const { agro } = setup((call) => (call.url.includes('wscpe') ? CPE_DUMMY : LPG_DUMMY));
+    expect(await agro.serverStatus()).toEqual(await agro.status());
   });
 
   it('clearAuthCache espera el borrado en el ticketStorage de ambos servicios', async () => {

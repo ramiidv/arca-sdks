@@ -27,9 +27,9 @@ npm install @ramiidv/arca-facturacion
 
 ```typescript
 import fs from 'fs';
-import { Arca, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
+import { ArcaFacturacion, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
 
-const arca = new Arca({
+const arca = new ArcaFacturacion({
   cuit: 20123456786,
   cert: fs.readFileSync('./cert.crt', 'utf-8'),
   key: fs.readFileSync('./key.key', 'utf-8'),
@@ -65,7 +65,7 @@ El SDK calcula automáticamente: IVA, totales (neto, IVA, exento, no gravado, tr
 ## Configuración
 
 ```typescript
-const arca = new Arca({
+const arca = new ArcaFacturacion({
   cuit: 20123456786, // CUIT (número o string, con o sin guiones). Se valida el dígito verificador
   cert: '...', // Certificado X.509 (PEM)
   key: '...', // Clave privada (PEM)
@@ -177,7 +177,7 @@ import {
 } from '@ramiidv/arca-facturacion';
 import { formatDate } from '@ramiidv/arca-common';
 
-const arca = new Arca({ cuit, cert, key, production: true, ticketStorage: new FileTicketStorage('./.arca') });
+const arca = new ArcaFacturacion({ cuit, cert, key, production: true, ticketStorage: new FileTicketStorage('./.arca') });
 
 async function emitir(job: Job) {
   // 1. Reservar el número y guardar el intento ANTES de enviar.
@@ -548,7 +548,7 @@ const url = arca.urlQR(result);
 // → "https://www.arca.gob.ar/fe/qr/?p=<base64>"
 
 // O con los datos sueltos (la fecha acepta YYYYMMDD, YYYY-MM-DD o Date; el CAE, string o número)
-const url2 = Arca.generateQRUrl(
+const url2 = ArcaFacturacion.generateQRUrl(
   {
     fecha: '20261030',
     cuit: 20123456786,
@@ -601,7 +601,7 @@ errores de negocio ni SOAP Faults. **Las emisiones nunca se reintentan** (ver "E
 - **Configurable**: `retries: 0` para desactivar, `retries: 3` para más intentos
 
 ```typescript
-const arca = new Arca({
+const arca = new ArcaFacturacion({
   ...config,
   retries: 2, // 2 reintentos (3 intentos totales)
   retryDelayMs: 2000, // empezar con 2s → 4s → 8s
@@ -614,7 +614,7 @@ El SDK emite eventos para debugging y monitoreo sin forzar un logger específico
 
 ```typescript
 // Opción 1: callback en config
-const arca = new Arca({
+const arca = new ArcaFacturacion({
   ...config,
   onEvent: (e) => console.log(`[${e.type}]`, e),
 });
@@ -713,7 +713,7 @@ Abortar antes de enviar no envía nada.
 
 ```typescript
 // Estado del servidor
-const status = await arca.serverStatus();
+const { wsfe, wsfex } = await arca.status(); // { ok: true, status: { appserver, dbserver, authserver } } | { ok: false, error }
 
 // Último comprobante autorizado
 const ultimo = await arca.ultimoComprobante(1, CbteTipo.FACTURA_B);
@@ -745,7 +745,7 @@ puntos de venta y las cotizaciones **no** se cachean.
 
 ## API
 
-### `new Arca(config)`
+### `new ArcaFacturacion(config)`
 
 | Parámetro              | Tipo                                              | Default            | Descripción                                                        |
 | ---------------------- | ------------------------------------------------- | ------------------ | ------------------------------------------------------------------ |
@@ -874,10 +874,10 @@ Retornan `Contribuyente` con: `cuit`, `nombre`, `tipoPersona`, `estadoClave`, `d
 
 | Método                                | Descripción                                                |
 | ------------------------------------- | ---------------------------------------------------------- |
-| `Arca.generateQRUrl(input, options?)` | Genera la URL del QR oficial de ARCA                       |
-| `Arca.calcularTotales(items, opts?)`  | **Deprecado**: usar la función `calcularTotales`           |
-| `Arca.extractCAE(result)`             | **Deprecado**: usar la API simplificada o `FeDetResp`      |
-| `Arca.formatDate(date)`               | **Deprecado**: usar `formatDate` de `@ramiidv/arca-common` |
+| `ArcaFacturacion.generateQRUrl(input, options?)` | Genera la URL del QR oficial de ARCA                       |
+| `ArcaFacturacion.calcularTotales(items, opts?)`  | **Deprecado**: usar la función `calcularTotales`           |
+| `ArcaFacturacion.extractCAE(result)`             | **Deprecado**: usar la API simplificada o `FeDetResp`      |
+| `ArcaFacturacion.formatDate(date)`               | **Deprecado**: usar `formatDate` de `@ramiidv/arca-common` |
 
 También se exportan como funciones: `armarComprobante`, `calcularTotales`, `resolverCbteTipo`,
 `intentoDesdeComprobante`, `coincideConIntento`, `facturaResultDesdeConsulta`, `requiereRecuperacion`,

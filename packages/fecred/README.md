@@ -171,7 +171,7 @@ try {
 ```typescript
 const ticket = await fecred.wsaa.getAccessTicket('wsfecred');
 const auth = { token: ticket.token, sign: ticket.sign, cuitRepresentada: '20123456786' };
-const tipos = await fecred.fecred.consultarTiposMotivosRechazo(auth);
+const tipos = await fecred.client.consultarTiposMotivosRechazo(auth);
 ```
 
 Detalles del protocolo (verificados contra homologación): namespace `http://ar.gob.afip.wsfecred/FECredService/`, wrapper `<operacionRequest>`, header `SOAPAction` = namespace + operación (obligatorio), `dummy` con Body vacío.

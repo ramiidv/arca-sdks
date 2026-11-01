@@ -287,6 +287,11 @@ export interface FECompConsultarResult {
   Events?: { Evt: WsError | WsError[] };
 }
 
+/**
+ * Estado de WSFE/WSFEX con los nombres de ARCA.
+ * @deprecated Lo devuelven `serverStatus()`/`serverStatusExpo()`; `status()`
+ *   usa `ServiceStatus`/`ServerStatus` de arca-common.
+ */
 export interface ServerStatus {
   AppServer: string;
   DbServer: string;

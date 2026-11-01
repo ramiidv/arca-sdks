@@ -129,3 +129,10 @@ describe('ArcaFecred', () => {
     expect(wsaa.clearTicket).toHaveBeenCalledWith('wsfecred');
   });
 });
+
+describe('ArcaFecred.client', () => {
+  it('fecred (deprecado) es el mismo cliente que client', () => {
+    const f = new ArcaFecred({ cert: 'c', key: 'k', cuit: '20123456786' });
+    expect(f.fecred).toBe(f.client);
+  });
+});

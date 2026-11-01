@@ -3,7 +3,7 @@ import { ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/a
 import { ArcaResultadoIncierto, ArcaWSFEError } from '../src/errors.js';
 import { CbteTipo, CondicionIva, DocTipo, IvaTipo, Moneda, TributoTipo } from '../src/constants.js';
 import { requiereRecuperacion } from '../src/facturacion.js';
-import { Arca } from '../src/arca.js';
+import { Arca, ArcaFacturacion } from '../src/index.js';
 import {
   arcaDePrueba,
   caeAprobado,
@@ -13,6 +13,7 @@ import {
   ultimoAutorizado,
   wsfeErrores,
   wsfeResponse,
+  wsfexResponse,
 } from './helpers.js';
 
 afterEach(() => {
@@ -530,7 +531,25 @@ describe('config', () => {
   });
 });
 
-describe('serverStatus', () => {
+describe('status', () => {
+  it('WSFE y WSFEX con el ServerStatus de arca-common; una falla no oculta la otra', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FEDummy: wsfeResponse('FEDummy', '<AppServer>OK</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer>'),
+      FEXDummy: wsfexResponse('FEXDummy', '<AppServer>OK</AppServer><DbServer>OK</DbServer>'),
+    });
+    const r = await arca.status();
+    expect(r.wsfe).toEqual({ ok: true, status: { appserver: 'OK', dbserver: 'OK', authserver: 'OK' } });
+    expect(r.wsfex.ok).toBe(false);
+    expect(!r.wsfex.ok && r.wsfex.error).toBeInstanceOf(ArcaSoapError);
+  });
+
+  it('Arca (deprecado) es el mismo cliente que ArcaFacturacion', () => {
+    expect(Arca).toBe(ArcaFacturacion);
+  });
+});
+
+describe('serverStatus (deprecado)', () => {
   it('FEDummy → AppServer/DbServer/AuthServer', async () => {
     const arca = await arcaDePrueba();
     mockArcaFetch({

@@ -17,10 +17,10 @@
  */
 
 import fs from 'node:fs';
-import { Arca, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
+import { ArcaFacturacion, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {
-  const arca = new Arca({
+  const arca = new ArcaFacturacion({
     cuit: 20123456786,
     cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
     key: fs.readFileSync('./certs/clave.key', 'utf-8'),

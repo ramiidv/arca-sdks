@@ -23,7 +23,8 @@
     "release": "npm run build && changeset publish",
     "test:smoke": "node scripts/smoke-require.cjs",
     "wsdl:check": "node scripts/wsdl.mjs",
-    "wsdl:update": "node scripts/wsdl.mjs --write"
+    "wsdl:update": "node scripts/wsdl.mjs --write",
+    "typecheck:examples": "for p in packages/*/examples; do tsc -p $p || exit 1; done"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
