@@ -72,11 +72,11 @@ export type CbteModo = (typeof CBTE_MODOS)[number];
 
 // @public (undocumented)
 export interface CdcAuth {
-    Cuit: number | string;
+    cuit: number | string;
     // (undocumented)
-    Sign: string;
+    sign: string;
     // (undocumented)
-    Token: string;
+    token: string;
 }
 
 // @public
@@ -98,67 +98,67 @@ export interface CdcClientConfig extends ServiceTransport {
 // @public
 export interface CdcMensaje {
     // (undocumented)
-    Code: number;
+    code: number;
     // (undocumented)
-    Msg: string;
+    msg: string;
 }
 
 // @public
 export interface ComprobanteConstatado {
     // (undocumented)
-    CbteFch: string;
+    cbteFch: string;
     // (undocumented)
-    CbteModo: string;
+    cbteModo: string;
     // (undocumented)
-    CbteNro: number;
+    cbteNro: number;
     // (undocumented)
-    CbteTipo: number;
+    cbteTipo: number;
     // (undocumented)
-    CodAutorizacion: string;
+    codAutorizacion: string;
     // (undocumented)
-    CuitEmisor: string;
+    cuitEmisor: string;
     // (undocumented)
-    DocNroReceptor?: string;
+    docNroReceptor?: string;
     // (undocumented)
-    DocTipoReceptor?: string;
+    docTipoReceptor?: string;
     // (undocumented)
-    ImpTotal: number;
+    impTotal: number;
     // (undocumented)
-    Opcionales?: Opcional[];
+    opcionales?: Opcional[];
     // (undocumented)
-    PtoVta: number;
+    ptoVta: number;
 }
 
 // @public (undocumented)
 export interface ConstatarInput {
-    CbteFch: string | Date;
-    CbteModo: CbteModo;
-    CbteNro: number;
-    CbteTipo: number;
-    CodAutorizacion: string;
-    CuitEmisor: number | string;
-    DocNroReceptor?: number | string;
-    DocTipoReceptor?: number | string;
-    ImpTotal: number;
-    Opcionales?: Opcional[];
-    PtoVta: number;
+    cbteFch: string | Date;
+    cbteModo: CbteModo;
+    cbteNro: number;
+    cbteTipo: number;
+    codAutorizacion: string;
+    cuitEmisor: number | string;
+    docNroReceptor?: number | string;
+    docTipoReceptor?: number | string;
+    impTotal: number;
+    opcionales?: Opcional[];
+    ptoVta: number;
 }
 
 // @public (undocumented)
 export interface ConstatarResult {
-    CmpResp?: ComprobanteConstatado;
-    Events: CdcMensaje[];
-    FchProceso: string;
-    Observaciones: CdcMensaje[];
-    Resultado: 'A' | 'R';
+    cmpResp?: ComprobanteConstatado;
+    events: CdcMensaje[];
+    fchProceso: string;
+    observaciones: CdcMensaje[];
+    resultado: 'A' | 'R';
 }
 
 // @public
 export interface DocTipoItem {
     // (undocumented)
-    Desc: string;
+    desc: string;
     // (undocumented)
-    Id: string;
+    id: string;
 }
 
 export { FileTicketStorage }
@@ -169,27 +169,27 @@ export { MemoryTicketStorage }
 
 // @public
 export interface ModalidadItem {
-    Cod: string;
+    cod: string;
     // (undocumented)
-    Desc: string;
+    desc: string;
     // (undocumented)
-    FchDesde?: string;
+    fchDesde?: string;
     // (undocumented)
-    FchHasta?: string;
+    fchHasta?: string;
 }
 
 // @public
 export interface Opcional {
-    Id: string;
-    Valor: string;
+    id: string;
+    valor: string;
 }
 
 // @public
 export interface OpcionalTipoItem {
     // (undocumented)
-    Desc: string;
+    desc: string;
     // (undocumented)
-    Id: string;
+    id: string;
 }
 
 export { ServerStatus }
@@ -201,9 +201,9 @@ export { TicketStorage }
 // @public
 export interface TipoCbteItem {
     // (undocumented)
-    Desc: string;
+    desc: string;
     // (undocumented)
-    Id: number;
+    id: number;
 }
 
 // @public

@@ -87,7 +87,7 @@ describe('recuperarComprobante', () => {
     });
     const res = await arca.recuperarComprobante(intento);
     expect(res.estado).toBe('conflicto');
-    if (res.estado === 'conflicto') expect(res.encontrado.ResultGet.CbteDesde).toBe(151);
+    if (res.estado === 'conflicto') expect(res.encontrado.resultGet.cbteDesde).toBe(151);
   });
 
   it('flujo completo: emitir → incierto → recuperar → autorizado', async () => {

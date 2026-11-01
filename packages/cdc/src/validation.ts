@@ -4,7 +4,7 @@ import { encodeRequest } from '@ramiidv/arca-common/schema';
 import { CMP_REQ, DOC_NRO_RE } from './schemas.js';
 import type { ConstatarInput } from './types.js';
 
-/** `DocTipoReceptor`/`DocNroReceptor` aceptan número o string; `''` equivale a no informarlo. */
+/** `docTipoReceptor`/`docNroReceptor` aceptan número o string; `''` equivale a no informarlo. */
 function digitsOrUndefined(value: number | string | undefined): string | undefined {
   if (value === undefined || value === null || value === '') return undefined;
   return typeof value === 'number' ? (Number.isSafeInteger(value) && value >= 0 ? String(value) : 'x') : value.trim();
@@ -12,13 +12,13 @@ function digitsOrUndefined(value: number | string | undefined): string | undefin
 
 /** Reglas del manual que no son del WSDL: receptor completo, CUIT del receptor e `Id` de opcionales únicos. */
 function checkReglas(input: Record<string, unknown>, errors: ValidationErrorDetail[]): void {
-  const docTipo = input.DocTipoReceptor as string | undefined;
-  const docNro = input.DocNroReceptor as string | undefined;
+  const docTipo = input.docTipoReceptor as string | undefined;
+  const docNro = input.docNroReceptor as string | undefined;
   if ((docTipo === undefined) !== (docNro === undefined)) {
-    const field = docTipo === undefined ? 'DocTipoReceptor' : 'DocNroReceptor';
+    const field = docTipo === undefined ? 'docTipoReceptor' : 'docNroReceptor';
     errors.push({
       field,
-      message: `${field}: DocTipoReceptor y DocNroReceptor se informan juntos`,
+      message: `${field}: docTipoReceptor y docNroReceptor se informan juntos`,
       value: input[field],
     });
   }
@@ -29,19 +29,19 @@ function checkReglas(input: Record<string, unknown>, errors: ValidationErrorDeta
     } catch (e) {
       if (!(e instanceof ArcaValidationError)) throw e;
       errors.push({
-        field: 'DocNroReceptor',
-        message: `DocNroReceptor: ${e.details[0]?.message ?? e.message}`,
+        field: 'docNroReceptor',
+        message: `docNroReceptor: ${e.details[0]?.message ?? e.message}`,
         value: docNro,
       });
     }
   }
-  if (Array.isArray(input.Opcionales)) {
+  if (Array.isArray(input.opcionales)) {
     const seen = new Set<string>();
-    input.Opcionales.forEach((op: unknown, i) => {
-      const id = (op as { Id?: unknown } | null)?.Id;
+    input.opcionales.forEach((op: unknown, i) => {
+      const id = (op as { id?: unknown } | null)?.id;
       if (typeof id !== 'string' || id.length < 1 || id.length > 4) return; // ya lo reporta el schema
       if (seen.has(id)) {
-        errors.push({ field: `Opcionales[${i}].Id`, message: `Opcionales[${i}].Id: Id "${id}" repetido`, value: id });
+        errors.push({ field: `opcionales[${i}].id`, message: `opcionales[${i}].id: id "${id}" repetido`, value: id });
       }
       seen.add(id);
     });
@@ -68,8 +68,8 @@ export function buildCmpReq(input: ConstatarInput): Record<string, unknown> {
     input !== null && typeof input === 'object'
       ? {
           ...input,
-          DocTipoReceptor: digitsOrUndefined(input.DocTipoReceptor),
-          DocNroReceptor: digitsOrUndefined(input.DocNroReceptor),
+          docTipoReceptor: digitsOrUndefined(input.docTipoReceptor),
+          docNroReceptor: digitsOrUndefined(input.docNroReceptor),
         }
       : input;
   return encodeRequest(normalized, CMP_REQ, 'ConstatarInput', checkReglas);

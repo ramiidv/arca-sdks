@@ -8,11 +8,11 @@ const cents = (n: number) => Math.round(n * 100);
 
 /** Invariante: BaseImp + Importe de cada alícuota + exento + no gravado + tributos = ImpTotal, al centavo. */
 function sumaExacta(d: InvoiceDetail): boolean {
-  const alicuotas = (d.Iva ?? []).reduce((a, i) => a + cents(i.BaseImp) + cents(i.Importe), 0);
+  const alicuotas = (d.iva ?? []).reduce((a, i) => a + cents(i.baseImp) + cents(i.importe), 0);
   return (
-    alicuotas + cents(d.ImpOpEx) + cents(d.ImpTotConc) + cents(d.ImpTrib) === cents(d.ImpTotal) &&
-    (d.Iva ?? []).reduce((a, i) => a + cents(i.BaseImp), 0) === cents(d.ImpNeto) &&
-    (d.Iva ?? []).reduce((a, i) => a + cents(i.Importe), 0) === cents(d.ImpIVA)
+    alicuotas + cents(d.impOpEx) + cents(d.impTotConc) + cents(d.impTrib) === cents(d.impTotal) &&
+    (d.iva ?? []).reduce((a, i) => a + cents(i.baseImp), 0) === cents(d.impNeto) &&
+    (d.iva ?? []).reduce((a, i) => a + cents(i.importe), 0) === cents(d.impIva)
   );
 }
 
@@ -30,8 +30,8 @@ function armar(items: LineItem[], extra: Record<string, unknown> = {}) {
 describe('precios con IVA incluido', () => {
   it('un solo ítem de $1 al 21%', () => {
     const { request } = armar([{ total: 1, iva: IvaTipo.IVA_21 }]);
-    expect(request.ImpTotal).toBe(1);
-    expect(request.Iva).toEqual([{ Id: IvaTipo.IVA_21, BaseImp: 0.83, Importe: 0.17 }]);
+    expect(request.impTotal).toBe(1);
+    expect(request.iva).toEqual([{ id: IvaTipo.IVA_21, baseImp: 0.83, importe: 0.17 }]);
     expect(sumaExacta(request)).toBe(true);
   });
 
@@ -41,21 +41,21 @@ describe('precios con IVA incluido', () => {
       { total: 99.99, iva: IvaTipo.IVA_21 },
       { total: 552.5, iva: IvaTipo.IVA_10_5 },
     ]);
-    expect(request.ImpTotal).toBe(1862.49);
-    const iva21 = request.Iva!.find((i) => i.Id === IvaTipo.IVA_21)!;
-    const iva105 = request.Iva!.find((i) => i.Id === IvaTipo.IVA_10_5)!;
-    expect(cents(iva21.BaseImp) + cents(iva21.Importe)).toBe(130999);
-    expect(iva105).toEqual({ Id: IvaTipo.IVA_10_5, BaseImp: 500, Importe: 52.5 });
+    expect(request.impTotal).toBe(1862.49);
+    const iva21 = request.iva!.find((i) => i.id === IvaTipo.IVA_21)!;
+    const iva105 = request.iva!.find((i) => i.id === IvaTipo.IVA_10_5)!;
+    expect(cents(iva21.baseImp) + cents(iva21.importe)).toBe(130999);
+    expect(iva105).toEqual({ id: IvaTipo.IVA_10_5, baseImp: 500, importe: 52.5 });
     expect(sumaExacta(request)).toBe(true);
   });
 
   it('exentos y no gravados con total: total = neto', () => {
     const { request } = armar([{ total: 121, iva: IvaTipo.IVA_21 }, { total: 50.5, exento: true }, { total: 10 }]);
-    expect(request.ImpOpEx).toBe(50.5);
-    expect(request.ImpTotConc).toBe(10);
-    expect(request.ImpNeto).toBe(100);
-    expect(request.ImpIVA).toBe(21);
-    expect(request.ImpTotal).toBe(181.5);
+    expect(request.impOpEx).toBe(50.5);
+    expect(request.impTotConc).toBe(10);
+    expect(request.impNeto).toBe(100);
+    expect(request.impIva).toBe(21);
+    expect(request.impTotal).toBe(181.5);
     expect(sumaExacta(request)).toBe(true);
   });
 
@@ -64,8 +64,8 @@ describe('precios con IVA incluido', () => {
       { neto: 100, iva: IvaTipo.IVA_21 },
       { total: 121, iva: IvaTipo.IVA_21 },
     ]);
-    expect(request.Iva).toEqual([{ Id: IvaTipo.IVA_21, BaseImp: 200, Importe: 42 }]);
-    expect(request.ImpTotal).toBe(242);
+    expect(request.iva).toEqual([{ id: IvaTipo.IVA_21, baseImp: 200, importe: 42 }]);
+    expect(request.impTotal).toBe(242);
   });
 
   it('tipo C con total: todo va a ImpNeto', () => {
@@ -76,10 +76,10 @@ describe('precios con IVA incluido', () => {
       fecha: '20261030',
       items: [{ total: 1500.5 }],
     });
-    expect(request.ImpNeto).toBe(1500.5);
-    expect(request.ImpIVA).toBe(0);
-    expect(request.ImpTotal).toBe(1500.5);
-    expect(request.Iva).toBeUndefined();
+    expect(request.impNeto).toBe(1500.5);
+    expect(request.impIva).toBe(0);
+    expect(request.impTotal).toBe(1500.5);
+    expect(request.iva).toBeUndefined();
   });
 });
 
@@ -93,9 +93,9 @@ describe('descuento global', () => {
       { descuentoGlobal: 171 },
     );
     // 1210/1710 * 171 = 121 ; 500/1710 * 171 = 50
-    expect(request.ImpTotal).toBe(1539);
-    expect(request.ImpOpEx).toBe(450);
-    expect(request.Iva).toEqual([{ Id: IvaTipo.IVA_21, BaseImp: 900, Importe: 189 }]);
+    expect(request.impTotal).toBe(1539);
+    expect(request.impOpEx).toBe(450);
+    expect(request.iva).toEqual([{ id: IvaTipo.IVA_21, baseImp: 900, importe: 189 }]);
     expect(importes.descuento).toBe(171);
     expect(sumaExacta(request)).toBe(true);
   });
@@ -109,17 +109,17 @@ describe('descuento global', () => {
       ],
       { descuentoGlobal: 0.01 * 7 },
     );
-    expect(request.ImpTotal).toBe(299.94);
+    expect(request.impTotal).toBe(299.94);
     expect(sumaExacta(request)).toBe(true);
   });
 
   it('no afecta los tributos', () => {
     const { request } = armar([{ total: 121, iva: IvaTipo.IVA_21 }], {
       descuentoGlobal: 21,
-      tributos: [{ Id: 99, Desc: 'Otro', BaseImp: 100, Alic: 0, Importe: 3.33 }],
+      tributos: [{ id: 99, desc: 'Otro', baseImp: 100, alic: 0, importe: 3.33 }],
     });
-    expect(request.ImpTrib).toBe(3.33);
-    expect(request.ImpTotal).toBe(103.33);
+    expect(request.impTrib).toBe(3.33);
+    expect(request.impTotal).toBe(103.33);
     expect(sumaExacta(request)).toBe(true);
   });
 
@@ -140,7 +140,7 @@ describe('descuento global', () => {
       const descuentoGlobal = Math.round(rnd() * bruto * 100) / 100;
       const { request } = armar(items, { descuentoGlobal });
       expect(sumaExacta(request)).toBe(true);
-      expect(cents(request.ImpTotal)).toBe(cents(bruto) - cents(descuentoGlobal));
+      expect(cents(request.impTotal)).toBe(cents(bruto) - cents(descuentoGlobal));
     }
   });
 });
@@ -167,8 +167,8 @@ describe('validación de items y descuento', () => {
 describe('armarComprobante', () => {
   it('es puro, no usa la red, y devuelve el intento', () => {
     const { request, importes, intento } = armar([{ total: 1210, iva: IvaTipo.IVA_21 }], { cbteNro: 77 });
-    expect(request.CbteDesde).toBe(77);
-    expect(request.CondicionIVAReceptorId).toBe(5);
+    expect(request.cbteDesde).toBe(77);
+    expect(request.condicionIvaReceptorId).toBe(5);
     expect(importes.total).toBe(1210);
     expect(intento).toEqual({
       ptoVta: 1,
@@ -197,7 +197,7 @@ describe('regresiones', () => {
       ],
       { descuentoGlobal: 0.02 },
     );
-    expect(iva.every((a) => a.BaseImp >= 0 && a.Importe >= 0)).toBe(true);
+    expect(iva.every((a) => a.baseImp >= 0 && a.importe >= 0)).toBe(true);
     expect(importes.exento).toBeGreaterThanOrEqual(0);
     expect(importes.total).toBe(0.01);
   });

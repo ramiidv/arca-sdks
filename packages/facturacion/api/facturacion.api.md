@@ -31,18 +31,18 @@ export { AccessTicket }
 // @public
 export interface ActividadItem {
     // (undocumented)
-    Desc: string;
+    desc: string;
     // (undocumented)
-    Id: number;
+    id: number;
     // (undocumented)
-    Orden: number;
+    orden: number;
 }
 
 // @public (undocumented)
 export interface AlicuotaIva {
-    BaseImp: number;
-    Id: number;
-    Importe: number;
+    baseImp: number;
+    id: number;
+    importe: number;
 }
 
 export { ArcaAuthError }
@@ -75,7 +75,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     consultarComprobanteExpo(cbteTipo: number, ptoVta: number, cbteNro: number, call?: CallOptions): Promise<WsfexGetCmpResult>;
     consultarSinMovimientoCAEA(caea: string, ptoVta: number, call?: CallOptions): Promise<CaeaSinMovItem[]>;
     crearFactura(request: InvoiceRequest, call?: CallOptions): Promise<FECAESolicitarResult>;
-    crearFacturaAuto(ptoVta: number, cbteTipo: number, invoice: Omit<InvoiceDetail, 'CbteDesde' | 'CbteHasta'>, call?: CallOptions): Promise<FECAESolicitarResult>;
+    crearFacturaAuto(ptoVta: number, cbteTipo: number, invoice: Omit<InvoiceDetail, 'cbteDesde' | 'cbteHasta'>, call?: CallOptions): Promise<FECAESolicitarResult>;
     crearFacturaExportacion(invoice: WsfexInvoice, call?: CallOptions): Promise<WsfexAuthResult>;
     facturar(opts: FacturarOpts, call?: CallOptions): Promise<FacturaResult>;
     facturarExpo(opts: FacturarExpoOpts, call?: CallOptions): Promise<FacturaExpoResult>;
@@ -197,87 +197,69 @@ export function armarComprobante(opts: FacturarOpts & {
 
 // @public (undocumented)
 export interface CaeaRegInfRequest {
-    CbteTipo: number;
+    cbteTipo: number;
     invoices: (InvoiceDetail & {
-        CAEA: string;
-        CbteFchHsGen: string;
+        caea: string;
+        cbteFchHsGen: string;
     })[];
-    PtoVta: number;
+    ptoVta: number;
 }
 
 // @public (undocumented)
 export interface CaeaRegInfResult {
+    events?: MensajeArca[];
     // (undocumented)
-    Errors?: {
-        Err: WsError[];
-    };
+    feCabResp: FeCabResp;
     // (undocumented)
-    Events?: {
-        Evt: WsError[];
-    };
-    // (undocumented)
-    FeCabResp: FeCabResp;
-    // (undocumented)
-    FeDetResp: {
-        FECAEADetResponse: FECAEDetResponse[];
-    };
+    feDetResp: FECAEDetResponse[];
 }
 
 // @public
 export interface CaeaSinMovItem {
     // (undocumented)
-    CAEA: string;
+    caea: string;
     // (undocumented)
-    FchProceso: string;
+    fchProceso: string;
     // (undocumented)
-    PtoVta: number;
+    ptoVta: number;
 }
 
 // @public
 export interface CaeaSinMovResult {
     // (undocumented)
-    CAEA?: string;
+    caea?: string;
+    events?: MensajeArca[];
     // (undocumented)
-    Errors?: {
-        Err: WsError[];
-    };
+    fchProceso?: string;
     // (undocumented)
-    Events?: {
-        Evt: WsError[];
-    };
+    ptoVta?: number;
     // (undocumented)
-    FchProceso?: string;
-    // (undocumented)
-    PtoVta?: number;
-    // (undocumented)
-    Resultado: 'A' | 'R';
+    resultado: 'A' | 'R';
 }
 
 // @public
 export interface CaeaSolicitarResult {
     // (undocumented)
-    CAEA: string;
+    caea: string;
     eventos?: MensajeArca[];
     // (undocumented)
-    FchProceso: string;
+    fchProceso: string;
     // (undocumented)
-    FchTopeInf: string;
+    fchTopeInf: string;
     // (undocumented)
-    FchVigDesde: string;
+    fchVigDesde: string;
     // (undocumented)
-    FchVigHasta: string;
+    fchVigHasta: string;
     // (undocumented)
-    Observaciones?: {
-        Obs: WsError[];
-    };
-    Orden: number;
-    Periodo: string;
+    observaciones?: MensajeArca[];
+    orden: number;
+    periodo: string;
 }
 
 // @public
 export function calcularTotales(items: LineItem[], opts?: {
     tributos?: {
-        Importe: number;
+        importe: number;
     }[];
     tipoC?: boolean;
     descuentoGlobal?: number;
@@ -379,10 +361,10 @@ export function coincideConIntento(consulta: FECompConsultarResult, intento: Int
 // @public
 export interface Comprador {
     // (undocumented)
-    DocNro: number;
+    docNro: number;
     // (undocumented)
-    DocTipo: number;
-    Porcentaje: number;
+    docTipo: number;
+    porcentaje: number;
 }
 
 // @public (undocumented)
@@ -394,11 +376,11 @@ export interface ComprobanteArmado {
 
 // @public (undocumented)
 export interface ComprobanteAsociado {
-    CbteFch?: string;
-    Cuit?: string | number;
-    Nro: number;
-    PtoVta: number;
-    Tipo: number;
+    cbteFch?: string;
+    cuit?: string | number;
+    nro: number;
+    ptoVta: number;
+    tipo: number;
 }
 
 // @public (undocumented)
@@ -424,20 +406,20 @@ export { CondicionIva }
 
 // @public
 export interface CondicionIvaItem {
-    Cmp_Clase?: string;
+    cmpClase?: string;
     // (undocumented)
-    Desc: string;
+    desc: string;
     // (undocumented)
-    Id: number;
+    id: number;
 }
 
 // @public
 export interface CotizacionResult {
-    FchCotiz: string;
+    fchCotiz: string;
     // (undocumented)
-    MonCotiz: number;
+    monCotiz: number;
     // (undocumented)
-    MonId: string;
+    monId: string;
 }
 
 // @public
@@ -586,136 +568,107 @@ export interface FacturarOpts {
 // @public (undocumented)
 export interface FeCabResp {
     // (undocumented)
-    CantReg: number;
+    cantReg: number;
     // (undocumented)
-    CbteTipo: number;
+    cbteTipo: number;
     // (undocumented)
-    Cuit: number;
+    cuit: number;
     // (undocumented)
-    FchProceso: string;
+    fchProceso: string;
     // (undocumented)
-    PtoVta: number;
+    ptoVta: number;
     // (undocumented)
-    Reproceso: string;
+    reproceso: string;
     // (undocumented)
-    Resultado: 'A' | 'R' | 'P';
+    resultado: 'A' | 'R' | 'P';
 }
 
 // @public (undocumented)
 export interface FECAEDetResponse {
-    CAE?: string;
-    CAEA?: string;
+    cae?: string;
+    caea?: string;
     // (undocumented)
-    CAEFchVto?: string;
+    caeFchVto?: string;
     // (undocumented)
-    CbteDesde: number;
+    cbteDesde: number;
     // (undocumented)
-    CbteFch: string;
+    cbteFch: string;
     // (undocumented)
-    CbteHasta: number;
+    cbteHasta: number;
     // (undocumented)
-    Concepto: number;
+    concepto: number;
     // (undocumented)
-    DocNro: number;
+    docNro: number;
     // (undocumented)
-    DocTipo: number;
+    docTipo: number;
     // (undocumented)
-    Observaciones?: {
-        Obs: WsError[];
-    };
+    observaciones?: MensajeArca[];
     // (undocumented)
-    Resultado: 'A' | 'R';
+    resultado: 'A' | 'R';
 }
 
 // @public (undocumented)
 export interface FECAESolicitarResult {
+    events?: MensajeArca[];
     // (undocumented)
-    Errors?: {
-        Err: WsError[];
-    };
+    feCabResp: FeCabResp;
     // (undocumented)
-    Events?: {
-        Evt: WsError[];
-    };
-    // (undocumented)
-    FeCabResp: FeCabResp;
-    // (undocumented)
-    FeDetResp: {
-        FECAEDetResponse: FECAEDetResponse[];
-    };
+    feDetResp: FECAEDetResponse[];
 }
 
 // @public (undocumented)
 export interface FECompConsultarResult {
+    events?: MensajeArca[];
     // (undocumented)
-    Errors?: {
-        Err: WsError[];
-    };
-    // (undocumented)
-    Events?: {
-        Evt: WsError[];
-    };
-    // (undocumented)
-    ResultGet: {
-        Concepto: number;
-        DocTipo: number;
-        DocNro: number;
-        CbteDesde: number;
-        CbteHasta: number;
-        CbteFch: string;
-        ImpTotal: number;
-        ImpTotConc: number;
-        ImpNeto: number;
-        ImpOpEx: number;
-        ImpTrib: number;
-        ImpIVA: number;
-        FchServDesde: string;
-        FchServHasta: string;
-        FchVtoPago: string;
-        MonId: string;
-        MonCotiz: number;
-        Resultado: 'A' | 'R';
-        CodAutorizacion: string;
-        EmisionTipo: string;
-        FchVto: string;
-        FchProceso: string;
-        PtoVta: number;
-        CbteTipo: number;
-        CondicionIVAReceptorId?: number;
-        Iva?: {
-            AlicIva: AlicuotaIva[];
-        };
-        Tributos?: {
-            Tributo: Tributo[];
-        };
-        CbtesAsoc?: {
-            CbteAsoc: ComprobanteAsociado[];
-        };
-        Opcionales?: {
-            Opcional: Opcional[];
-        };
-        Observaciones?: {
-            Obs: WsError[];
-        };
+    resultGet: {
+        concepto: number;
+        docTipo: number;
+        docNro: number;
+        cbteDesde: number;
+        cbteHasta: number;
+        cbteFch: string;
+        impTotal: number;
+        impTotConc: number;
+        impNeto: number;
+        impOpEx: number;
+        impTrib: number;
+        impIva: number;
+        fchServDesde: string;
+        fchServHasta: string;
+        fchVtoPago: string;
+        monId: string;
+        monCotiz: number;
+        resultado: 'A' | 'R';
+        codAutorizacion: string;
+        emisionTipo: string;
+        fchVto: string;
+        fchProceso: string;
+        ptoVta: number;
+        cbteTipo: number;
+        condicionIvaReceptorId?: number;
+        canMisMonExt?: string;
+        iva?: AlicuotaIva[];
+        tributos?: Tributo[];
+        cbtesAsoc?: ComprobanteAsociado[];
+        opcionales?: Opcional[];
+        compradores?: Comprador[];
+        periodoAsoc?: PeriodoAsociado;
+        actividades?: {
+            id: number;
+        }[];
+        observaciones?: MensajeArca[];
     };
 }
 
 // @public (undocumented)
 export interface FECompUltimoAutorizadoResult {
     // (undocumented)
-    CbteNro: number;
+    cbteNro: number;
     // (undocumented)
-    CbteTipo: number;
+    cbteTipo: number;
+    events?: MensajeArca[];
     // (undocumented)
-    Errors?: {
-        Err: WsError[];
-    };
-    // (undocumented)
-    Events?: {
-        Evt: WsError[];
-    };
-    // (undocumented)
-    PtoVta: number;
+    ptoVta: number;
 }
 
 export { FileTicketStorage }
@@ -774,42 +727,42 @@ export interface IntentoExpo {
 
 // @public (undocumented)
 export interface InvoiceDetail {
-    Actividades?: {
-        Id: number;
+    actividades?: {
+        id: number;
     }[];
-    CanMisMonExt?: string;
-    CbteDesde: number;
-    CbteFch: string;
-    CbteFchHsGen?: string;
-    CbteHasta: number;
-    CbtesAsoc?: ComprobanteAsociado[];
-    Compradores?: Comprador[];
-    Concepto: number;
-    CondicionIVAReceptorId?: number;
-    DocNro: number;
-    DocTipo: number;
-    FchServDesde?: string;
-    FchServHasta?: string;
-    FchVtoPago?: string;
-    ImpIVA: number;
-    ImpNeto: number;
-    ImpOpEx: number;
-    ImpTotal: number;
-    ImpTotConc: number;
-    ImpTrib: number;
-    Iva?: AlicuotaIva[];
-    MonCotiz?: number;
-    MonId: string;
-    Opcionales?: Opcional[];
-    PeriodoAsoc?: PeriodoAsociado;
-    Tributos?: Tributo[];
+    canMisMonExt?: string;
+    cbteDesde: number;
+    cbteFch: string;
+    cbteFchHsGen?: string;
+    cbteHasta: number;
+    cbtesAsoc?: ComprobanteAsociado[];
+    compradores?: Comprador[];
+    concepto: number;
+    condicionIvaReceptorId?: number;
+    docNro: number;
+    docTipo: number;
+    fchServDesde?: string;
+    fchServHasta?: string;
+    fchVtoPago?: string;
+    impIva: number;
+    impNeto: number;
+    impOpEx: number;
+    impTotal: number;
+    impTotConc: number;
+    impTrib: number;
+    iva?: AlicuotaIva[];
+    monCotiz?: number;
+    monId: string;
+    opcionales?: Opcional[];
+    periodoAsoc?: PeriodoAsociado;
+    tributos?: Tributo[];
 }
 
 // @public (undocumented)
 export interface InvoiceRequest {
-    CbteTipo: number;
+    cbteTipo: number;
     invoices: InvoiceDetail[];
-    PtoVta: number;
+    ptoVta: number;
 }
 
 // @public (undocumented)
@@ -897,13 +850,13 @@ export enum Moneda {
 // @public (undocumented)
 export interface MonedaItem {
     // (undocumented)
-    Desc: string;
+    desc: string;
     // (undocumented)
-    FchDesde?: string;
+    fchDesde?: string;
     // (undocumented)
-    FchHasta?: string;
+    fchHasta?: string;
     // (undocumented)
-    Id: string;
+    id: string;
 }
 
 // @public
@@ -924,8 +877,8 @@ export interface NotaDebitoOpts extends Omit<FacturarOpts, 'cbteTipo'> {
 
 // @public (undocumented)
 export interface Opcional {
-    Id: string;
-    Valor: string;
+    id: string;
+    valor: string;
 }
 
 // @public
@@ -934,39 +887,39 @@ export type OperacionEmision = 'FECAESolicitar' | 'FECAEARegInformativo';
 // @public
 export interface PaisItem {
     // (undocumented)
-    Desc: string;
+    desc: string;
     // (undocumented)
-    Id: number;
+    id: number;
 }
 
 // @public (undocumented)
 export interface ParamItem {
     // (undocumented)
-    Desc: string;
+    desc: string;
     // (undocumented)
-    FchDesde?: string;
+    fchDesde?: string;
     // (undocumented)
-    FchHasta?: string;
+    fchHasta?: string;
     // (undocumented)
-    Id: number;
+    id: number;
 }
 
 // @public
 export interface PeriodoAsociado {
-    FchDesde: string;
-    FchHasta: string;
+    fchDesde: string;
+    fchHasta: string;
 }
 
 // @public (undocumented)
 export interface PtoVentaItem {
     // (undocumented)
-    Bloqueado: string;
+    bloqueado: string;
     // (undocumented)
-    EmisionTipo: string;
+    emisionTipo: string;
     // (undocumented)
-    FchBaja: string;
+    fchBaja: string;
     // (undocumented)
-    Nro: number;
+    nro: number;
 }
 
 // @public
@@ -1030,11 +983,11 @@ export enum TipoExpo {
 
 // @public (undocumented)
 export interface Tributo {
-    Alic: number;
-    BaseImp: number;
-    Desc: string;
-    Id: number;
-    Importe: number;
+    alic: number;
+    baseImp: number;
+    desc: string;
+    id: number;
+    importe: number;
 }
 
 // @public (undocumented)
@@ -1084,14 +1037,6 @@ export interface WsClientOptions {
     timeoutMs?: number;
 }
 
-// @public (undocumented)
-export interface WsError {
-    // (undocumented)
-    Code: number;
-    // (undocumented)
-    Msg: string;
-}
-
 // @public
 export const WSFE_ERRORES_INTERNOS: readonly number[];
 
@@ -1104,11 +1049,11 @@ export const WSFE_NUMERO_NO_CORRESPONDE = 10016;
 // @public (undocumented)
 export interface WsfeAuth {
     // (undocumented)
-    Cuit: number;
+    cuit: number;
     // (undocumented)
-    Sign: string;
+    sign: string;
     // (undocumented)
-    Token: string;
+    token: string;
 }
 
 // @public
@@ -1160,22 +1105,20 @@ export const WSFEX_NAMESPACE = "http://ar.gov.afip.dif.fexv1/";
 // @public (undocumented)
 export interface WsfexAuthResult {
     // (undocumented)
-    FEXErr?: WsfexErr;
+    fexEvents?: WsfexEvents;
     // (undocumented)
-    FEXEvents?: WsfexEvents;
-    // (undocumented)
-    FEXResultAuth?: {
-        Id: number;
-        Cuit: number;
-        Cbte_tipo: number;
-        Punto_vta: number;
-        Cbte_nro: number;
-        Cae?: string;
-        Fch_venc_Cae?: string;
-        Fch_cbte?: string;
-        Resultado: 'A' | 'R';
-        Reproceso?: string;
-        Motivos_Obs?: string;
+    fexResultAuth?: {
+        id: number;
+        cuit: number;
+        cbteTipo: number;
+        puntoVta: number;
+        cbteNro: number;
+        cae?: string;
+        fchVencCae?: string;
+        fchCbte?: string;
+        resultado: 'A' | 'R';
+        reproceso?: string;
+        motivosObs?: string;
     };
 }
 
@@ -1209,159 +1152,135 @@ export class WsfexClient extends SoapServiceClient {
 
 // @public (undocumented)
 export interface WsfexCmpAsoc {
-    Cbte_cuit: number;
-    Cbte_nro: number;
-    Cbte_punto_vta: number;
-    Cbte_tipo: number;
+    cbteCuit: number;
+    cbteNro: number;
+    cbtePuntoVta: number;
+    cbteTipo: number;
 }
 
 // @public
 export interface WsfexCotizacion {
     // (undocumented)
-    Mon_ctz: number;
+    monCtz: number;
     // (undocumented)
-    Mon_fecha?: string;
+    monFecha?: string;
 }
 
-// @public (undocumented)
-export interface WsfexErr {
-    // (undocumented)
-    ErrCode: number;
-    // (undocumented)
-    ErrMsg: string;
-}
-
-// @public (undocumented)
+// @public
 export interface WsfexEvents {
     // (undocumented)
-    EventCode: number;
+    eventCode: number;
     // (undocumented)
-    EventMsg: string;
+    eventMsg: string;
 }
 
 // @public
 export interface WsfexGetCmpResult {
     // (undocumented)
-    FEXErr?: WsfexErr;
+    fexEvents?: WsfexEvents;
     // (undocumented)
-    FEXEvents?: WsfexEvents;
-    // (undocumented)
-    FEXResultGet?: {
-        Id: number;
-        Fecha_cbte?: string;
-        Cbte_tipo: number;
-        Punto_vta: number;
-        Cbte_nro: number;
-        Tipo_expo: number;
-        Permiso_existente?: string;
-        Permisos?: {
-            Permiso: WsfexPermiso[];
-        };
-        Dst_cmp: number;
-        Cliente?: string;
-        Cuit_pais_cliente: number | string;
-        Domicilio_cliente?: string;
-        Id_impositivo?: string;
-        Moneda_Id?: string;
-        Moneda_ctz: number;
-        CanMisMonExt?: string;
-        Obs_comerciales?: string;
-        Imp_total: number;
-        Obs?: string;
-        Cmps_asoc?: {
-            Cmp_asoc: WsfexCmpAsoc[];
-        };
-        Forma_pago?: string;
-        Incoterms?: string;
-        Incoterms_Ds?: string;
-        Idioma_cbte: number;
-        Items?: {
-            Item: WsfexItem[];
-        };
-        Fecha_cbte_cae?: string;
-        Fch_venc_Cae?: string;
-        Cae?: string;
-        Resultado?: 'A' | 'R';
-        Motivos_Obs?: string;
-        Opcionales?: {
-            Opcional: Opcional[];
-        };
-        Fecha_pago?: string;
-        Actividades?: {
-            Actividad: {
-                Id: number;
-            }[];
-        };
+    fexResultGet?: {
+        id: number;
+        fechaCbte?: string;
+        cbteTipo: number;
+        puntoVta: number;
+        cbteNro: number;
+        tipoExpo: number;
+        permisoExistente?: string;
+        permisos?: WsfexPermiso[];
+        dstCmp: number;
+        cliente?: string;
+        cuitPaisCliente: number | string;
+        domicilioCliente?: string;
+        idImpositivo?: string;
+        monedaId?: string;
+        monedaCtz: number;
+        canMisMonExt?: string;
+        obsComerciales?: string;
+        impTotal: number;
+        obs?: string;
+        cmpsAsoc?: WsfexCmpAsoc[];
+        formaPago?: string;
+        incoterms?: string;
+        incotermsDs?: string;
+        idiomaCbte: number;
+        items?: WsfexItem[];
+        fechaCbteCae?: string;
+        fchVencCae?: string;
+        cae?: string;
+        resultado?: 'A' | 'R';
+        motivosObs?: string;
+        opcionales?: Opcional[];
+        fechaPago?: string;
+        actividades?: {
+            id: number;
+        }[];
     };
 }
 
 // @public (undocumented)
 export interface WsfexInvoice {
-    Actividades?: {
-        Id: number;
+    actividades?: {
+        id: number;
     }[];
-    CanMisMonExt?: string;
-    Cbte_nro: number;
-    Cbte_Tipo: number;
-    Cliente: string;
-    Cmps_asoc?: WsfexCmpAsoc[];
-    Cuit_pais_cliente: number;
-    Domicilio_cliente: string;
-    Dst_cmp: number;
-    Fecha_cbte: string;
-    Fecha_pago?: string;
-    Forma_pago: string;
-    Id: number;
-    Id_impositivo: string;
-    Idioma_cbte: number;
-    Imp_total: number;
-    Incoterms?: string;
-    Incoterms_Ds?: string;
-    Items: WsfexItem[];
-    Moneda_ctz: number;
-    Moneda_Id: string;
-    Obs?: string;
-    Obs_comerciales?: string;
-    Opcionales?: Opcional[];
-    Permiso_existente?: string;
-    Permisos?: WsfexPermiso[];
-    Punto_vta: number;
-    Tipo_expo: number;
+    canMisMonExt?: string;
+    cbteNro: number;
+    cbteTipo: number;
+    cliente: string;
+    cmpsAsoc?: WsfexCmpAsoc[];
+    cuitPaisCliente: number;
+    domicilioCliente: string;
+    dstCmp: number;
+    fechaCbte: string;
+    fechaPago?: string;
+    formaPago: string;
+    id: number;
+    idImpositivo: string;
+    idiomaCbte: number;
+    impTotal: number;
+    incoterms?: string;
+    incotermsDs?: string;
+    items: WsfexItem[];
+    monedaCtz: number;
+    monedaId: string;
+    obs?: string;
+    obsComerciales?: string;
+    opcionales?: Opcional[];
+    permisoExistente?: string;
+    permisos?: WsfexPermiso[];
+    puntoVta: number;
+    tipoExpo: number;
 }
 
 // @public (undocumented)
 export interface WsfexItem {
-    Pro_bonificacion: number;
-    Pro_codigo: string;
-    Pro_ds: string;
-    Pro_precio_uni: number;
-    Pro_qty: number;
-    Pro_total_item: number;
-    Pro_umed: number;
+    proBonificacion: number;
+    proCodigo: string;
+    proDs: string;
+    proPrecioUni: number;
+    proQty: number;
+    proTotalItem: number;
+    proUmed: number;
 }
 
 // @public (undocumented)
 export interface WsfexLastCmpResult {
     // (undocumented)
-    FEXErr?: WsfexErr;
+    fexEvents?: WsfexEvents;
     // (undocumented)
-    FEXEvents?: WsfexEvents;
-    // (undocumented)
-    FEXResult_LastCMP?: {
-        Cbte_nro: number;
-        Cbte_fecha?: string;
+    fexResultLastCmp?: {
+        cbteNro: number;
+        cbteFecha?: string;
     };
 }
 
 // @public (undocumented)
 export interface WsfexLastIdResult {
     // (undocumented)
-    FEXErr?: WsfexErr;
+    fexEvents?: WsfexEvents;
     // (undocumented)
-    FEXEvents?: WsfexEvents;
-    // (undocumented)
-    FEXResultGet?: {
-        Id: number;
+    fexResultGet?: {
+        id: number;
     };
 }
 
@@ -1370,18 +1289,18 @@ export type WsfexParamItem = Record<string, string | number>;
 
 // @public (undocumented)
 export interface WsfexPermiso {
-    Dst_merc: number;
-    Id_permiso: string;
+    dstMerc: number;
+    idPermiso: string;
 }
 
 // @public
 export interface WsfexPtoVenta {
     // (undocumented)
-    Pve_Bloqueado?: string;
+    pveBloqueado?: string;
     // (undocumented)
-    Pve_FchBaja?: string;
+    pveFchBaja?: string;
     // (undocumented)
-    Pve_Nro: number;
+    pveNro: number;
 }
 
 // (No @packageDocumentation comment for this package)

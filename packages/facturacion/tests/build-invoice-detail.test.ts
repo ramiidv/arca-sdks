@@ -13,21 +13,21 @@ describe('buildInvoiceDetail', () => {
       42,
     );
 
-    expect(detail.Concepto).toBe(Concepto.PRODUCTOS);
-    expect(detail.DocTipo).toBe(DocTipo.CONSUMIDOR_FINAL);
-    expect(detail.DocNro).toBe(0);
-    expect(detail.CbteDesde).toBe(42);
-    expect(detail.CbteHasta).toBe(42);
-    expect(detail.MonId).toBe(Moneda.PESOS);
-    expect(detail.MonCotiz).toBe(1);
-    expect(detail.ImpNeto).toBe(100);
-    expect(detail.ImpIVA).toBe(21);
-    expect(detail.ImpTotal).toBe(121);
-    expect(detail.ImpTotConc).toBe(0);
-    expect(detail.ImpOpEx).toBe(0);
-    expect(detail.ImpTrib).toBe(0);
-    expect(detail.Iva).toHaveLength(1);
-    expect(detail.CondicionIVAReceptorId).toBe(CondicionIva.CONSUMIDOR_FINAL);
+    expect(detail.concepto).toBe(Concepto.PRODUCTOS);
+    expect(detail.docTipo).toBe(DocTipo.CONSUMIDOR_FINAL);
+    expect(detail.docNro).toBe(0);
+    expect(detail.cbteDesde).toBe(42);
+    expect(detail.cbteHasta).toBe(42);
+    expect(detail.monId).toBe(Moneda.PESOS);
+    expect(detail.monCotiz).toBe(1);
+    expect(detail.impNeto).toBe(100);
+    expect(detail.impIva).toBe(21);
+    expect(detail.impTotal).toBe(121);
+    expect(detail.impTotConc).toBe(0);
+    expect(detail.impOpEx).toBe(0);
+    expect(detail.impTrib).toBe(0);
+    expect(detail.iva).toHaveLength(1);
+    expect(detail.condicionIvaReceptorId).toBe(CondicionIva.CONSUMIDOR_FINAL);
     expect(importes.total).toBe(121);
   });
 
@@ -49,11 +49,11 @@ describe('buildInvoiceDetail', () => {
       1,
     );
 
-    expect(detail.Concepto).toBe(Concepto.SERVICIOS);
-    expect(detail.FchServDesde).toBe('20260301');
-    expect(detail.FchServHasta).toBe('20260331');
-    expect(detail.FchVtoPago).toBe('20260415');
-    expect(detail.CondicionIVAReceptorId).toBe(CondicionIva.RESPONSABLE_INSCRIPTO);
+    expect(detail.concepto).toBe(Concepto.SERVICIOS);
+    expect(detail.fchServDesde).toBe('20260301');
+    expect(detail.fchServHasta).toBe('20260331');
+    expect(detail.fchVtoPago).toBe('20260415');
+    expect(detail.condicionIvaReceptorId).toBe(CondicionIva.RESPONSABLE_INSCRIPTO);
   });
 
   it('tipo C no genera array Iva', () => {
@@ -66,10 +66,10 @@ describe('buildInvoiceDetail', () => {
       1,
     );
 
-    expect(detail.ImpNeto).toBe(5000);
-    expect(detail.ImpIVA).toBe(0);
-    expect(detail.ImpTotal).toBe(5000);
-    expect(detail.Iva).toBeUndefined();
+    expect(detail.impNeto).toBe(5000);
+    expect(detail.impIva).toBe(0);
+    expect(detail.impTotal).toBe(5000);
+    expect(detail.iva).toBeUndefined();
   });
 
   it('acepta Date objects para servicio y fecha', () => {
@@ -88,8 +88,8 @@ describe('buildInvoiceDetail', () => {
       1,
     );
 
-    expect(detail.CbteFch).toMatch(/^\d{8}$/);
-    expect(detail.FchServDesde).toMatch(/^\d{8}$/);
+    expect(detail.cbteFch).toMatch(/^\d{8}$/);
+    expect(detail.fchServDesde).toMatch(/^\d{8}$/);
   });
 
   it('pasa CanMisMonExt cuando se especifica', () => {
@@ -105,8 +105,8 @@ describe('buildInvoiceDetail', () => {
       1,
     );
 
-    expect(detail.MonId).toBe('DOL');
-    expect(detail.MonCotiz).toBe(1200);
-    expect(detail.CanMisMonExt).toBe('S');
+    expect(detail.monId).toBe('DOL');
+    expect(detail.monCotiz).toBe(1200);
+    expect(detail.canMisMonExt).toBe('S');
   });
 });

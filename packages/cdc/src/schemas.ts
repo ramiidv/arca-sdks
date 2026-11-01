@@ -7,7 +7,7 @@
  *
  * @internal No se exporta desde `index.ts`.
  */
-import { cuit, date8, dec, int, must, obj, opt, str, wrapped } from '@ramiidv/arca-common/schema';
+import { cuit, date8, dec, int, must, obj, opt, str, wrapped, xml } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import { CBTE_MODOS } from './constants.js';
 
@@ -25,19 +25,25 @@ export const DOC_NRO_RE = /^\d{1,20}$/;
  * `minOccurs=0` en el WSDL pero el manual los exige.
  */
 export const CMP_REQ: Schema = {
-  CbteModo: str({ values: CBTE_MODOS }),
-  CuitEmisor: cuit(),
-  PtoVta: int(1, 99998),
-  CbteTipo: int(1, 999),
-  CbteNro: int(1, 99_999_999),
-  CbteFch: date8(),
+  cbteModo: xml('CbteModo', str({ values: CBTE_MODOS })),
+  cuitEmisor: xml('CuitEmisor', cuit()),
+  ptoVta: xml('PtoVta', int(1, 99998)),
+  cbteTipo: xml('CbteTipo', int(1, 999)),
+  cbteNro: xml('CbteNro', int(1, 99_999_999)),
+  cbteFch: xml('CbteFch', date8()),
   // `s:double`; el manual admite 13 enteros y 2 decimales (error 7).
-  ImpTotal: dec(2, 0, 9_999_999_999_999.99),
-  CodAutorizacion: str({ pattern: /^\d{14}$/ }),
-  DocTipoReceptor: opt(str({ pattern: DOC_TIPO_RE })),
-  DocNroReceptor: opt(str({ pattern: DOC_NRO_RE })),
-  Opcionales: opt(
-    wrapped('Opcional', obj({ Id: str({ minLen: 1, maxLen: 4 }), Valor: str({ minLen: 1, maxLen: 250 }) })),
+  impTotal: xml('ImpTotal', dec(2, 0, 9_999_999_999_999.99)),
+  codAutorizacion: xml('CodAutorizacion', str({ pattern: /^\d{14}$/ })),
+  docTipoReceptor: xml('DocTipoReceptor', opt(str({ pattern: DOC_TIPO_RE }))),
+  docNroReceptor: xml('DocNroReceptor', opt(str({ pattern: DOC_NRO_RE }))),
+  opcionales: xml(
+    'Opcionales',
+    opt(
+      wrapped(
+        'Opcional',
+        obj({ id: xml('Id', str({ minLen: 1, maxLen: 4 })), valor: xml('Valor', str({ minLen: 1, maxLen: 250 })) }),
+      ),
+    ),
   ),
 };
 
@@ -46,38 +52,41 @@ export const CMP_REQ: Schema = {
 // ---------------------------------------------------------------------------
 
 /** `Obs` / `Evt` (`Code` es `minOccurs=1`). */
-const MENSAJE: Schema = { Code: must(int()), Msg: opt(str()) };
+const MENSAJE: Schema = { code: xml('Code', must(int())), msg: xml('Msg', opt(str())) };
 
 /** `CmpDatos` tal como lo devuelve ARCA en `CmpResp`. */
 export const CMP_RESP: Schema = {
-  CbteModo: must(str()),
-  CuitEmisor: must(cuit({ decodeAs: 'string' })),
-  PtoVta: must(int()),
-  CbteTipo: must(int()),
-  CbteNro: must(int()),
-  CbteFch: must(str()),
-  ImpTotal: must(dec(2)),
-  CodAutorizacion: must(str()),
-  DocTipoReceptor: opt(str()),
-  DocNroReceptor: opt(str()),
-  Opcionales: wrapped('Opcional', obj({ Id: must(str()), Valor: opt(str()) }), 0),
+  cbteModo: xml('CbteModo', must(str())),
+  cuitEmisor: xml('CuitEmisor', must(cuit({ decodeAs: 'string' }))),
+  ptoVta: xml('PtoVta', must(int())),
+  cbteTipo: xml('CbteTipo', must(int())),
+  cbteNro: xml('CbteNro', must(int())),
+  cbteFch: xml('CbteFch', must(str())),
+  impTotal: xml('ImpTotal', must(dec(2))),
+  codAutorizacion: xml('CodAutorizacion', must(str())),
+  docTipoReceptor: xml('DocTipoReceptor', opt(str())),
+  docNroReceptor: xml('DocNroReceptor', opt(str())),
+  opcionales: xml(
+    'Opcionales',
+    wrapped('Opcional', obj({ id: xml('Id', must(str())), valor: xml('Valor', opt(str())) }), 0),
+  ),
 };
 
 /** `CmpResponse` (en orden del WSDL) sin `CmpResp` (que se decodifica aparte) ni `Errors` (`checkServiceErrors`). */
 export const CONSTATAR_RESP: Schema = {
-  Resultado: must(str()),
-  Observaciones: wrapped('Obs', obj(MENSAJE), 0),
-  FchProceso: must(str()),
-  Events: wrapped('Evt', obj(MENSAJE), 0),
+  resultado: xml('Resultado', must(str())),
+  observaciones: xml('Observaciones', wrapped('Obs', obj(MENSAJE), 0)),
+  fchProceso: xml('FchProceso', must(str())),
+  events: xml('Events', wrapped('Evt', obj(MENSAJE), 0)),
 };
 
 /** Ítems de `ResultGet` de las tablas de parámetros. */
 export const FAC_MOD_TIPO: Schema = {
-  Cod: must(str()),
-  Desc: must(str()),
-  FchDesde: opt(str()),
-  FchHasta: opt(str()),
+  cod: xml('Cod', must(str())),
+  desc: xml('Desc', must(str())),
+  fchDesde: xml('FchDesde', opt(str())),
+  fchHasta: xml('FchHasta', opt(str())),
 };
-export const CBTE_TIPO: Schema = { Id: must(int()), Desc: must(str()) };
+export const CBTE_TIPO: Schema = { id: xml('Id', must(int())), desc: xml('Desc', must(str())) };
 /** `DocTipo` y `OpcionalTipo` (`Id` es `s:string`: se preservan ceros a la izquierda). */
-export const ID_DESC: Schema = { Id: must(str()), Desc: must(str()) };
+export const ID_DESC: Schema = { id: xml('Id', must(str())), desc: xml('Desc', must(str())) };

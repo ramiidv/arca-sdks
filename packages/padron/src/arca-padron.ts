@@ -195,9 +195,9 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
   private async getAuth(service: PadronServicio, call?: CallOptions): Promise<WsAuth> {
     const ticket = await this.ticket(service, call);
     return {
-      Token: ticket.token,
-      Sign: ticket.sign,
-      CuitRepresentada: this.cuit,
+      token: ticket.token,
+      sign: ticket.sign,
+      cuitRepresentada: this.cuit,
     };
   }
 }

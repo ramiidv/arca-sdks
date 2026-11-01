@@ -38,18 +38,18 @@ const cdc = new ArcaCdc({
 });
 
 const r = await cdc.constatar({
-  CbteModo: "CAE",
-  CuitEmisor: 30712345671,
-  PtoVta: 1,
-  CbteTipo: 1,
-  CbteNro: 150,
-  CbteFch: "20260315",
-  ImpTotal: 12100,
-  CodAutorizacion: "73429843294823",
-  DocTipoReceptor: 80,
-  DocNroReceptor: 20123456786,
+  cbteModo: "CAE",
+  cuitEmisor: 30712345671,
+  ptoVta: 1,
+  cbteTipo: 1,
+  cbteNro: 150,
+  cbteFch: "20260315",
+  impTotal: 12100,
+  codAutorizacion: "73429843294823",
+  docTipoReceptor: 80,
+  docNroReceptor: 20123456786,
 });
-// r.Resultado: "A" | "R"; r.Observaciones; r.FchProceso; r.CmpResp; r.Events
+// r.resultado: "A" | "R"; r.observaciones; r.fchProceso; r.cmpResp; r.events
 ```
 
 ## Configuration
@@ -64,44 +64,44 @@ const r = await cdc.constatar({
 
 - `constatar(input): Promise<ConstatarResult>` - ComprobanteConstatar.
 - `status(): Promise<ServerStatus>` - ComprobanteDummy, no auth.
-- `getModalidades(): Promise<{ Cod: string; Desc: string; FchDesde?: string; FchHasta?: string }[]>` - ComprobantesModalidadConsultar (Cod = CAE/CAI/CAEA).
-- `getTiposCbte(): Promise<{ Id: number; Desc: string }[]>` - ComprobantesTipoConsultar.
-- `getDocTipos(): Promise<{ Id: string; Desc: string }[]>` - DocumentosTipoConsultar.
-- `getTiposOpcionales(): Promise<{ Id: string; Desc: string }[]>` - OpcionalesTipoConsultar.
+- `getModalidades(): Promise<{ cod: string; desc: string; fchDesde?: string; fchHasta?: string }[]>` - ComprobantesModalidadConsultar (Cod = CAE/CAI/CAEA).
+- `getTiposCbte(): Promise<{ id: number; desc: string }[]>` - ComprobantesTipoConsultar.
+- `getDocTipos(): Promise<{ id: string; desc: string }[]>` - DocumentosTipoConsultar.
+- `getTiposOpcionales(): Promise<{ id: string; desc: string }[]>` - OpcionalesTipoConsultar.
 - `clearAuthCache(): Promise<void>`.
 
 ```typescript
 interface ConstatarInput {           // CmpReq (CmpDatos), sent in WSDL order
-  CbteModo: "CAE" | "CAI" | "CAEA";
-  CuitEmisor: number | string;
-  PtoVta: number;                    // 1..99998
-  CbteTipo: number;                  // 1..999
-  CbteNro: number;                   // 1..99999999
-  CbteFch: string | Date;            // YYYYMMDD | YYYY-MM-DD | Date
-  ImpTotal: number;                  // finite >= 0, rounded to 2 decimals
-  CodAutorizacion: string;           // 14 digits
-  DocTipoReceptor?: number | string; // both or neither
-  DocNroReceptor?: number | string;  // digits only
-  Opcionales?: { Id: string; Valor: string }[];
+  cbteModo: "CAE" | "CAI" | "CAEA";
+  cuitEmisor: number | string;
+  ptoVta: number;                    // 1..99998
+  cbteTipo: number;                  // 1..999
+  cbteNro: number;                   // 1..99999999
+  cbteFch: string | Date;            // YYYYMMDD | YYYY-MM-DD | Date
+  impTotal: number;                  // finite >= 0, rounded to 2 decimals
+  codAutorizacion: string;           // 14 digits
+  docTipoReceptor?: number | string; // both or neither
+  docNroReceptor?: number | string;  // digits only
+  opcionales?: { id: string; valor: string }[];
 }
 
 interface ConstatarResult {
-  Resultado: "A" | "R";
-  FchProceso: string;
-  CmpResp?: { CbteModo: string; CuitEmisor: string; PtoVta: number; CbteTipo: number; CbteNro: number;
-              CbteFch: string; ImpTotal: number; CodAutorizacion: string; DocTipoReceptor?: string;
-              DocNroReceptor?: string; Opcionales?: { Id: string; Valor: string }[] };
-  Observaciones: { Code: number; Msg: string }[];
-  Events: { Code: number; Msg: string }[];
+  resultado: "A" | "R";
+  fchProceso: string;
+  cmpResp?: { cbteModo: string; cuitEmisor: string; ptoVta: number; cbteTipo: number; cbteNro: number;
+              cbteFch: string; impTotal: number; codAutorizacion: string; docTipoReceptor?: string;
+              docNroReceptor?: string; opcionales?: { id: string; valor: string }[] };
+  observaciones: { code: number; msg: string }[];
+  events: { code: number; msg: string }[];
 }
 ```
 
 Semantics:
 - `A`: authorized (may include non-blocking observations, e.g. 200).
-- `R`: functional rejection, reasons in `Observaciones` (100, 102-118, 150-153).
+- `R`: functional rejection, reasons in `observaciones` (100, 102-118, 150-153).
 - ARCA `Errors` (format 1-10, auth 600-602, infrastructure 500-503) => throws `ArcaServiceError`
   (ARCA also sets Resultado=R there, but the invoice was not actually checked).
-- Missing `Resultado`/`FchProceso` => `ArcaSoapError`.
+- Missing `resultado`/`fchProceso` => `ArcaSoapError`.
 
 ## Errors
 
@@ -126,4 +126,4 @@ Production negotiates 1024-bit DH; works thanks to common's legacy TLS fallback 
 `validateConstatarInput`, `WSCDC_ENDPOINTS`, `WSCDC_NAMESPACE`, `WSCDC_SERVICE_ID`, `CBTE_MODOS`,
 error classes and types (`ArcaCdcConfig`, `ConstatarInput`, `ConstatarResult`,
 `ComprobanteConstatado`, `CdcMensaje`, `ModalidadItem`, `TipoCbteItem`, `DocTipoItem`,
-`OpcionalTipoItem`, `CbteModo`, `Opcional`, `CdcAuth`, `CallOptions`, `TicketStorage`, ...).
+`OpcionalTipoItem`, `cbteModo`, `Opcional`, `CdcAuth`, `CallOptions`, `TicketStorage`, ...).

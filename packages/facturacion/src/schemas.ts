@@ -2,19 +2,19 @@
  * Schemas de los WSDL de WSFEv1 (`wsdl/wsfev1.wsdl`) y WSFEX (`wsdl/wsfexv1.wsdl`)
  * para el DSL de `@ramiidv/arca-common/schema`.
  *
- * Son servicios ASMX: elementos `qualified` y nombres en PascalCase. Los
- * requests no agregan restricciones de los manuales (las valida
+ * Son servicios ASMX: elementos `qualified` y nombres en PascalCase (WSFEX
+ * también con `_`). En la API los campos son los de ARCA en camelCase
+ * (`CbteFch` → `cbteFch`, `Fecha_cbte` → `fechaCbte`): `xml()` guarda el
+ * nombre del XML. Las listas son arrays, sin el contenedor (`observaciones`
+ * en lugar de `Observaciones/Obs`).
+ *
+ * Los requests no agregan restricciones de los manuales (las valida
  * `validation.ts` sobre la API de alto nivel): acá solo se fija el orden del
  * XSD, los obligatorios y el tipo de cada campo.
  *
- * Las listas de las respuestas se describen como `obj({ Item: list(...) })` y
- * no con `wrapped()`: los tipos públicos (`FECAESolicitarResult`, etc.)
- * conservan el contenedor del XML (`{ Obs: [...] }`), con la lista siempre
- * como array.
- *
  * @internal No se exporta desde `index.ts`.
  */
-import { custom, date8, double, int, list, must, obj, opt, str, wrapped } from '@ramiidv/arca-common/schema';
+import { custom, date8, double, int, must, obj, opt, str, wrapped, xml } from '@ramiidv/arca-common/schema';
 import type { Field, Schema } from '@ramiidv/arca-common/schema';
 
 /**
@@ -36,258 +36,327 @@ const items = (item: string, schema: Schema): Field => opt(wrapped(item, obj(sch
 // ===========================================================================
 
 export const CBTE_ASOC_REQ: Schema = {
-  Tipo: int(),
-  PtoVta: int(),
-  Nro: long(),
-  Cuit: opt(str()),
-  CbteFch: opt(date8()),
+  tipo: xml('Tipo', int()),
+  ptoVta: xml('PtoVta', int()),
+  nro: xml('Nro', long()),
+  cuit: xml('Cuit', opt(str())),
+  cbteFch: xml('CbteFch', opt(date8())),
 };
 
 export const TRIBUTO_REQ: Schema = {
-  Id: int(),
-  Desc: opt(str()),
-  BaseImp: double(),
-  Alic: double(),
-  Importe: double(),
+  id: xml('Id', int()),
+  desc: xml('Desc', opt(str())),
+  baseImp: xml('BaseImp', double()),
+  alic: xml('Alic', double()),
+  importe: xml('Importe', double()),
 };
 
-export const ALIC_IVA_REQ: Schema = { Id: int(), BaseImp: double(), Importe: double() };
-export const OPCIONAL_REQ: Schema = { Id: str(), Valor: str() };
-export const COMPRADOR_REQ: Schema = { DocTipo: int(), DocNro: long(), Porcentaje: double() };
-export const ACTIVIDAD_REQ: Schema = { Id: long() };
+export const ALIC_IVA_REQ: Schema = {
+  id: xml('Id', int()),
+  baseImp: xml('BaseImp', double()),
+  importe: xml('Importe', double()),
+};
+export const OPCIONAL_REQ: Schema = { id: xml('Id', str()), valor: xml('Valor', str()) };
+export const COMPRADOR_REQ: Schema = {
+  docTipo: xml('DocTipo', int()),
+  docNro: xml('DocNro', long()),
+  porcentaje: xml('Porcentaje', double()),
+};
+export const ACTIVIDAD_REQ: Schema = { id: xml('Id', long()) };
 
 /** `FECAEDetRequest` (= `FEDetRequest`), en orden del WSDL. */
 export const FE_DET_REQ: Schema = {
-  Concepto: int(),
-  DocTipo: int(),
-  DocNro: long(),
-  CbteDesde: long(),
-  CbteHasta: long(),
-  CbteFch: date8(),
-  ImpTotal: double(),
-  ImpTotConc: double(),
-  ImpNeto: double(),
-  ImpOpEx: double(),
-  ImpTrib: double(),
-  ImpIVA: double(),
-  FchServDesde: opt(date8()),
-  FchServHasta: opt(date8()),
-  FchVtoPago: opt(date8()),
-  MonId: str(),
-  MonCotiz: opt(double()),
-  CanMisMonExt: opt(str()),
-  CondicionIVAReceptorId: opt(int()),
-  CbtesAsoc: items('CbteAsoc', CBTE_ASOC_REQ),
-  Tributos: items('Tributo', TRIBUTO_REQ),
-  Iva: items('AlicIva', ALIC_IVA_REQ),
-  Opcionales: items('Opcional', OPCIONAL_REQ),
-  Compradores: items('Comprador', COMPRADOR_REQ),
-  PeriodoAsoc: opt(obj({ FchDesde: date8(), FchHasta: date8() })),
-  Actividades: items('Actividad', ACTIVIDAD_REQ),
+  concepto: xml('Concepto', int()),
+  docTipo: xml('DocTipo', int()),
+  docNro: xml('DocNro', long()),
+  cbteDesde: xml('CbteDesde', long()),
+  cbteHasta: xml('CbteHasta', long()),
+  cbteFch: xml('CbteFch', date8()),
+  impTotal: xml('ImpTotal', double()),
+  impTotConc: xml('ImpTotConc', double()),
+  impNeto: xml('ImpNeto', double()),
+  impOpEx: xml('ImpOpEx', double()),
+  impTrib: xml('ImpTrib', double()),
+  impIva: xml('ImpIVA', double()),
+  fchServDesde: xml('FchServDesde', opt(date8())),
+  fchServHasta: xml('FchServHasta', opt(date8())),
+  fchVtoPago: xml('FchVtoPago', opt(date8())),
+  monId: xml('MonId', str()),
+  monCotiz: xml('MonCotiz', opt(double())),
+  canMisMonExt: xml('CanMisMonExt', opt(str())),
+  condicionIvaReceptorId: xml('CondicionIVAReceptorId', opt(int())),
+  cbtesAsoc: xml('CbtesAsoc', items('CbteAsoc', CBTE_ASOC_REQ)),
+  tributos: xml('Tributos', items('Tributo', TRIBUTO_REQ)),
+  iva: xml('Iva', items('AlicIva', ALIC_IVA_REQ)),
+  opcionales: xml('Opcionales', items('Opcional', OPCIONAL_REQ)),
+  compradores: xml('Compradores', items('Comprador', COMPRADOR_REQ)),
+  periodoAsoc: xml('PeriodoAsoc', opt(obj({ fchDesde: xml('FchDesde', date8()), fchHasta: xml('FchHasta', date8()) }))),
+  actividades: xml('Actividades', items('Actividad', ACTIVIDAD_REQ)),
 };
 
 /** `FECAEADetRequest`: `FEDetRequest` + `CAEA` y `CbteFchHsGen` al final. */
 export const FECAEA_DET_REQ: Schema = {
   ...FE_DET_REQ,
-  CAEA: str({ pattern: /^\d{14}$/ }),
-  CbteFchHsGen: str({ pattern: /^\d{14}$/ }),
+  caea: xml('CAEA', str({ pattern: /^\d{14}$/ })),
+  cbteFchHsGen: xml('CbteFchHsGen', str({ pattern: /^\d{14}$/ })),
 };
 
-export const FE_CAB_REQ: Schema = { CantReg: int(1), PtoVta: int(1), CbteTipo: int(1) };
+export const FE_CAB_REQ: Schema = {
+  cantReg: xml('CantReg', int(1)),
+  ptoVta: xml('PtoVta', int(1)),
+  cbteTipo: xml('CbteTipo', int(1)),
+};
 
 /** `FeCAEReq` de FECAESolicitar. */
 export const FECAE_REQ: Schema = {
-  FeCabReq: obj(FE_CAB_REQ),
-  FeDetReq: wrapped('FECAEDetRequest', obj(FE_DET_REQ)),
+  feCabReq: xml('FeCabReq', obj(FE_CAB_REQ)),
+  feDetReq: xml('FeDetReq', wrapped('FECAEDetRequest', obj(FE_DET_REQ))),
 };
 
 /** `FeCAEARegInfReq` de FECAEARegInformativo. */
 export const FECAEA_REQ: Schema = {
-  FeCabReq: obj(FE_CAB_REQ),
-  FeDetReq: wrapped('FECAEADetRequest', obj(FECAEA_DET_REQ)),
+  feCabReq: xml('FeCabReq', obj(FE_CAB_REQ)),
+  feDetReq: xml('FeDetReq', wrapped('FECAEADetRequest', obj(FECAEA_DET_REQ))),
 };
 
 // Parámetros de las consultas (sin `Auth`, que arma el cliente), en orden del WSDL.
 
-export const ULTIMO_REQ: Schema = { PtoVta: int(1), CbteTipo: int(1) };
+export const ULTIMO_REQ: Schema = { ptoVta: xml('PtoVta', int(1)), cbteTipo: xml('CbteTipo', int(1)) };
 export const COMP_CONSULTAR_REQ: Schema = {
-  FeCompConsReq: obj({ CbteTipo: int(1), CbteNro: long(), PtoVta: int(1) }),
+  feCompConsReq: xml(
+    'FeCompConsReq',
+    obj({ cbteTipo: xml('CbteTipo', int(1)), cbteNro: xml('CbteNro', long()), ptoVta: xml('PtoVta', int(1)) }),
+  ),
 };
 /** `Periodo` es `s:int` (`AAAAMM`); la API lo recibe como string. */
-export const CAEA_REQ: Schema = { Periodo: str({ pattern: /^\d{6}$/ }), Orden: int(1, 2) };
-export const CAEA_SIN_MOV_INFORMAR_REQ: Schema = { PtoVta: int(1), CAEA: str() };
-export const CAEA_SIN_MOV_CONSULTAR_REQ: Schema = { CAEA: str(), PtoVta: int(1) };
-export const COTIZACION_REQ: Schema = { MonId: str({ minLen: 1 }), FchCotiz: opt(date8()) };
-export const CONDICION_IVA_REQ: Schema = { ClaseCmp: opt(str()) };
+export const CAEA_REQ: Schema = {
+  periodo: xml('Periodo', str({ pattern: /^\d{6}$/ })),
+  orden: xml('Orden', int(1, 2)),
+};
+export const CAEA_SIN_MOV_INFORMAR_REQ: Schema = { ptoVta: xml('PtoVta', int(1)), caea: xml('CAEA', str()) };
+export const CAEA_SIN_MOV_CONSULTAR_REQ: Schema = { caea: xml('CAEA', str()), ptoVta: xml('PtoVta', int(1)) };
+export const COTIZACION_REQ: Schema = {
+  monId: xml('MonId', str({ minLen: 1 })),
+  fchCotiz: xml('FchCotiz', opt(date8())),
+};
+export const CONDICION_IVA_REQ: Schema = { claseCmp: xml('ClaseCmp', opt(str())) };
 
 // ===========================================================================
 // WSFEv1 - Respuestas
 // ===========================================================================
 
 /** `Obs`/`Evt`/`Err` (`Code` es `minOccurs=1`). */
-const MENSAJE: Schema = { Code: must(int()), Msg: opt(str()) };
+const MENSAJE: Schema = { code: xml('Code', must(int())), msg: xml('Msg', opt(str())) };
 
-/** Contenedor de lista en una respuesta: `{ Item: X[] }`. */
-const arrayOf = (item: string, schema: Schema): Field => opt(obj({ [item]: list(obj(schema), 0) }));
+/** Lista de una respuesta, sin el contenedor: `<Iva><AlicIva/>...</Iva>` → `iva: [...]`. */
+const arrayOf = (item: string, schema: Schema): Field => opt(wrapped(item, obj(schema), 0));
 
 const OBSERVACIONES = arrayOf('Obs', MENSAJE);
-const EVENTS = arrayOf('Evt', MENSAJE);
-const ERRORS = arrayOf('Err', MENSAJE);
 
-/** `Errors` y `Events`, presentes en casi todas las respuestas de WSFEv1. */
-const ERR_EVT: Schema = { Errors: ERRORS, Events: EVENTS };
+/**
+ * `Events`, presente en casi todas las respuestas de WSFEv1. `Errors` no se
+ * decodifica: si viene, el cliente lanza `ArcaWSFEError` antes.
+ */
+const ERR_EVT: Schema = { events: xml('Events', arrayOf('Evt', MENSAJE)) };
 
 export const FE_CAB_RESP: Schema = {
-  Cuit: must(int()),
-  PtoVta: must(int()),
-  CbteTipo: must(int()),
-  FchProceso: opt(str()),
-  CantReg: must(int()),
-  Resultado: must(str()),
-  Reproceso: opt(str()),
+  cuit: xml('Cuit', must(int())),
+  ptoVta: xml('PtoVta', must(int())),
+  cbteTipo: xml('CbteTipo', must(int())),
+  fchProceso: xml('FchProceso', opt(str())),
+  cantReg: xml('CantReg', must(int())),
+  resultado: xml('Resultado', must(str())),
+  reproceso: xml('Reproceso', opt(str())),
 };
 
 /** `FEDetResponse`: lo común a `FECAEDetResponse` y `FECAEADetResponse`. */
 const FE_DET_RESP: Schema = {
-  Concepto: must(int()),
-  DocTipo: must(int()),
-  DocNro: must(int()),
-  CbteDesde: must(int()),
-  CbteHasta: must(int()),
-  CbteFch: opt(str()),
-  Resultado: must(str()),
-  Observaciones: OBSERVACIONES,
+  concepto: xml('Concepto', must(int())),
+  docTipo: xml('DocTipo', must(int())),
+  docNro: xml('DocNro', must(int())),
+  cbteDesde: xml('CbteDesde', must(int())),
+  cbteHasta: xml('CbteHasta', must(int())),
+  cbteFch: xml('CbteFch', opt(str())),
+  resultado: xml('Resultado', must(str())),
+  observaciones: xml('Observaciones', OBSERVACIONES),
 };
 
-export const FECAE_DET_RESP: Schema = { ...FE_DET_RESP, CAE: opt(str()), CAEFchVto: opt(str()) };
-export const FECAEA_DET_RESP: Schema = { ...FE_DET_RESP, CAEA: opt(str()) };
+export const FECAE_DET_RESP: Schema = {
+  ...FE_DET_RESP,
+  cae: xml('CAE', opt(str())),
+  caeFchVto: xml('CAEFchVto', opt(str())),
+};
+export const FECAEA_DET_RESP: Schema = { ...FE_DET_RESP, caea: xml('CAEA', opt(str())) };
 
 /** `FECAEResponse` (FECAESolicitar). `FeCabResp`/`FeDetResp` los verifica `emitir`. */
 export const FECAE_RESP: Schema = {
-  FeCabResp: opt(obj(FE_CAB_RESP)),
-  FeDetResp: arrayOf('FECAEDetResponse', FECAE_DET_RESP),
-  Events: EVENTS,
-  Errors: ERRORS,
+  feCabResp: xml('FeCabResp', opt(obj(FE_CAB_RESP))),
+  feDetResp: xml('FeDetResp', arrayOf('FECAEDetResponse', FECAE_DET_RESP)),
+  ...ERR_EVT,
 };
 
 /** `FECAEAResponse` (FECAEARegInformativo). */
 export const FECAEA_RESP: Schema = {
-  FeCabResp: opt(obj(FE_CAB_RESP)),
-  FeDetResp: arrayOf('FECAEADetResponse', FECAEA_DET_RESP),
-  Events: EVENTS,
-  Errors: ERRORS,
+  feCabResp: xml('FeCabResp', opt(obj(FE_CAB_RESP))),
+  feDetResp: xml('FeDetResp', arrayOf('FECAEADetResponse', FECAEA_DET_RESP)),
+  ...ERR_EVT,
 };
 
-export const ULTIMO_RESP: Schema = { PtoVta: must(int()), CbteTipo: must(int()), CbteNro: must(int()), ...ERR_EVT };
+export const ULTIMO_RESP: Schema = {
+  ptoVta: xml('PtoVta', must(int())),
+  cbteTipo: xml('CbteTipo', must(int())),
+  cbteNro: xml('CbteNro', must(int())),
+  ...ERR_EVT,
+};
 
 export const CBTE_ASOC_RESP: Schema = {
-  Tipo: must(int()),
-  PtoVta: must(int()),
-  Nro: must(int()),
-  Cuit: opt(str()),
-  CbteFch: opt(str()),
+  tipo: xml('Tipo', must(int())),
+  ptoVta: xml('PtoVta', must(int())),
+  nro: xml('Nro', must(int())),
+  cuit: xml('Cuit', opt(str())),
+  cbteFch: xml('CbteFch', opt(str())),
 };
 export const TRIBUTO_RESP: Schema = {
-  Id: must(int()),
-  Desc: opt(str()),
-  BaseImp: must(double()),
-  Alic: must(double()),
-  Importe: must(double()),
+  id: xml('Id', must(int())),
+  desc: xml('Desc', opt(str())),
+  baseImp: xml('BaseImp', must(double())),
+  alic: xml('Alic', must(double())),
+  importe: xml('Importe', must(double())),
 };
-export const ALIC_IVA_RESP: Schema = { Id: must(int()), BaseImp: must(double()), Importe: must(double()) };
-export const OPCIONAL_RESP: Schema = { Id: opt(str()), Valor: opt(str()) };
-export const COMPRADOR_RESP: Schema = { DocTipo: must(int()), DocNro: must(int()), Porcentaje: must(double()) };
+export const ALIC_IVA_RESP: Schema = {
+  id: xml('Id', must(int())),
+  baseImp: xml('BaseImp', must(double())),
+  importe: xml('Importe', must(double())),
+};
+export const OPCIONAL_RESP: Schema = { id: xml('Id', opt(str())), valor: xml('Valor', opt(str())) };
+export const COMPRADOR_RESP: Schema = {
+  docTipo: xml('DocTipo', must(int())),
+  docNro: xml('DocNro', must(int())),
+  porcentaje: xml('Porcentaje', must(double())),
+};
 
 /** `FECompConsResponse` (ResultGet de FECompConsultar), en orden del WSDL. */
 export const COMP_CONS_RESP: Schema = {
-  Concepto: must(int()),
-  DocTipo: must(int()),
-  DocNro: must(int()),
-  CbteDesde: must(int()),
-  CbteHasta: must(int()),
-  CbteFch: opt(str()),
-  ImpTotal: must(double()),
-  ImpTotConc: must(double()),
-  ImpNeto: must(double()),
-  ImpOpEx: must(double()),
-  ImpTrib: must(double()),
-  ImpIVA: must(double()),
-  FchServDesde: opt(str()),
-  FchServHasta: opt(str()),
-  FchVtoPago: opt(str()),
-  MonId: opt(str()),
-  MonCotiz: opt(double()),
-  CanMisMonExt: opt(str()),
-  CondicionIVAReceptorId: opt(int()),
-  CbtesAsoc: arrayOf('CbteAsoc', CBTE_ASOC_RESP),
-  Tributos: arrayOf('Tributo', TRIBUTO_RESP),
-  Iva: arrayOf('AlicIva', ALIC_IVA_RESP),
-  Opcionales: arrayOf('Opcional', OPCIONAL_RESP),
-  Compradores: arrayOf('Comprador', COMPRADOR_RESP),
-  PeriodoAsoc: opt(obj({ FchDesde: opt(str()), FchHasta: opt(str()) })),
-  Actividades: arrayOf('Actividad', { Id: must(int()) }),
-  Resultado: opt(str()),
-  CodAutorizacion: opt(str()),
-  EmisionTipo: opt(str()),
-  FchVto: opt(str()),
-  FchProceso: opt(str()),
-  Observaciones: OBSERVACIONES,
-  PtoVta: must(int()),
-  CbteTipo: must(int()),
+  concepto: xml('Concepto', must(int())),
+  docTipo: xml('DocTipo', must(int())),
+  docNro: xml('DocNro', must(int())),
+  cbteDesde: xml('CbteDesde', must(int())),
+  cbteHasta: xml('CbteHasta', must(int())),
+  cbteFch: xml('CbteFch', opt(str())),
+  impTotal: xml('ImpTotal', must(double())),
+  impTotConc: xml('ImpTotConc', must(double())),
+  impNeto: xml('ImpNeto', must(double())),
+  impOpEx: xml('ImpOpEx', must(double())),
+  impTrib: xml('ImpTrib', must(double())),
+  impIva: xml('ImpIVA', must(double())),
+  fchServDesde: xml('FchServDesde', opt(str())),
+  fchServHasta: xml('FchServHasta', opt(str())),
+  fchVtoPago: xml('FchVtoPago', opt(str())),
+  monId: xml('MonId', opt(str())),
+  monCotiz: xml('MonCotiz', opt(double())),
+  canMisMonExt: xml('CanMisMonExt', opt(str())),
+  condicionIvaReceptorId: xml('CondicionIVAReceptorId', opt(int())),
+  cbtesAsoc: xml('CbtesAsoc', arrayOf('CbteAsoc', CBTE_ASOC_RESP)),
+  tributos: xml('Tributos', arrayOf('Tributo', TRIBUTO_RESP)),
+  iva: xml('Iva', arrayOf('AlicIva', ALIC_IVA_RESP)),
+  opcionales: xml('Opcionales', arrayOf('Opcional', OPCIONAL_RESP)),
+  compradores: xml('Compradores', arrayOf('Comprador', COMPRADOR_RESP)),
+  periodoAsoc: xml(
+    'PeriodoAsoc',
+    opt(obj({ fchDesde: xml('FchDesde', opt(str())), fchHasta: xml('FchHasta', opt(str())) })),
+  ),
+  actividades: xml('Actividades', arrayOf('Actividad', { id: xml('Id', must(int())) })),
+  resultado: xml('Resultado', opt(str())),
+  codAutorizacion: xml('CodAutorizacion', opt(str())),
+  emisionTipo: xml('EmisionTipo', opt(str())),
+  fchVto: xml('FchVto', opt(str())),
+  fchProceso: xml('FchProceso', opt(str())),
+  observaciones: xml('Observaciones', OBSERVACIONES),
+  ptoVta: xml('PtoVta', must(int())),
+  cbteTipo: xml('CbteTipo', must(int())),
 };
 
-export const COMP_CONSULTA_RESP: Schema = { ResultGet: opt(obj(COMP_CONS_RESP)), ...ERR_EVT };
+export const COMP_CONSULTA_RESP: Schema = { resultGet: xml('ResultGet', opt(obj(COMP_CONS_RESP))), ...ERR_EVT };
 
-export const REG_X_REQ_RESP: Schema = { RegXReq: must(int()), ...ERR_EVT };
+export const REG_X_REQ_RESP: Schema = { regXReq: xml('RegXReq', must(int())), ...ERR_EVT };
 
 /**
  * `FECAEAGet`. `Periodo` es `s:int` en el WSDL pero la API lo devuelve como
  * string (`AAAAMM`).
  */
 export const CAEA_GET: Schema = {
-  CAEA: must(str()),
-  Periodo: must(str()),
-  Orden: must(int()),
-  FchVigDesde: opt(str()),
-  FchVigHasta: opt(str()),
-  FchTopeInf: opt(str()),
-  FchProceso: opt(str()),
-  Observaciones: OBSERVACIONES,
+  caea: xml('CAEA', must(str())),
+  periodo: xml('Periodo', must(str())),
+  orden: xml('Orden', must(int())),
+  fchVigDesde: xml('FchVigDesde', opt(str())),
+  fchVigHasta: xml('FchVigHasta', opt(str())),
+  fchTopeInf: xml('FchTopeInf', opt(str())),
+  fchProceso: xml('FchProceso', opt(str())),
+  observaciones: xml('Observaciones', OBSERVACIONES),
 };
-export const CAEA_GET_RESP: Schema = { ResultGet: opt(obj(CAEA_GET)), ...ERR_EVT };
+export const CAEA_GET_RESP: Schema = { resultGet: xml('ResultGet', opt(obj(CAEA_GET))), ...ERR_EVT };
 
-export const CAEA_SIN_MOV: Schema = { CAEA: must(str()), FchProceso: opt(str()), PtoVta: must(int()) };
-export const CAEA_SIN_MOV_CONS_RESP: Schema = { ResultGet: arrayOf('FECAEASinMov', CAEA_SIN_MOV), ...ERR_EVT };
+export const CAEA_SIN_MOV: Schema = {
+  caea: xml('CAEA', must(str())),
+  fchProceso: xml('FchProceso', opt(str())),
+  ptoVta: xml('PtoVta', must(int())),
+};
+export const CAEA_SIN_MOV_CONS_RESP: Schema = {
+  resultGet: xml('ResultGet', arrayOf('FECAEASinMov', CAEA_SIN_MOV)),
+  ...ERR_EVT,
+};
 export const CAEA_SIN_MOV_RESP: Schema = {
-  CAEA: opt(str()),
-  FchProceso: opt(str()),
-  PtoVta: opt(int()),
-  Resultado: opt(str()),
+  caea: xml('CAEA', opt(str())),
+  fchProceso: xml('FchProceso', opt(str())),
+  ptoVta: xml('PtoVta', opt(int())),
+  resultado: xml('Resultado', opt(str())),
   ...ERR_EVT,
 };
 
-export const COTIZACION: Schema = { MonId: opt(str()), MonCotiz: must(double()), FchCotiz: opt(str()) };
-export const COTIZACION_RESP: Schema = { ResultGet: opt(obj(COTIZACION)), ...ERR_EVT };
+export const COTIZACION: Schema = {
+  monId: xml('MonId', opt(str())),
+  monCotiz: xml('MonCotiz', must(double())),
+  fchCotiz: xml('FchCotiz', opt(str())),
+};
+export const COTIZACION_RESP: Schema = { resultGet: xml('ResultGet', opt(obj(COTIZACION))), ...ERR_EVT };
 
 // Ítems de las tablas de parámetros (`ResultGet/<item>`).
 
 /** `CbteTipo`, `ConceptoTipo`, `DocTipo`, `TributoTipo`; también `IvaTipo` y `OpcionalTipo`, cuyo `Id` la API devuelve como número. */
-export const PARAM_ITEM: Schema = { Id: must(int()), Desc: opt(str()), FchDesde: opt(str()), FchHasta: opt(str()) };
-/** `Moneda`: `Id` es `s:string` (`"060"` no pierde el cero). */
-export const MONEDA: Schema = { Id: must(str()), Desc: opt(str()), FchDesde: opt(str()), FchHasta: opt(str()) };
-export const CONDICION_IVA: Schema = { Id: must(int()), Desc: opt(str()), Cmp_Clase: opt(str()) };
-export const PTO_VENTA: Schema = {
-  Nro: must(int()),
-  EmisionTipo: opt(str()),
-  Bloqueado: opt(str()),
-  FchBaja: opt(str()),
+export const PARAM_ITEM: Schema = {
+  id: xml('Id', must(int())),
+  desc: xml('Desc', opt(str())),
+  fchDesde: xml('FchDesde', opt(str())),
+  fchHasta: xml('FchHasta', opt(str())),
 };
-export const PAIS: Schema = { Id: must(int()), Desc: opt(str()) };
-export const ACTIVIDAD: Schema = { Id: must(int()), Orden: must(int()), Desc: opt(str()) };
+/** `Moneda`: `Id` es `s:string` (`"060"` no pierde el cero). */
+export const MONEDA: Schema = {
+  id: xml('Id', must(str())),
+  desc: xml('Desc', opt(str())),
+  fchDesde: xml('FchDesde', opt(str())),
+  fchHasta: xml('FchHasta', opt(str())),
+};
+export const CONDICION_IVA: Schema = {
+  id: xml('Id', must(int())),
+  desc: xml('Desc', opt(str())),
+  cmpClase: xml('Cmp_Clase', opt(str())),
+};
+export const PTO_VENTA: Schema = {
+  nro: xml('Nro', must(int())),
+  emisionTipo: xml('EmisionTipo', opt(str())),
+  bloqueado: xml('Bloqueado', opt(str())),
+  fchBaja: xml('FchBaja', opt(str())),
+};
+export const PAIS: Schema = { id: xml('Id', must(int())), desc: xml('Desc', opt(str())) };
+export const ACTIVIDAD: Schema = {
+  id: xml('Id', must(int())),
+  orden: xml('Orden', must(int())),
+  desc: xml('Desc', opt(str())),
+};
 
 /** Respuesta de una tabla de parámetros: `ResultGet/<item>[]` como array. */
 export const tablaWsfe = (item: string, schema: Schema): Schema => ({
-  ResultGet: wrapped(item, obj(schema), 0),
+  resultGet: xml('ResultGet', wrapped(item, obj(schema), 0)),
   ...ERR_EVT,
 });
 
@@ -295,159 +364,192 @@ export const tablaWsfe = (item: string, schema: Schema): Schema => ({
 // WSFEX - Requests
 // ===========================================================================
 
-export const PERMISO_REQ: Schema = { Id_permiso: str(), Dst_merc: int() };
-export const CMP_ASOC_REQ: Schema = { Cbte_tipo: int(), Cbte_punto_vta: int(), Cbte_nro: long(), Cbte_cuit: long() };
+export const PERMISO_REQ: Schema = { idPermiso: xml('Id_permiso', str()), dstMerc: xml('Dst_merc', int()) };
+export const CMP_ASOC_REQ: Schema = {
+  cbteTipo: xml('Cbte_tipo', int()),
+  cbtePuntoVta: xml('Cbte_punto_vta', int()),
+  cbteNro: xml('Cbte_nro', long()),
+  cbteCuit: xml('Cbte_cuit', long()),
+};
 export const ITEM_REQ: Schema = {
-  Pro_codigo: opt(str()),
-  Pro_ds: str(),
-  Pro_qty: double(),
-  Pro_umed: int(),
-  Pro_precio_uni: double(),
-  Pro_bonificacion: double(),
-  Pro_total_item: double(),
+  proCodigo: xml('Pro_codigo', opt(str())),
+  proDs: xml('Pro_ds', str()),
+  proQty: xml('Pro_qty', double()),
+  proUmed: xml('Pro_umed', int()),
+  proPrecioUni: xml('Pro_precio_uni', double()),
+  proBonificacion: xml('Pro_bonificacion', double()),
+  proTotalItem: xml('Pro_total_item', double()),
 };
 
 /** `ClsFEXRequest` (el `Cmp` de FEXAuthorize), en orden del WSDL. */
 export const FEX_CMP_REQ: Schema = {
-  Id: long(),
-  Fecha_cbte: date8(),
-  Cbte_Tipo: int(),
-  Punto_vta: int(),
-  Cbte_nro: long(),
-  Tipo_expo: int(),
+  id: xml('Id', long()),
+  fechaCbte: xml('Fecha_cbte', date8()),
+  cbteTipo: xml('Cbte_Tipo', int()),
+  puntoVta: xml('Punto_vta', int()),
+  cbteNro: xml('Cbte_nro', long()),
+  tipoExpo: xml('Tipo_expo', int()),
   // "" se envía como elemento vacío: el manual lo pide fuera de Factura E de bienes.
-  Permiso_existente: opt(str()),
-  Permisos: items('Permiso', PERMISO_REQ),
-  Dst_cmp: int(),
-  Cliente: str(),
-  Cuit_pais_cliente: long(),
-  Domicilio_cliente: str(),
-  Id_impositivo: opt(str()),
-  Moneda_Id: str(),
-  Moneda_ctz: double(),
-  CanMisMonExt: opt(str()),
-  Obs_comerciales: opt(str()),
-  Imp_total: double(),
-  Obs: opt(str()),
-  Cmps_asoc: items('Cmp_asoc', CMP_ASOC_REQ),
-  Forma_pago: opt(str()),
-  Incoterms: opt(str()),
-  Incoterms_Ds: opt(str()),
-  Idioma_cbte: int(),
-  Items: items('Item', ITEM_REQ),
-  Opcionales: items('Opcional', OPCIONAL_REQ),
-  Fecha_pago: opt(date8()),
-  Actividades: items('Actividad', ACTIVIDAD_REQ),
+  permisoExistente: xml('Permiso_existente', opt(str())),
+  permisos: xml('Permisos', items('Permiso', PERMISO_REQ)),
+  dstCmp: xml('Dst_cmp', int()),
+  cliente: xml('Cliente', str()),
+  cuitPaisCliente: xml('Cuit_pais_cliente', long()),
+  domicilioCliente: xml('Domicilio_cliente', str()),
+  idImpositivo: xml('Id_impositivo', opt(str())),
+  monedaId: xml('Moneda_Id', str()),
+  monedaCtz: xml('Moneda_ctz', double()),
+  canMisMonExt: xml('CanMisMonExt', opt(str())),
+  obsComerciales: xml('Obs_comerciales', opt(str())),
+  impTotal: xml('Imp_total', double()),
+  obs: xml('Obs', opt(str())),
+  cmpsAsoc: xml('Cmps_asoc', items('Cmp_asoc', CMP_ASOC_REQ)),
+  formaPago: xml('Forma_pago', opt(str())),
+  incoterms: xml('Incoterms', opt(str())),
+  incotermsDs: xml('Incoterms_Ds', opt(str())),
+  idiomaCbte: xml('Idioma_cbte', int()),
+  items: xml('Items', items('Item', ITEM_REQ)),
+  opcionales: xml('Opcionales', items('Opcional', OPCIONAL_REQ)),
+  fechaPago: xml('Fecha_pago', opt(date8())),
+  actividades: xml('Actividades', items('Actividad', ACTIVIDAD_REQ)),
 };
 
 // Parámetros de las consultas (sin `Auth`), en orden del WSDL.
 
 /** `Pto_venta` y `Cbte_Tipo` de FEXGetLast_CMP: van dentro de `Auth` (`ClsFEX_LastCMP`). */
-export const FEX_LAST_CMP_REQ: Schema = { Pto_venta: int(1), Cbte_Tipo: int(1) };
-export const FEX_GET_CMP_REQ: Schema = { Cbte_tipo: int(1), Punto_vta: int(1), Cbte_nro: long() };
-export const FEX_CTZ_REQ: Schema = { Mon_id: str({ minLen: 1 }), FchCotiz: opt(date8()) };
-export const FEX_CHECK_PERMISO_REQ: Schema = { ID_Permiso: str({ minLen: 1 }), Dst_merc: int(0) };
-export const FEX_MON_CON_COTIZACION_REQ: Schema = { Fecha_CTZ: opt(date8()) };
+export const FEX_LAST_CMP_REQ: Schema = { ptoVenta: xml('Pto_venta', int(1)), cbteTipo: xml('Cbte_Tipo', int(1)) };
+export const FEX_GET_CMP_REQ: Schema = {
+  cbteTipo: xml('Cbte_tipo', int(1)),
+  puntoVta: xml('Punto_vta', int(1)),
+  cbteNro: xml('Cbte_nro', long()),
+};
+export const FEX_CTZ_REQ: Schema = {
+  monId: xml('Mon_id', str({ minLen: 1 })),
+  fchCotiz: xml('FchCotiz', opt(date8())),
+};
+export const FEX_CHECK_PERMISO_REQ: Schema = {
+  idPermiso: xml('ID_Permiso', str({ minLen: 1 })),
+  dstMerc: xml('Dst_merc', int(0)),
+};
+export const FEX_MON_CON_COTIZACION_REQ: Schema = { fechaCtz: xml('Fecha_CTZ', opt(date8())) };
 
 // ===========================================================================
 // WSFEX - Respuestas
 // ===========================================================================
 
-/** `FEXErr`: `ErrCode` 0 significa "sin error". */
-export const FEX_ERR: Schema = { ErrCode: must(int()), ErrMsg: opt(str()) };
-export const FEX_EVENTS: Schema = { EventCode: must(int()), EventMsg: opt(str()) };
-const FEX_ERR_EVT: Schema = { FEXErr: opt(obj(FEX_ERR)), FEXEvents: opt(obj(FEX_EVENTS)) };
+export const FEX_EVENTS: Schema = { eventCode: xml('EventCode', must(int())), eventMsg: xml('EventMsg', opt(str())) };
+/** `FEXEvents`. `FEXErr` no se decodifica: con un código distinto de 0 el cliente lanza `ArcaWSFEError`. */
+const FEX_ERR_EVT: Schema = { fexEvents: xml('FEXEvents', opt(obj(FEX_EVENTS))) };
 
 /** `ClsFEXOutAuthorize`. `Resultado` lo verifica `authorize`. */
 export const FEX_OUT_AUTHORIZE: Schema = {
-  Id: must(int()),
-  Cuit: must(int()),
-  Cbte_tipo: must(int()),
-  Punto_vta: must(int()),
-  Cbte_nro: must(int()),
-  Cae: opt(str()),
-  Fch_venc_Cae: opt(str()),
-  Fch_cbte: opt(str()),
-  Resultado: opt(str()),
-  Reproceso: opt(str()),
-  Motivos_Obs: opt(str()),
+  id: xml('Id', must(int())),
+  cuit: xml('Cuit', must(int())),
+  cbteTipo: xml('Cbte_tipo', must(int())),
+  puntoVta: xml('Punto_vta', must(int())),
+  cbteNro: xml('Cbte_nro', must(int())),
+  cae: xml('Cae', opt(str())),
+  fchVencCae: xml('Fch_venc_Cae', opt(str())),
+  fchCbte: xml('Fch_cbte', opt(str())),
+  resultado: xml('Resultado', opt(str())),
+  reproceso: xml('Reproceso', opt(str())),
+  motivosObs: xml('Motivos_Obs', opt(str())),
 };
-export const FEX_AUTHORIZE_RESP: Schema = { FEXResultAuth: opt(obj(FEX_OUT_AUTHORIZE)), ...FEX_ERR_EVT };
+export const FEX_AUTHORIZE_RESP: Schema = {
+  fexResultAuth: xml('FEXResultAuth', opt(obj(FEX_OUT_AUTHORIZE))),
+  ...FEX_ERR_EVT,
+};
 
-export const PERMISO_RESP: Schema = { Id_permiso: opt(str()), Dst_merc: must(int()) };
+export const PERMISO_RESP: Schema = { idPermiso: xml('Id_permiso', opt(str())), dstMerc: xml('Dst_merc', must(int())) };
 export const CMP_ASOC_RESP: Schema = {
-  Cbte_tipo: must(int()),
-  Cbte_punto_vta: must(int()),
-  Cbte_nro: must(int()),
-  Cbte_cuit: must(int()),
+  cbteTipo: xml('Cbte_tipo', must(int())),
+  cbtePuntoVta: xml('Cbte_punto_vta', must(int())),
+  cbteNro: xml('Cbte_nro', must(int())),
+  cbteCuit: xml('Cbte_cuit', must(int())),
 };
 export const ITEM_RESP: Schema = {
-  Pro_codigo: opt(str()),
-  Pro_ds: opt(str()),
-  Pro_qty: must(double()),
-  Pro_umed: must(int()),
-  Pro_precio_uni: must(double()),
-  Pro_bonificacion: must(double()),
-  Pro_total_item: must(double()),
+  proCodigo: xml('Pro_codigo', opt(str())),
+  proDs: xml('Pro_ds', opt(str())),
+  proQty: xml('Pro_qty', must(double())),
+  proUmed: xml('Pro_umed', must(int())),
+  proPrecioUni: xml('Pro_precio_uni', must(double())),
+  proBonificacion: xml('Pro_bonificacion', must(double())),
+  proTotalItem: xml('Pro_total_item', must(double())),
 };
 
 /** `ClsFEXGetCMPR` (FEXResultGet de FEXGetCMP). `Cuit_pais_cliente` queda como string (CUIT de 11 dígitos). */
 export const FEX_GET_CMPR: Schema = {
-  Id: must(int()),
-  Fecha_cbte: opt(str()),
-  Cbte_tipo: must(int()),
-  Punto_vta: must(int()),
-  Cbte_nro: must(int()),
-  Tipo_expo: must(int()),
-  Permiso_existente: opt(str()),
-  Permisos: arrayOf('Permiso', PERMISO_RESP),
-  Dst_cmp: must(int()),
-  Cliente: opt(str()),
-  Cuit_pais_cliente: must(str()),
-  Domicilio_cliente: opt(str()),
-  Id_impositivo: opt(str()),
-  Moneda_Id: opt(str()),
-  Moneda_ctz: must(double()),
-  CanMisMonExt: opt(str()),
-  Obs_comerciales: opt(str()),
-  Imp_total: must(double()),
-  Obs: opt(str()),
-  Cmps_asoc: arrayOf('Cmp_asoc', CMP_ASOC_RESP),
-  Forma_pago: opt(str()),
-  Incoterms: opt(str()),
-  Incoterms_Ds: opt(str()),
-  Idioma_cbte: must(int()),
-  Items: arrayOf('Item', ITEM_RESP),
-  Fecha_cbte_cae: opt(str()),
-  Fch_venc_Cae: opt(str()),
-  Cae: opt(str()),
-  Resultado: opt(str()),
-  Motivos_Obs: opt(str()),
-  Opcionales: arrayOf('Opcional', OPCIONAL_RESP),
-  Fecha_pago: opt(str()),
-  Actividades: arrayOf('Actividad', { Id: must(int()) }),
+  id: xml('Id', must(int())),
+  fechaCbte: xml('Fecha_cbte', opt(str())),
+  cbteTipo: xml('Cbte_tipo', must(int())),
+  puntoVta: xml('Punto_vta', must(int())),
+  cbteNro: xml('Cbte_nro', must(int())),
+  tipoExpo: xml('Tipo_expo', must(int())),
+  permisoExistente: xml('Permiso_existente', opt(str())),
+  permisos: xml('Permisos', arrayOf('Permiso', PERMISO_RESP)),
+  dstCmp: xml('Dst_cmp', must(int())),
+  cliente: xml('Cliente', opt(str())),
+  cuitPaisCliente: xml('Cuit_pais_cliente', must(str())),
+  domicilioCliente: xml('Domicilio_cliente', opt(str())),
+  idImpositivo: xml('Id_impositivo', opt(str())),
+  monedaId: xml('Moneda_Id', opt(str())),
+  monedaCtz: xml('Moneda_ctz', must(double())),
+  canMisMonExt: xml('CanMisMonExt', opt(str())),
+  obsComerciales: xml('Obs_comerciales', opt(str())),
+  impTotal: xml('Imp_total', must(double())),
+  obs: xml('Obs', opt(str())),
+  cmpsAsoc: xml('Cmps_asoc', arrayOf('Cmp_asoc', CMP_ASOC_RESP)),
+  formaPago: xml('Forma_pago', opt(str())),
+  incoterms: xml('Incoterms', opt(str())),
+  incotermsDs: xml('Incoterms_Ds', opt(str())),
+  idiomaCbte: xml('Idioma_cbte', must(int())),
+  items: xml('Items', arrayOf('Item', ITEM_RESP)),
+  fechaCbteCae: xml('Fecha_cbte_cae', opt(str())),
+  fchVencCae: xml('Fch_venc_Cae', opt(str())),
+  cae: xml('Cae', opt(str())),
+  resultado: xml('Resultado', opt(str())),
+  motivosObs: xml('Motivos_Obs', opt(str())),
+  opcionales: xml('Opcionales', arrayOf('Opcional', OPCIONAL_RESP)),
+  fechaPago: xml('Fecha_pago', opt(str())),
+  actividades: xml('Actividades', arrayOf('Actividad', { id: xml('Id', must(int())) })),
 };
-export const FEX_GET_CMP_RESP: Schema = { FEXResultGet: opt(obj(FEX_GET_CMPR)), ...FEX_ERR_EVT };
+export const FEX_GET_CMP_RESP: Schema = { fexResultGet: xml('FEXResultGet', opt(obj(FEX_GET_CMPR))), ...FEX_ERR_EVT };
 
 export const FEX_LAST_CMP_RESP: Schema = {
-  FEXResult_LastCMP: opt(obj({ Cbte_nro: must(int()), Cbte_fecha: opt(str()) })),
+  fexResultLastCmp: xml(
+    'FEXResult_LastCMP',
+    opt(obj({ cbteNro: xml('Cbte_nro', must(int())), cbteFecha: xml('Cbte_fecha', opt(str())) })),
+  ),
   ...FEX_ERR_EVT,
 };
-export const FEX_LAST_ID_RESP: Schema = { FEXResultGet: opt(obj({ Id: must(int()) })), ...FEX_ERR_EVT };
+export const FEX_LAST_ID_RESP: Schema = {
+  fexResultGet: xml('FEXResultGet', opt(obj({ id: xml('Id', must(int())) }))),
+  ...FEX_ERR_EVT,
+};
 export const FEX_CTZ_RESP: Schema = {
-  FEXResultGet: opt(obj({ Mon_ctz: must(double()), Mon_fecha: opt(str()) })),
+  fexResultGet: xml(
+    'FEXResultGet',
+    opt(obj({ monCtz: xml('Mon_ctz', must(double())), monFecha: xml('Mon_fecha', opt(str())) })),
+  ),
   ...FEX_ERR_EVT,
 };
-export const FEX_CHECK_PERMISO_RESP: Schema = { FEXResultGet: opt(obj({ Status: opt(str()) })), ...FEX_ERR_EVT };
+export const FEX_CHECK_PERMISO_RESP: Schema = {
+  fexResultGet: xml('FEXResultGet', opt(obj({ status: xml('Status', opt(str())) }))),
+  ...FEX_ERR_EVT,
+};
 
 // Ítems de las tablas de parámetros de WSFEX (`FEXResultGet/<item>`).
 
-const vigencia = (prefix: string, id: Field): Schema => ({
-  [`${prefix}_Id`]: must(id),
-  [`${prefix}_Ds`]: opt(str()),
-  [`${prefix}_vig_desde`]: opt(str()),
-  [`${prefix}_vig_hasta`]: opt(str()),
-});
+/** `<Prefijo>_Id`, `_Ds`, `_vig_desde`, `_vig_hasta` → `prefijoId`, `prefijoDs`, `prefijoVigDesde`, `prefijoVigHasta`. */
+const vigencia = (prefix: string, id: Field): Schema => {
+  const p = prefix.toLowerCase();
+  return {
+    [`${p}Id`]: xml(`${prefix}_Id`, must(id)),
+    [`${p}Ds`]: xml(`${prefix}_Ds`, opt(str())),
+    [`${p}VigDesde`]: xml(`${prefix}_vig_desde`, opt(str())),
+    [`${p}VigHasta`]: xml(`${prefix}_vig_hasta`, opt(str())),
+  };
+};
 
 export const FEX_TABLAS = {
   ClsFEXResponse_Cbte_Tipo: vigencia('Cbte', int()),
@@ -458,22 +560,30 @@ export const FEX_TABLAS = {
   ClsFEXResponse_Mon: vigencia('Mon', str()),
   ClsFEXResponse_Opc: vigencia('Opc', int()),
   // `s:string` en el WSDL, pero la API lo devuelve como número (`FacturarExpoOpts.pais`); no hay códigos con cero a la izquierda.
-  ClsFEXResponse_DST_pais: { DST_Codigo: must(int()), DST_Ds: opt(str()) },
+  ClsFEXResponse_DST_pais: { dstCodigo: xml('DST_Codigo', must(int())), dstDs: xml('DST_Ds', opt(str())) },
   // CUIT de 11 dígitos: queda como string, como hasta ahora.
-  ClsFEXResponse_DST_cuit: { DST_CUIT: must(str()), DST_Ds: opt(str()) },
+  ClsFEXResponse_DST_cuit: { dstCuit: xml('DST_CUIT', must(str())), dstDs: xml('DST_Ds', opt(str())) },
   ClsFEXResponse_Mon_CON_Cotizacion: {
-    Mon_Id: must(str()),
-    Mon_Ds: opt(str()),
+    monId: xml('Mon_Id', must(str())),
+    monDs: xml('Mon_Ds', opt(str())),
     // `s:string` en el WSDL; la API lo devuelve como número.
-    Mon_ctz: opt(double()),
-    Fecha_ctz: opt(str()),
+    monCtz: xml('Mon_ctz', opt(double())),
+    fechaCtz: xml('Fecha_ctz', opt(str())),
   },
-  ClsFEXResponse_PtoVenta: { Pve_Nro: must(int()), Pve_Bloqueado: opt(str()), Pve_FchBaja: opt(str()) },
-  ClsFEXResponse_ActividadTipo: { Id: must(int()), Orden: must(int()), Desc: opt(str()) },
+  ClsFEXResponse_PtoVenta: {
+    pveNro: xml('Pve_Nro', must(int())),
+    pveBloqueado: xml('Pve_Bloqueado', opt(str())),
+    pveFchBaja: xml('Pve_FchBaja', opt(str())),
+  },
+  ClsFEXResponse_ActividadTipo: {
+    id: xml('Id', must(int())),
+    orden: xml('Orden', must(int())),
+    desc: xml('Desc', opt(str())),
+  },
 } satisfies Record<string, Schema>;
 
 /** Respuesta de una tabla de parámetros de WSFEX: `FEXResultGet/<item>[]` como array. */
 export const tablaWsfex = (item: keyof typeof FEX_TABLAS): Schema => ({
-  FEXResultGet: wrapped(item, obj(FEX_TABLAS[item]), 0),
+  fexResultGet: xml('FEXResultGet', wrapped(item, obj(FEX_TABLAS[item]), 0)),
   ...FEX_ERR_EVT,
 });

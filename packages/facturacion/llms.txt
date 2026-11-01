@@ -157,8 +157,8 @@ interface FacturarOpts {
   servicio?: { desde, hasta, vtoPago };    // Required for concepto 2/3. Date or "YYYYMMDD"; desde <= hasta
   moneda?: string;                         // Default: "PES"
   cotizacion?: number;                     // > 0. PES → must be 1 (10039). Foreign → required unless canMisMonExt "S" (10038)
-  tributos?: Tributo[];                    // Importe/BaseImp >= 0, rounded to 2 decimals; <Tributos> omitted if empty
-  opcionales?: Opcional[];                 // E.g., CBU for FCE: [{ Id: "2101", Valor: "..." }]
+  tributos?: Tributo[];                    // importe/baseImp >= 0, rounded to 2 decimals; <Tributos> omitted if empty
+  opcionales?: Opcional[];                 // E.g., CBU for FCE: [{ id: "2101", valor: "..." }]
 }
 
 // Exactly one of `neto` (without IVA) or `total` (final price, IVA included).
@@ -257,6 +257,8 @@ formatFechaHora(new Date()); // "20260328143210" (CbteFchHsGen format)
 
 ## Raw API (advanced)
 
+Naming: everything is camelCase. Raw API inputs and raw results use ARCA's field names in camelCase, acronyms as words (`CbteFch` → `cbteFch`, `ImpIVA` → `impIva`, `CAEFchVto` → `caeFchVto`, WSFEX `Fecha_cbte` → `fechaCbte`). Lists are plain arrays without the XML container (`resultGet.iva`, `feDetResp[0].observaciones`).
+
 Maps directly to WSFEv1 SOAP methods. No auto-calculation. User must provide all fields.
 
 ```typescript
@@ -265,16 +267,16 @@ const nextNum = await arca.siguienteComprobante(1, CbteTipo.FACTURA_B);
 
 // Create invoice with full control
 const rawResult = await arca.crearFactura({
-  PtoVta: 1,
-  CbteTipo: CbteTipo.FACTURA_B,
+  ptoVta: 1,
+  cbteTipo: CbteTipo.FACTURA_B,
   invoices: [{
-    Concepto: 1, DocTipo: 99, DocNro: 0,
-    CbteDesde: nextNum, CbteHasta: nextNum,
-    CbteFch: "20260328",
-    ImpTotal: 121, ImpTotConc: 0, ImpNeto: 100,
-    ImpOpEx: 0, ImpTrib: 0, ImpIVA: 21,
-    MonId: "PES", MonCotiz: 1,
-    Iva: [{ Id: 5, BaseImp: 100, Importe: 21 }],
+    concepto: 1, docTipo: 99, docNro: 0,
+    cbteDesde: nextNum, cbteHasta: nextNum,
+    cbteFch: "20260328",
+    impTotal: 121, impTotConc: 0, impNeto: 100,
+    impOpEx: 0, impTrib: 0, impIva: 21,
+    monId: "PES", monCotiz: 1,
+    iva: [{ id: 5, baseImp: 100, importe: 21 }],
   }],
 });
 
@@ -289,7 +291,7 @@ await arca.status();  // { wsfe, wsfex }: { ok: true, status: { appserver, dbser
 await arca.ultimoComprobante(ptoVta, cbteTipo);     // number
 await arca.consultarComprobante(cbteTipo, ptoVta, cbteNro);
 await arca.getPuntosVenta();
-await arca.getCotizacion(Moneda.DOLARES);           // { MonId, MonCotiz: number, FchCotiz } (ResultGet). Not cached
+await arca.getCotizacion(Moneda.DOLARES);           // { monId, monCotiz: number, fchCotiz } (ResultGet). Not cached
 await arca.getCotizacion(Moneda.DOLARES, { fecha: "20261030" }); // FchCotiz param
 await arca.getTiposComprobante();
 await arca.getTiposConcepto();
@@ -299,9 +301,9 @@ await arca.getMonedas();
 await arca.getTiposTributo();
 await arca.getTiposOpcional();
 await arca.getCantMaxRegistros();
-await arca.getCondicionesIva({ claseCmp: "A" }); // { Id, Desc, Cmp_Clase }[]
-await arca.getActividades();             // FEParamGetActividades: { Id, Orden, Desc }[]
-await arca.getTiposPaises();             // FEParamGetTiposPaises: { Id, Desc }[]
+await arca.getCondicionesIva({ claseCmp: "A" }); // { id, desc, cmpClase }[]
+await arca.getActividades();             // FEParamGetActividades: { id, orden, desc }[]
+await arca.getTiposPaises();             // FEParamGetTiposPaises: { id, desc }[]
 await arca.consultarSinMovimientoCAEA(caea, ptoVta); // FECAEASinMovimientoConsultar
 
 // Utility
@@ -319,7 +321,7 @@ resolverCbteTipo(emisor: CondicionIva, receptor: CondicionIva, clase?: "factura"
 The SDK validates inputs before sending to ARCA, throwing `ArcaValidationError` (extends `ArcaError`, with `field` and `details`):
 - `facturar()` / `notaCredito()` / `notaDebito()` / `armarComprobante()`: ptoVta, cbteTipo (not class E), cbteNro (integer >= 1), items (exactly one of neto/total, >= 0, no iva+exento, known aliquot), descuentoGlobal (0..total), fecha / servicio / cbtesAsoc[].fecha / periodoAsoc (existing dates via arca-common), concepto vs servicio, moneda/cotizacion/canMisMonExt (10038/10039/10241), docNro CUIT check digit, class A receiver (10243), tributos (Importe/BaseImp/Alic >= 0). **condicionIva required when docTipo != 99.**
 - `facturarExpo()`: ptoVta, cbteTipo (19/20/21), tipoExpo (1/2/4), cliente, moneda, cotizacion > 0, formaPago, pais, items; Permiso_existente/permisos per the manual table (1720); fechaPago only for type 19 (1673) and >= fecha for services (1674).
-- `crearFactura()` / `registrarCAEA()`: PtoVta, CbteTipo, invoices not empty, Imp* finite, CbteDesde/Hasta, CbteFch (YYYYMMDD, existing), FchServ* format, MonId, MonCotiz (unless CanMisMonExt "S"), CondicionIVAReceptorId when DocTipo != 99; registrarCAEA also requires CAEA and CbteFchHsGen (yyyymmddhhmmss).
+- `crearFactura()` / `registrarCAEA()`: ptoVta, cbteTipo, invoices not empty, imp* finite, cbteDesde/Hasta, cbteFch (YYYYMMDD, existing), fchServ* format, MonId, MonCotiz (unless CanMisMonExt "S"), CondicionIVAReceptorId when DocTipo != 99; registrarCAEA also requires CAEA and CbteFchHsGen (yyyymmddhhmmss).
 
 ## Error handling
 
@@ -438,11 +440,11 @@ await arca.facturar({
     vtoPago: new Date("2026-04-15"),
   },
   tributos: [{
-    Id: TributoTipo.IIBB,
-    Desc: "IIBB CABA",
-    BaseImp: 10000,
-    Alic: 3,
-    Importe: 300,
+    id: TributoTipo.IIBB,
+    desc: "IIBB CABA",
+    baseImp: 10000,
+    alic: 3,
+    importe: 300,
   }],
 });
 ```
@@ -451,8 +453,8 @@ await arca.facturar({
 
 ```typescript
 const result = await arca.crearFactura({
-  PtoVta: 1,
-  CbteTipo: CbteTipo.FACTURA_B,
+  ptoVta: 1,
+  cbteTipo: CbteTipo.FACTURA_B,
   invoices: [invoice1, invoice2, invoice3], // up to getCantMaxRegistros()
 });
 ```
@@ -469,7 +471,7 @@ await arca.facturar({
   condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
   items: [{ neto: 1000, iva: IvaTipo.IVA_21 }],
   moneda: Moneda.DOLARES,
-  cotizacion: cotiz.MonCotiz,
+  cotizacion: cotiz.monCotiz,
   canMisMonExt: "N", // optional; with "S" cotizacion may be omitted (ARCA uses the official rate)
 });
 ```
@@ -586,11 +588,11 @@ await arca.getTiposCbteExpo();
 await arca.getPuntosVentaExpo();          // FEXGetPARAM_PtoVenta
 await arca.getOpcionalesExpo();           // FEXGetPARAM_Opcionales
 await arca.getActividadesExpo();          // FEXGetPARAM_Actividades
-await arca.getCotizacionExpo("DOL", { fecha: "20261030" }); // FEXGetPARAM_Ctz → { Mon_ctz, Mon_fecha }
+await arca.getCotizacionExpo("DOL", { fecha: "20261030" }); // FEXGetPARAM_Ctz → { monCtz, monFecha }
 await arca.getMonedasConCotizacionExpo(); // FEXGetPARAM_MON_CON_COTIZACION
 await arca.checkPermisoExpo(idPermiso, dstMerc); // FEXCheck_Permiso → Status
 await arca.siguienteComprobanteExpo(ptoVta, cbteTipo, { signal });
-// consultarComprobanteExpo returns FEXResultGet with WSDL fields (Fecha_cbte_cae, Motivos_Obs, Cae, ...)
+// consultarComprobanteExpo returns fexResultGet with the WSDL fields in camelCase (fechaCbteCae, motivosObs, cae, ...)
 ```
 
 ## CAEA (offline/contingency invoicing)
@@ -600,10 +602,10 @@ CAEA (Código de Autorización Electrónico Anticipado). Since RG 5782 (WSFEv1 m
 ```typescript
 // 1. Request CAEA for a fortnight (periodo YYYYMM, orden 1|2; validated)
 const caea = await arca.solicitarCAEA("202611", 1);
-// caea: { CAEA, Periodo, Orden, FchVigDesde, FchVigHasta, FchTopeInf, FchProceso, eventos }
+// caea: { caea, periodo, orden, fchVigDesde, fchVigHasta, fchTopeInf, fchProceso, eventos }
 
 // 2. Report each comprobante issued offline (same interface as facturar() + fechaHoraGeneracion)
-const result = await arca.registrarFacturaCAEA(caea.CAEA, {
+const result = await arca.registrarFacturaCAEA(caea.caea, {
   ptoVta: 5,
   cbteTipo: CbteTipo.FACTURA_B,
   cbteNro: 120,
@@ -614,13 +616,13 @@ const result = await arca.registrarFacturaCAEA(caea.CAEA, {
 // Returns FacturaResult with cae = CAEA and tipoCodAut "A"
 
 // 3. Points of sale without movement
-await arca.sinMovimientoCAEA(caea.CAEA, 6);            // sends PtoVta, CAEA (WSDL order)
-await arca.consultarSinMovimientoCAEA(caea.CAEA, 6);   // [{ CAEA, FchProceso, PtoVta }]
+await arca.sinMovimientoCAEA(caea.caea, 6);            // sends PtoVta, CAEA (WSDL order)
+await arca.consultarSinMovimientoCAEA(caea.caea, 6);   // [{ caea, fchProceso, ptoVta }]
 
 // Query existing CAEA
 const existing = await arca.consultarCAEA("202611", 1);
 
-// Raw API: registrarCAEA({ PtoVta, CbteTipo, invoices: [{ ...detail, CAEA, CbteFchHsGen }] })
+// Raw API: registrarCAEA({ ptoVta, cbteTipo, invoices: [{ ...detail, caea, cbteFchHsGen }] })
 ```
 
 ## Padrón (taxpayer registry)

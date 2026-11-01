@@ -65,9 +65,9 @@ export abstract class BasePadronClient extends SoapServiceClient {
   /** Parámetros de autenticación en el orden del WSDL: token, sign, cuitRepresentada. */
   protected authParams(auth: WsAuth): Record<string, unknown> {
     return {
-      token: auth.Token,
-      sign: auth.Sign,
-      cuitRepresentada: validateCuit(auth.CuitRepresentada),
+      token: auth.token,
+      sign: auth.sign,
+      cuitRepresentada: validateCuit(auth.cuitRepresentada),
     };
   }
 

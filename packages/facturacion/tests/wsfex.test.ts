@@ -150,7 +150,7 @@ describe('facturarExpo: request', () => {
       cbteTipo: CbteTipo.NOTA_CREDITO_E,
       id: 8,
       cbteNro: 1,
-      cbtesAsoc: [{ Cbte_tipo: 19, Cbte_punto_vta: 3, Cbte_nro: 10, Cbte_cuit: 20123456786 }],
+      cbtesAsoc: [{ cbteTipo: 19, cbtePuntoVta: 3, cbteNro: 10, cbteCuit: 20123456786 }],
     });
     const cmp = mock.last('FEXAuthorize').params.Cmp;
     expect(cmp.Permiso_existente).toBe('');
@@ -172,8 +172,8 @@ describe('facturarExpo: request', () => {
       cbteNro: 1,
       permisoExistente: 'S',
       permisos: [
-        { Id_permiso: '26001EC01000001A', Dst_merc: 203 },
-        { Id_permiso: '26001EC01000002B', Dst_merc: 203 },
+        { idPermiso: '26001EC01000001A', dstMerc: 203 },
+        { idPermiso: '26001EC01000002B', dstMerc: 203 },
       ],
     });
     const cmp = mock.last('FEXAuthorize').params.Cmp;
@@ -253,7 +253,7 @@ describe('facturarExpo: respuesta y errores', () => {
     expect(err).toBeInstanceOf(ArcaResultadoInciertoExpo);
     expect(err.code).toBe('ARCA_RESULTADO_INCIERTO_EXPO');
     expect(err).toMatchObject({ id: 42, cbteTipo: 19, ptoVta: 3, cbteNro: 10 });
-    expect(err.intento).toEqual({ id: 42, cbteNro: 10, fecha: err.request.Fecha_cbte });
+    expect(err.intento).toEqual({ id: 42, cbteNro: 10, fecha: err.request.fechaCbte });
     expect(err.cause).toBeInstanceOf(ArcaSoapError);
     expect(mock.count('FEXAuthorize')).toBe(1);
 
@@ -265,7 +265,7 @@ describe('facturarExpo: respuesta y errores', () => {
     const reenviado = mock.last('FEXAuthorize').params.Cmp;
     expect(reenviado.Id).toBe(42);
     expect(reenviado.Cbte_nro).toBe(10);
-    expect(reenviado.Fecha_cbte).toBe(err.request.Fecha_cbte);
+    expect(reenviado.Fecha_cbte).toBe(err.request.fechaCbte);
   });
 
   it('503 → incierto con un solo fetch', async () => {
@@ -293,32 +293,32 @@ describe('facturarExpo: respuesta y errores', () => {
     const arca = await arcaDePrueba();
     mockArcaFetch({ FEXAuthorize: networkError('ECONNRESET') });
     const invoice = {
-      Id: 5,
-      Cbte_Tipo: 19,
-      Fecha_cbte: '20261030',
-      Punto_vta: 3,
-      Cbte_nro: 4,
-      Tipo_expo: 2,
-      Dst_cmp: 203,
-      Cliente: 'X',
-      Cuit_pais_cliente: 50000000059,
-      Domicilio_cliente: 'Y',
-      Id_impositivo: 'Z',
-      Moneda_Id: 'DOL',
-      Moneda_ctz: 1000,
-      Imp_total: 10,
-      Idioma_cbte: 1,
-      Forma_pago: 'T',
-      Fecha_pago: '20261030',
-      Items: [
+      id: 5,
+      cbteTipo: 19,
+      fechaCbte: '20261030',
+      puntoVta: 3,
+      cbteNro: 4,
+      tipoExpo: 2,
+      dstCmp: 203,
+      cliente: 'X',
+      cuitPaisCliente: 50000000059,
+      domicilioCliente: 'Y',
+      idImpositivo: 'Z',
+      monedaId: 'DOL',
+      monedaCtz: 1000,
+      impTotal: 10,
+      idiomaCbte: 1,
+      formaPago: 'T',
+      fechaPago: '20261030',
+      items: [
         {
-          Pro_codigo: 'S',
-          Pro_ds: 'Servicio',
-          Pro_qty: 1,
-          Pro_umed: 7,
-          Pro_precio_uni: 10,
-          Pro_bonificacion: 0,
-          Pro_total_item: 10,
+          proCodigo: 'S',
+          proDs: 'Servicio',
+          proQty: 1,
+          proUmed: 7,
+          proPrecioUni: 10,
+          proBonificacion: 0,
+          proTotalItem: 10,
         },
       ],
     };
@@ -365,11 +365,11 @@ describe('WSFEX: consultas', () => {
     });
     const res = await arca.consultarComprobanteExpo(19, 3, 10);
     expect(mock.last('FEXGetCMP').params.Cmp).toEqual({ Cbte_tipo: 19, Punto_vta: 3, Cbte_nro: 10 });
-    expect(res.FEXResultGet).toMatchObject({
-      Cae: '76123456789099',
-      Fecha_cbte_cae: '20261030',
-      Motivos_Obs: 'Obs X',
-      Imp_total: 34.8,
+    expect(res.fexResultGet).toMatchObject({
+      cae: '76123456789099',
+      fechaCbteCae: '20261030',
+      motivosObs: 'Obs X',
+      impTotal: 34.8,
     });
   });
 
@@ -398,10 +398,10 @@ describe('WSFEX: consultas', () => {
           OK_ERR,
       ),
     });
-    expect(await arca.getPaisesExpo()).toEqual([{ DST_Codigo: 203, DST_Ds: 'BRASIL' }]);
-    expect((await arca.getPuntosVentaExpo()).map((p) => p.Pve_Nro)).toEqual([3, 4]);
-    expect(await arca.getOpcionalesExpo()).toEqual([{ Opc_Id: 1, Opc_Ds: 'Opcional' }]);
-    expect(await arca.getActividadesExpo()).toEqual([{ Id: 620100, Orden: 1, Desc: 'Consultoría' }]);
+    expect(await arca.getPaisesExpo()).toEqual([{ dstCodigo: 203, dstDs: 'BRASIL' }]);
+    expect((await arca.getPuntosVentaExpo()).map((p) => p.pveNro)).toEqual([3, 4]);
+    expect(await arca.getOpcionalesExpo()).toEqual([{ opcId: 1, opcDs: 'Opcional' }]);
+    expect(await arca.getActividadesExpo()).toEqual([{ id: 620100, orden: 1, desc: 'Consultoría' }]);
   });
 
   it('FEXGetPARAM_Ctz y FEXCheck_Permiso', async () => {
@@ -414,8 +414,8 @@ describe('WSFEX: consultas', () => {
       FEXCheck_Permiso: wsfexResponse('FEXCheck_Permiso', `<FEXResultGet><Status>OK</Status></FEXResultGet>${OK_ERR}`),
     });
     expect(await arca.getCotizacionExpo('DOL', { fecha: '20261029' })).toEqual({
-      Mon_ctz: 1015.5,
-      Mon_fecha: '20261029',
+      monCtz: 1015.5,
+      monFecha: '20261029',
     });
     expect(orden(mock.last('FEXGetPARAM_Ctz').params)).toEqual(['Auth', 'Mon_id', 'FchCotiz']);
     expect(await arca.checkPermisoExpo('26001EC01000001A', 203)).toBe('OK');

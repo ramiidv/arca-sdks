@@ -7,7 +7,7 @@ import type { ArcaSdkConfig } from '@ramiidv/arca-common';
 // ============================================================
 
 /**
- * Configuración de `Arca`. Extiende `ArcaSdkConfig` de `@ramiidv/arca-common`
+ * Configuración de `ArcaFacturacion`. Extiende `ArcaSdkConfig` de `@ramiidv/arca-common`
  * (cert, key, cuit, production, timeout, retries, retryDelayMs,
  * tokenTTLMinutes, onEvent, ticketStorage, clockOffsetMs, autoClockSkew,
  * loginErrorCooldownMs, fetch, legacyTls, wsaa, signal).
@@ -45,9 +45,9 @@ export interface ArcaConfig extends ArcaSdkConfig {
 // ============================================================
 
 export interface WsfeAuth {
-  Token: string;
-  Sign: string;
-  Cuit: number;
+  token: string;
+  sign: string;
+  cuit: number;
 }
 
 // ============================================================
@@ -56,136 +56,136 @@ export interface WsfeAuth {
 
 export interface AlicuotaIva {
   /** ID de tipo de IVA (usar enum IvaTipo) */
-  Id: number;
+  id: number;
   /** Base imponible */
-  BaseImp: number;
+  baseImp: number;
   /** Importe del IVA */
-  Importe: number;
+  importe: number;
 }
 
 export interface Tributo {
   /** ID de tipo de tributo (usar enum TributoTipo) */
-  Id: number;
+  id: number;
   /** Descripción del tributo */
-  Desc: string;
+  desc: string;
   /** Base imponible (>= 0, se redondea a 2 decimales) */
-  BaseImp: number;
+  baseImp: number;
   /** Alícuota del tributo (>= 0) */
-  Alic: number;
+  alic: number;
   /** Importe del tributo (>= 0, se redondea a 2 decimales) */
-  Importe: number;
+  importe: number;
 }
 
 /** Comprador de un comprobante con receptores múltiples (estructura `Compradores` de WSFEv1). */
 export interface Comprador {
-  DocTipo: number;
-  DocNro: number;
+  docTipo: number;
+  docNro: number;
   /** Porcentaje de titularidad */
-  Porcentaje: number;
+  porcentaje: number;
 }
 
 /** Período asociado (`PeriodoAsoc`): NC/ND que refieren a un período en lugar de a comprobantes. */
 export interface PeriodoAsociado {
   /** Fecha desde (YYYYMMDD) */
-  FchDesde: string;
+  fchDesde: string;
   /** Fecha hasta (YYYYMMDD) */
-  FchHasta: string;
+  fchHasta: string;
 }
 
 export interface ComprobanteAsociado {
   /** Tipo de comprobante asociado */
-  Tipo: number;
+  tipo: number;
   /** Punto de venta del comprobante asociado */
-  PtoVta: number;
+  ptoVta: number;
   /** Número de comprobante asociado */
-  Nro: number;
+  nro: number;
   /** CUIT del emisor del comprobante asociado */
-  Cuit?: string | number;
+  cuit?: string | number;
   /** Fecha del comprobante asociado (formato YYYYMMDD) */
-  CbteFch?: string;
+  cbteFch?: string;
 }
 
 export interface Opcional {
   /** ID de dato opcional */
-  Id: string;
+  id: string;
   /** Valor del dato opcional */
-  Valor: string;
+  valor: string;
 }
 
 export interface InvoiceDetail {
   /** Concepto: 1=Productos, 2=Servicios, 3=Productos y Servicios */
-  Concepto: number;
+  concepto: number;
   /** Tipo de documento del receptor (usar enum DocTipo) */
-  DocTipo: number;
+  docTipo: number;
   /** Número de documento del receptor */
-  DocNro: number;
+  docNro: number;
   /** Número de comprobante desde */
-  CbteDesde: number;
+  cbteDesde: number;
   /** Número de comprobante hasta */
-  CbteHasta: number;
+  cbteHasta: number;
   /** Fecha del comprobante (formato YYYYMMDD) */
-  CbteFch: string;
+  cbteFch: string;
   /** Importe total */
-  ImpTotal: number;
+  impTotal: number;
   /** Importe total de conceptos no gravados */
-  ImpTotConc: number;
+  impTotConc: number;
   /** Importe neto gravado */
-  ImpNeto: number;
+  impNeto: number;
   /** Importe exento de IVA */
-  ImpOpEx: number;
+  impOpEx: number;
   /** Importe total de tributos */
-  ImpTrib: number;
+  impTrib: number;
   /** Importe total de IVA */
-  ImpIVA: number;
+  impIva: number;
   /** Código de moneda (usar enum Moneda) */
-  MonId: string;
+  monId: string;
   /**
    * Cotización de la moneda: 1 para pesos. Obligatoria salvo moneda extranjera
    * con `CanMisMonExt = "S"` (validación 10038).
    */
-  MonCotiz?: number;
+  monCotiz?: number;
   /** Fecha inicio del servicio (formato YYYYMMDD, requerido para servicios) */
-  FchServDesde?: string;
+  fchServDesde?: string;
   /** Fecha fin del servicio (formato YYYYMMDD, requerido para servicios) */
-  FchServHasta?: string;
+  fchServHasta?: string;
   /** Fecha de vencimiento de pago (formato YYYYMMDD, requerido para servicios) */
-  FchVtoPago?: string;
+  fchVtoPago?: string;
   /** Array de alícuotas de IVA */
-  Iva?: AlicuotaIva[];
+  iva?: AlicuotaIva[];
   /** Array de tributos */
-  Tributos?: Tributo[];
+  tributos?: Tributo[];
   /** Array de comprobantes asociados */
-  CbtesAsoc?: ComprobanteAsociado[];
+  cbtesAsoc?: ComprobanteAsociado[];
   /** Array de datos opcionales */
-  Opcionales?: Opcional[];
+  opcionales?: Opcional[];
   /**
    * Condición de IVA del receptor (usar enum CondicionIva). Obligatorio según RG 5616:
    * ARCA rechaza los comprobantes sin este dato desde el 01/12/2026 (manual WSFEv1 v4.8).
    */
-  CondicionIVAReceptorId?: number;
+  condicionIvaReceptorId?: number;
   /**
    * Cancela en la misma moneda extranjera: "S" o "N" (opcional). Con `MonId`
    * = PES no debe informarse o debe ser "N" (validación 10241).
    */
-  CanMisMonExt?: string;
+  canMisMonExt?: string;
   /** Compradores (receptores múltiples). */
-  Compradores?: Comprador[];
+  compradores?: Comprador[];
   /** Período asociado (solo NC/ND, alternativa a `CbtesAsoc`). */
-  PeriodoAsoc?: PeriodoAsociado;
+  periodoAsoc?: PeriodoAsociado;
   /** Actividades asociadas al comprobante (ver `getActividades`). */
-  Actividades?: { Id: number }[];
+  actividades?: { id: number }[];
   /**
    * Solo FECAEARegInformativo: fecha y hora de generación del comprobante
    * de contingencia, formato yyyymmddhhmmss (manual WSFEv1 v4.6, RG 5782).
    */
-  CbteFchHsGen?: string;
+  cbteFchHsGen?: string;
 }
 
 export interface InvoiceRequest {
   /** Punto de venta */
-  PtoVta: number;
+  ptoVta: number;
   /** Tipo de comprobante (usar enum CbteTipo) */
-  CbteTipo: number;
+  cbteTipo: number;
   /** Detalle de comprobantes */
   invoices: InvoiceDetail[];
 }
@@ -195,34 +195,29 @@ export interface InvoiceRequest {
 // ============================================================
 
 export interface FeCabResp {
-  Cuit: number;
-  PtoVta: number;
-  CbteTipo: number;
-  FchProceso: string;
-  CantReg: number;
-  Resultado: 'A' | 'R' | 'P';
-  Reproceso: string;
+  cuit: number;
+  ptoVta: number;
+  cbteTipo: number;
+  fchProceso: string;
+  cantReg: number;
+  resultado: 'A' | 'R' | 'P';
+  reproceso: string;
 }
 
 export interface FECAEDetResponse {
-  Concepto: number;
-  DocTipo: number;
-  DocNro: number;
-  CbteDesde: number;
-  CbteHasta: number;
-  CbteFch: string;
-  Resultado: 'A' | 'R';
+  concepto: number;
+  docTipo: number;
+  docNro: number;
+  cbteDesde: number;
+  cbteHasta: number;
+  cbteFch: string;
+  resultado: 'A' | 'R';
   /** CAE otorgado (FECAESolicitar) */
-  CAE?: string;
-  CAEFchVto?: string;
+  cae?: string;
+  caeFchVto?: string;
   /** CAEA informado (FECAEARegInformativo) */
-  CAEA?: string;
-  Observaciones?: { Obs: WsError[] };
-}
-
-export interface WsError {
-  Code: number;
-  Msg: string;
+  caea?: string;
+  observaciones?: MensajeArca[];
 }
 
 /** Error, observación o evento de ARCA ya normalizado. */
@@ -232,105 +227,109 @@ export interface MensajeArca {
 }
 
 export interface FECAESolicitarResult {
-  FeCabResp: FeCabResp;
-  FeDetResp: { FECAEDetResponse: FECAEDetResponse[] };
-  Errors?: { Err: WsError[] };
-  Events?: { Evt: WsError[] };
+  feCabResp: FeCabResp;
+  feDetResp: FECAEDetResponse[];
+  /** `Events` de ARCA: avisos generales. */
+  events?: MensajeArca[];
 }
 
 export interface FECompUltimoAutorizadoResult {
-  PtoVta: number;
-  CbteTipo: number;
-  CbteNro: number;
-  Errors?: { Err: WsError[] };
-  Events?: { Evt: WsError[] };
+  ptoVta: number;
+  cbteTipo: number;
+  cbteNro: number;
+  /** `Events` de ARCA: avisos generales. */
+  events?: MensajeArca[];
 }
 
 export interface FECompConsultarResult {
-  ResultGet: {
-    Concepto: number;
-    DocTipo: number;
-    DocNro: number;
-    CbteDesde: number;
-    CbteHasta: number;
-    CbteFch: string;
-    ImpTotal: number;
-    ImpTotConc: number;
-    ImpNeto: number;
-    ImpOpEx: number;
-    ImpTrib: number;
-    ImpIVA: number;
-    FchServDesde: string;
-    FchServHasta: string;
-    FchVtoPago: string;
-    MonId: string;
-    MonCotiz: number;
-    Resultado: 'A' | 'R';
-    CodAutorizacion: string;
-    EmisionTipo: string;
-    FchVto: string;
-    FchProceso: string;
-    PtoVta: number;
-    CbteTipo: number;
-    CondicionIVAReceptorId?: number;
-    Iva?: { AlicIva: AlicuotaIva[] };
-    Tributos?: { Tributo: Tributo[] };
-    CbtesAsoc?: { CbteAsoc: ComprobanteAsociado[] };
-    Opcionales?: { Opcional: Opcional[] };
-    Observaciones?: { Obs: WsError[] };
+  resultGet: {
+    concepto: number;
+    docTipo: number;
+    docNro: number;
+    cbteDesde: number;
+    cbteHasta: number;
+    cbteFch: string;
+    impTotal: number;
+    impTotConc: number;
+    impNeto: number;
+    impOpEx: number;
+    impTrib: number;
+    impIva: number;
+    fchServDesde: string;
+    fchServHasta: string;
+    fchVtoPago: string;
+    monId: string;
+    monCotiz: number;
+    resultado: 'A' | 'R';
+    codAutorizacion: string;
+    emisionTipo: string;
+    fchVto: string;
+    fchProceso: string;
+    ptoVta: number;
+    cbteTipo: number;
+    condicionIvaReceptorId?: number;
+    canMisMonExt?: string;
+    iva?: AlicuotaIva[];
+    tributos?: Tributo[];
+    cbtesAsoc?: ComprobanteAsociado[];
+    opcionales?: Opcional[];
+    compradores?: Comprador[];
+    periodoAsoc?: PeriodoAsociado;
+    actividades?: { id: number }[];
+    observaciones?: MensajeArca[];
   };
-  Errors?: { Err: WsError[] };
-  Events?: { Evt: WsError[] };
+  /** `Events` de ARCA: avisos generales. */
+  events?: MensajeArca[];
 }
 
 export interface ParamItem {
-  Id: number;
-  Desc: string;
-  FchDesde?: string;
-  FchHasta?: string;
+  id: number;
+  desc: string;
+  fchDesde?: string;
+  fchHasta?: string;
 }
 
 /** Condición frente al IVA del receptor (`FEParamGetCondicionIvaReceptor`). */
 export interface CondicionIvaItem {
-  Id: number;
-  Desc: string;
+  id: number;
+  desc: string;
   /** Clases de comprobante para las que es válida (ej: "A/M/C") */
-  Cmp_Clase?: string;
+  cmpClase?: string;
 }
 
 export interface MonedaItem {
-  Id: string;
-  Desc: string;
-  FchDesde?: string;
-  FchHasta?: string;
+  id: string;
+  desc: string;
+  fchDesde?: string;
+  fchHasta?: string;
 }
 
 export interface PtoVentaItem {
-  Nro: number;
-  EmisionTipo: string;
-  Bloqueado: string;
-  FchBaja: string;
+  nro: number;
+  emisionTipo: string;
+  bloqueado: string;
+  fchBaja: string;
 }
 
 /** Cotización de `FEParamGetCotizacion` (`ResultGet`). */
 export interface CotizacionResult {
-  MonId: string;
-  MonCotiz: number;
+  monId: string;
+  monCotiz: number;
   /** Fecha de la cotización (YYYYMMDD) */
-  FchCotiz: string;
+  fchCotiz: string;
 }
 
 /** Actividad del emisor (`FEParamGetActividades`). */
 export interface ActividadItem {
-  Id: number;
-  Orden: number;
-  Desc: string;
+  id: number;
+  orden: number;
+  desc: string;
 }
 
 /** País (`FEParamGetTiposPaises`). */
 export interface PaisItem {
-  Id: number;
-  Desc: string;
+  id: number;
+  desc: string;
 }
 
 // ============================================================
@@ -378,37 +377,37 @@ export interface QROptions {
 
 export interface WsfexItem {
   /** Código del producto */
-  Pro_codigo: string;
+  proCodigo: string;
   /** Descripción del producto */
-  Pro_ds: string;
+  proDs: string;
   /** Cantidad */
-  Pro_qty: number;
+  proQty: number;
   /** Unidad de medida (código AFIP) */
-  Pro_umed: number;
+  proUmed: number;
   /** Precio unitario */
-  Pro_precio_uni: number;
+  proPrecioUni: number;
   /** Bonificación / descuento */
-  Pro_bonificacion: number;
+  proBonificacion: number;
   /** Total del item */
-  Pro_total_item: number;
+  proTotalItem: number;
 }
 
 export interface WsfexPermiso {
   /** Número de permiso de embarque */
-  Id_permiso: string;
+  idPermiso: string;
   /** País destino de la mercadería */
-  Dst_merc: number;
+  dstMerc: number;
 }
 
 export interface WsfexCmpAsoc {
   /** Tipo de comprobante asociado */
-  Cbte_tipo: number;
+  cbteTipo: number;
   /** Punto de venta del comprobante asociado */
-  Cbte_punto_vta: number;
+  cbtePuntoVta: number;
   /** Número del comprobante asociado */
-  Cbte_nro: number;
+  cbteNro: number;
   /** CUIT del emisor del comprobante asociado */
-  Cbte_cuit: number;
+  cbteCuit: number;
 }
 
 export interface WsfexInvoice {
@@ -416,168 +415,160 @@ export interface WsfexInvoice {
    * ID único del request (usar getLastId + 1). Ante un corte, reenviar la
    * misma solicitud con el mismo Id: WSFEX responde `Reproceso = "S"` sin duplicar.
    */
-  Id: number;
+  id: number;
   /** Tipo de comprobante (19=Factura E, 20=ND E, 21=NC E) */
-  Cbte_Tipo: number;
+  cbteTipo: number;
   /** Fecha del comprobante (YYYYMMDD) */
-  Fecha_cbte: string;
+  fechaCbte: string;
   /** Punto de venta */
-  Punto_vta: number;
+  puntoVta: number;
   /** Número de comprobante */
-  Cbte_nro: number;
+  cbteNro: number;
   /** Tipo de exportación: 1=Bienes, 2=Servicios, 4=Otros */
-  Tipo_expo: number;
+  tipoExpo: number;
   /**
    * Permiso de embarque existente: "S"/"N" solo para Factura E (19) de bienes
    * (Tipo_expo 1); vacío en los demás casos (validación 1720).
    */
-  Permiso_existente?: string;
+  permisoExistente?: string;
   /** Código de país destino */
-  Dst_cmp: number;
+  dstCmp: number;
   /** Nombre del cliente */
-  Cliente: string;
+  cliente: string;
   /** CUIT del país del cliente */
-  Cuit_pais_cliente: number;
+  cuitPaisCliente: number;
   /** Domicilio del cliente */
-  Domicilio_cliente: string;
+  domicilioCliente: string;
   /** ID impositivo del cliente extranjero */
-  Id_impositivo: string;
+  idImpositivo: string;
   /** Código de moneda */
-  Moneda_Id: string;
+  monedaId: string;
   /** Cotización de la moneda */
-  Moneda_ctz: number;
+  monedaCtz: number;
   /** Importe total del comprobante */
-  Imp_total: number;
+  impTotal: number;
   /** Observaciones comerciales */
-  Obs_comerciales?: string;
+  obsComerciales?: string;
   /** Observaciones */
-  Obs?: string;
+  obs?: string;
   /** Idioma: 1=Español, 2=Inglés, 3=Portugués */
-  Idioma_cbte: number;
+  idiomaCbte: number;
   /** Forma de pago */
-  Forma_pago: string;
+  formaPago: string;
   /** Código Incoterms */
-  Incoterms?: string;
+  incoterms?: string;
   /** Descripción Incoterms */
-  Incoterms_Ds?: string;
+  incotermsDs?: string;
   /** Fecha de pago (YYYYMMDD). Solo Factura E (19); obligatoria para servicios/otros (1672, 1673). */
-  Fecha_pago?: string;
+  fechaPago?: string;
   /** Cancela en misma moneda extranjera: "S" o "N" */
-  CanMisMonExt?: string;
+  canMisMonExt?: string;
   /** Items del comprobante */
-  Items: WsfexItem[];
+  items: WsfexItem[];
   /** Permisos de embarque */
-  Permisos?: WsfexPermiso[];
+  permisos?: WsfexPermiso[];
   /** Comprobantes asociados */
-  Cmps_asoc?: WsfexCmpAsoc[];
+  cmpsAsoc?: WsfexCmpAsoc[];
   /** Datos opcionales */
-  Opcionales?: Opcional[];
+  opcionales?: Opcional[];
   /** Actividades (ver `getActividadesExpo`) */
-  Actividades?: { Id: number }[];
+  actividades?: { id: number }[];
 }
 
-export interface WsfexErr {
-  ErrCode: number;
-  ErrMsg: string;
-}
-
+/** `FEXEvents` de WSFEX (código 0 = sin eventos). */
 export interface WsfexEvents {
-  EventCode: number;
-  EventMsg: string;
+  eventCode: number;
+  eventMsg: string;
 }
 
 export interface WsfexAuthResult {
-  FEXResultAuth?: {
-    Id: number;
-    Cuit: number;
-    Cbte_tipo: number;
-    Punto_vta: number;
-    Cbte_nro: number;
-    Cae?: string;
-    Fch_venc_Cae?: string;
-    Fch_cbte?: string;
-    Resultado: 'A' | 'R';
+  fexResultAuth?: {
+    id: number;
+    cuit: number;
+    cbteTipo: number;
+    puntoVta: number;
+    cbteNro: number;
+    cae?: string;
+    fchVencCae?: string;
+    fchCbte?: string;
+    resultado: 'A' | 'R';
     /** "S" si WSFEX encontró la misma solicitud (mismo Id) ya procesada. */
-    Reproceso?: string;
-    Motivos_Obs?: string;
+    reproceso?: string;
+    motivosObs?: string;
   };
-  FEXErr?: WsfexErr;
-  FEXEvents?: WsfexEvents;
+  fexEvents?: WsfexEvents;
 }
 
 export interface WsfexLastCmpResult {
-  FEXResult_LastCMP?: {
-    Cbte_nro: number;
-    Cbte_fecha?: string;
+  fexResultLastCmp?: {
+    cbteNro: number;
+    cbteFecha?: string;
   };
-  FEXErr?: WsfexErr;
-  FEXEvents?: WsfexEvents;
+  fexEvents?: WsfexEvents;
 }
 
 export interface WsfexLastIdResult {
-  FEXResultGet?: { Id: number };
-  FEXErr?: WsfexErr;
-  FEXEvents?: WsfexEvents;
+  fexResultGet?: { id: number };
+  fexEvents?: WsfexEvents;
 }
 
 /** Respuesta de `FEXGetCMP` (campos según el WSDL de WSFEX, `ClsFEXGetCMPR`). */
 export interface WsfexGetCmpResult {
-  FEXResultGet?: {
-    Id: number;
-    Fecha_cbte?: string;
-    Cbte_tipo: number;
-    Punto_vta: number;
-    Cbte_nro: number;
-    Tipo_expo: number;
-    Permiso_existente?: string;
-    Permisos?: { Permiso: WsfexPermiso[] };
-    Dst_cmp: number;
-    Cliente?: string;
-    Cuit_pais_cliente: number | string;
-    Domicilio_cliente?: string;
-    Id_impositivo?: string;
-    Moneda_Id?: string;
-    Moneda_ctz: number;
-    CanMisMonExt?: string;
-    Obs_comerciales?: string;
-    Imp_total: number;
-    Obs?: string;
-    Cmps_asoc?: { Cmp_asoc: WsfexCmpAsoc[] };
-    Forma_pago?: string;
-    Incoterms?: string;
-    Incoterms_Ds?: string;
-    Idioma_cbte: number;
-    Items?: { Item: WsfexItem[] };
+  fexResultGet?: {
+    id: number;
+    fechaCbte?: string;
+    cbteTipo: number;
+    puntoVta: number;
+    cbteNro: number;
+    tipoExpo: number;
+    permisoExistente?: string;
+    permisos?: WsfexPermiso[];
+    dstCmp: number;
+    cliente?: string;
+    cuitPaisCliente: number | string;
+    domicilioCliente?: string;
+    idImpositivo?: string;
+    monedaId?: string;
+    monedaCtz: number;
+    canMisMonExt?: string;
+    obsComerciales?: string;
+    impTotal: number;
+    obs?: string;
+    cmpsAsoc?: WsfexCmpAsoc[];
+    formaPago?: string;
+    incoterms?: string;
+    incotermsDs?: string;
+    idiomaCbte: number;
+    items?: WsfexItem[];
     /** Fecha de autorización del CAE */
-    Fecha_cbte_cae?: string;
-    Fch_venc_Cae?: string;
-    Cae?: string;
-    Resultado?: 'A' | 'R';
-    Motivos_Obs?: string;
-    Opcionales?: { Opcional: Opcional[] };
-    Fecha_pago?: string;
-    Actividades?: { Actividad: { Id: number }[] };
+    fechaCbteCae?: string;
+    fchVencCae?: string;
+    cae?: string;
+    resultado?: 'A' | 'R';
+    motivosObs?: string;
+    opcionales?: Opcional[];
+    fechaPago?: string;
+    actividades?: { id: number }[];
   };
-  FEXErr?: WsfexErr;
-  FEXEvents?: WsfexEvents;
+  fexEvents?: WsfexEvents;
 }
 
 /** Cotización de `FEXGetPARAM_Ctz`. */
 export interface WsfexCotizacion {
-  Mon_ctz: number;
-  Mon_fecha?: string;
+  monCtz: number;
+  monFecha?: string;
 }
 
 /** Punto de venta de exportación (`FEXGetPARAM_PtoVenta`). */
 export interface WsfexPtoVenta {
-  Pve_Nro: number;
-  Pve_Bloqueado?: string;
-  Pve_FchBaja?: string;
+  pveNro: number;
+  pveBloqueado?: string;
+  pveFchBaja?: string;
 }
 
 /**
- * Item de parámetro WSFEX. Los nombres de campo varían por tipo
- * (ej: Mon_Id, Cbte_Id, DST_Codigo, etc.). Usar Record para acceso genérico.
+ * Item de parámetro WSFEX. Los nombres de campo varían por tabla (ej: `monId`,
+ * `cbteId`, `dstCodigo`): son los de ARCA en camelCase.
  */
 export type WsfexParamItem = Record<string, string | number>;
 
@@ -587,54 +578,54 @@ export type WsfexParamItem = Record<string, string | number>;
 
 /** `ResultGet` de FECAEASolicitar / FECAEAConsultar (`FECAEAGet`). */
 export interface CaeaSolicitarResult {
-  CAEA: string;
+  caea: string;
   /** Período YYYYMM */
-  Periodo: string;
+  periodo: string;
   /** Quincena: 1 o 2 */
-  Orden: number;
-  FchVigDesde: string;
-  FchVigHasta: string;
-  FchTopeInf: string;
-  FchProceso: string;
-  Observaciones?: { Obs: WsError[] };
+  orden: number;
+  fchVigDesde: string;
+  fchVigHasta: string;
+  fchTopeInf: string;
+  fchProceso: string;
+  observaciones?: MensajeArca[];
   /** Eventos de ARCA de la respuesta (normalizados). */
   eventos?: MensajeArca[];
 }
 
 export interface CaeaRegInfResult {
-  FeCabResp: FeCabResp;
-  FeDetResp: { FECAEADetResponse: FECAEDetResponse[] };
-  Errors?: { Err: WsError[] };
-  Events?: { Evt: WsError[] };
+  feCabResp: FeCabResp;
+  feDetResp: FECAEDetResponse[];
+  /** `Events` de ARCA: avisos generales. */
+  events?: MensajeArca[];
 }
 
 export interface CaeaRegInfRequest {
   /** Punto de venta */
-  PtoVta: number;
+  ptoVta: number;
   /** Tipo de comprobante */
-  CbteTipo: number;
+  cbteTipo: number;
   /**
    * Detalle de comprobantes con CAEA. `CbteFchHsGen` (yyyymmddhhmmss) es
    * obligatorio desde la RG 5782 (validación 1440).
    */
-  invoices: (InvoiceDetail & { CAEA: string; CbteFchHsGen: string })[];
+  invoices: (InvoiceDetail & { caea: string; cbteFchHsGen: string })[];
 }
 
 /** Respuesta de FECAEASinMovimientoInformar. */
 export interface CaeaSinMovResult {
-  CAEA?: string;
-  FchProceso?: string;
-  PtoVta?: number;
-  Resultado: 'A' | 'R';
-  Errors?: { Err: WsError[] };
-  Events?: { Evt: WsError[] };
+  caea?: string;
+  fchProceso?: string;
+  ptoVta?: number;
+  resultado: 'A' | 'R';
+  /** `Events` de ARCA: avisos generales. */
+  events?: MensajeArca[];
 }
 
 /** Un informe "sin movimiento" (`FECAEASinMovimientoConsultar`). */
 export interface CaeaSinMovItem {
-  CAEA: string;
-  FchProceso: string;
-  PtoVta: number;
+  caea: string;
+  fchProceso: string;
+  ptoVta: number;
 }
 
 // ============================================================

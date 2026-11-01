@@ -251,7 +251,7 @@ describe('CAEA', () => {
   it('registrarCAEA raw valida el request', async () => {
     const arca = await arcaDePrueba();
     const mock = mockArcaFetch({});
-    await expect(arca.registrarCAEA({ PtoVta: 5, CbteTipo: 6, invoices: [] })).rejects.toBeInstanceOf(
+    await expect(arca.registrarCAEA({ ptoVta: 5, cbteTipo: 6, invoices: [] })).rejects.toBeInstanceOf(
       ArcaValidationError,
     );
     expect(mock.fn).not.toHaveBeenCalled();

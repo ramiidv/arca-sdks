@@ -90,6 +90,6 @@ export class ArcaCdc extends ArcaSdkBase<'wscdc'> {
 
   private async auth(opts?: CallOptions): Promise<CdcAuth> {
     const ticket = await this.ticket('wscdc', opts);
-    return { Token: ticket.token, Sign: ticket.sign, Cuit: this.cuit };
+    return { token: ticket.token, sign: ticket.sign, cuit: this.cuit };
   }
 }

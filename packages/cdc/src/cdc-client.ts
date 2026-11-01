@@ -1,6 +1,6 @@
 import { ArcaSoapError, checkServiceErrors, parseServerStatus, SoapServiceClient } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus, ServiceTransport } from '@ramiidv/arca-common';
-import { decodeResponse, obj, wrapped } from '@ramiidv/arca-common/schema';
+import { decodeResponse, obj, wrapped, xml } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import { WSCDC_NAMESPACE } from './constants.js';
 import * as S from './schemas.js';
@@ -50,13 +50,16 @@ function decode<T>(node: unknown, schema: Schema, path: string): T {
   return decodeResponse<T>(dropEmpty(node), schema, path, { error: responseError });
 }
 
-type MensajeRaw = { Code: number; Msg?: string };
-const mensajes = (list: MensajeRaw[]): CdcMensaje[] => list.map((m) => ({ Code: m.Code, Msg: m.Msg ?? '' }));
+type MensajeRaw = { code: number; msg?: string };
+const mensajes = (list: MensajeRaw[]): CdcMensaje[] => list.map((m) => ({ code: m.code, msg: m.msg ?? '' }));
+
+/** Bloque `Auth` con los nombres del XML. */
+const authXml = (auth: CdcAuth) => ({ Token: auth.token, Sign: auth.sign, Cuit: auth.cuit });
 
 function parseCmpResp(raw: Raw, method: string): ComprobanteConstatado {
-  const { Opcionales, ...cmp } = decode<ComprobanteConstatado>(raw, S.CMP_RESP, `${method}.CmpResp`);
-  if (!Opcionales?.length) return cmp;
-  return { ...cmp, Opcionales: Opcionales.map((o) => ({ Id: o.Id, Valor: o.Valor ?? '' })) };
+  const { opcionales, ...cmp } = decode<ComprobanteConstatado>(raw, S.CMP_RESP, `${method}.CmpResp`);
+  if (!opcionales?.length) return cmp;
+  return { ...cmp, opcionales: opcionales.map((o) => ({ id: o.id, valor: o.valor ?? '' })) };
 }
 
 /**
@@ -89,39 +92,40 @@ export class CdcClient extends SoapServiceClient {
     auth: CdcAuth,
     opts?: CallOptions,
   ): Promise<T[]> {
-    const result = await this.call(method, { Auth: auth }, opts);
+    const result = await this.call(method, { Auth: authXml(auth) }, opts);
     checkServiceErrors(result, `WSCDC ${method}`);
-    return decode<{ ResultGet: T[] }>(result, { ResultGet: wrapped(child, obj(item), 0) }, method).ResultGet;
+    return decode<{ resultGet: T[] }>(result, { resultGet: xml('ResultGet', wrapped(child, obj(item), 0)) }, method)
+      .resultGet;
   }
 
   /**
    * `ComprobanteConstatar`: constata un comprobante (CAE, CAI o CAEA).
    *
    * - Errores de formato, autenticación o infraestructura (`Errors`) → `ArcaServiceError`.
-   * - Rechazo funcional → `Resultado: 'R'` con el detalle en `Observaciones`.
+   * - Rechazo funcional → `resultado: 'R'` con el detalle en `observaciones`.
    */
   async constatar(auth: CdcAuth, input: ConstatarInput, opts?: CallOptions): Promise<ConstatarResult> {
     const method = 'ComprobanteConstatar';
     const cmpReq = buildCmpReq(input);
-    const result = await this.call(method, { Auth: auth, CmpReq: cmpReq }, opts);
+    const result = await this.call(method, { Auth: authXml(auth), CmpReq: cmpReq }, opts);
 
     checkServiceErrors(result, `WSCDC ${method}`);
 
-    const r = decode<{ Resultado: string; FchProceso: string; Observaciones: MensajeRaw[]; Events: MensajeRaw[] }>(
+    const r = decode<{ resultado: string; fchProceso: string; observaciones: MensajeRaw[]; events: MensajeRaw[] }>(
       result,
       S.CONSTATAR_RESP,
       method,
     );
-    if (r.Resultado !== 'A' && r.Resultado !== 'R') {
-      throw responseError(`Respuesta inválida: ${method}.Resultado desconocido "${r.Resultado}"`);
+    if (r.resultado !== 'A' && r.resultado !== 'R') {
+      throw responseError(`Respuesta inválida: ${method}.Resultado desconocido "${r.resultado}"`);
     }
     const out: ConstatarResult = {
-      Resultado: r.Resultado,
-      FchProceso: r.FchProceso,
-      Observaciones: mensajes(r.Observaciones),
-      Events: mensajes(r.Events),
+      resultado: r.resultado,
+      fchProceso: r.fchProceso,
+      observaciones: mensajes(r.observaciones),
+      events: mensajes(r.events),
     };
-    if (isRecord(result['CmpResp'])) out.CmpResp = parseCmpResp(result['CmpResp'], method);
+    if (isRecord(result['CmpResp'])) out.cmpResp = parseCmpResp(result['CmpResp'], method);
     return out;
   }
 

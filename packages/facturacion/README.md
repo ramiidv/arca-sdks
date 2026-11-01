@@ -385,7 +385,7 @@ const result = await arca.facturar({
   docNro: 30712345671,
   condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
   items: [{ neto: 100000, iva: IvaTipo.IVA_21 }],
-  opcionales: [{ Id: '2101', Valor: '0110012345678901234567' }], // CBU obligatorio
+  opcionales: [{ id: '2101', valor: '0110012345678901234567' }], // CBU obligatorio
 });
 
 // Nota de crédito FCE: el asociado lleva CUIT del emisor y fecha; Opcional 22 (anulación S/N)
@@ -395,7 +395,7 @@ await arca.notaCredito({
   docNro: 30712345671,
   condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
   items: [{ neto: 100000, iva: IvaTipo.IVA_21 }],
-  opcionales: [{ Id: '22', Valor: 'N' }],
+  opcionales: [{ id: '22', valor: 'N' }],
   comprobanteOriginal: { tipo: CbteTipo.FCE_FACTURA_A, ptoVta: 1, nro: 15, cuit: 20123456786, fecha: '20261020' },
 });
 ```
@@ -467,11 +467,11 @@ controlador fiscal) y cada comprobante se informa con la **fecha y hora en que s
 // 1. Solicitar el CAEA de la quincena (o consultarlo si ya se pidió)
 const caea = await arca.solicitarCAEA('202611', 1); // noviembre, 1ra quincena
 console.log(
-  `CAEA: ${caea.CAEA}, vigencia: ${caea.FchVigDesde} - ${caea.FchVigHasta}, informar hasta ${caea.FchTopeInf}`,
+  `CAEA: ${caea.caea}, vigencia: ${caea.fchVigDesde} - ${caea.fchVigHasta}, informar hasta ${caea.fchTopeInf}`,
 );
 
 // 2. Informar cada comprobante emitido offline (misma interfaz que facturar())
-const result = await arca.registrarFacturaCAEA(caea.CAEA, {
+const result = await arca.registrarFacturaCAEA(caea.caea, {
   ptoVta: 5,
   cbteTipo: CbteTipo.FACTURA_B,
   cbteNro: 120, // el número que usaste offline
@@ -481,8 +481,8 @@ const result = await arca.registrarFacturaCAEA(caea.CAEA, {
 });
 
 // 3. Puntos de venta sin movimientos en el período
-await arca.sinMovimientoCAEA(caea.CAEA, 6);
-const informados = await arca.consultarSinMovimientoCAEA(caea.CAEA, 6);
+await arca.sinMovimientoCAEA(caea.caea, 6);
+const informados = await arca.consultarSinMovimientoCAEA(caea.caea, 6);
 
 // Consultar un CAEA existente
 const existente = await arca.consultarCAEA('202611', 1);
@@ -553,7 +553,7 @@ También se exportan `generarUrlQR(input, options?)` y `urlQRDesdeFactura(factur
 ### Factura en moneda extranjera
 
 ```typescript
-const cotiz = await arca.getCotizacion(Moneda.DOLARES); // { MonId, MonCotiz, FchCotiz }
+const cotiz = await arca.getCotizacion(Moneda.DOLARES); // { monId, monCotiz, fchCotiz }
 // A una fecha: await arca.getCotizacion(Moneda.DOLARES, { fecha: "20261030" })
 
 const result = await arca.facturar({
@@ -564,7 +564,7 @@ const result = await arca.facturar({
   condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
   items: [{ neto: 1000, iva: IvaTipo.IVA_21 }],
   moneda: Moneda.DOLARES,
-  cotizacion: cotiz.MonCotiz,
+  cotizacion: cotiz.monCotiz,
   canMisMonExt: 'N', // opcional: "S" si se cancela en la misma moneda extranjera
 });
 ```
@@ -705,7 +705,7 @@ const cbte = await arca.consultarComprobante(CbteTipo.FACTURA_B, 1, 150);
 // Puntos de venta habilitados
 const ptosVenta = await arca.getPuntosVenta();
 
-// Cotización del dólar ({ MonId, MonCotiz, FchCotiz })
+// Cotización del dólar ({ monId, monCotiz, fchCotiz })
 const cotiz = await arca.getCotizacion(Moneda.DOLARES);
 
 // Tipos disponibles
@@ -725,6 +725,11 @@ Los parámetros se cachean (`paramCacheTTLMs`, default 24 h; `clearParamCache()`
 puntos de venta y las cotizaciones **no** se cachean.
 
 ## API
+
+**Nombres:** todo en camelCase. En la API raw y en los resultados crudos (`raw`) los campos son
+los de ARCA en camelCase, con las siglas como palabras: `CbteFch` → `cbteFch`, `ImpIVA` →
+`impIva`, `CAEFchVto` → `caeFchVto`, `Fecha_cbte` (WSFEX) → `fechaCbte`. Las listas son arrays,
+sin el contenedor del XML: `resultGet.iva` en lugar de `ResultGet.Iva.AlicIva`.
 
 ### `new ArcaFacturacion(config)`
 
@@ -811,7 +816,7 @@ puntos de venta y las cotizaciones **no** se cachean.
 | `solicitarCAEA(periodo, orden)`            | Solicita un CAEA para un período y quincena                                           |
 | `consultarCAEA(periodo, orden)`            | Consulta un CAEA existente                                                            |
 | `registrarFacturaCAEA(caea, opts)`         | Informa un comprobante con CAEA (API simplificada, `fechaHoraGeneracion` obligatorio) |
-| `registrarCAEA(request)`                   | Informa comprobantes con CAEA (API raw, cada uno con `CAEA` y `CbteFchHsGen`)         |
+| `registrarCAEA(request)`                   | Informa comprobantes con CAEA (API raw, cada uno con `caea` y `cbteFchHsGen`)         |
 | `sinMovimientoCAEA(caea, ptoVta)`          | Informa sin movimientos para un CAEA                                                  |
 | `consultarSinMovimientoCAEA(caea, ptoVta)` | Consulta los informes sin movimiento (`FECAEASinMovimientoConsultar`)                 |
 
@@ -823,7 +828,7 @@ puntos de venta y las cotizaciones **no** se cachean.
 | `getTiposComprobante()`               | Lista de tipos de comprobante                                 |
 | `getTiposConcepto()`                  | Lista de tipos de concepto                                    |
 | `getTiposDocumento()`                 | Lista de tipos de documento                                   |
-| `getCondicionesIva({ claseCmp? })`    | Condiciones de IVA válidas para el receptor (con `Cmp_Clase`) |
+| `getCondicionesIva({ claseCmp? })`    | Condiciones de IVA válidas para el receptor (con `cmpClase`)  |
 | `getTiposIva()`                       | Lista de alícuotas de IVA                                     |
 | `getMonedas()`                        | Lista de monedas                                              |
 | `getTiposTributo()`                   | Lista de tipos de tributo                                     |
@@ -831,7 +836,7 @@ puntos de venta y las cotizaciones **no** se cachean.
 | `getActividades()`                    | Actividades del emisor (`FEParamGetActividades`)              |
 | `getTiposPaises()`                    | Países (`FEParamGetTiposPaises`)                              |
 | `getPuntosVenta()`                    | Puntos de venta habilitados (no se cachea)                    |
-| `getCotizacion(monedaId, { fecha? })` | Cotización de una moneda: `{ MonId, MonCotiz, FchCotiz }`     |
+| `getCotizacion(monedaId, { fecha? })` | Cotización de una moneda: `{ monId, monCotiz, fchCotiz }`     |
 | `getCantMaxRegistros()`               | Máx registros por request                                     |
 
 ### Eventos

@@ -14,30 +14,28 @@ const importes: Importes = {
 describe('parseFacturaResult', () => {
   it('parsea resultado aprobado', () => {
     const raw: FECAESolicitarResult = {
-      FeCabResp: {
-        Cuit: 20123456789,
-        PtoVta: 1,
-        CbteTipo: 6,
-        FchProceso: '20260328120000',
-        CantReg: 1,
-        Resultado: 'A',
-        Reproceso: 'N',
+      feCabResp: {
+        cuit: 20123456789,
+        ptoVta: 1,
+        cbteTipo: 6,
+        fchProceso: '20260328120000',
+        cantReg: 1,
+        resultado: 'A',
+        reproceso: 'N',
       },
-      FeDetResp: {
-        FECAEDetResponse: [
-          {
-            Concepto: 1,
-            DocTipo: 99,
-            DocNro: 0,
-            CbteDesde: 150,
-            CbteHasta: 150,
-            CbteFch: '20260328',
-            Resultado: 'A',
-            CAE: '74512345678901',
-            CAEFchVto: '20260407',
-          },
-        ],
-      },
+      feDetResp: [
+        {
+          concepto: 1,
+          docTipo: 99,
+          docNro: 0,
+          cbteDesde: 150,
+          cbteHasta: 150,
+          cbteFch: '20260328',
+          resultado: 'A',
+          cae: '74512345678901',
+          caeFchVto: '20260407',
+        },
+      ],
     };
 
     const result = parseFacturaResult(raw, importes);
@@ -55,33 +53,29 @@ describe('parseFacturaResult', () => {
 
   it('parsea resultado rechazado con observaciones', () => {
     const raw: FECAESolicitarResult = {
-      FeCabResp: {
-        Cuit: 20123456789,
-        PtoVta: 1,
-        CbteTipo: 6,
-        FchProceso: '20260328120000',
-        CantReg: 1,
-        Resultado: 'R',
-        Reproceso: 'N',
+      feCabResp: {
+        cuit: 20123456789,
+        ptoVta: 1,
+        cbteTipo: 6,
+        fchProceso: '20260328120000',
+        cantReg: 1,
+        resultado: 'R',
+        reproceso: 'N',
       },
-      FeDetResp: {
-        FECAEDetResponse: [
-          {
-            Concepto: 1,
-            DocTipo: 99,
-            DocNro: 0,
-            CbteDesde: 150,
-            CbteHasta: 150,
-            CbteFch: '20260328',
-            Resultado: 'R',
-            CAE: '',
-            CAEFchVto: '',
-            Observaciones: {
-              Obs: [{ Code: 10016, Msg: 'Error de test' }],
-            },
-          },
-        ],
-      },
+      feDetResp: [
+        {
+          concepto: 1,
+          docTipo: 99,
+          docNro: 0,
+          cbteDesde: 150,
+          cbteHasta: 150,
+          cbteFch: '20260328',
+          resultado: 'R',
+          cae: '',
+          caeFchVto: '',
+          observaciones: [{ code: 10016, msg: 'Error de test' }],
+        },
+      ],
     };
 
     const result = parseFacturaResult(raw, importes);
@@ -97,41 +91,39 @@ describe('parseFacturaResult', () => {
 
   it('maneja array de FECAEDetResponse', () => {
     const raw: FECAESolicitarResult = {
-      FeCabResp: {
-        Cuit: 20123456789,
-        PtoVta: 1,
-        CbteTipo: 6,
-        FchProceso: '20260328120000',
-        CantReg: 2,
-        Resultado: 'A',
-        Reproceso: 'N',
+      feCabResp: {
+        cuit: 20123456789,
+        ptoVta: 1,
+        cbteTipo: 6,
+        fchProceso: '20260328120000',
+        cantReg: 2,
+        resultado: 'A',
+        reproceso: 'N',
       },
-      FeDetResp: {
-        FECAEDetResponse: [
-          {
-            Concepto: 1,
-            DocTipo: 99,
-            DocNro: 0,
-            CbteDesde: 150,
-            CbteHasta: 150,
-            CbteFch: '20260328',
-            Resultado: 'A',
-            CAE: '11111111111111',
-            CAEFchVto: '20260407',
-          },
-          {
-            Concepto: 1,
-            DocTipo: 99,
-            DocNro: 0,
-            CbteDesde: 151,
-            CbteHasta: 151,
-            CbteFch: '20260328',
-            Resultado: 'A',
-            CAE: '22222222222222',
-            CAEFchVto: '20260407',
-          },
-        ],
-      },
+      feDetResp: [
+        {
+          concepto: 1,
+          docTipo: 99,
+          docNro: 0,
+          cbteDesde: 150,
+          cbteHasta: 150,
+          cbteFch: '20260328',
+          resultado: 'A',
+          cae: '11111111111111',
+          caeFchVto: '20260407',
+        },
+        {
+          concepto: 1,
+          docTipo: 99,
+          docNro: 0,
+          cbteDesde: 151,
+          cbteHasta: 151,
+          cbteFch: '20260328',
+          resultado: 'A',
+          cae: '22222222222222',
+          caeFchVto: '20260407',
+        },
+      ],
     };
 
     const result = parseFacturaResult(raw, importes);
@@ -141,36 +133,32 @@ describe('parseFacturaResult', () => {
 
   it('maneja observaciones como array', () => {
     const raw: FECAESolicitarResult = {
-      FeCabResp: {
-        Cuit: 20123456789,
-        PtoVta: 1,
-        CbteTipo: 6,
-        FchProceso: '20260328120000',
-        CantReg: 1,
-        Resultado: 'R',
-        Reproceso: 'N',
+      feCabResp: {
+        cuit: 20123456789,
+        ptoVta: 1,
+        cbteTipo: 6,
+        fchProceso: '20260328120000',
+        cantReg: 1,
+        resultado: 'R',
+        reproceso: 'N',
       },
-      FeDetResp: {
-        FECAEDetResponse: [
-          {
-            Concepto: 1,
-            DocTipo: 99,
-            DocNro: 0,
-            CbteDesde: 150,
-            CbteHasta: 150,
-            CbteFch: '20260328',
-            Resultado: 'R',
-            CAE: '',
-            CAEFchVto: '',
-            Observaciones: {
-              Obs: [
-                { Code: 10001, Msg: 'Error 1' },
-                { Code: 10002, Msg: 'Error 2' },
-              ],
-            },
-          },
-        ],
-      },
+      feDetResp: [
+        {
+          concepto: 1,
+          docTipo: 99,
+          docNro: 0,
+          cbteDesde: 150,
+          cbteHasta: 150,
+          cbteFch: '20260328',
+          resultado: 'R',
+          cae: '',
+          caeFchVto: '',
+          observaciones: [
+            { code: 10001, msg: 'Error 1' },
+            { code: 10002, msg: 'Error 2' },
+          ],
+        },
+      ],
     };
 
     const result = parseFacturaResult(raw, importes);

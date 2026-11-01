@@ -11,3 +11,5 @@ else console.error(s.a4.error);
 ```
 
 También se quita lo deprecado: `TipoDocumento` (usar `DocTipo`), `ImpuestoId.IVA_NO_INSCRIPTO`, el re-export de `checkServiceErrors` (está en `@ramiidv/arca-common`) y el tipo `ArcaPadronEvent` (usar `ArcaEvent`).
+
+`WsAuth` (credenciales de los clientes de bajo nivel) pasa a camelCase: `{ token, sign, cuitRepresentada }`.

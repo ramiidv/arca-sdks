@@ -38,9 +38,9 @@ export type PadronStatus = Record<PadronServicio, ServiceStatus>;
 // ---------------------------------------------------------------------------
 
 export interface WsAuth {
-  Token: string;
-  Sign: string;
-  CuitRepresentada: string;
+  token: string;
+  sign: string;
+  cuitRepresentada: string;
 }
 
 // ---------------------------------------------------------------------------

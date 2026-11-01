@@ -62,10 +62,12 @@ devuelve `ServiceStatus`, no `PromiseSettledResult`) y `tests/arca-sdk.test.ts`
 (`Arca` → `ArcaFacturacion`). El resto compila y pasa sus tests contra las
 versiones nuevas.
 
-Queda por decidir: la convención de nombres. cdc usa los
-nombres de AFIP (`CbteModo`, PascalCase) y padron tiene métodos en inglés
-(`getConstanciaInscripcion`). Decidir si se unifican o se documenta la regla
-(por ejemplo, PascalCase en los servicios ASMX y camelCase en los Java).
+Convención de nombres (decidida): todo en camelCase. Los campos de ARCA se
+pasan a camelCase con las siglas como palabras (`CAEFchVto` → `caeFchVto`,
+`Fecha_cbte` → `fechaCbte`) y las listas son arrays sin el contenedor del XML.
+Con el DSL, cada schema usa `xml('NombreArca', …)` para el nombre del XML. Se
+aplicó en facturacion 6.0, cdc 0.5 y `WsAuth` de padron 0.6; el resto de los
+SDKs ya era camelCase.
 
 ### 3. Mejoras al DSL y al comparador de contratos (common)
 

@@ -889,11 +889,11 @@ export { WsaaClientConfig }
 // @public (undocumented)
 export interface WsAuth {
     // (undocumented)
-    CuitRepresentada: string;
+    cuitRepresentada: string;
     // (undocumented)
-    Sign: string;
+    sign: string;
     // (undocumented)
-    Token: string;
+    token: string;
 }
 
 // (No @packageDocumentation comment for this package)

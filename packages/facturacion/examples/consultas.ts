@@ -35,11 +35,11 @@ async function main() {
 
   // Cotización del dólar
   const cotizacion = await arca.getCotizacion(Moneda.DOLARES);
-  console.log(`Cotización USD: ${cotizacion.MonCotiz} (${cotizacion.FchCotiz})`);
+  console.log(`Cotización USD: ${cotizacion.monCotiz} (${cotizacion.fchCotiz})`);
 
   // Cotización a una fecha puntual
   const cotizacionAyer = await arca.getCotizacion(Moneda.DOLARES, { fecha: '20261030' });
-  console.log('Cotización USD al 30/10:', cotizacionAyer.MonCotiz);
+  console.log('Cotización USD al 30/10:', cotizacionAyer.monCotiz);
 
   // Actividades del emisor (para informar en Actividades)
   console.log('Actividades:', await arca.getActividades());
@@ -55,7 +55,7 @@ async function main() {
   // Consultar un comprobante específico
   if (ultimoNro > 0) {
     const comprobante = await arca.consultarComprobante(CbteTipo.FACTURA_B, 1, ultimoNro);
-    console.log('Comprobante consultado:', comprobante.ResultGet);
+    console.log('Comprobante consultado:', comprobante.resultGet);
   }
 
   // ============================================================

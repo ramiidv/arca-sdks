@@ -83,7 +83,7 @@ async function resolver(jobId: string, envio = 1) {
       break;
     case 'conflicto':
       db.set(jobId, { ...job, estado: 'conflicto' });
-      console.error('El número lo usó otra emisión:', r.encontrado.ResultGet);
+      console.error('El número lo usó otra emisión:', r.encontrado.resultGet);
       break;
   }
 }

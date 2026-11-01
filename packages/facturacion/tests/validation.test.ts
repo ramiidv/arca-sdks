@@ -139,77 +139,77 @@ describe('validateFacturarExpoOpts', () => {
 });
 
 describe('validateInvoiceRequest', () => {
-  it('rechaza sin PtoVta', () => {
+  it('rechaza sin ptoVta', () => {
     expect(() =>
       validateInvoiceRequest({
-        PtoVta: 0,
-        CbteTipo: 6,
+        ptoVta: 0,
+        cbteTipo: 6,
         invoices: [
           {
-            CbteDesde: 1,
-            CbteHasta: 1,
-            CbteFch: '20260328',
-            ImpTotal: 121,
-            ImpTotConc: 0,
-            ImpNeto: 100,
-            ImpOpEx: 0,
-            ImpTrib: 0,
-            ImpIVA: 21,
-            MonId: 'PES',
-            MonCotiz: 1,
-            Concepto: 1,
-            DocTipo: 99,
-            DocNro: 0,
+            cbteDesde: 1,
+            cbteHasta: 1,
+            cbteFch: '20260328',
+            impTotal: 121,
+            impTotConc: 0,
+            impNeto: 100,
+            impOpEx: 0,
+            impTrib: 0,
+            impIva: 21,
+            monId: 'PES',
+            monCotiz: 1,
+            concepto: 1,
+            docTipo: 99,
+            docNro: 0,
           },
         ],
       }),
-    ).toThrow('PtoVta');
+    ).toThrow('ptoVta');
   });
 
   it('rechaza invoices vacío', () => {
-    expect(() => validateInvoiceRequest({ PtoVta: 1, CbteTipo: 6, invoices: [] })).toThrow('invoices');
+    expect(() => validateInvoiceRequest({ ptoVta: 1, cbteTipo: 6, invoices: [] })).toThrow('invoices');
   });
 });
 
 describe('validateInvoiceRequest (raw)', () => {
   const inv = {
-    Concepto: 1,
-    DocTipo: 99,
-    DocNro: 0,
-    CbteDesde: 1,
-    CbteHasta: 1,
-    CbteFch: '20261030',
-    ImpTotal: 121,
-    ImpTotConc: 0,
-    ImpNeto: 100,
-    ImpOpEx: 0,
-    ImpTrib: 0,
-    ImpIVA: 21,
-    MonId: 'PES',
-    MonCotiz: 1,
-    CondicionIVAReceptorId: 5,
+    concepto: 1,
+    docTipo: 99,
+    docNro: 0,
+    cbteDesde: 1,
+    cbteHasta: 1,
+    cbteFch: '20261030',
+    impTotal: 121,
+    impTotConc: 0,
+    impNeto: 100,
+    impOpEx: 0,
+    impTrib: 0,
+    impIva: 21,
+    monId: 'PES',
+    monCotiz: 1,
+    condicionIvaReceptorId: 5,
   };
-  const req = (extra: Record<string, unknown>) => ({ PtoVta: 1, CbteTipo: 6, invoices: [{ ...inv, ...extra }] });
+  const req = (extra: Record<string, unknown>) => ({ ptoVta: 1, cbteTipo: 6, invoices: [{ ...inv, ...extra }] });
 
   it('acepta un detalle válido', () => {
     expect(() => validateInvoiceRequest(req({}))).not.toThrow();
   });
 
   it.each([
-    ['CbteFch inexistente', { CbteFch: '20261399' }, 'CbteFch'],
-    ['CbteFch con guiones', { CbteFch: '2026-10-30' }, 'CbteFch'],
-    ['FchServDesde inválida', { FchServDesde: '20261132' }, 'FchServDesde'],
-    ['PES con MonCotiz 2', { MonCotiz: 2 }, 'MonCotiz'],
-    ['DOL sin MonCotiz ni CanMisMonExt S', { MonId: 'DOL', MonCotiz: undefined }, 'MonCotiz'],
-    ['CanMisMonExt S con PES', { CanMisMonExt: 'S' }, 'CanMisMonExt'],
-    ['ImpTotal NaN', { ImpTotal: Number.NaN }, 'ImpTotal'],
+    ['cbteFch inexistente', { cbteFch: '20261399' }, 'cbteFch'],
+    ['cbteFch con guiones', { cbteFch: '2026-10-30' }, 'cbteFch'],
+    ['fchServDesde inválida', { fchServDesde: '20261132' }, 'fchServDesde'],
+    ['PES con monCotiz 2', { monCotiz: 2 }, 'monCotiz'],
+    ['DOL sin monCotiz ni canMisMonExt S', { monId: 'DOL', monCotiz: undefined }, 'monCotiz'],
+    ['canMisMonExt S con PES', { canMisMonExt: 'S' }, 'canMisMonExt'],
+    ['impTotal NaN', { impTotal: Number.NaN }, 'impTotal'],
   ])('rechaza %s', (_, extra, field) => {
     expect(() => validateInvoiceRequest(req(extra) as never)).toThrow(field);
   });
 
-  it('DOL con CanMisMonExt S puede omitir MonCotiz', () => {
+  it('DOL con canMisMonExt S puede omitir monCotiz', () => {
     expect(() =>
-      validateInvoiceRequest(req({ MonId: 'DOL', MonCotiz: undefined, CanMisMonExt: 'S' }) as never),
+      validateInvoiceRequest(req({ monId: 'DOL', monCotiz: undefined, canMisMonExt: 'S' }) as never),
     ).not.toThrow();
   });
 });

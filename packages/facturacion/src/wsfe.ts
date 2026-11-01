@@ -1,4 +1,4 @@
-import { SoapServiceClient, ensureArray, extractServiceErrors, parseServerStatus } from '@ramiidv/arca-common';
+import { SoapServiceClient, extractServiceErrors, parseServerStatus } from '@ramiidv/arca-common';
 import type {
   ArcaEvent,
   CallOptions,
@@ -34,6 +34,7 @@ import type {
   CaeaRegInfResult,
   CaeaSinMovResult,
   CaeaSinMovItem,
+  MensajeArca,
 } from './types.js';
 
 type R = Record<string, unknown>;
@@ -59,6 +60,11 @@ export interface WsClientOptions {
 function checkErrors(result: R): void {
   const errors = extractServiceErrors(result);
   if (errors.length > 0) throw new ArcaWSFEError(errors.map((e) => ({ code: e.code, msg: e.msg })));
+}
+
+/** Bloque `Auth` de WSFEv1/WSFEX con los nombres del XML. */
+export function authXml(auth: WsfeAuth): R {
+  return { Token: auth.token, Sign: auth.sign, Cuit: auth.cuit };
 }
 
 /** Falta un campo obligatorio en la respuesta de una consulta. */
@@ -116,7 +122,7 @@ export class WsfeClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<T> {
     const body = schemas.request ? encodeRequest(params, schemas.request, method) : {};
-    const result = await this.call(method, { Auth: auth, ...body }, opts);
+    const result = await this.call(method, { Auth: authXml(auth), ...body }, opts);
     checkErrors(result);
     return decodeArca<T>(result, schemas.response, method);
   }
@@ -128,15 +134,14 @@ export class WsfeClient extends SoapServiceClient {
   private async emitir<T>(
     operacion: OperacionEmision,
     params: R,
-    request: { PtoVta: number; CbteTipo: number; invoices: InvoiceDetail[] },
-    detalleKey: 'FECAEDetResponse' | 'FECAEADetResponse',
+    request: { ptoVta: number; cbteTipo: number; invoices: InvoiceDetail[] },
     response: Schema,
     opts?: CallOptions,
   ): Promise<T> {
     const incierto = (cause: unknown) =>
       new ArcaResultadoIncierto(
         operacion,
-        request.invoices.map((inv) => intentoDesdeComprobante(request.PtoVta, request.CbteTipo, inv)),
+        request.invoices.map((inv) => intentoDesdeComprobante(request.ptoVta, request.cbteTipo, inv)),
         { cause },
       );
 
@@ -164,8 +169,7 @@ export class WsfeClient extends SoapServiceClient {
     } catch (err) {
       throw incierto(err);
     }
-    const detResp = decoded.FeDetResp as R | undefined;
-    if (!detResp || detResp[detalleKey] === undefined || !decoded.FeCabResp) {
+    if (!Array.isArray(decoded.feDetResp) || !decoded.feCabResp) {
       throw incierto(new ArcaSoapError(`Respuesta de ${operacion} sin FeCabResp/FeDetResp`));
     }
     return decoded as T;
@@ -182,17 +186,16 @@ export class WsfeClient extends SoapServiceClient {
   async solicitarCAE(auth: WsfeAuth, request: InvoiceRequest, opts?: CallOptions): Promise<FECAESolicitarResult> {
     const feCAEReq = encodeRequest(
       {
-        FeCabReq: { CantReg: request.invoices.length, PtoVta: request.PtoVta, CbteTipo: request.CbteTipo },
-        FeDetReq: request.invoices.map(detInput),
+        feCabReq: { cantReg: request.invoices.length, ptoVta: request.ptoVta, cbteTipo: request.cbteTipo },
+        feDetReq: request.invoices.map(detInput),
       },
       S.FECAE_REQ,
       'FECAESolicitar',
     );
     return this.emitir<FECAESolicitarResult>(
       'FECAESolicitar',
-      { Auth: auth, FeCAEReq: feCAEReq },
+      { Auth: authXml(auth), FeCAEReq: feCAEReq },
       request,
-      'FECAEDetResponse',
       S.FECAE_RESP,
       opts,
     );
@@ -202,11 +205,11 @@ export class WsfeClient extends SoapServiceClient {
     const result = await this.consulta<FECompUltimoAutorizadoResult>(
       'FECompUltimoAutorizado',
       auth,
-      { PtoVta: ptoVta, CbteTipo: cbteTipo },
+      { ptoVta, cbteTipo },
       { request: S.ULTIMO_REQ, response: S.ULTIMO_RESP },
       opts,
     );
-    return result.CbteNro;
+    return result.cbteNro;
   }
 
   async consultarComprobante(
@@ -219,11 +222,11 @@ export class WsfeClient extends SoapServiceClient {
     const result = await this.consulta<FECompConsultarResult>(
       'FECompConsultar',
       auth,
-      { FeCompConsReq: { CbteTipo: cbteTipo, CbteNro: cbteNro, PtoVta: ptoVta } },
+      { feCompConsReq: { cbteTipo, cbteNro, ptoVta } },
       { request: S.COMP_CONSULTAR_REQ, response: S.COMP_CONSULTA_RESP },
       opts,
     );
-    if (!result.ResultGet) throw sinCampo('FECompConsultar', 'ResultGet');
+    if (!result.resultGet) throw sinCampo('FECompConsultar', 'ResultGet');
     return result;
   }
 
@@ -244,14 +247,14 @@ export class WsfeClient extends SoapServiceClient {
     opts?: CallOptions,
     params: { request?: Schema; values: R } = { values: {} },
   ): Promise<T[]> {
-    const result = await this.consulta<{ ResultGet?: T[] }>(
+    const result = await this.consulta<{ resultGet?: T[] }>(
       method,
       auth,
       params.values,
       { request: params.request, response: S.tablaWsfe(itemKey, item) },
       opts,
     );
-    return result.ResultGet ?? [];
+    return result.resultGet ?? [];
   }
 
   async getTiposComprobante(auth: WsfeAuth, opts?: CallOptions): Promise<ParamItem[]> {
@@ -273,7 +276,7 @@ export class WsfeClient extends SoapServiceClient {
   async getCondicionesIva(auth: WsfeAuth, opts?: CallOptions, claseCmp?: string): Promise<CondicionIvaItem[]> {
     return this.getParam(auth, 'FEParamGetCondicionIvaReceptor', 'CondicionIvaReceptor', S.CONDICION_IVA, opts, {
       request: S.CONDICION_IVA_REQ,
-      values: { ClaseCmp: claseCmp },
+      values: { claseCmp },
     });
   }
 
@@ -317,27 +320,27 @@ export class WsfeClient extends SoapServiceClient {
     monedaId: string,
     opts?: CallOptions & { fchCotiz?: string },
   ): Promise<CotizacionResult> {
-    const result = await this.consulta<{ ResultGet?: Partial<CotizacionResult> & { MonCotiz: number } }>(
+    const result = await this.consulta<{ resultGet?: Partial<CotizacionResult> & { monCotiz: number } }>(
       'FEParamGetCotizacion',
       auth,
-      { MonId: monedaId, FchCotiz: opts?.fchCotiz },
+      { monId: monedaId, fchCotiz: opts?.fchCotiz },
       { request: S.COTIZACION_REQ, response: S.COTIZACION_RESP },
       opts,
     );
-    const r = result.ResultGet;
+    const r = result.resultGet;
     if (!r) throw sinCampo('FEParamGetCotizacion', 'ResultGet');
-    return { MonId: r.MonId ?? monedaId, MonCotiz: r.MonCotiz, FchCotiz: r.FchCotiz ?? '' };
+    return { monId: r.monId ?? monedaId, monCotiz: r.monCotiz, fchCotiz: r.fchCotiz ?? '' };
   }
 
   async getCantMaxRegistros(auth: WsfeAuth, opts?: CallOptions): Promise<number> {
-    const result = await this.consulta<{ RegXReq: number }>(
+    const result = await this.consulta<{ regXReq: number }>(
       'FECompTotXRequest',
       auth,
       {},
       { response: S.REG_X_REQ_RESP },
       opts,
     );
-    return result.RegXReq;
+    return result.regXReq;
   }
 
   // ============================================================
@@ -345,21 +348,21 @@ export class WsfeClient extends SoapServiceClient {
   // ============================================================
 
   private async caeaGet(method: string, auth: WsfeAuth, periodo: string, orden: number, opts?: CallOptions) {
-    const result = await this.consulta<{ ResultGet?: CaeaSolicitarResult; Events?: unknown }>(
+    const result = await this.consulta<{ resultGet?: CaeaSolicitarResult; events?: MensajeArca[] }>(
       method,
       auth,
-      { Periodo: periodo, Orden: orden },
+      { periodo, orden },
       { request: S.CAEA_REQ, response: S.CAEA_GET_RESP },
       opts,
     );
-    const r = result.ResultGet;
+    const r = result.resultGet;
     if (!r) throw sinCampo(method, 'ResultGet.CAEA');
     const caea: CaeaSolicitarResult = {
       ...r,
-      FchVigDesde: r.FchVigDesde ?? '',
-      FchVigHasta: r.FchVigHasta ?? '',
-      FchTopeInf: r.FchTopeInf ?? '',
-      FchProceso: r.FchProceso ?? '',
+      fchVigDesde: r.fchVigDesde ?? '',
+      fchVigHasta: r.fchVigHasta ?? '',
+      fchTopeInf: r.fchTopeInf ?? '',
+      fchProceso: r.fchProceso ?? '',
       eventos: eventosWsfe(result),
     };
     return caea;
@@ -392,21 +395,16 @@ export class WsfeClient extends SoapServiceClient {
     // FECAEADetRequest extiende FEDetRequest: CAEA y CbteFchHsGen van al final.
     const feCAEARegInfReq = encodeRequest(
       {
-        FeCabReq: { CantReg: request.invoices.length, PtoVta: request.PtoVta, CbteTipo: request.CbteTipo },
-        FeDetReq: request.invoices.map((inv) => ({
-          ...detInput(inv),
-          CAEA: inv.CAEA,
-          CbteFchHsGen: inv.CbteFchHsGen,
-        })),
+        feCabReq: { cantReg: request.invoices.length, ptoVta: request.ptoVta, cbteTipo: request.cbteTipo },
+        feDetReq: request.invoices.map((inv) => ({ ...detInput(inv), caea: inv.caea, cbteFchHsGen: inv.cbteFchHsGen })),
       },
       S.FECAEA_REQ,
       'FECAEARegInformativo',
     );
     return this.emitir<CaeaRegInfResult>(
       'FECAEARegInformativo',
-      { Auth: auth, FeCAEARegInfReq: feCAEARegInfReq },
+      { Auth: authXml(auth), FeCAEARegInfReq: feCAEARegInfReq },
       request,
-      'FECAEADetResponse',
       S.FECAEA_RESP,
       opts,
     );
@@ -419,8 +417,8 @@ export class WsfeClient extends SoapServiceClient {
    */
   async sinMovimientoCAEA(auth: WsfeAuth, caea: string, ptoVta: number, opts?: CallOptions): Promise<CaeaSinMovResult> {
     const method = 'FECAEASinMovimientoInformar';
-    const body = encodeRequest({ PtoVta: ptoVta, CAEA: caea }, S.CAEA_SIN_MOV_INFORMAR_REQ, method);
-    const raw = await this.call(method, { Auth: auth, ...body }, { ...opts, kind: 'emision' });
+    const body = encodeRequest({ ptoVta, caea }, S.CAEA_SIN_MOV_INFORMAR_REQ, method);
+    const raw = await this.call(method, { Auth: authXml(auth), ...body }, { ...opts, kind: 'emision' });
     checkErrors(raw);
     let result: CaeaSinMovResult | undefined;
     try {
@@ -428,7 +426,7 @@ export class WsfeClient extends SoapServiceClient {
     } catch {
       // Forma inválida: se trata como respuesta sin Resultado.
     }
-    if (result?.Resultado !== 'A' && result?.Resultado !== 'R') {
+    if (result?.resultado !== 'A' && result?.resultado !== 'R') {
       throw new ArcaSoapError(`Respuesta de ${method} sin Resultado`, { uncertain: true });
     }
     return result;
@@ -446,14 +444,14 @@ export class WsfeClient extends SoapServiceClient {
     ptoVta: number,
     opts?: CallOptions,
   ): Promise<CaeaSinMovItem[]> {
-    const result = await this.consulta<{ ResultGet?: { FECAEASinMov?: CaeaSinMovItem | CaeaSinMovItem[] } }>(
+    const result = await this.consulta<{ resultGet?: CaeaSinMovItem[] }>(
       'FECAEASinMovimientoConsultar',
       auth,
-      { CAEA: caea, PtoVta: ptoVta },
+      { caea, ptoVta },
       { request: S.CAEA_SIN_MOV_CONSULTAR_REQ, response: S.CAEA_SIN_MOV_CONS_RESP },
       opts,
     );
-    return ensureArray(result.ResultGet?.FECAEASinMov).map((i) => ({ ...i, FchProceso: i.FchProceso ?? '' }));
+    return (result.resultGet ?? []).map((i) => ({ ...i, fchProceso: i.fchProceso ?? '' }));
   }
 }
 
@@ -470,50 +468,50 @@ const lista = <T>(v: T[] | undefined) => (v && v.length > 0 ? v : undefined);
  */
 function detInput(inv: InvoiceDetail): R {
   return {
-    Concepto: inv.Concepto,
-    DocTipo: inv.DocTipo,
-    DocNro: inv.DocNro,
-    CbteDesde: inv.CbteDesde,
-    CbteHasta: inv.CbteHasta,
-    CbteFch: inv.CbteFch,
-    ImpTotal: inv.ImpTotal,
-    ImpTotConc: inv.ImpTotConc,
-    ImpNeto: inv.ImpNeto,
-    ImpOpEx: inv.ImpOpEx,
-    ImpTrib: inv.ImpTrib,
-    ImpIVA: inv.ImpIVA,
-    FchServDesde: inv.FchServDesde || undefined,
-    FchServHasta: inv.FchServHasta || undefined,
-    FchVtoPago: inv.FchVtoPago || undefined,
-    MonId: inv.MonId,
-    MonCotiz: inv.MonCotiz ?? undefined,
-    CanMisMonExt: inv.CanMisMonExt || undefined,
-    CondicionIVAReceptorId: inv.CondicionIVAReceptorId ?? undefined,
-    CbtesAsoc: lista(inv.CbtesAsoc)?.map((c) => ({
-      Tipo: c.Tipo,
-      PtoVta: c.PtoVta,
-      Nro: c.Nro,
-      Cuit: presente(c.Cuit) ? String(c.Cuit) : undefined,
-      CbteFch: c.CbteFch || undefined,
+    concepto: inv.concepto,
+    docTipo: inv.docTipo,
+    docNro: inv.docNro,
+    cbteDesde: inv.cbteDesde,
+    cbteHasta: inv.cbteHasta,
+    cbteFch: inv.cbteFch,
+    impTotal: inv.impTotal,
+    impTotConc: inv.impTotConc,
+    impNeto: inv.impNeto,
+    impOpEx: inv.impOpEx,
+    impTrib: inv.impTrib,
+    impIva: inv.impIva,
+    fchServDesde: inv.fchServDesde || undefined,
+    fchServHasta: inv.fchServHasta || undefined,
+    fchVtoPago: inv.fchVtoPago || undefined,
+    monId: inv.monId,
+    monCotiz: inv.monCotiz ?? undefined,
+    canMisMonExt: inv.canMisMonExt || undefined,
+    condicionIvaReceptorId: inv.condicionIvaReceptorId ?? undefined,
+    cbtesAsoc: lista(inv.cbtesAsoc)?.map((c) => ({
+      tipo: c.tipo,
+      ptoVta: c.ptoVta,
+      nro: c.nro,
+      cuit: presente(c.cuit) ? String(c.cuit) : undefined,
+      cbteFch: c.cbteFch || undefined,
     })),
-    Tributos: lista(inv.Tributos)?.map((t) => ({
-      Id: t.Id,
-      Desc: t.Desc || undefined,
-      BaseImp: t.BaseImp,
-      Alic: t.Alic,
-      Importe: t.Importe,
+    tributos: lista(inv.tributos)?.map((t) => ({
+      id: t.id,
+      desc: t.desc || undefined,
+      baseImp: t.baseImp,
+      alic: t.alic,
+      importe: t.importe,
     })),
-    Iva: lista(inv.Iva)?.map((i) => ({ Id: i.Id, BaseImp: i.BaseImp, Importe: i.Importe })),
-    Opcionales: lista(inv.Opcionales)?.map((o) => ({ Id: o.Id, Valor: o.Valor })),
-    Compradores: lista(inv.Compradores)?.map((c) => ({
-      DocTipo: c.DocTipo,
-      DocNro: c.DocNro,
-      Porcentaje: c.Porcentaje,
+    iva: lista(inv.iva)?.map((i) => ({ id: i.id, baseImp: i.baseImp, importe: i.importe })),
+    opcionales: lista(inv.opcionales)?.map((o) => ({ id: o.id, valor: o.valor })),
+    compradores: lista(inv.compradores)?.map((c) => ({
+      docTipo: c.docTipo,
+      docNro: c.docNro,
+      porcentaje: c.porcentaje,
     })),
-    PeriodoAsoc: inv.PeriodoAsoc
-      ? { FchDesde: inv.PeriodoAsoc.FchDesde, FchHasta: inv.PeriodoAsoc.FchHasta }
+    periodoAsoc: inv.periodoAsoc
+      ? { fchDesde: inv.periodoAsoc.fchDesde, fchHasta: inv.periodoAsoc.fchHasta }
       : undefined,
-    Actividades: lista(inv.Actividades)?.map((a) => ({ Id: a.Id })),
+    actividades: lista(inv.actividades)?.map((a) => ({ id: a.id })),
   };
 }
 

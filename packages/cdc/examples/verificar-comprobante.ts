@@ -19,25 +19,25 @@ async function main() {
   console.log('Estado del servicio:', await cdc.status());
 
   const result = await cdc.constatar({
-    CbteModo: 'CAE',
-    CuitEmisor: '30-71234567-1', // CUIT del proveedor que emitió la factura
-    PtoVta: 1,
-    CbteTipo: 1, // Factura A
-    CbteNro: 150,
-    CbteFch: '2026-03-15',
-    ImpTotal: 12100,
-    CodAutorizacion: '73429843294823',
-    DocTipoReceptor: 80, // CUIT (obligatorio en comprobantes A)
-    DocNroReceptor: 20123456786,
+    cbteModo: 'CAE',
+    cuitEmisor: '30-71234567-1', // CUIT del proveedor que emitió la factura
+    ptoVta: 1,
+    cbteTipo: 1, // Factura A
+    cbteNro: 150,
+    cbteFch: '2026-03-15',
+    impTotal: 12100,
+    codAutorizacion: '73429843294823',
+    docTipoReceptor: 80, // CUIT (obligatorio en comprobantes A)
+    docNroReceptor: 20123456786,
   });
 
-  if (result.Resultado === 'A') {
-    console.log(`Comprobante CONSTATADO (${result.FchProceso}).`);
+  if (result.resultado === 'A') {
+    console.log(`Comprobante CONSTATADO (${result.fchProceso}).`);
   } else {
     console.log('Comprobante RECHAZADO:');
   }
-  for (const obs of result.Observaciones) {
-    console.log(`  Observación [${obs.Code}]: ${obs.Msg}`);
+  for (const obs of result.observaciones) {
+    console.log(`  Observación [${obs.code}]: ${obs.msg}`);
   }
 }
 
