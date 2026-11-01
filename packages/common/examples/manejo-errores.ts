@@ -5,7 +5,7 @@
  * distinguir entre problemas de autenticación, SOAP, negocio
  * y validación de datos.
  */
-import fs from 'fs';
+import fs from 'node:fs';
 import {
   WsaaClient,
   ArcaError,

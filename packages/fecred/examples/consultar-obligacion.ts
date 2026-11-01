@@ -2,7 +2,7 @@
  * Ejemplo: ¿la CUIT receptora está obligada a recibir Factura de Crédito Electrónica?
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 import { ArcaFecred, FileTicketStorage } from '@ramiidv/arca-fecred';
 
 async function main() {

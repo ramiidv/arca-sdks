@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ArcaValidationError, WsaaClient } from '@ramiidv/arca-common';
+import { ArcaValidationError, type WsaaClient } from '@ramiidv/arca-common';
 import { ArcaFecred, ENDPOINTS } from '../src/index.js';
 import { mockFetch, sentRequest, soapResponse, xmlResponse } from './helpers.js';
 

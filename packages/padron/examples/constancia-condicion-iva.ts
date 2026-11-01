@@ -7,7 +7,7 @@
  *
  * Requiere que el certificado tenga autorizado ws_sr_constancia_inscripcion.
  */
-import { readFileSync } from 'fs';
+import { readFileSync } from 'node:fs';
 import { ArcaPadron, FileTicketStorage, condicionIvaDesdePadron } from '@ramiidv/arca-padron';
 
 const padron = new ArcaPadron({

@@ -73,6 +73,7 @@ export const DISENO_REGISTRO: readonly CampoDiseno[] = Object.freeze([
 /** Campos numéricos con default `0` según el manual (en lugar de "vacío"). */
 const DEFAULT_CERO: ReadonlySet<string> = new Set(['rectificacion', 'marcaCovidTipoContratoCCG']);
 
+// biome-ignore lint/suspicious/noControlCharactersInRegex: detecta caracteres de control a propósito
 const CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F]/;
 
 interface OpcionesResueltas {

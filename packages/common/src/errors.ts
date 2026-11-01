@@ -9,7 +9,7 @@ const ERROR_KINDS = Symbol.for('@ramiidv/arca-common:error-kinds');
 
 /** `code` propio de una clase de error (no heredado), si lo declara. */
 function ownCode(ctor: unknown): string | undefined {
-  return typeof ctor === 'function' && Object.prototype.hasOwnProperty.call(ctor, 'code')
+  return typeof ctor === 'function' && Object.hasOwn(ctor, 'code')
     ? (ctor as unknown as { code: string }).code
     : undefined;
 }

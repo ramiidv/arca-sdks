@@ -560,7 +560,7 @@ describe('WSCPE: consultas', () => {
   });
 
   it('consultarUltNroOrden / siguienteNroOrden', async () => {
-    const { agro, calls } = setup(() => cpeResp('ConsultarUltNroOrdenResp', '<nroOrden>41</nroOrden>' + METADATA));
+    const { agro, calls } = setup(() => cpeResp('ConsultarUltNroOrdenResp', `<nroOrden>41</nroOrden>${METADATA}`));
     expect(await agro.cpe.consultarUltNroOrden(1, TIPO_CPE.AUTOMOTOR)).toBe(41);
     expect(await agro.cpe.siguienteNroOrden(1, TIPO_CPE.AUTOMOTOR)).toBe(42);
     expect(calls[0].element).toBe('ser:ConsultarUltNroOrdenReq');

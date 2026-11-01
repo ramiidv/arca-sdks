@@ -23,6 +23,7 @@ const codProvincia = () => int(0, 99); // LpgCodProvProcedenciaType
 const campania = () => int(203, 9999); // LpgCampaniaType
 const siNo = () => str({ values: ['S', 'N'] }); // LpgSiNoType
 const alicuota = () => dec(4, 0, 100); // LpgAlicuotaType
+// biome-ignore lint/correctness/noPrecisionLoss: tope literal del XSD (maxInclusive)
 const importe17_2 = () => dec(2, 0, 99999999999999999.99); // LpgImporte_17_2_Type
 const gradoCodigo = () => str({ maxLen: 2 }); // LpgGradoCodigoType
 const gradoValor = () => dec(8, 0, 1.99999999, true); // LpgGradoValorType

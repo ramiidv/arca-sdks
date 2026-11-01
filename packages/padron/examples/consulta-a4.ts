@@ -5,7 +5,7 @@
  * contribuyente usando el web service ws_sr_padron_a4.
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync } from 'node:fs';
 import { ArcaPadron } from '@ramiidv/arca-padron';
 
 const client = new ArcaPadron({

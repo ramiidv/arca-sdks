@@ -7,7 +7,7 @@
  *   - ArcaSoapError: HTTP, timeout o SOAP Fault. `uncertain` indica si ARCA pudo haberla procesado.
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 import {
   ArcaFecred,
   ArcaAuthError,

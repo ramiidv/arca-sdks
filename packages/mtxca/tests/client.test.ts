@@ -479,7 +479,7 @@ describe('consultarCotizacionMoneda', () => {
 describe('parámetros', () => {
   it('consultarMonedas: 1 y N elementos, códigos como string', async () => {
     const one = '<codigoDescripcion><codigo>PES</codigo><descripcion>Pesos</descripcion></codigoDescripcion>';
-    const two = one + '<codigoDescripcion><codigo>060</codigo><descripcion>Euro</descripcion></codigoDescripcion>';
+    const two = `${one}<codigoDescripcion><codigo>060</codigo><descripcion>Euro</descripcion></codigoDescripcion>`;
     const m = mockFetch(
       soapResponse('consultarMonedasResponse', `<arrayMonedas>${one}</arrayMonedas>`),
       soapResponse('consultarMonedasResponse', `<arrayMonedas>${two}</arrayMonedas>`),

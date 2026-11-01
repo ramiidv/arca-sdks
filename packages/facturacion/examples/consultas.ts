@@ -2,7 +2,7 @@
  * Ejemplo: Consultas de parámetros y comprobantes (WSFE + WSFEX)
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 import { Arca, CbteTipo, Moneda } from '@ramiidv/arca-facturacion';
 
 async function main() {

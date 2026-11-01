@@ -106,7 +106,7 @@ describe('ArcaEmpleados', () => {
       expect(l.slice(0, 2)).toBe('01');
     }
     expect(out.lineas.map((l) => l.slice(2, 4))).toEqual(['AT', 'BT', 'MR', 'NA']);
-    expect(out.contenido).toBe(out.lineas.join('\r\n') + '\r\n');
+    expect(out.contenido).toBe(`${out.lineas.join('\r\n')}\r\n`);
     expect(out.encoding).toBe('latin1');
     expect(out.buffer).toHaveLength(4 * 132);
     expect(out.resumen).toEqual({ totalRegistros: 4, altas: 1, bajas: 1, modificaciones: 1, na: 1, nb: 0 });
@@ -116,7 +116,7 @@ describe('ArcaEmpleados', () => {
     const out = new ArcaEmpleados({ serializacion: { eol: '\n', encoding: 'ascii', noRepresentables: 'transliterar' } })
       .alta({ ...alta(), cct: 'ÑU' })
       .generar();
-    expect(out.contenido).toBe(out.lineas[0] + '\n');
+    expect(out.contenido).toBe(`${out.lineas[0]}\n`);
     expect(out.lineas[0].slice(90, 100)).toBe('NU        ');
     expect(out.encoding).toBe('ascii');
   });

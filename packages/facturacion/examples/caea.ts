@@ -16,7 +16,7 @@
  * Cada período es una quincena: orden 1 (días 1-15) u orden 2 (días 16-fin).
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 import { Arca, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {

@@ -123,7 +123,7 @@ export function resultadoAprobado(r: Obj, path: string): 'A' | 'O' {
     const obs = parseInfo(r, path).observaciones.map((o) => ({ code: o.codigo, msg: o.descripcion }));
     const details = [...errors, ...obs];
     throw new ArcaServiceError(
-      `${SERVICE}: operación rechazada (resultado R)${details.length ? ': ' + details.map((d) => `[${d.code}] ${d.msg}`).join(', ') : ''}`,
+      `${SERVICE}: operación rechazada (resultado R)${details.length ? `: ${details.map((d) => `[${d.code}] ${d.msg}`).join(', ')}` : ''}`,
       details,
     );
   }

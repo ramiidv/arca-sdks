@@ -5,7 +5,7 @@
  * tipos de error que puede arrojar el SDK.
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync } from 'node:fs';
 import {
   ArcaPadron,
   ArcaPadronError,

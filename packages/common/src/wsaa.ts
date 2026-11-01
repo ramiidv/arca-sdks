@@ -318,7 +318,7 @@ export class WsaaClient {
     const traXml = this.createTRA(service);
     const cms = this.signTRA(traXml);
 
-    const bodyContent = `<loginCms xmlns="${WSAA_NAMESPACE}">` + `<in0>${cms}</in0>` + `</loginCms>`;
+    const bodyContent = `<loginCms xmlns="${WSAA_NAMESPACE}"><in0>${cms}</in0></loginCms>`;
 
     const parsed = await soapCall(this.endpoint, bodyContent, {
       ...this.soapOpts,
@@ -446,7 +446,7 @@ export class WsaaClient {
       },
     };
 
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + buildXml(tra);
+    return `<?xml version="1.0" encoding="UTF-8"?>\n${buildXml(tra)}`;
   }
 
   /**

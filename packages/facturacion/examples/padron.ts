@@ -9,7 +9,7 @@
  *   ws_sr_constancia_inscripcion
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 import { Arca } from '@ramiidv/arca-facturacion';
 
 async function main() {

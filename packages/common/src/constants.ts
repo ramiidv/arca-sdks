@@ -67,6 +67,7 @@ export enum DocTipo {
    */
   SIN_IDENTIFICAR = 99,
   /** Consumidor final sin identificar (código 99, ver `SIN_IDENTIFICAR`). */
+  // biome-ignore lint/suspicious/noDuplicateEnumValues: alias intencional del código 99
   CONSUMIDOR_FINAL = 99,
 }
 

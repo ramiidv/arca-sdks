@@ -86,7 +86,7 @@ export function ensureArray<T>(val: T | T[] | undefined | null): T[] {
  */
 export function getNestedValue(obj: Record<string, unknown>, ...keys: string[]): unknown {
   if (obj === null || typeof obj !== 'object') return undefined;
-  let nullish: unknown = undefined;
+  let nullish: unknown;
   for (const key of keys) {
     if (!Object.hasOwn(obj, key)) continue;
     const value = obj[key];
@@ -356,7 +356,7 @@ export async function soapCall(
 
   for (let attempt = 0; ; attempt++) {
     if (lastError) {
-      const delay = baseDelay * Math.pow(2, attempt - 1);
+      const delay = baseDelay * 2 ** (attempt - 1);
       safeEmit(onEvent, {
         type: 'request:retry',
         endpoint,

@@ -5,7 +5,7 @@
  * Al proveer `servicio`, el concepto se auto-detecta como SERVICIOS.
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 import { Arca, CbteTipo, CondicionIva, DocTipo, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {

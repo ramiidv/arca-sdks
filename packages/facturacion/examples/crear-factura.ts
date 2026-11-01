@@ -13,8 +13,8 @@
  *   https://auth.afip.gob.ar/contribuyente_/certificados/
  */
 
-import fs from 'fs';
-import { Arca, CbteTipo, DocTipo, IvaTipo } from '@ramiidv/arca-facturacion';
+import fs from 'node:fs';
+import { Arca, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {
   // 1. Inicializar el SDK

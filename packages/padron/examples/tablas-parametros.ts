@@ -6,7 +6,7 @@
  * usando el web service ws_sr_padron_a100.
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync } from 'node:fs';
 import { ArcaPadron, CollectionName } from '@ramiidv/arca-padron';
 
 const client = new ArcaPadron({

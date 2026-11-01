@@ -483,7 +483,7 @@ describe('A4: respuestas realistas', () => {
         'getPersona',
         personaA4(imp4(20, 'BAJA DEFINITIVA', 'MONOTRIBUTO') + imp4(30, 'BAJA DEFINITIVA'), '').replace(
           '<domicilio>',
-          categoria + '<domicilio>',
+          `${categoria}<domicilio>`,
         ),
       ),
     );

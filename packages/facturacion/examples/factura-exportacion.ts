@@ -9,7 +9,7 @@
  * devuelve el CAE original con reproceso = true, sin duplicar.
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 import { Arca, ArcaResultadoInciertoExpo, CbteTipo } from '@ramiidv/arca-facturacion';
 import type { FacturarExpoOpts } from '@ramiidv/arca-facturacion';
 

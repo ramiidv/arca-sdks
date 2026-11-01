@@ -8,6 +8,7 @@ type R = Record<string, unknown>;
 /** Límites de los simpleTypes del XSD de WSMTXCA. */
 const SHORT_MAX = 32767;
 const IMPORTE_MAX = 9999999999999.99;
+// biome-ignore lint/correctness/noPrecisionLoss: tope literal del XSD (maxInclusive)
 const DECIMAL_MAX = 999999999999.999999;
 const LONG_DIGITS = /^\d{1,18}$/;
 

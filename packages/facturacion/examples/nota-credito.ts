@@ -7,7 +7,7 @@
  *   etc.
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 import { Arca, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {

@@ -146,7 +146,7 @@ export function caeAprobado(o: {
 export function wsfeErrores(method: string, errors: { code: number; msg: string }[]): Response {
   return wsfeResponse(
     method,
-    '<Errors>' + errors.map((e) => `<Err><Code>${e.code}</Code><Msg>${e.msg}</Msg></Err>`).join('') + '</Errors>',
+    `<Errors>${errors.map((e) => `<Err><Code>${e.code}</Code><Msg>${e.msg}</Msg></Err>`).join('')}</Errors>`,
   );
 }
 

@@ -2,7 +2,7 @@
  * Ejemplo: recorrer las FCE recibidas, aceptar una y rechazar otra.
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 import { ArcaFecred, ArcaSoapError, FileTicketStorage } from '@ramiidv/arca-fecred';
 
 async function main() {

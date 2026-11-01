@@ -11,7 +11,7 @@
  *    con el mismo número es seguro) o conflicto.
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 import { formatDate } from '@ramiidv/arca-common';
 import {
   Arca,

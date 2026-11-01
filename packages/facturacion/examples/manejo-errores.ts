@@ -10,7 +10,7 @@
  *   - ArcaSoapError: error HTTP/SOAP en consultas, o emisión que con certeza no se envió
  */
 
-import fs from 'fs';
+import fs from 'node:fs';
 import {
   Arca,
   CbteTipo,
