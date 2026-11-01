@@ -94,14 +94,10 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
 
 // @public (undocumented)
 export interface ArcaMtxcaConfig extends ArcaSdkConfig {
-    // @deprecated
-    endpoint?: string;
     endpoints?: {
         mtxca?: string;
         wsaa?: string;
     };
-    // @deprecated
-    wsaaEndpoint?: string;
 }
 
 export { ArcaServiceError }

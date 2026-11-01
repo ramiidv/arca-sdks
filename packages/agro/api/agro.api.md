@@ -214,11 +214,6 @@ export class ArcaAgro extends ArcaSdkBase<AgroService> {
     constructor(config: ArcaAgroConfig);
     readonly cpe: CpeClient;
     readonly lpg: LpgClient;
-    // @deprecated (undocumented)
-    serverStatus(opts?: CallOptions): Promise<{
-        cpe: AgroServiceStatus;
-        lpg: AgroServiceStatus;
-    }>;
     status(opts?: CallOptions): Promise<{
         cpe: AgroServiceStatus;
         lpg: AgroServiceStatus;

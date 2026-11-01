@@ -17,7 +17,6 @@ import { ArcaTicketVigenteError } from '@ramiidv/arca-common';
 import { ArcaValidationError } from '@ramiidv/arca-common';
 import { CallOptions } from '@ramiidv/arca-common';
 import { FileTicketStorage } from '@ramiidv/arca-common';
-import type { LegacyTlsMode } from '@ramiidv/arca-common';
 import { MemoryTicketStorage } from '@ramiidv/arca-common';
 import { ServerStatus } from '@ramiidv/arca-common';
 import { ServiceErrorDetail } from '@ramiidv/arca-common';
@@ -90,8 +89,6 @@ export class ArcaFecred extends ArcaSdkBase<'wsfecred'> {
     consultarTiposFormasCancelacion(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarTiposMotivosRechazo(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarTiposRetenciones(opts?: CallOptions): Promise<TipoRetencion[]>;
-    // @deprecated (undocumented)
-    get fecred(): FecredClient;
     informarCancelacionTotalFECred(params: InformarCancelacionTotalParams, opts?: CallOptions): Promise<OperacionFecredResult>;
     informarFacturaAgtDptoCltv(params: InformarFacturaAgtDptoCltvParams, opts?: CallOptions): Promise<OperacionFecredResult>;
     modificarOpcionTransferencia(params: ModificarOpcionTransferenciaParams, opts?: CallOptions): Promise<OperacionFecredResult>;
@@ -433,18 +430,7 @@ export class FecredClient extends SoapServiceClient {
 }
 
 // @public (undocumented)
-export interface FecredClientConfig extends SoapServiceClientConfig {
-    // @deprecated
-    onEvent?: (event: ArcaEvent) => void;
-    // @deprecated
-    soapOptions?: {
-        timeout?: number;
-        retries?: number;
-        retryDelayMs?: number;
-        fetch?: typeof fetch;
-        legacyTls?: LegacyTlsMode;
-    };
-}
+export type FecredClientConfig = SoapServiceClientConfig;
 
 export { FileTicketStorage }
 

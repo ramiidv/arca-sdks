@@ -20,6 +20,7 @@ import { DocTipo } from '@ramiidv/arca-common';
 import { FileTicketStorage } from '@ramiidv/arca-common';
 import { LegacyTlsMode } from '@ramiidv/arca-common';
 import { MemoryTicketStorage } from '@ramiidv/arca-common';
+import type { ServerStatus } from '@ramiidv/arca-common';
 import type { ServiceStatus } from '@ramiidv/arca-common';
 import { SoapServiceClient } from '@ramiidv/arca-common';
 import { TicketStorage } from '@ramiidv/arca-common';
@@ -44,12 +45,6 @@ export interface AlicuotaIva {
     Importe: number;
 }
 
-// @public @deprecated
-export const Arca: typeof ArcaFacturacion;
-
-// @public @deprecated (undocumented)
-export type Arca = ArcaFacturacion;
-
 export { ArcaAuthError }
 
 // @public
@@ -59,12 +54,8 @@ export interface ArcaConfig extends ArcaSdkConfig {
         wsaa?: string;
         wsfe?: string;
         wsfex?: string;
-        padronA5?: string;
-        padronA13?: string;
     };
     paramCacheTTLMs?: number;
-    // @deprecated (undocumented)
-    requestTimeoutMs?: number;
 }
 
 export { ArcaError }
@@ -77,41 +68,17 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     armarComprobante(opts: FacturarOpts & {
         cbteNro: number;
     }): ComprobanteArmado;
-    // @deprecated
-    static calcularTotales(items: LineItem[], opts?: {
-        tributos?: {
-            Importe: number;
-        }[];
-        tipoC?: boolean;
-        descuentoGlobal?: number;
-    }): {
-        importes: Importes;
-        iva: AlicuotaIva[];
-    };
     checkPermisoExpo(idPermiso: string, dstMerc: number, call?: CallOptions): Promise<string>;
     clearParamCache(): void;
     consultarCAEA(periodo: string, orden: number, call?: CallOptions): Promise<CaeaSolicitarResult>;
     consultarComprobante(cbteTipo: number, ptoVta: number, cbteNro: number, call?: CallOptions): Promise<FECompConsultarResult>;
     consultarComprobanteExpo(cbteTipo: number, ptoVta: number, cbteNro: number, call?: CallOptions): Promise<WsfexGetCmpResult>;
-    // @deprecated
-    consultarCuit(cuit: number, call?: CallOptions): Promise<Contribuyente>;
-    // @deprecated
-    consultarCuitDetalle(cuit: number, call?: CallOptions): Promise<Contribuyente>;
     consultarSinMovimientoCAEA(caea: string, ptoVta: number, call?: CallOptions): Promise<CaeaSinMovItem[]>;
     crearFactura(request: InvoiceRequest, call?: CallOptions): Promise<FECAESolicitarResult>;
     crearFacturaAuto(ptoVta: number, cbteTipo: number, invoice: Omit<InvoiceDetail, 'CbteDesde' | 'CbteHasta'>, call?: CallOptions): Promise<FECAESolicitarResult>;
     crearFacturaExportacion(invoice: WsfexInvoice, call?: CallOptions): Promise<WsfexAuthResult>;
-    // @deprecated
-    static extractCAE(result: FECAESolicitarResult): {
-        approved: boolean;
-        details: FECAEDetResponse[];
-        cae?: string;
-        caeFchVto?: string;
-    };
     facturar(opts: FacturarOpts, call?: CallOptions): Promise<FacturaResult>;
     facturarExpo(opts: FacturarExpoOpts, call?: CallOptions): Promise<FacturaExpoResult>;
-    // @deprecated
-    static formatDate(date: Date | string): string;
     static generateQRUrl(input: QRInput, options?: QROptions): string;
     getActividades(call?: CallOptions): Promise<ActividadItem[]>;
     getActividadesExpo(call?: CallOptions): Promise<WsfexParamItem[]>;
@@ -152,10 +119,6 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     recuperarComprobante(intento: IntentoComprobante, call?: CallOptions): Promise<ResultadoRecuperacion>;
     registrarCAEA(request: CaeaRegInfRequest, call?: CallOptions): Promise<CaeaRegInfResult>;
     registrarFacturaCAEA(caea: string, opts: FacturarCAEAOpts, call?: CallOptions): Promise<FacturaResult>;
-    // @deprecated
-    serverStatus(call?: CallOptions): Promise<ServerStatus>;
-    // @deprecated
-    serverStatusExpo(call?: CallOptions): Promise<ServerStatus>;
     siguienteComprobante(ptoVta: number, cbteTipo: number, call?: CallOptions): Promise<number>;
     siguienteComprobanteExpo(ptoVta: number, cbteTipo: number, call?: CallOptions): Promise<number>;
     sinMovimientoCAEA(caea: string, ptoVta: number, call?: CallOptions): Promise<CaeaSinMovResult>;
@@ -246,17 +209,17 @@ export interface CaeaRegInfRequest {
 export interface CaeaRegInfResult {
     // (undocumented)
     Errors?: {
-        Err: WsError | WsError[];
+        Err: WsError[];
     };
     // (undocumented)
     Events?: {
-        Evt: WsError | WsError[];
+        Evt: WsError[];
     };
     // (undocumented)
     FeCabResp: FeCabResp;
     // (undocumented)
     FeDetResp: {
-        FECAEADetResponse: FECAEDetResponse | FECAEDetResponse[];
+        FECAEADetResponse: FECAEDetResponse[];
     };
 }
 
@@ -276,11 +239,11 @@ export interface CaeaSinMovResult {
     CAEA?: string;
     // (undocumented)
     Errors?: {
-        Err: WsError | WsError[];
+        Err: WsError[];
     };
     // (undocumented)
     Events?: {
-        Evt: WsError | WsError[];
+        Evt: WsError[];
     };
     // (undocumented)
     FchProceso?: string;
@@ -305,7 +268,7 @@ export interface CaeaSolicitarResult {
     FchVigHasta: string;
     // (undocumented)
     Observaciones?: {
-        Obs: WsError | WsError[];
+        Obs: WsError[];
     };
     Orden: number;
     Periodo: string;
@@ -468,26 +431,6 @@ export interface CondicionIvaItem {
     Id: number;
 }
 
-// @public (undocumented)
-export interface Contribuyente {
-    cuit: number;
-    domicilioFiscal?: {
-        direccion?: string;
-        localidad?: string;
-        codPostal?: string;
-        tipoDomicilio?: string;
-    };
-    estadoClave: string;
-    impuestos?: {
-        id: number;
-        descripcion: string;
-        estado: string;
-    }[];
-    nombre: string;
-    raw: Record<string, any>;
-    tipoPersona: string;
-}
-
 // @public
 export interface CotizacionResult {
     FchCotiz: string;
@@ -519,14 +462,6 @@ export const ENDPOINTS: {
     readonly wsfex: {
         readonly testing: 'https://wswhomo.afip.gov.ar/wsfexv1/service.asmx';
         readonly production: 'https://servicios1.afip.gov.ar/wsfexv1/service.asmx';
-    };
-    readonly padronA5: {
-        readonly testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5';
-        readonly production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5';
-    };
-    readonly padronA13: {
-        readonly testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13';
-        readonly production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13';
     };
 };
 
@@ -686,7 +621,7 @@ export interface FECAEDetResponse {
     DocTipo: number;
     // (undocumented)
     Observaciones?: {
-        Obs: WsError | WsError[];
+        Obs: WsError[];
     };
     // (undocumented)
     Resultado: 'A' | 'R';
@@ -696,17 +631,17 @@ export interface FECAEDetResponse {
 export interface FECAESolicitarResult {
     // (undocumented)
     Errors?: {
-        Err: WsError | WsError[];
+        Err: WsError[];
     };
     // (undocumented)
     Events?: {
-        Evt: WsError | WsError[];
+        Evt: WsError[];
     };
     // (undocumented)
     FeCabResp: FeCabResp;
     // (undocumented)
     FeDetResp: {
-        FECAEDetResponse: FECAEDetResponse | FECAEDetResponse[];
+        FECAEDetResponse: FECAEDetResponse[];
     };
 }
 
@@ -714,11 +649,11 @@ export interface FECAESolicitarResult {
 export interface FECompConsultarResult {
     // (undocumented)
     Errors?: {
-        Err: WsError | WsError[];
+        Err: WsError[];
     };
     // (undocumented)
     Events?: {
-        Evt: WsError | WsError[];
+        Evt: WsError[];
     };
     // (undocumented)
     ResultGet: {
@@ -748,19 +683,19 @@ export interface FECompConsultarResult {
         CbteTipo: number;
         CondicionIVAReceptorId?: number;
         Iva?: {
-            AlicIva: AlicuotaIva | AlicuotaIva[];
+            AlicIva: AlicuotaIva[];
         };
         Tributos?: {
-            Tributo: Tributo | Tributo[];
+            Tributo: Tributo[];
         };
         CbtesAsoc?: {
-            CbteAsoc: ComprobanteAsociado | ComprobanteAsociado[];
+            CbteAsoc: ComprobanteAsociado[];
         };
         Opcionales?: {
-            Opcional: Opcional | Opcional[];
+            Opcional: Opcional[];
         };
         Observaciones?: {
-            Obs: WsError | WsError[];
+            Obs: WsError[];
         };
     };
 }
@@ -773,11 +708,11 @@ export interface FECompUltimoAutorizadoResult {
     CbteTipo: number;
     // (undocumented)
     Errors?: {
-        Err: WsError | WsError[];
+        Err: WsError[];
     };
     // (undocumented)
     Events?: {
-        Evt: WsError | WsError[];
+        Evt: WsError[];
     };
     // (undocumented)
     PtoVta: number;
@@ -996,18 +931,6 @@ export interface Opcional {
 // @public
 export type OperacionEmision = 'FECAESolicitar' | 'FECAEARegInformativo';
 
-// @public @deprecated
-export class PadronClient {
-    constructor(production: boolean, opts?: Omit<WsClientOptions, 'endpoint'> & {
-        endpoints?: {
-            padronA5?: string;
-            padronA13?: string;
-        };
-    });
-    getPersonaA13(auth: WsfeAuth, cuit: number, opts?: CallOptions): Promise<Contribuyente>;
-    getPersonaA5(auth: WsfeAuth, cuit: number, opts?: CallOptions): Promise<Contribuyente>;
-}
-
 // @public
 export interface PaisItem {
     // (undocumented)
@@ -1093,16 +1016,6 @@ export type ResultadoRecuperacion =
     encontrado: FECompConsultarResult;
 };
 
-// @public @deprecated
-export interface ServerStatus {
-    // (undocumented)
-    AppServer: string;
-    // (undocumented)
-    AuthServer: string;
-    // (undocumented)
-    DbServer: string;
-}
-
 export { TicketStorage }
 
 // @public
@@ -1114,9 +1027,6 @@ export enum TipoExpo {
     // (undocumented)
     SERVICIOS = 2
 }
-
-// @public @deprecated
-export function toDateString(d: Date | string): string;
 
 // @public (undocumented)
 export interface Tributo {
@@ -1158,8 +1068,6 @@ export function urlQRDesdeFactura(factura: FacturaResult, datos: DatosQR, option
 export const WSAA_SERVICES: {
     readonly wsfe: 'wsfe';
     readonly wsfex: 'wsfex';
-    readonly padronA5: 'ws_sr_constancia_inscripcion';
-    readonly padronA13: 'ws_sr_padron_a13';
 };
 
 export { WsaaClient }
@@ -1211,6 +1119,7 @@ export class WsfeClient extends SoapServiceClient {
     // (undocumented)
     consultarComprobante(auth: WsfeAuth, cbteTipo: number, ptoVta: number, cbteNro: number, opts?: CallOptions): Promise<FECompConsultarResult>;
     consultarSinMovimientoCAEA(auth: WsfeAuth, caea: string, ptoVta: number, opts?: CallOptions): Promise<CaeaSinMovItem[]>;
+    dummy(opts?: CallOptions): Promise<ServerStatus>;
     getActividades(auth: WsfeAuth, opts?: CallOptions): Promise<ActividadItem[]>;
     // (undocumented)
     getCantMaxRegistros(auth: WsfeAuth, opts?: CallOptions): Promise<number>;
@@ -1235,8 +1144,6 @@ export class WsfeClient extends SoapServiceClient {
     // (undocumented)
     getTiposTributo(auth: WsfeAuth, opts?: CallOptions): Promise<ParamItem[]>;
     registrarCAEA(auth: WsfeAuth, request: CaeaRegInfRequest, opts?: CallOptions): Promise<CaeaRegInfResult>;
-    // (undocumented)
-    serverStatus(opts?: CallOptions): Promise<ServerStatus>;
     sinMovimientoCAEA(auth: WsfeAuth, caea: string, ptoVta: number, opts?: CallOptions): Promise<CaeaSinMovResult>;
     solicitarCAE(auth: WsfeAuth, request: InvoiceRequest, opts?: CallOptions): Promise<FECAESolicitarResult>;
     solicitarCAEA(auth: WsfeAuth, periodo: string, orden: number, opts?: CallOptions): Promise<CaeaSolicitarResult>;
@@ -1277,6 +1184,7 @@ export class WsfexClient extends SoapServiceClient {
     constructor(production: boolean, opts?: WsClientOptions);
     authorize(auth: WsfeAuth, invoice: WsfexInvoice, opts?: CallOptions): Promise<WsfexAuthResult>;
     checkPermiso(auth: WsfeAuth, idPermiso: string, dstMerc: number, opts?: CallOptions): Promise<string>;
+    dummy(opts?: CallOptions): Promise<ServerStatus>;
     getActividades(auth: WsfeAuth, opts?: CallOptions): Promise<WsfexParamItem[]>;
     getCmp(auth: WsfeAuth, cbteTipo: number, ptoVta: number, cbteNro: number, opts?: CallOptions): Promise<WsfexGetCmpResult>;
     getCotizacion(auth: WsfeAuth, monId: string, opts?: CallOptions & {
@@ -1297,7 +1205,6 @@ export class WsfexClient extends SoapServiceClient {
     getTiposCbte(auth: WsfeAuth, opts?: CallOptions): Promise<WsfexParamItem[]>;
     getTiposExpo(auth: WsfeAuth, opts?: CallOptions): Promise<WsfexParamItem[]>;
     getUMed(auth: WsfeAuth, opts?: CallOptions): Promise<WsfexParamItem[]>;
-    serverStatus(opts?: CallOptions): Promise<ServerStatus>;
 }
 
 // @public (undocumented)
@@ -1348,7 +1255,7 @@ export interface WsfexGetCmpResult {
         Tipo_expo: number;
         Permiso_existente?: string;
         Permisos?: {
-            Permiso: WsfexPermiso | WsfexPermiso[];
+            Permiso: WsfexPermiso[];
         };
         Dst_cmp: number;
         Cliente?: string;
@@ -1362,14 +1269,14 @@ export interface WsfexGetCmpResult {
         Imp_total: number;
         Obs?: string;
         Cmps_asoc?: {
-            Cmp_asoc: WsfexCmpAsoc | WsfexCmpAsoc[];
+            Cmp_asoc: WsfexCmpAsoc[];
         };
         Forma_pago?: string;
         Incoterms?: string;
         Incoterms_Ds?: string;
         Idioma_cbte: number;
         Items?: {
-            Item: WsfexItem | WsfexItem[];
+            Item: WsfexItem[];
         };
         Fecha_cbte_cae?: string;
         Fch_venc_Cae?: string;
@@ -1377,13 +1284,11 @@ export interface WsfexGetCmpResult {
         Resultado?: 'A' | 'R';
         Motivos_Obs?: string;
         Opcionales?: {
-            Opcional: Opcional | Opcional[];
+            Opcional: Opcional[];
         };
         Fecha_pago?: string;
         Actividades?: {
             Actividad: {
-                Id: number;
-            } | {
                 Id: number;
             }[];
         };

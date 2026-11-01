@@ -16,7 +16,6 @@ import { ArcaTicketVigenteError } from '@ramiidv/arca-common';
 import { ArcaValidationError } from '@ramiidv/arca-common';
 import { buildXml } from '@ramiidv/arca-common';
 import { CallOptions } from '@ramiidv/arca-common';
-import { checkServiceErrors as checkServiceErrors_2 } from '@ramiidv/arca-common';
 import { CondicionIva } from '@ramiidv/arca-common';
 import { DocTipo } from '@ramiidv/arca-common';
 import { ensureArray } from '@ramiidv/arca-common';
@@ -26,6 +25,7 @@ import { parseXml } from '@ramiidv/arca-common';
 import { Provincia } from '@ramiidv/arca-common';
 import { ServerStatus } from '@ramiidv/arca-common';
 import type { ServiceErrorDetail } from '@ramiidv/arca-common';
+import type { ServiceStatus } from '@ramiidv/arca-common';
 import { SoapCallOptions } from '@ramiidv/arca-common';
 import { SoapServiceClient } from '@ramiidv/arca-common';
 import { TicketStorage } from '@ramiidv/arca-common';
@@ -101,9 +101,6 @@ export class ArcaPadronError extends ArcaError {
     static readonly code: string;
 }
 
-// @public @deprecated (undocumented)
-export type ArcaPadronEvent = ArcaEvent;
-
 // @public
 export class ArcaPadronServiceError extends ArcaServiceError {
     constructor(message: string, errors: ServiceErrorDetail[], options?: {
@@ -176,9 +173,6 @@ export interface CategoriaA5 {
     // (undocumented)
     periodo?: number;
 }
-
-// @public @deprecated (undocumented)
-export const checkServiceErrors: typeof checkServiceErrors_2;
 
 // @public
 export enum CollectionName {
@@ -492,8 +486,6 @@ export enum ImpuestoId {
     GANANCIAS_PJ = 10,
     IVA_EXENTO = 32,
     IVA_NO_ALCANZADO = 34,
-    // @deprecated (undocumented)
-    IVA_NO_INSCRIPTO = 33,
     IVA_RESPONSABLE_INSCRIPTO = 30,
     MONOTRIBUTO = 20,
     MONOTRIBUTO_AUTONOMO = 21
@@ -578,7 +570,7 @@ export type PadronServicio = 'a5' | 'a4' | 'a10' | 'a13' | 'a100';
 export type PadronSoapOptions = Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs' | 'fetch' | 'legacyTls'>;
 
 // @public
-export type PadronStatus = Record<PadronServicio, PromiseSettledResult<ServerStatus>>;
+export type PadronStatus = Record<PadronServicio, ServiceStatus>;
 
 // @public (undocumented)
 export interface ParameterAttribute {
@@ -871,12 +863,6 @@ export interface TelefonoA4 {
 }
 
 export { TicketStorage }
-
-// @public @deprecated (undocumented)
-export const TipoDocumento: typeof DocTipo;
-
-// @public @deprecated (undocumented)
-export type TipoDocumento = DocTipo;
 
 // @public
 export enum TipoDomicilio {
