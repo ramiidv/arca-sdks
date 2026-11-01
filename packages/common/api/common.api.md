@@ -607,8 +607,8 @@ export interface ValidationErrorDetail {
 
 // @public (undocumented)
 export const WSAA_ENDPOINTS: {
-    readonly testing: "https://wsaahomo.afip.gov.ar/ws/services/LoginCms";
-    readonly production: "https://wsaa.afip.gov.ar/ws/services/LoginCms";
+    readonly testing: 'https://wsaahomo.afip.gov.ar/ws/services/LoginCms';
+    readonly production: 'https://wsaa.afip.gov.ar/ws/services/LoginCms';
 };
 
 // @public (undocumented)

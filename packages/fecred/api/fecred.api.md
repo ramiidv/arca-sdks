@@ -351,20 +351,20 @@ export interface CuentaEnAgenteInput {
 // @public
 export const ENDPOINTS: {
     readonly wsfecred: {
-        readonly testing: "https://fwshomo.afip.gob.ar/wsfecred/FECredService";
-        readonly production: "https://serviciosjava.afip.gob.ar/wsfecred/FECredService";
-        readonly namespace: "http://ar.gob.afip.wsfecred/FECredService/";
-        readonly serviceId: "wsfecred";
+        readonly testing: 'https://fwshomo.afip.gob.ar/wsfecred/FECredService';
+        readonly production: 'https://serviciosjava.afip.gob.ar/wsfecred/FECredService';
+        readonly namespace: 'http://ar.gob.afip.wsfecred/FECredService/';
+        readonly serviceId: 'wsfecred';
     };
 };
 
 // @public
 export const EstadoComprobante: {
-    readonly PENDIENTE_RECEPCION: "PendienteRecepcion";
-    readonly RECEPCIONADO: "Recepcionado";
-    readonly ACEPTADO: "Aceptado";
-    readonly RECHAZADO: "Rechazado";
-    readonly INFORMADA_AG_DPTO: "InformadaAgDpto";
+    readonly PENDIENTE_RECEPCION: 'PendienteRecepcion';
+    readonly RECEPCIONADO: 'Recepcionado';
+    readonly ACEPTADO: 'Aceptado';
+    readonly RECHAZADO: 'Rechazado';
+    readonly INFORMADA_AG_DPTO: 'InformadaAgDpto';
 };
 
 // @public (undocumented)
@@ -380,11 +380,11 @@ export interface EstadoComprobanteInfo {
 
 // @public
 export const EstadoCtaCte: {
-    readonly MODIFICABLE: "Modificable";
-    readonly ACEPTADA: "Aceptada";
-    readonly RECHAZADA: "Rechazada";
-    readonly CANCELADA_TOTAL: "CanceladaTotal";
-    readonly INFORMADA_AG_DPTO: "InformadaAgDpto";
+    readonly MODIFICABLE: 'Modificable';
+    readonly ACEPTADA: 'Aceptada';
+    readonly RECHAZADA: 'Rechazada';
+    readonly CANCELADA_TOTAL: 'CanceladaTotal';
+    readonly INFORMADA_AG_DPTO: 'InformadaAgDpto';
 };
 
 // @public (undocumented)
@@ -669,8 +669,8 @@ export interface ObligadoRecepcionResult extends InfoRespuesta {
 
 // @public
 export const OpcionTransferencia: {
-    readonly SCA: "SCA";
-    readonly ADC: "ADC";
+    readonly SCA: 'SCA';
+    readonly ADC: 'ADC';
 };
 
 // @public (undocumented)
@@ -720,9 +720,9 @@ export interface RechazarNotaDCResult extends InfoRespuesta {
 
 // @public
 export const Resultado: {
-    readonly APROBADO: "A";
-    readonly OBSERVADO: "O";
-    readonly RECHAZADO: "R";
+    readonly APROBADO: 'A';
+    readonly OBSERVADO: 'O';
+    readonly RECHAZADO: 'R';
 };
 
 // @public (undocumented)
@@ -751,8 +751,8 @@ export interface RetencionInput {
 
 // @public
 export const RolCtaCte: {
-    readonly EMISOR: "Emisor";
-    readonly RECEPTOR: "Receptor";
+    readonly EMISOR: 'Emisor';
+    readonly RECEPTOR: 'Receptor';
 };
 
 // @public (undocumented)
@@ -776,8 +776,8 @@ export { TicketStorage }
 
 // @public
 export const TipoAceptacion: {
-    readonly TACITA: "Tacita";
-    readonly EXPRESA: "Expresa";
+    readonly TACITA: 'Tacita';
+    readonly EXPRESA: 'Expresa';
 };
 
 // @public (undocumented)
@@ -785,8 +785,8 @@ export type TipoAceptacion = (typeof TipoAceptacion)[keyof typeof TipoAceptacion
 
 // @public
 export const TipoCancelacion: {
-    readonly PARCIAL: "PAR";
-    readonly TOTAL: "TOT";
+    readonly PARCIAL: 'PAR';
+    readonly TOTAL: 'TOT';
 };
 
 // @public (undocumented)
@@ -797,12 +797,12 @@ export type TipoCodAutorizacion = 'A' | 'E';
 
 // @public
 export const TipoFechaFiltro: {
-    readonly EMISION: "Emision";
-    readonly PUESTA_DISPO: "PuestaDispo";
-    readonly VEN_PAGO: "VenPago";
-    readonly VEN_ACEP: "VenAcep";
-    readonly ACEP: "Acep";
-    readonly INFO_AG_DPTO_CLTV: "InfoAgDptoCltv";
+    readonly EMISION: 'Emision';
+    readonly PUESTA_DISPO: 'PuestaDispo';
+    readonly VEN_PAGO: 'VenPago';
+    readonly VEN_ACEP: 'VenAcep';
+    readonly ACEP: 'Acep';
+    readonly INFO_AG_DPTO_CLTV: 'InfoAgDptoCltv';
 };
 
 // @public (undocumented)

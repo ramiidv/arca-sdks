@@ -195,7 +195,7 @@ export class ArcaResultadoInciertoExpo extends ArcaError {
     static readonly code: string;
     readonly id: number;
     readonly intento: IntentoExpo;
-    readonly operacion: "FEXAuthorize";
+    readonly operacion: 'FEXAuthorize';
     // (undocumented)
     readonly ptoVta: number;
     readonly request: WsfexInvoice;
@@ -513,20 +513,20 @@ export { DocTipo }
 // @public (undocumented)
 export const ENDPOINTS: {
     readonly wsfe: {
-        readonly testing: "https://wswhomo.afip.gov.ar/wsfev1/service.asmx";
-        readonly production: "https://servicios1.afip.gov.ar/wsfev1/service.asmx";
+        readonly testing: 'https://wswhomo.afip.gov.ar/wsfev1/service.asmx';
+        readonly production: 'https://servicios1.afip.gov.ar/wsfev1/service.asmx';
     };
     readonly wsfex: {
-        readonly testing: "https://wswhomo.afip.gov.ar/wsfexv1/service.asmx";
-        readonly production: "https://servicios1.afip.gov.ar/wsfexv1/service.asmx";
+        readonly testing: 'https://wswhomo.afip.gov.ar/wsfexv1/service.asmx';
+        readonly production: 'https://servicios1.afip.gov.ar/wsfexv1/service.asmx';
     };
     readonly padronA5: {
-        readonly testing: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5";
-        readonly production: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5";
+        readonly testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5';
+        readonly production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5';
     };
     readonly padronA13: {
-        readonly testing: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13";
-        readonly production: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13";
+        readonly testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13';
+        readonly production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13';
     };
 };
 
@@ -1156,10 +1156,10 @@ export function urlQRDesdeFactura(factura: FacturaResult, datos: DatosQR, option
 
 // @public
 export const WSAA_SERVICES: {
-    readonly wsfe: "wsfe";
-    readonly wsfex: "wsfex";
-    readonly padronA5: "ws_sr_constancia_inscripcion";
-    readonly padronA13: "ws_sr_padron_a13";
+    readonly wsfe: 'wsfe';
+    readonly wsfex: 'wsfex';
+    readonly padronA5: 'ws_sr_constancia_inscripcion';
+    readonly padronA13: 'ws_sr_padron_a13';
 };
 
 export { WsaaClient }

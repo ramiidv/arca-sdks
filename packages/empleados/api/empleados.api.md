@@ -111,11 +111,11 @@ export function codificarArchivo(contenido: string, encoding?: EncodingArchivo):
 
 // @public
 export const CodigoMovimiento: {
-    readonly ALTA: "AT";
-    readonly BAJA: "BT";
-    readonly MODIFICACION: "MR";
-    readonly NA: "NA";
-    readonly NB: "NB";
+    readonly ALTA: 'AT';
+    readonly BAJA: 'BT';
+    readonly MODIFICACION: 'MR';
+    readonly NA: 'NA';
+    readonly NB: 'NB';
 };
 
 // @public (undocumented)

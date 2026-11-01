@@ -387,38 +387,38 @@ export interface EmailA4 {
 // @public (undocumented)
 export const ENDPOINTS: {
     readonly wsaa: {
-        readonly testing: "https://wsaahomo.afip.gov.ar/ws/services/LoginCms";
-        readonly production: "https://wsaa.afip.gov.ar/ws/services/LoginCms";
+        readonly testing: 'https://wsaahomo.afip.gov.ar/ws/services/LoginCms';
+        readonly production: 'https://wsaa.afip.gov.ar/ws/services/LoginCms';
     };
     readonly a5: {
-        readonly testing: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5";
-        readonly production: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5";
-        readonly namespace: "http://a5.soap.ws.server.puc.sr/";
-        readonly serviceId: "ws_sr_constancia_inscripcion";
+        readonly testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5';
+        readonly production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5';
+        readonly namespace: 'http://a5.soap.ws.server.puc.sr/';
+        readonly serviceId: 'ws_sr_constancia_inscripcion';
     };
     readonly a13: {
-        readonly testing: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13";
-        readonly production: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13";
-        readonly namespace: "http://a13.soap.ws.server.puc.sr/";
-        readonly serviceId: "ws_sr_padron_a13";
+        readonly testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13';
+        readonly production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13';
+        readonly namespace: 'http://a13.soap.ws.server.puc.sr/';
+        readonly serviceId: 'ws_sr_padron_a13';
     };
     readonly a4: {
-        readonly testing: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA4";
-        readonly production: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA4";
-        readonly namespace: "http://a4.soap.ws.server.puc.sr/";
-        readonly serviceId: "ws_sr_padron_a4";
+        readonly testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA4';
+        readonly production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA4';
+        readonly namespace: 'http://a4.soap.ws.server.puc.sr/';
+        readonly serviceId: 'ws_sr_padron_a4';
     };
     readonly a10: {
-        readonly testing: "https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA10";
-        readonly production: "https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA10";
-        readonly namespace: "http://a10.soap.ws.server.puc.sr/";
-        readonly serviceId: "ws_sr_padron_a10";
+        readonly testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA10';
+        readonly production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA10';
+        readonly namespace: 'http://a10.soap.ws.server.puc.sr/';
+        readonly serviceId: 'ws_sr_padron_a10';
     };
     readonly a100: {
-        readonly testing: "https://awshomo.afip.gov.ar/sr-parametros/webservices/parameterServiceA100";
-        readonly production: "https://aws.afip.gov.ar/sr-parametros/webservices/parameterServiceA100";
-        readonly namespace: "http://a100.soap.ws.server.pucParam.sr/";
-        readonly serviceId: "ws_sr_padron_a100";
+        readonly testing: 'https://awshomo.afip.gov.ar/sr-parametros/webservices/parameterServiceA100';
+        readonly production: 'https://aws.afip.gov.ar/sr-parametros/webservices/parameterServiceA100';
+        readonly namespace: 'http://a100.soap.ws.server.pucParam.sr/';
+        readonly serviceId: 'ws_sr_padron_a100';
     };
 };
 

@@ -674,8 +674,8 @@ export interface CoordenadasGPSCPE {
 
 // @public
 export const CPE_ENDPOINTS: {
-    readonly testing: "https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap";
-    readonly production: "https://cpea-ws.afip.gob.ar/wscpe/services/soap";
+    readonly testing: 'https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap';
+    readonly production: 'https://cpea-ws.afip.gob.ar/wscpe/services/soap';
 };
 
 // @public
@@ -1104,20 +1104,20 @@ export interface EditarCPEFerroviariaParams {
 
 // @public
 export const ESTADOS_CPE: {
-    readonly AC: "Activa";
-    readonly AN: "Anulada";
-    readonly BR: "Borrador";
-    readonly CF: "Activa con confirmación de arribo";
-    readonly CN: "Confirmada";
-    readonly CO: "Activa con contingencia";
-    readonly DE: "Desactivada";
-    readonly RE: "Rechazada";
-    readonly PA: "Pendiente de aceptación por el productor";
-    readonly AP: "Anulación por el productor";
-    readonly DD: "Descargado en destino";
-    readonly PE: "Pendiente de emisión";
-    readonly IN: "Inactiva";
-    readonly PO: "Pendiente de aceptación por el origen";
+    readonly AC: 'Activa';
+    readonly AN: 'Anulada';
+    readonly BR: 'Borrador';
+    readonly CF: 'Activa con confirmación de arribo';
+    readonly CN: 'Confirmada';
+    readonly CO: 'Activa con contingencia';
+    readonly DE: 'Desactivada';
+    readonly RE: 'Rechazada';
+    readonly PA: 'Pendiente de aceptación por el productor';
+    readonly AP: 'Anulación por el productor';
+    readonly DD: 'Descargado en destino';
+    readonly PE: 'Pendiente de emisión';
+    readonly IN: 'Inactiva';
+    readonly PO: 'Pendiente de aceptación por el origen';
 };
 
 // @public
@@ -1428,8 +1428,8 @@ export interface LocalidadProductorCPE {
 
 // @public
 export const LPG_ENDPOINTS: {
-    readonly testing: "https://fwshomo.afip.gov.ar/wslpg/LpgService";
-    readonly production: "https://serviciosjava.afip.gob.ar/wslpg/LpgService";
+    readonly testing: 'https://fwshomo.afip.gov.ar/wslpg/LpgService';
+    readonly production: 'https://serviciosjava.afip.gob.ar/wslpg/LpgService';
 };
 
 // @public
@@ -1747,8 +1747,8 @@ export interface VariedadSemillaCPE extends CodigoDescripcion {
 
 // @public (undocumented)
 export const WSAA_SERVICES: {
-    readonly cpe: "wscpe";
-    readonly lpg: "wslpg";
+    readonly cpe: 'wscpe';
+    readonly lpg: 'wslpg';
 };
 
 // (No @packageDocumentation comment for this package)

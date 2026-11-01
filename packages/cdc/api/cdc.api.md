@@ -65,7 +65,7 @@ export { ArcaValidationError }
 export { CallOptions }
 
 // @public
-export const CBTE_MODOS: readonly ["CAE", "CAI", "CAEA"];
+export const CBTE_MODOS: readonly ['CAE', 'CAI', 'CAEA'];
 
 // @public
 export type CbteModo = (typeof CBTE_MODOS)[number];
@@ -215,8 +215,8 @@ export { WsaaClient }
 
 // @public
 export const WSCDC_ENDPOINTS: {
-    readonly testing: "https://wswhomo.afip.gov.ar/WSCDC/service.asmx";
-    readonly production: "https://servicios1.afip.gov.ar/WSCDC/service.asmx";
+    readonly testing: 'https://wswhomo.afip.gov.ar/WSCDC/service.asmx';
+    readonly production: 'https://servicios1.afip.gov.ar/WSCDC/service.asmx';
 };
 
 // @public

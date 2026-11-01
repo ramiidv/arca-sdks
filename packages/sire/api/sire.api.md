@@ -191,12 +191,12 @@ export interface EmitirCertificadoParams {
 // @public
 export const ENDPOINTS: {
     readonly wsaa: {
-        readonly testing: "https://wsaahomo.afip.gov.ar/ws/services/LoginCms";
-        readonly production: "https://wsaa.afip.gov.ar/ws/services/LoginCms";
+        readonly testing: 'https://wsaahomo.afip.gov.ar/ws/services/LoginCms';
+        readonly production: 'https://wsaa.afip.gov.ar/ws/services/LoginCms';
     };
     readonly sire: {
-        readonly testing: "https://ws-aplicativos-reca.homo.afip.gob.ar/sire/ws/v1/c2005/2005";
-        readonly production: "https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005";
+        readonly testing: 'https://ws-aplicativos-reca.homo.afip.gob.ar/sire/ws/v1/c2005/2005';
+        readonly production: 'https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005';
     };
 };
 

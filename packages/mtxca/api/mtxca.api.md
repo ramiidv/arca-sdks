@@ -225,8 +225,8 @@ export enum Moneda {
 
 // @public (undocumented)
 export const MTXCA_ENDPOINTS: {
-    readonly testing: "https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService";
-    readonly production: "https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService";
+    readonly testing: 'https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService';
+    readonly production: 'https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService';
 };
 
 // @public

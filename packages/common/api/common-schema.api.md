@@ -12,7 +12,7 @@ export const bool: () => Field;
 
 // @public
 export const cuit: (o?: {
-    decodeAs?: "number" | "string";
+    decodeAs?: 'number' | 'string';
 }) => Field;
 
 // @public
