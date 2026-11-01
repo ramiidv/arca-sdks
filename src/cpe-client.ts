@@ -99,7 +99,7 @@ export class CpeClient {
       throw new ArcaAgroResponseError(`${SERVICE} ${method}: la respuesta no tiene <respuesta>`, kind === 'emision');
     }
     const node = respuesta as Record<string, unknown>;
-    throwOnServiceErrors(node, ['errores'], SERVICE, method);
+    throwOnServiceErrors(node, SERVICE, method);
     return node;
   }
 

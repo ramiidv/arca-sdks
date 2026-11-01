@@ -22,7 +22,6 @@ import type {
 import { requireAjuste } from './validation.js';
 
 const SERVICE = 'WSLPG';
-const ERROR_CONTAINERS = ['errores', 'erroresFormato'] as const;
 
 /** Elementos de request/response de cada operación (del WSDL). */
 interface Op {
@@ -108,7 +107,7 @@ export class LpgClient {
       responseElement: o.resp,
       soapActionFromMethod: true,
     });
-    throwOnServiceErrors(result, ERROR_CONTAINERS, SERVICE, o.method);
+    throwOnServiceErrors(result, SERVICE, o.method);
     return result;
   }
 

@@ -42,17 +42,13 @@ export class ArcaAgroResponseError extends ArcaError {
 }
 
 /**
- * Lanza `ArcaAgroServiceError` si el nodo tiene errores de negocio en alguno
- * de los contenedores indicados (con código distinto de 0 o no numérico).
+ * Lanza `ArcaAgroServiceError` si el nodo tiene errores de negocio (con código
+ * distinto de 0 o no numérico). `extractServiceErrors` de common reconoce
+ * `errores.error[]` (WSCPE, WSLPG) y `erroresFormato.error[]` (WSLPG).
  * @internal
  */
-export function throwOnServiceErrors(
-  node: Record<string, unknown>,
-  containers: readonly string[],
-  service: 'WSCPE' | 'WSLPG',
-  method: string,
-): void {
-  const errors = containers.flatMap((c) => extractServiceErrors({ errores: node[c] }));
+export function throwOnServiceErrors(node: Record<string, unknown>, service: 'WSCPE' | 'WSLPG', method: string): void {
+  const errors = extractServiceErrors(node);
   const relevant = errors.filter((e) => e.code !== 0 || e.rawCode !== undefined);
   if (relevant.length > 0) {
     throw new ArcaAgroServiceError(
