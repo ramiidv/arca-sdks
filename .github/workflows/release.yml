@@ -29,11 +29,10 @@ jobs:
       - run: npm test
       # Con changesets pendientes abre/actualiza el PR "Version Packages";
       # si no hay, publica los paquetes cuya versión no está en npm.
-      - uses: changesets/action@v1
+      - uses: changesets/action@v2
         with:
-          version: npm run version-packages
-          publish: npm run release
-          commit: "chore: version packages"
-          title: "chore: version packages"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          version-script: npm run version-packages
+          publish-script: npm run release
+          commit-message: 'chore: version packages'
+          pr-title: 'chore: version packages'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
