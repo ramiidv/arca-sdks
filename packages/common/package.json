@@ -2,39 +2,33 @@
   "name": "@ramiidv/arca-common",
   "version": "0.4.0",
   "description": "Utilidades compartidas para los SDKs de ARCA (ex AFIP) - WSAA, SOAP client, validadores, tipos comunes",
+  "author": "ramiidv",
+  "license": "MIT",
   "type": "module",
-  "main": "./dist/cjs/index.js",
-  "types": "./dist/cjs/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/esm/index.d.ts",
-        "default": "./dist/esm/index.js"
-      },
-      "require": {
-        "types": "./dist/cjs/index.d.ts",
-        "default": "./dist/cjs/index.js"
-      }
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./package.json": "./package.json"
   },
   "sideEffects": false,
   "files": [
     "dist",
-    "LICENSE",
     "README.md",
+    "LICENSE",
     "CHANGELOG.md",
     "llms.txt"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node -e \"require('fs').writeFileSync('dist/cjs/package.json', JSON.stringify({ type: 'commonjs' }))\"",
+    "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
-    "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run clean && npm run build && npm test && npm run test:smoke",
-    "test:smoke": "node scripts/smoke.mjs WsaaClient ArcaError ArcaTicketVigenteError MemoryTicketStorage FileTicketStorage CondicionIva afipSoapCall extractMethodResult checkServiceErrors extractServiceErrors formatDate parseAfipDate DocTipo Provincia"
+    "lint:pkg": "publint --strict && attw --pack . --profile esm-only"
   },
   "keywords": [
     "arca",
@@ -46,31 +40,27 @@
     "soap",
     "common"
   ],
-  "author": "ramiidv",
-  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ramiidv/arca-common.git"
+    "url": "git+https://github.com/ramiidv/arca-sdks.git",
+    "directory": "packages/common"
   },
   "homepage": "https://arca-sdk.dev/common",
   "bugs": {
-    "url": "https://github.com/ramiidv/arca-common/issues"
+    "url": "https://github.com/ramiidv/arca-sdks/issues"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19.0"
   },
   "dependencies": {
     "fast-xml-parser": "^5.0.0",
     "node-forge": "^1.3.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/node-forge": "^1.3.0",
-    "typescript": "^5.7.0",
-    "vitest": "^3.1.0"
-  },
-  "module": "./dist/esm/index.js"
+    "@types/node-forge": "^1.3.0"
+  }
 }

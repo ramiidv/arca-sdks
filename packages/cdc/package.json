@@ -2,30 +2,33 @@
   "name": "@ramiidv/arca-cdc",
   "version": "0.3.0",
   "description": "SDK para el web service WSCDC de ARCA (ex AFIP) - Constatacion de Comprobantes",
+  "author": "ramiidv",
+  "license": "MIT",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
       "default": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "sideEffects": false,
   "files": [
     "dist",
-    "llms.txt",
+    "README.md",
     "LICENSE",
-    "README.md"
+    "CHANGELOG.md",
+    "llms.txt"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run clean && npm run build && npm test"
+    "lint:pkg": "publint --strict && attw --pack . --profile esm-only"
   },
   "keywords": [
     "arca",
@@ -44,28 +47,23 @@
     "invoice",
     "verification"
   ],
-  "author": "ramiidv",
-  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ramiidv/arca-cdc.git"
+    "url": "git+https://github.com/ramiidv/arca-sdks.git",
+    "directory": "packages/cdc"
   },
   "homepage": "https://arca-sdk.dev/cdc",
   "bugs": {
-    "url": "https://github.com/ramiidv/arca-cdc/issues"
+    "url": "https://github.com/ramiidv/arca-sdks/issues"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19.0"
   },
   "dependencies": {
     "@ramiidv/arca-common": "^0.4.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.7.0",
-    "vitest": "^3.2.4"
   }
 }

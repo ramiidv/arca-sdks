@@ -1,0 +1,35 @@
+{
+  "name": "arca-sdks",
+  "private": true,
+  "description": "Monorepo de los SDKs de TypeScript para los web services de ARCA (ex AFIP)",
+  "type": "module",
+  "workspaces": [
+    "packages/common",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "clean": "npm run clean --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "vitest run",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "lint:pkg": "npm run lint:pkg --workspaces",
+    "changeset": "changeset",
+    "version-packages": "changeset version && npm install --package-lock-only",
+    "release": "npm run build && changeset publish",
+    "test:smoke": "node scripts/smoke-require.cjs"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@biomejs/biome": "^2.6.4",
+    "@changesets/cli": "^3.0.3",
+    "@types/node": "^22.0.0",
+    "publint": "^0.3.25",
+    "typescript": "^6.0.3",
+    "vitest": "^3.2.7"
+  }
+}

@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  # Trusted publishing (OIDC): npm publica sin token y agrega provenance.
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+      # Trusted publishing requiere npm >= 11.5.1.
+      - run: npm install -g npm@^11.5.1
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      # Con changesets pendientes abre/actualiza el PR "Version Packages";
+      # si no hay, publica los paquetes cuya versión no está en npm.
+      - uses: changesets/action@v1
+        with:
+          version: npm run version-packages
+          publish: npm run release
+          commit: 'chore: version packages'
+          title: 'chore: version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

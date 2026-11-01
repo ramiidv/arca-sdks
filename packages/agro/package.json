@@ -5,30 +5,30 @@
   "author": "ramiidv",
   "license": "MIT",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
       "default": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "sideEffects": false,
   "files": [
     "dist",
     "README.md",
     "LICENSE",
+    "CHANGELOG.md",
     "llms.txt"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
-    "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run clean && npm run build && npm test"
+    "lint:pkg": "publint --strict && attw --pack . --profile esm-only"
   },
   "keywords": [
     "arca",
@@ -47,24 +47,21 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ramiidv/arca-agro.git"
+    "url": "git+https://github.com/ramiidv/arca-sdks.git",
+    "directory": "packages/agro"
   },
   "homepage": "https://arca-sdk.dev/agro",
   "bugs": {
-    "url": "https://github.com/ramiidv/arca-agro/issues"
+    "url": "https://github.com/ramiidv/arca-sdks/issues"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.19.0"
   },
   "dependencies": {
     "@ramiidv/arca-common": "^0.4.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.7.0",
-    "vitest": "^3.1.0"
   }
 }

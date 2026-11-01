@@ -2,30 +2,33 @@
   "name": "@ramiidv/arca-mtxca",
   "version": "0.3.0",
   "description": "TypeScript SDK para el web service WSMTXCA de ARCA (ex AFIP) - Facturacion electronica con detalle de articulos",
+  "author": "ramiidv",
+  "license": "MIT",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
       "default": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "sideEffects": false,
   "files": [
     "dist",
-    "llms.txt",
+    "README.md",
     "LICENSE",
-    "README.md"
+    "CHANGELOG.md",
+    "llms.txt"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run clean && npm run build && npm test"
+    "lint:pkg": "publint --strict && attw --pack . --profile esm-only"
   },
   "keywords": [
     "arca",
@@ -43,28 +46,23 @@
     "soap",
     "invoice"
   ],
-  "author": "ramiidv",
-  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ramiidv/arca-mtxca.git"
+    "url": "git+https://github.com/ramiidv/arca-sdks.git",
+    "directory": "packages/mtxca"
   },
   "homepage": "https://arca-sdk.dev/mtxca",
   "bugs": {
-    "url": "https://github.com/ramiidv/arca-mtxca/issues"
+    "url": "https://github.com/ramiidv/arca-sdks/issues"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19.0"
   },
   "dependencies": {
     "@ramiidv/arca-common": "^0.4.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.7.0",
-    "vitest": "^3.2.4"
   }
 }

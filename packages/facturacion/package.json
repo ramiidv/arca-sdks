@@ -5,18 +5,12 @@
   "author": "ramiidv",
   "license": "MIT",
   "type": "module",
-  "main": "./dist/cjs/index.js",
-  "types": "./dist/cjs/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/esm/index.d.ts",
-        "default": "./dist/esm/index.js"
-      },
-      "require": {
-        "types": "./dist/cjs/index.d.ts",
-        "default": "./dist/cjs/index.js"
-      }
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -25,17 +19,16 @@
     "dist",
     "README.md",
     "LICENSE",
-    "llm.txt",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "llms.txt"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node -e \"require('fs').writeFileSync('dist/cjs/package.json', JSON.stringify({ type: 'commonjs' }))\"",
+    "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist",
-    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run clean && npm run build && npm test && npm run test:smoke",
-    "test:smoke": "node scripts/smoke.mjs Arca ArcaResultadoIncierto ArcaResultadoInciertoExpo ArcaWSFEError armarComprobante generarUrlQR resolverCbteTipo CbteTipo FileTicketStorage",
+    "lint:pkg": "publint --strict && attw --pack . --profile esm-only",
     "test:integration": "vitest run tests/integration"
   },
   "keywords": [
@@ -62,25 +55,21 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ramiidv/arca-facturacion.git"
+    "url": "git+https://github.com/ramiidv/arca-sdks.git",
+    "directory": "packages/facturacion"
   },
   "homepage": "https://arca-sdk.dev/facturacion",
   "bugs": {
-    "url": "https://github.com/ramiidv/arca-facturacion/issues"
+    "url": "https://github.com/ramiidv/arca-sdks/issues"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.19.0"
   },
   "dependencies": {
     "@ramiidv/arca-common": "^0.4.0"
-  },
-  "devDependencies": {
-    "@types/node": "^25.5.0",
-    "typescript": "^6.0.2",
-    "vitest": "^3.2.4"
-  },
-  "module": "./dist/esm/index.js"
+  }
 }
