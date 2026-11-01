@@ -37,5 +37,10 @@
     "publint": "^0.3.25",
     "typescript": "^6.0.3",
     "vitest": "^3.2.7"
+  },
+  "overrides": {
+    "@microsoft/api-extractor": {
+      "minimatch": "^11.0.1"
+    }
   }
 }
