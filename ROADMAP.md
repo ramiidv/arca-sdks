@@ -86,15 +86,19 @@ nombres de AFIP (`CbteModo`, PascalCase) y padron tiene métodos en inglés
 - Que el orden de los errores de `extraCheck` se intercale con el de los del
   schema (hoy van al final).
 
-### 4. Tests de integración contra homologación
+### 4. Tests de integración contra homologación (en curso)
 
-Solo facturacion tiene `tests/integration` (se saltean sin certificado).
+Rama `feat/integracion-homologacion`: cada paquete tiene `tests/integration`
+(dummy sin autenticación y una consulta autenticada si `ARCA_TEST_SERVICES`
+incluye el servicio), `npm run test:integration` y el workflow
+`integracion.yml` (nightly y manual, con los tickets de WSAA en `actions/cache`).
+Los dummy de los 7 servicios se probaron contra homologación el 2026-11-01.
 
-- Guardar un certificado de homologación en los secrets del repo.
-- Agregar un workflow nightly o manual que corra `dummy` y alguna consulta de
-  cada servicio contra homologación.
-- Grabar respuestas reales, sin token, sign ni CUIT reales, como fixtures para
-  los tests unitarios.
+- [ ] Cargar en el repo los secrets `ARCA_TEST_CERT`, `ARCA_TEST_KEY` y
+      `ARCA_TEST_CUIT`, y la variable `ARCA_TEST_SERVICES` con los servicios
+      autorizados para ese certificado.
+- [ ] Grabar respuestas reales, sin token, sign ni CUIT reales, como fixtures
+      para los tests unitarios (requiere el certificado).
 
 ### 5. ~~Detección de cambios incompatibles~~ (hecho)
 

@@ -15,6 +15,7 @@
     "clean": "npm run clean --workspaces",
     "typecheck": "npm run typecheck --workspaces",
     "test": "vitest run",
+    "test:integration": "vitest run integration",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "lint:pkg": "npm run lint:pkg --workspaces",
