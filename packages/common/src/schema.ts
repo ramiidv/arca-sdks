@@ -39,12 +39,22 @@ type Scalar =
   | { kind: 'int'; min?: number; max?: number; minExclusive?: boolean }
   | { kind: 'id' }
   | { kind: 'dec'; digits: number; min?: number; max?: number; minExclusive?: boolean }
-  | { kind: 'bool' }
+  | { kind: 'bool'; format: 'boolean' | 'SN' }
+  | { kind: 'double'; min?: number; max?: number }
   | { kind: 'cuit'; decodeAs: 'number' | 'string' }
   | { kind: 'date' }
   | { kind: 'date8' }
   | { kind: 'datetime' }
-  | { kind: 'base64' };
+  | { kind: 'base64' }
+  | { kind: 'custom'; encode: CustomEncoder; decode?: CustomDecoder };
+
+/**
+ * Codifica un valor de un escalar propio: devuelve el valor a enviar o llama a
+ * `fail(motivo)` (que devuelve `undefined`) si es inválido.
+ */
+export type CustomEncoder = (value: unknown, fail: (message: string) => undefined) => unknown;
+/** Decodifica el texto de un escalar propio; `fail(motivo)` lanza el error de respuesta. */
+export type CustomDecoder = (text: string, fail: (message: string) => never) => unknown;
 
 export interface Field {
   readonly scalar?: Scalar;
@@ -57,8 +67,16 @@ export interface Field {
    * `deduccion[]`). El usuario pasa/recibe directamente el array.
    */
   readonly wrap?: string;
-  /** Solo en respuestas: el elemento es obligatorio (si falta, la respuesta es inválida). */
+  /**
+   * Solo en respuestas: el elemento es obligatorio. Si falta o viene vacío, la
+   * respuesta es inválida (en una lista: si no viene el elemento/contenedor).
+   */
   readonly required?: boolean;
+  /**
+   * Nombre del elemento en el XML, si difiere del nombre de la propiedad en la
+   * API (ver `xml()`). Los errores usan el nombre de la API.
+   */
+  readonly xml?: string;
 }
 
 export type Schema = { readonly [element: string]: Field };
@@ -82,7 +100,24 @@ export const id = (): Field => ({ scalar: { kind: 'id' } });
 export const dec = (digits: number, min?: number, max?: number, minExclusive = false): Field => ({
   scalar: { kind: 'dec', digits, min, max, minExclusive },
 });
-export const bool = (): Field => ({ scalar: { kind: 'bool' } });
+/** `xsd:boolean` (`true`/`false`). */
+export const bool = (): Field => ({ scalar: { kind: 'bool', format: 'boolean' } });
+/** Booleano como `S`/`N` (convención de los servicios Java de ARCA). La API usa `boolean`. */
+export const siNo = (): Field => ({ scalar: { kind: 'bool', format: 'SN' } });
+/** `xsd:double`: número finito, sin redondeo. */
+export const double = (min?: number, max?: number): Field => ({ scalar: { kind: 'double', min, max } });
+/**
+ * Escalar propio (ej: una fecha con un formato particular del servicio, un
+ * número de documento que acepta string con guiones o number).
+ */
+export const custom = (encode: CustomEncoder, decode?: CustomDecoder): Field => ({
+  scalar: { kind: 'custom', encode, decode },
+});
+/**
+ * Usa otro nombre de elemento en el XML: `{ cuitEmisor: xml('CUITEmisor', cuit()) }`
+ * se envía y se lee como `<CUITEmisor>` pero en la API es `cuitEmisor`.
+ */
+export const xml = (name: string, f: Field): Field => ({ ...f, xml: name });
 /**
  * CUIT (11 dígitos con dígito verificador). Se envía normalizado; en respuestas
  * se devuelve como `number` (default) o como string (`cuit({ decodeAs: 'string' })`).
@@ -132,6 +167,17 @@ export function formatDateTimeAR(d: Date): string {
   return `${p('year')}-${p('month')}-${p('day')}T${p('hour')}:${p('minute')}:${p('second')}-03:00`;
 }
 
+/**
+ * Redondea a `digits` decimales, mitad hacia arriba (en valor absoluto), sobre
+ * el valor decimal que se escribió: `8.575` → `8.58` aunque en binario sea
+ * `8.57499999…`.
+ */
+export function roundHalfUp(value: number, digits: number): number {
+  const scaled = Number((Math.abs(value) * 10 ** digits).toPrecision(15));
+  const result = (Math.sign(value) * Math.round(scaled)) / 10 ** digits;
+  return result === 0 ? 0 : result;
+}
+
 const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -170,14 +216,20 @@ function encodeScalar(v: unknown, s: Scalar, path: string, errors: ValidationErr
     }
     case 'dec': {
       if (typeof v !== 'number' || !Number.isFinite(v)) return fail('debe ser un número finito');
-      const factor = 10 ** s.digits;
-      const rounded = Math.round((v + Math.sign(v) * Number.EPSILON) * factor) / factor;
+      const rounded = roundHalfUp(v, s.digits);
       if (checkRange(rounded, s.min, s.max, s.minExclusive) === undefined) return undefined;
       return rounded.toFixed(s.digits);
     }
     case 'bool':
       if (typeof v !== 'boolean') return fail('debe ser boolean');
+      if (s.format === 'SN') return v ? 'S' : 'N';
       return v ? 'true' : 'false';
+    case 'double': {
+      if (typeof v !== 'number' || !Number.isFinite(v)) return fail('debe ser un número finito');
+      return checkRange(v, s.min, s.max);
+    }
+    case 'custom':
+      return s.encode(v, fail);
     case 'cuit':
       try {
         return validateCuit(v as string | number);
@@ -255,9 +307,9 @@ function encodeObject(
       }
       if (v.length === 0) continue;
       const items = v.map((item, i) => encodeValue(item, f, `${p}[${i}]`, errors));
-      out[key] = f.wrap ? { [f.wrap]: items } : items;
+      out[f.xml ?? key] = f.wrap ? { [f.wrap]: items } : items;
     } else {
-      out[key] = encodeValue(v, f, p, errors);
+      out[f.xml ?? key] = encodeValue(v, f, p, errors);
     }
   }
   return out;
@@ -290,70 +342,133 @@ export function encodeRequest(
 // Decode (respuestas)
 // ---------------------------------------------------------------------------
 
-function textValue(v: unknown): unknown {
-  if (isPlainObject(v) && Object.hasOwn(v, '#text')) return v['#text'];
-  return v;
-}
-
 /** Crea el error que se lanza ante una respuesta con forma inválida. */
 export type ResponseErrorFactory = (message: string) => Error;
 
 const defaultResponseError: ResponseErrorFactory = (message) => new ArcaResponseError(message);
 
+/** `xsi:nil="true"` (con o sin prefijo de namespace en el atributo). */
+function isNil(v: unknown): boolean {
+  if (!isPlainObject(v)) return false;
+  const nil = v['@_nil'] ?? v['@_xsi:nil'];
+  return nil === true || nil === 'true';
+}
+
+/** Texto de un elemento simple: `#text` si tiene atributos, `''` si sólo tiene atributos. */
+function textValue(v: unknown): unknown {
+  if (!isPlainObject(v)) return v;
+  if (Object.hasOwn(v, '#text')) return v['#text'];
+  return Object.keys(v).every((k) => k.startsWith('@_')) ? '' : v;
+}
+
+/** Elemento vacío (`<x/>`, `<x></x>` o sólo con atributos). */
+function isEmptyElement(v: unknown): boolean {
+  return v === '' || (isPlainObject(v) && Object.keys(v).every((k) => k.startsWith('@_')));
+}
+
 function decodeScalar(raw: unknown, s: Scalar, path: string, error: ResponseErrorFactory): unknown {
   const v = textValue(raw);
   if (v === undefined || v === null) return undefined;
   if (typeof v === 'object') throw error(`Respuesta inválida: ${path} no es un valor simple`);
+  const text = String(v);
   switch (s.kind) {
     case 'str':
+      if (s.values && text !== '' && !s.values.includes(text)) {
+        throw error(`Respuesta inválida: ${path} tiene un valor inesperado (${text})`);
+      }
+      return text;
     case 'id':
     case 'date':
     case 'date8':
     case 'datetime':
     case 'base64':
-      return String(v);
+      return text;
     case 'cuit':
     case 'int':
-    case 'dec': {
-      if (v === '') return undefined;
-      if (s.kind === 'cuit' && s.decodeAs === 'string') return String(v);
-      const n = Number(v);
-      if (!Number.isFinite(n)) throw error(`Respuesta inválida: ${path} no es numérico (${String(v)})`);
+    case 'dec':
+    case 'double': {
+      if (text === '') return undefined;
+      if (s.kind === 'cuit' && s.decodeAs === 'string') return text;
+      const n = Number(text);
+      if (!Number.isFinite(n)) throw error(`Respuesta inválida: ${path} no es numérico (${text})`);
+      if (s.kind === 'int' && !Number.isInteger(n)) throw error(`Respuesta inválida: ${path} no es entero (${text})`);
       return n;
     }
-    case 'bool':
-      if (v === true || v === 'true' || v === 1 || v === '1') return true;
-      if (v === false || v === 'false' || v === 0 || v === '0') return false;
-      if (v === '') return undefined;
-      throw error(`Respuesta inválida: ${path} no es boolean (${String(v)})`);
+    case 'bool': {
+      if (text === '') return undefined;
+      const [yes, no] = s.format === 'SN' ? ['S', 'N'] : ['true', 'false'];
+      if (text === yes || (s.format === 'boolean' && text === '1')) return true;
+      if (text === no || (s.format === 'boolean' && text === '0')) return false;
+      throw error(`Respuesta inválida: ${path} no es ${yes}/${no} (${text})`);
+    }
+    case 'custom': {
+      if (!s.decode) return text;
+      return s.decode(text, (message) => {
+        throw error(`Respuesta inválida: ${path}: ${message}`);
+      });
+    }
   }
 }
 
-function decodeValue(v: unknown, f: Field, path: string, error: ResponseErrorFactory): unknown {
-  if (f.schema) return decodeNode(v, f.schema, path, error);
-  return decodeScalar(v, f.scalar!, path, error);
+function decodeValue(v: unknown, f: Field, path: string, ctx: DecodeContext): unknown {
+  if (f.schema) return decodeNode(v, f.schema, path, ctx);
+  return decodeScalar(v, f.scalar!, path, ctx.error);
 }
 
-function decodeNode(node: unknown, schema: Schema, path: string, error: ResponseErrorFactory): Record<string, unknown> {
-  if (node === undefined || node === null || node === '') return {};
-  if (!isPlainObject(node)) throw error(`Respuesta inválida: ${path} no es un elemento complejo`);
+interface DecodeContext {
+  error: ResponseErrorFactory;
+  emptyLists: 'array' | 'omit';
+}
+
+function decodeList(v: unknown, f: Field, p: string, ctx: DecodeContext): unknown[] | undefined {
+  let items = v;
+  if (f.wrap) {
+    if (items === undefined || items === null) return undefined;
+    if (isNil(items)) return [];
+    items = isPlainObject(items) ? items[f.wrap] : undefined;
+    // Contenedor presente pero vacío: lista vacía.
+    if (items === undefined) return [];
+  } else if (items === undefined || items === null) {
+    return undefined;
+  }
+  return ensureArray(items as unknown)
+    .filter((item) => !isNil(item))
+    .map((item, i) => decodeValue(item, f, `${p}[${i}]`, ctx));
+}
+
+function decodeNode(node: unknown, schema: Schema, path: string, ctx: DecodeContext): Record<string, unknown> {
+  if (node === undefined || node === null || isNil(node) || isEmptyElement(node)) node = {};
+  if (!isPlainObject(node)) throw ctx.error(`Respuesta inválida: ${path} no es un elemento complejo`);
   const out: Record<string, unknown> = {};
   for (const [key, f] of Object.entries(schema)) {
     const p = `${path}.${key}`;
-    let v = node[key];
+    const v = node[f.xml ?? key];
+
+    // En una lista, un `xsi:nil` suelto es una lista vacía (el elemento vino).
     if (f.minItems !== undefined) {
-      if (f.wrap) v = isPlainObject(v) ? v[f.wrap] : undefined;
-      out[key] = ensureArray(v as unknown).map((item, i) => decodeValue(item, f, `${p}[${i}]`, error));
+      const list = decodeList(v, f, p, ctx);
+      if (list === undefined) {
+        if (f.required) throw ctx.error(`Respuesta inválida: falta ${p}`);
+        if (ctx.emptyLists === 'array') out[key] = [];
+      } else {
+        out[key] = list;
+      }
       continue;
     }
-    if (v === undefined || v === null) {
-      if (f.required) throw error(`Respuesta inválida: falta ${p}`);
+
+    if (v === undefined || v === null || isNil(v)) {
+      if (f.required) throw ctx.error(`Respuesta inválida: falta ${p}`);
       continue;
     }
-    if (Array.isArray(v)) throw error(`Respuesta inválida: ${p} aparece más de una vez`);
-    const decoded = decodeValue(v, f, p, error);
-    if (decoded !== undefined) out[key] = decoded;
-    else if (f.required) throw error(`Respuesta inválida: ${p} vacío`);
+    if (Array.isArray(v)) throw ctx.error(`Respuesta inválida: ${p} aparece más de una vez`);
+
+    if (f.schema && isEmptyElement(v) && !f.required) continue;
+    const decoded = decodeValue(v, f, p, ctx);
+    if (decoded === undefined || (decoded === '' && f.required)) {
+      if (f.required) throw ctx.error(`Respuesta inválida: ${p} vacío`);
+      continue;
+    }
+    out[key] = decoded;
   }
   return out;
 }
@@ -362,15 +477,27 @@ function decodeNode(node: unknown, schema: Schema, path: string, error: Response
 export interface DecodeOptions {
   /** Error a lanzar ante una respuesta inválida (default: `ArcaResponseError`). */
   error?: ResponseErrorFactory;
+  /**
+   * Listas que no vinieron en la respuesta: `'array'` (default) las devuelve
+   * como `[]`; `'omit'` no incluye la propiedad.
+   */
+  emptyLists?: 'array' | 'omit';
 }
 
 /**
  * Decodifica un nodo de respuesta según el schema. Los campos que no están en
- * el schema se ignoran; las listas ausentes se devuelven como `[]`.
+ * el schema se ignoran; los elementos `xsi:nil` cuentan como ausentes; las
+ * listas ausentes se devuelven como `[]` (ver `emptyLists`); un objeto opcional
+ * vacío (`<x/>`) se omite.
  *
- * @throws ArcaResponseError (o el de `options.error`) si falta un elemento
- *   obligatorio o un valor no tiene el tipo del schema.
+ * @throws ArcaResponseError (o el de `options.error`) si falta (o viene vacío)
+ *   un elemento obligatorio, o un valor no tiene el tipo del schema (número no
+ *   numérico, entero con decimales, valor fuera de `values`, S/N inválido).
  */
 export function decodeResponse<T>(node: unknown, schema: Schema, path: string, options: DecodeOptions = {}): T {
-  return decodeNode(node, schema, path, options.error ?? defaultResponseError) as T;
+  const ctx: DecodeContext = {
+    error: options.error ?? defaultResponseError,
+    emptyLists: options.emptyLists ?? 'array',
+  };
+  return decodeNode(node, schema, path, ctx) as T;
 }

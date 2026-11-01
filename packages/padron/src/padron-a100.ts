@@ -16,7 +16,8 @@ const ParameterCollectionReturnSchema: Schema = {
       parameterList: list(
         obj({
           attributeList: list(obj({ name: must(str({ minLen: 1 })), value: str() })),
-          description: must(str()),
+          // minOccurs=0 en el WSDL; ARCA puede mandarla vacía.
+          description: str(),
           id: must(str({ minLen: 1 })),
         }),
       ),
@@ -66,7 +67,7 @@ export class PadronA100Client extends BasePadronClient {
     );
     return (parameterCollection.parameterList ?? []).map((p) => ({
       id: p.id,
-      descripcion: p.description,
+      descripcion: p.description ?? '',
       atributos: p.attributeList?.length ? p.attributeList : undefined,
     }));
   }

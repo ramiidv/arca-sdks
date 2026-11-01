@@ -781,8 +781,8 @@ describe('respuestas decodificadas con el schema del XSD', () => {
     const c = client(fetch);
     const err = await c.consultarCtasCtes(AUTH, { rol: 'Emisor' }).catch((e) => e);
     expect(err).toBeInstanceOf(ArcaSoapError);
-    expect(err.message).toMatch(/ctasCtes\[0\]\.opcionTransferencia vale "XYZ"/);
-    await expect(c.consultarCtasCtes(AUTH, { rol: 'Emisor' })).rejects.toThrow(/hayMas vale "X" \(se esperaba S\/N\)/);
+    expect(err.message).toMatch(/ctasCtes\[0\]\.opcionTransferencia tiene un valor inesperado \(XYZ\)/);
+    await expect(c.consultarCtasCtes(AUTH, { rol: 'Emisor' })).rejects.toThrow(/hayMas no es S\/N \(X\)/);
   });
 
   it('arrayHistorialEstados es obligatorio', async () => {

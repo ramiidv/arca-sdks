@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { ArcaResponseError, ArcaValidationError, parseXml } from '../src/index.js';
 import {
+  bool,
+  custom,
   cuit,
   date,
   date8,
@@ -14,9 +16,13 @@ import {
   must,
   obj,
   opt,
+  roundHalfUp,
+  siNo,
   str,
   wrapped,
+  xml,
 } from '../src/schema.js';
+import { double } from '../src/schema.js';
 
 describe('schema: encode', () => {
   it('redondea decimales según fractionDigits y rechaza NaN/Infinity/negativos', () => {
@@ -123,5 +129,86 @@ describe('schema: decode', () => {
   it('error propio con options.error', () => {
     class MiError extends Error {}
     expect(() => decodeResponse({}, { a: must(str()) }, 'r', { error: (m) => new MiError(m) })).toThrow(MiError);
+  });
+});
+
+describe('schema v2', () => {
+  it('roundHalfUp redondea sobre el valor decimal escrito', () => {
+    expect(roundHalfUp(8.575, 2)).toBe(8.58);
+    expect(roundHalfUp(1.005, 2)).toBe(1.01);
+    expect(roundHalfUp(-8.575, 2)).toBe(-8.58);
+    expect(roundHalfUp(-0.001, 2)).toBe(0);
+    expect(roundHalfUp(1e-7, 6)).toBe(0);
+    expect(encodeRequest({ a: 8.575 }, { a: dec(2) }, 't')).toEqual({ a: '8.58' });
+  });
+
+  it('siNo: boolean en la API, S/N en el XML', () => {
+    expect(encodeRequest({ a: true, b: false }, { a: siNo(), b: siNo() }, 't')).toEqual({ a: 'S', b: 'N' });
+    expect(decodeResponse({ a: 'S', b: 'N' }, { a: siNo(), b: siNo() }, 'r')).toEqual({ a: true, b: false });
+    expect(() => decodeResponse({ a: 'X' }, { a: siNo() }, 'r')).toThrow(ArcaResponseError);
+    expect(decodeResponse({ a: 'true' }, { a: bool() }, 'r')).toEqual({ a: true });
+  });
+
+  it('double: sin redondeo', () => {
+    expect(encodeRequest({ a: 1.23456 }, { a: double(0) }, 't')).toEqual({ a: 1.23456 });
+    expect(decodeResponse({ a: '1.5' }, { a: double() }, 'r')).toEqual({ a: 1.5 });
+  });
+
+  it('xml(): nombre distinto en el XML, errores con el nombre de la API', () => {
+    const s = { cuitEmisor: xml('CUITEmisor', cuit({ decodeAs: 'string' })) };
+    expect(encodeRequest({ cuitEmisor: '20123456786' }, s, 't')).toEqual({ CUITEmisor: '20123456786' });
+    expect(decodeResponse({ CUITEmisor: '20123456786' }, s, 'r')).toEqual({ cuitEmisor: '20123456786' });
+    try {
+      encodeRequest({ cuitEmisor: 'x' }, s, 't');
+      expect.unreachable();
+    } catch (e) {
+      expect((e as ArcaValidationError).field).toBe('cuitEmisor');
+    }
+  });
+
+  it('custom(): codificador y decodificador propios', () => {
+    const digitos = custom(
+      (v, fail) => {
+        const d = String(v).replace(/-/g, '');
+        return /^\d+$/.test(d) ? d : fail('debe tener sólo dígitos');
+      },
+      (t, fail) => (/^\d+$/.test(t) ? t : fail('no son dígitos')),
+    );
+    expect(encodeRequest({ a: '20-123' }, { a: digitos }, 't')).toEqual({ a: '20123' });
+    expect(() => encodeRequest({ a: 'x' }, { a: digitos }, 't')).toThrow(/sólo dígitos/);
+    expect(() => decodeResponse({ a: 'x' }, { a: digitos }, 'r')).toThrow(/no son dígitos/);
+  });
+
+  it('must() rechaza el valor vacío; opt(str()) lo conserva', () => {
+    expect(() => decodeResponse({ a: '' }, { a: must(str()) }, 'r')).toThrow(/vacío/);
+    expect(decodeResponse({ a: '' }, { a: opt(str()) }, 'r')).toEqual({ a: '' });
+  });
+
+  it('enteros y enums se validan al decodificar', () => {
+    expect(() => decodeResponse({ a: '1.5' }, { a: int() }, 'r')).toThrow(/no es entero/);
+    expect(() => decodeResponse({ a: 'X' }, { a: str({ values: ['A', 'R'] }) }, 'r')).toThrow(/valor inesperado/);
+  });
+
+  it('xsi:nil cuenta como ausente (también en listas)', () => {
+    const nil = { '@_nil': 'true' };
+    expect(decodeResponse({ a: nil }, { a: opt(str()) }, 'r')).toEqual({});
+    expect(() => decodeResponse({ a: nil }, { a: must(str()) }, 'r')).toThrow(/falta/);
+    expect(decodeResponse({ l: ['x', nil, 'y'] }, { l: list(str(), 0) }, 'r')).toEqual({ l: ['x', 'y'] });
+    expect(decodeResponse({ l: nil }, { l: list(str(), 0) }, 'r', { emptyLists: 'omit' })).toEqual({ l: [] });
+  });
+
+  it('must() en listas exige el elemento/contenedor', () => {
+    expect(() => decodeResponse({}, { l: must(wrapped('item', str(), 0)) }, 'r')).toThrow(/falta r.l/);
+    expect(decodeResponse({ l: '' }, { l: must(wrapped('item', str(), 0)) }, 'r')).toEqual({ l: [] });
+  });
+
+  it('objeto vacío: opcional se omite, obligatorio valida sus hijos', () => {
+    const s = { o: obj({ a: must(str()) }) };
+    expect(decodeResponse({ o: '' }, s, 'r')).toEqual({});
+    expect(() => decodeResponse({ o: '' }, { o: must(obj({ a: must(str()) })) }, 'r')).toThrow(/falta r.o.a/);
+  });
+
+  it('emptyLists: omit', () => {
+    expect(decodeResponse({}, { l: list(str(), 0) }, 'r', { emptyLists: 'omit' })).toEqual({});
   });
 });

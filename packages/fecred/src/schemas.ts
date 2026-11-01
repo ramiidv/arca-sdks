@@ -4,20 +4,15 @@
  * `@ramiidv/arca-common/schema`. El orden de las claves es el de la `xsd:sequence`.
  *
  * Las claves son los nombres de la API del SDK; cuando el elemento del XML se
- * llama distinto se indica con `as('NombreXml', ...)`. Encima del DSL, este
- * módulo agrega:
- * - `as`: renombre API ↔ XML (`cuitEmisor` ↔ `CUITEmisor`, `motivos` ↔ `arrayMotivosRechazo`, ...);
- * - `siNo`: `SiNoSimpleType` (`S`/`N`) ↔ `boolean`;
- * - `choice`: `xsd:choice` en respuestas (al menos una de las opciones);
- * - en respuestas, los valores fuera de una enumeración (`str({ values })`) y
- *   las listas `must()` ausentes se rechazan.
+ * llama distinto se indica con `as('NombreXml', ...)` (`xml()` del DSL). Lo
+ * único que se agrega al DSL es `choice`: `xsd:choice` en respuestas (al menos
+ * una de las opciones).
  *
  * @internal No se exporta desde `index.ts`.
  */
 import { ArcaSoapError, ensureArray, formatDate, validateCBU } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
 import {
-  bool,
   cuit,
   date,
   datetime,
@@ -29,8 +24,10 @@ import {
   must,
   obj,
   opt,
+  siNo,
   str,
   wrapped,
+  xml,
 } from '@ramiidv/arca-common/schema';
 import type { Field, Schema } from '@ramiidv/arca-common/schema';
 import {
@@ -49,92 +46,42 @@ export const SERVICE = 'WSFECRED';
 type Obj = Record<string, unknown>;
 
 // ---------------------------------------------------------------------------
-// Extensiones del DSL: renombre API ↔ XML, S/N y xsd:choice
+// xsd:choice (lo único que el DSL no expresa)
 // ---------------------------------------------------------------------------
 
-interface Ext {
-  /** Nombre del elemento en el XML, si difiere de la clave de la API. */
-  readonly xml?: string;
-  /** `SiNoSimpleType`: `boolean` en la API, `S`/`N` en el XML. */
-  readonly siNo?: boolean;
+interface Choice {
   /** `xsd:choice`: en las respuestas tiene que venir al menos una opción. */
   readonly choice?: boolean;
 }
 
-const ext = (f: Field) => f as Field & Ext;
-
-/** El elemento del XML se llama `xml` (la clave del schema es el nombre de la API). */
-const as = (xml: string, f: Field): Field => ({ ...f, xml }) as Field & Ext;
-/** `SiNoSimpleType`. */
-const siNo = (): Field => ({ ...bool(), siNo: true }) as Field & Ext;
+/** El elemento del XML se llama `name` (la clave del schema es el nombre de la API). */
+const as = xml;
 /** `xsd:choice` entre los elementos de `schema`. */
-const choice = (schema: Schema): Field => ({ ...obj(schema), choice: true }) as Field & Ext;
+const choice = (schema: Schema): Field => ({ ...obj(schema), choice: true }) as Field & Choice;
 
 const isObj = (v: unknown): v is Obj => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isAbsent = (v: unknown) => v === undefined || v === null || v === '';
 
-/** Aplica `item` a cada valor del campo (escalar, lista o contenedor `wrapped`). */
-function mapField(v: unknown, f: Field, path: string, item: (x: unknown, p: string) => unknown): unknown {
-  if (f.minItems === undefined) return item(v, path);
-  if (f.wrap) {
-    if (!isObj(v)) return v;
-    return { [f.wrap]: ensureArray(v[f.wrap]).map((x, i) => item(x, `${path}[${i}]`)) };
-  }
-  return Array.isArray(v) ? v.map((x, i) => item(x, `${path}[${i}]`)) : item(v, path);
-}
-
-/** Request ya codificado por `encodeRequest` (claves de la API) → elementos del XML. */
-function toXml(node: Obj, schema: Schema): Obj {
-  const out: Obj = {};
-  for (const [key, f] of Object.entries(schema)) {
-    if (node[key] === undefined) continue;
-    out[ext(f).xml ?? key] = mapField(node[key], f, key, (x) => {
-      if (f.schema) return toXml(x as Obj, f.schema);
-      if (ext(f).siNo) return x === 'true' ? 'S' : 'N';
-      return x;
-    });
-  }
-  return out;
-}
-
 const responseError = (message: string) => new ArcaSoapError(`${SERVICE}: ${message}`, { uncertain: true });
 
-/** Respuesta del XML → claves de la API y valores que entiende `decodeResponse`. */
-function fromXml(node: unknown, schema: Schema, path: string): unknown {
-  if (!isObj(node)) return node;
-  const out: Obj = {};
+/** Verifica que cada `choice` de la respuesta traiga al menos una opción. */
+function checkChoices(node: unknown, schema: Schema, path: string): void {
+  if (!isObj(node)) return;
   for (const [key, f] of Object.entries(schema)) {
-    const p = `${path}.${key}`;
-    const v = node[ext(f).xml ?? key];
-    if (v === undefined || v === null) {
-      // `decodeResponse` devuelve `[]` para cualquier lista ausente, aun con `must()`.
-      if (f.required && f.minItems !== undefined) throw responseError(`Respuesta inválida: falta ${p}`);
-      continue;
-    }
-    out[key] = mapField(v, f, p, (x, xp) => fromXmlValue(x, f, xp));
-  }
-  return out;
-}
-
-function fromXmlValue(x: unknown, f: Field, path: string): unknown {
-  if (f.schema) {
-    if (ext(f).choice) {
-      const options = Object.entries(f.schema).map(([k, c]) => ext(c).xml ?? k);
-      if (!isObj(x) || options.every((k) => isAbsent(x[k]))) {
-        throw responseError(`Respuesta inválida: falta ${path}.${options.join('|')}`);
+    if (!f.schema) continue;
+    let v = node[f.xml ?? key];
+    if (f.wrap) v = isObj(v) ? v[f.wrap] : undefined;
+    ensureArray(v).forEach((item, i) => {
+      const p = f.minItems === undefined ? `${path}.${key}` : `${path}.${key}[${i}]`;
+      if ((f as Field & Choice).choice) {
+        const options = Object.entries(f.schema!).map(([k, c]) => c.xml ?? k);
+        if (!isObj(item) || options.every((k) => isAbsent(item[k]))) {
+          throw responseError(`Respuesta inválida: falta ${p}.${options.join('|')}`);
+        }
       }
-    }
-    return fromXml(x, f.schema, path);
+      checkChoices(item, f.schema!, p);
+    });
   }
-  if (typeof x !== 'string' || x === '') return x;
-  if (ext(f).siNo) {
-    if (x === 'S') return 'true';
-    if (x === 'N') return 'false';
-    throw responseError(`Respuesta inválida: ${path} vale "${x}" (se esperaba S/N)`);
-  }
-  const values = f.scalar?.kind === 'str' ? f.scalar.values : undefined;
-  if (values && !values.includes(x)) throw responseError(`Respuesta inválida: ${path} vale "${x}" (valor desconocido)`);
-  return x;
 }
 
 /**
@@ -173,7 +120,7 @@ function checkRequest(input: Obj, errors: ValidationErrorDetail[]): void {
  * los errores) y lo devuelve con los nombres y valores del XML, en orden XSD.
  */
 export function encode(input: unknown, schema: Schema, method: string): Obj {
-  return toXml(encodeRequest(input, schema, method, checkRequest), schema);
+  return encodeRequest(input, schema, method, checkRequest);
 }
 
 /**
@@ -181,7 +128,8 @@ export function encode(input: unknown, schema: Schema, method: string): Obj {
  * que no cumple el schema lanza `ArcaSoapError` (`uncertain`).
  */
 export function decode<T>(node: unknown, schema: Schema, path: string): T {
-  return decodeResponse<T>(fromXml(node, schema, path), schema, path, { error: responseError });
+  checkChoices(node, schema, path);
+  return decodeResponse<T>(node, schema, path, { error: responseError });
 }
 
 // ---------------------------------------------------------------------------
