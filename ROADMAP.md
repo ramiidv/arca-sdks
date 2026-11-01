@@ -10,7 +10,7 @@ Primera versión publicada desde el monorepo (con trusted publishing y provenanc
 | Paquete | Versión | Notas |
 |---|---|---|
 | `@ramiidv/arca-common` | 0.5.0 | `ArcaSdkBase`, `SoapServiceClient`, `/schema` (DSL del XSD), `/testing` (mocks y contratos contra el WSDL) |
-| `@ramiidv/arca-facturacion` | 5.0.0 | ESM-only. WSFE/WSFEX todavía sin el DSL |
+| `@ramiidv/arca-facturacion` | 5.0.0 | ESM-only. WSFE/WSFEX sobre el DSL en `main` (sin publicar) |
 | `@ramiidv/arca-padron` | 0.5.0 | DSL + contratos |
 | `@ramiidv/arca-agro` | 0.4.0 | DSL + contratos (WSCPE, WSLPG) |
 | `@ramiidv/arca-cdc` | 0.4.0 | DSL + contratos |
@@ -25,10 +25,10 @@ configuración, `wsaa`, `cuit`, `production`, `on`/`off`, `config.wsaa`,
 
 ## Pendientes operativos
 
-- [ ] Desplegar arca-sdk.dev (`~/projects/arca-sdk-web/landing`). Ya está
+- [ ] Desplegar arca-sdk.dev (`../arca-sdk-web/landing`). Ya está
       actualizado y compilado con las versiones nuevas, los links al
       monorepo, `ArcaFacturacion` y Node 20.19+; falta `npx vercel deploy --prod`.
-- [ ] Mergear en arca-server la branch `chore/sdks-nuevas-versiones`, que sube
+- [ ] Mergear en arca-server (`../arca-server`) la branch `chore/sdks-nuevas-versiones`, que sube
       todos los SDKs a estas versiones (typecheck, tests y build verificados) y
       después redesplegar.
 - [ ] Archivar los 9 repos anteriores (`ramiidv/arca-common`,
@@ -40,21 +40,15 @@ configuración, `wsaa`, `cuit`, `production`, `on`/`off`, `config.wsaa`,
 
 En orden de prioridad.
 
-### 1. facturacion: WSFE y WSFEX sobre el DSL
+### 1. ~~facturacion: WSFE y WSFEX sobre el DSL~~ (hecho, pendiente de release)
 
-Es el paquete más usado y el único que todavía serializa y parsea a mano
-(`src/wsfe.ts`, `src/wsfex.ts`, `src/facturacion.ts`, `src/validation.ts`).
+Changeset `wsfe-wsfex-dsl` (minor). `src/schemas.ts` describe requests y
+respuestas, `src/decode.ts` decodifica respetando la forma `X | X[]` de los
+tipos públicos y `tests/contract.test.ts` compara contra los dos WSDL.
 
-- Describir los requests y respuestas con `@ramiidv/arca-common/schema`. Son
-  servicios ASMX: elementos `qualified`, nombres en PascalCase y fechas
-  `AAAAMMDD` (`date8()`).
-- Pedir las respuestas con `parseNumbers: false` y decodificarlas con el
-  schema. Hoy no se pierden datos porque los campos largos (CAE, CUIT, fechas)
-  quedan como string por `skipLike`, pero los códigos y descripciones cortos
-  pueden perder ceros y decimales.
-- Agregar `tests/contract.test.ts` contra `wsdl/wsfev1.wsdl` y
-  `wsdl/wsfexv1.wsdl`, como en los otros paquetes.
-- Mantener la API pública. Es un minor.
+Queda para facturacion 6.0: las respuestas crudas pueden pasar a usar arrays
+siempre (`wrapped()`), sin el `restoreSingles` de `decode.ts`. También
+`validation.ts` podría apoyarse en los schemas en vez de validar a mano.
 
 ### 2. Próximas majors: quitar lo deprecado
 
@@ -64,6 +58,7 @@ Es el paquete más usado y el único que todavía serializa y parsea a mano
 | facturacion 6.0 | `serverStatus()`, `serverStatusExpo()` y su `ServerStatus` en mayúsculas | `status()` |
 | facturacion 6.0 | `src/padron.ts`, `consultarCuit`, `consultarCuitDetalle`, `endpoints.padronA5/A13` | `@ramiidv/arca-padron` |
 | facturacion 6.0 | `requestTimeoutMs` | `timeout` |
+| facturacion 6.0 | Forma `X \| X[]` en las respuestas crudas (`FeDetResp`, `Observaciones`, `Iva`...) | Arrays siempre |
 | agro 0.5 | `serverStatus()` | `status()` |
 | fecred 0.5 | `ArcaFecred.fecred`, `FecredClientConfig.soapOptions`/`onEvent` | `client`, `transport` |
 | mtxca 0.5 | `endpoint`, `wsaaEndpoint` | `endpoints: { mtxca, wsaa }` |

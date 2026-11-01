@@ -1,7 +1,11 @@
 import { SoapServiceClient, ensureArray } from '@ramiidv/arca-common';
 import type { CallOptions, SoapOperationKind } from '@ramiidv/arca-common';
 import { ENDPOINTS, WSFEX_ERRORES_INTERNOS, WSFEX_NAMESPACE } from './constants.js';
+import { encodeRequest } from '@ramiidv/arca-common/schema';
+import type { Schema } from '@ramiidv/arca-common/schema';
+import { decodeArca } from './decode.js';
 import { ArcaResultadoInciertoExpo, ArcaSoapError, ArcaWSFEError } from './errors.js';
+import * as S from './schemas.js';
 import { serverStatusDe, transportDe } from './wsfe.js';
 import type { WsClientOptions } from './wsfe.js';
 import type {
@@ -9,6 +13,8 @@ import type {
   WsfexInvoice,
   WsfexAuthResult,
   WsfexGetCmpResult,
+  WsfexLastCmpResult,
+  WsfexLastIdResult,
   WsfexParamItem,
   WsfexCotizacion,
   WsfexPtoVenta,
@@ -42,10 +48,15 @@ function sinCampo(method: string, campo: string): ArcaSoapError {
   return new ArcaSoapError(`Respuesta de ${method} sin ${campo}`);
 }
 
+const lista = <T>(v: T[] | undefined) => (v && v.length > 0 ? v : undefined);
+
 /**
  * Arma el `Cmp` (ClsFEXRequest) en el orden de la secuencia del WSDL de WSFEX,
  * envolviendo los arrays (`Permisos/Permiso`, `Cmps_asoc/Cmp_asoc`,
- * `Items/Item`, `Opcionales/Opcional`, `Actividades/Actividad`).
+ * `Items/Item`, `Opcionales/Opcional`, `Actividades/Actividad`). Los
+ * opcionales vacíos no se envían, salvo `Permiso_existente: ""`.
+ *
+ * @throws ArcaValidationError si un campo no tiene el tipo del WSDL.
  */
 export function buildFexCmp(inv: WsfexInvoice): R {
   const cmp: R = {
@@ -55,61 +66,44 @@ export function buildFexCmp(inv: WsfexInvoice): R {
     Punto_vta: inv.Punto_vta,
     Cbte_nro: inv.Cbte_nro,
     Tipo_expo: inv.Tipo_expo,
+    // "" se envía como elemento vacío: el manual pide Permiso_existente "vacío" fuera de Factura E de bienes.
+    Permiso_existente: inv.Permiso_existente ?? undefined,
+    Permisos: lista(inv.Permisos)?.map((p) => ({ Id_permiso: p.Id_permiso, Dst_merc: p.Dst_merc })),
+    Dst_cmp: inv.Dst_cmp,
+    Cliente: inv.Cliente,
+    Cuit_pais_cliente: inv.Cuit_pais_cliente,
+    Domicilio_cliente: inv.Domicilio_cliente,
+    Id_impositivo: inv.Id_impositivo || undefined,
+    Moneda_Id: inv.Moneda_Id,
+    Moneda_ctz: inv.Moneda_ctz,
+    CanMisMonExt: inv.CanMisMonExt || undefined,
+    Obs_comerciales: inv.Obs_comerciales || undefined,
+    Imp_total: inv.Imp_total,
+    Obs: inv.Obs || undefined,
+    Cmps_asoc: lista(inv.Cmps_asoc)?.map((c) => ({
+      Cbte_tipo: c.Cbte_tipo,
+      Cbte_punto_vta: c.Cbte_punto_vta,
+      Cbte_nro: c.Cbte_nro,
+      Cbte_cuit: c.Cbte_cuit,
+    })),
+    Forma_pago: inv.Forma_pago || undefined,
+    Incoterms: inv.Incoterms || undefined,
+    Incoterms_Ds: inv.Incoterms_Ds || undefined,
+    Idioma_cbte: inv.Idioma_cbte,
+    Items: lista(inv.Items)?.map((i) => ({
+      Pro_codigo: i.Pro_codigo || undefined,
+      Pro_ds: i.Pro_ds,
+      Pro_qty: i.Pro_qty,
+      Pro_umed: i.Pro_umed,
+      Pro_precio_uni: i.Pro_precio_uni,
+      Pro_bonificacion: i.Pro_bonificacion,
+      Pro_total_item: i.Pro_total_item,
+    })),
+    Opcionales: lista(inv.Opcionales)?.map((o) => ({ Id: o.Id, Valor: o.Valor })),
+    Fecha_pago: inv.Fecha_pago || undefined,
+    Actividades: lista(inv.Actividades)?.map((a) => ({ Id: a.Id })),
   };
-  // "" se envía como elemento vacío: el manual pide Permiso_existente "vacío" fuera de Factura E de bienes.
-  if (inv.Permiso_existente !== undefined && inv.Permiso_existente !== null)
-    cmp.Permiso_existente = inv.Permiso_existente;
-  if (inv.Permisos && inv.Permisos.length > 0) {
-    cmp.Permisos = { Permiso: inv.Permisos.map((p) => ({ Id_permiso: p.Id_permiso, Dst_merc: p.Dst_merc })) };
-  }
-  cmp.Dst_cmp = inv.Dst_cmp;
-  cmp.Cliente = inv.Cliente;
-  cmp.Cuit_pais_cliente = inv.Cuit_pais_cliente;
-  cmp.Domicilio_cliente = inv.Domicilio_cliente;
-  if (inv.Id_impositivo) cmp.Id_impositivo = inv.Id_impositivo;
-  cmp.Moneda_Id = inv.Moneda_Id;
-  cmp.Moneda_ctz = inv.Moneda_ctz;
-  if (inv.CanMisMonExt) cmp.CanMisMonExt = inv.CanMisMonExt;
-  if (inv.Obs_comerciales) cmp.Obs_comerciales = inv.Obs_comerciales;
-  cmp.Imp_total = inv.Imp_total;
-  if (inv.Obs) cmp.Obs = inv.Obs;
-  if (inv.Cmps_asoc && inv.Cmps_asoc.length > 0) {
-    cmp.Cmps_asoc = {
-      Cmp_asoc: inv.Cmps_asoc.map((c) => ({
-        Cbte_tipo: c.Cbte_tipo,
-        Cbte_punto_vta: c.Cbte_punto_vta,
-        Cbte_nro: c.Cbte_nro,
-        Cbte_cuit: c.Cbte_cuit,
-      })),
-    };
-  }
-  if (inv.Forma_pago) cmp.Forma_pago = inv.Forma_pago;
-  if (inv.Incoterms) cmp.Incoterms = inv.Incoterms;
-  if (inv.Incoterms_Ds) cmp.Incoterms_Ds = inv.Incoterms_Ds;
-  cmp.Idioma_cbte = inv.Idioma_cbte;
-  if (inv.Items && inv.Items.length > 0) {
-    cmp.Items = {
-      Item: inv.Items.map((i) => {
-        const item: R = {};
-        if (i.Pro_codigo !== undefined && i.Pro_codigo !== '') item.Pro_codigo = i.Pro_codigo;
-        item.Pro_ds = i.Pro_ds;
-        item.Pro_qty = i.Pro_qty;
-        item.Pro_umed = i.Pro_umed;
-        item.Pro_precio_uni = i.Pro_precio_uni;
-        item.Pro_bonificacion = i.Pro_bonificacion;
-        item.Pro_total_item = i.Pro_total_item;
-        return item;
-      }),
-    };
-  }
-  if (inv.Opcionales && inv.Opcionales.length > 0) {
-    cmp.Opcionales = { Opcional: inv.Opcionales.map((o) => ({ Id: o.Id, Valor: o.Valor })) };
-  }
-  if (inv.Fecha_pago) cmp.Fecha_pago = inv.Fecha_pago;
-  if (inv.Actividades && inv.Actividades.length > 0) {
-    cmp.Actividades = { Actividad: inv.Actividades.map((a) => ({ Id: a.Id })) };
-  }
-  return cmp;
+  return encodeRequest(cmp, S.FEX_CMP_REQ, 'FEXAuthorize.Cmp');
 }
 
 /** Cliente de bajo nivel de WSFEX (Factura electrónica de exportación). */
@@ -122,20 +116,26 @@ export class WsfexClient extends SoapServiceClient {
     });
   }
 
-  /** WSFEX es ASMX con `elementFormDefault="qualified"`, como WSFEv1. */
+  /**
+   * WSFEX es ASMX con `elementFormDefault="qualified"`, como WSFEv1. La
+   * respuesta queda como texto (`parseNumbers: false`): la convierte el schema
+   * de cada operación.
+   */
   private call(method: string, params: R, opts?: CallOptions & { kind?: SoapOperationKind }): Promise<R> {
     return this.soapCall(method, params, {
       qualified: true,
       soapActionFromMethod: true,
+      parseNumbers: false,
       kind: opts?.kind,
       signal: opts?.signal,
     });
   }
 
-  private async consulta(method: string, params: R, opts?: CallOptions): Promise<R> {
+  /** Consulta: lanza `ArcaWSFEError` si ARCA devuelve `FEXErr` y decodifica la respuesta. */
+  private async consulta<T>(method: string, params: R, response: Schema, opts?: CallOptions): Promise<T> {
     const result = await this.call(method, params, opts);
     checkFexErr(result);
-    return result;
+    return decodeArca<T>(result, response, method);
   }
 
   // ============================================================
@@ -151,9 +151,10 @@ export class WsfexClient extends SoapServiceClient {
    * - `ArcaWSFEError`: WSFEX rechazó el request (`FEXErr`).
    */
   async authorize(auth: WsfeAuth, invoice: WsfexInvoice, opts?: CallOptions): Promise<WsfexAuthResult> {
+    const cmp = buildFexCmp(invoice);
     let result: R;
     try {
-      result = await this.call('FEXAuthorize', { Auth: auth, Cmp: buildFexCmp(invoice) }, { ...opts, kind: 'emision' });
+      result = await this.call('FEXAuthorize', { Auth: auth, Cmp: cmp }, { ...opts, kind: 'emision' });
     } catch (err) {
       if (err instanceof ArcaSoapError && err.uncertain) throw new ArcaResultadoInciertoExpo(invoice, { cause: err });
       throw err;
@@ -167,34 +168,47 @@ export class WsfexClient extends SoapServiceClient {
     }
     if (err) throw new ArcaWSFEError([{ code: err.ErrCode, msg: err.ErrMsg }], 'WSFEX');
 
-    const auth_ = result.FEXResultAuth as R | undefined;
-    if (!auth_ || (auth_.Resultado !== 'A' && auth_.Resultado !== 'R')) {
+    let decoded: WsfexAuthResult;
+    try {
+      decoded = decodeArca<WsfexAuthResult>(result, S.FEX_AUTHORIZE_RESP, 'FEXAuthorize');
+    } catch (cause) {
+      throw new ArcaResultadoInciertoExpo(invoice, { cause });
+    }
+    const r = decoded.FEXResultAuth;
+    if (!r || (r.Resultado !== 'A' && r.Resultado !== 'R')) {
       throw new ArcaResultadoInciertoExpo(invoice, {
         cause: new ArcaSoapError('Respuesta de FEXAuthorize sin FEXResultAuth.Resultado', { uncertain: true }),
       });
     }
-    if (auth_.Cae !== undefined && auth_.Cae !== null) auth_.Cae = String(auth_.Cae);
-    return result as WsfexAuthResult;
+    return decoded;
   }
 
   /** Último comprobante autorizado (`FEXGetLast_CMP`). */
   async getLastCmp(auth: WsfeAuth, ptoVta: number, cbteTipo: number, opts?: CallOptions): Promise<number> {
-    const result = await this.consulta(
+    const result = await this.consulta<WsfexLastCmpResult>(
       'FEXGetLast_CMP',
-      { Auth: { Token: auth.Token, Sign: auth.Sign, Cuit: auth.Cuit, Pto_venta: ptoVta, Cbte_Tipo: cbteTipo } },
+      {
+        Auth: {
+          Token: auth.Token,
+          Sign: auth.Sign,
+          Cuit: auth.Cuit,
+          ...encodeRequest({ Pto_venta: ptoVta, Cbte_Tipo: cbteTipo }, S.FEX_LAST_CMP_REQ, 'FEXGetLast_CMP'),
+        },
+      },
+      S.FEX_LAST_CMP_RESP,
       opts,
     );
     const nro = result.FEXResult_LastCMP?.Cbte_nro;
-    if (nro === undefined || nro === null) throw sinCampo('FEXGetLast_CMP', 'FEXResult_LastCMP.Cbte_nro');
-    return Number(nro);
+    if (nro === undefined) throw sinCampo('FEXGetLast_CMP', 'FEXResult_LastCMP.Cbte_nro');
+    return nro;
   }
 
   /** Último `Id` de request usado (`FEXGetLast_ID`). */
   async getLastId(auth: WsfeAuth, opts?: CallOptions): Promise<number> {
-    const result = await this.consulta('FEXGetLast_ID', { Auth: auth }, opts);
+    const result = await this.consulta<WsfexLastIdResult>('FEXGetLast_ID', { Auth: auth }, S.FEX_LAST_ID_RESP, opts);
     const id = result.FEXResultGet?.Id;
-    if (id === undefined || id === null) throw sinCampo('FEXGetLast_ID', 'FEXResultGet.Id');
-    return Number(id);
+    if (id === undefined) throw sinCampo('FEXGetLast_ID', 'FEXResultGet.Id');
+    return id;
   }
 
   /** Consulta un comprobante de exportación (`FEXGetCMP`). */
@@ -205,15 +219,19 @@ export class WsfexClient extends SoapServiceClient {
     cbteNro: number,
     opts?: CallOptions,
   ): Promise<WsfexGetCmpResult> {
-    const result = await this.consulta(
+    const cmp = encodeRequest(
+      { Cbte_tipo: cbteTipo, Punto_vta: ptoVta, Cbte_nro: cbteNro },
+      S.FEX_GET_CMP_REQ,
       'FEXGetCMP',
-      { Auth: auth, Cmp: { Cbte_tipo: cbteTipo, Punto_vta: ptoVta, Cbte_nro: cbteNro } },
+    );
+    const result = await this.consulta<WsfexGetCmpResult>(
+      'FEXGetCMP',
+      { Auth: auth, Cmp: cmp },
+      S.FEX_GET_CMP_RESP,
       opts,
     );
     if (!result.FEXResultGet) throw sinCampo('FEXGetCMP', 'FEXResultGet');
-    const r = result.FEXResultGet as R;
-    if (r.Cae !== undefined && r.Cae !== null) r.Cae = String(r.Cae);
-    return result as WsfexGetCmpResult;
+    return result;
   }
 
   /** Estado de los servidores de WSFEX (`FEXDummy`). */
@@ -227,12 +245,16 @@ export class WsfexClient extends SoapServiceClient {
     monId: string,
     opts?: CallOptions & { fchCotiz?: string },
   ): Promise<WsfexCotizacion> {
-    const params: R = { Auth: auth, Mon_id: monId };
-    if (opts?.fchCotiz !== undefined) params.FchCotiz = opts.fchCotiz;
-    const result = await this.consulta('FEXGetPARAM_Ctz', params, opts);
-    const r = result.FEXResultGet as R | undefined;
-    if (!r || r.Mon_ctz === undefined || r.Mon_ctz === null) throw sinCampo('FEXGetPARAM_Ctz', 'FEXResultGet.Mon_ctz');
-    return { Mon_ctz: Number(r.Mon_ctz), ...(r.Mon_fecha != null && { Mon_fecha: String(r.Mon_fecha) }) };
+    const params = encodeRequest({ Mon_id: monId, FchCotiz: opts?.fchCotiz }, S.FEX_CTZ_REQ, 'FEXGetPARAM_Ctz');
+    const result = await this.consulta<{ FEXResultGet?: WsfexCotizacion }>(
+      'FEXGetPARAM_Ctz',
+      { Auth: auth, ...params },
+      S.FEX_CTZ_RESP,
+      opts,
+    );
+    const r = result.FEXResultGet;
+    if (!r) throw sinCampo('FEXGetPARAM_Ctz', 'FEXResultGet.Mon_ctz');
+    return r;
   }
 
   /**
@@ -240,23 +262,34 @@ export class WsfexClient extends SoapServiceClient {
    * que informa ARCA (ej: "OK").
    */
   async checkPermiso(auth: WsfeAuth, idPermiso: string, dstMerc: number, opts?: CallOptions): Promise<string> {
-    const result = await this.consulta(
+    const params = encodeRequest(
+      { ID_Permiso: idPermiso, Dst_merc: dstMerc },
+      S.FEX_CHECK_PERMISO_REQ,
       'FEXCheck_Permiso',
-      { Auth: auth, ID_Permiso: idPermiso, Dst_merc: dstMerc },
+    );
+    const result = await this.consulta<{ FEXResultGet?: { Status?: string } }>(
+      'FEXCheck_Permiso',
+      { Auth: auth, ...params },
+      S.FEX_CHECK_PERMISO_RESP,
       opts,
     );
     const status = result.FEXResultGet?.Status;
-    if (status === undefined || status === null) throw sinCampo('FEXCheck_Permiso', 'FEXResultGet.Status');
-    return String(status);
+    if (status === undefined) throw sinCampo('FEXCheck_Permiso', 'FEXResultGet.Status');
+    return status;
   }
 
   // ============================================================
   // Parámetros
   // ============================================================
 
-  private async getParamList<T>(method: string, itemKey: string, params: R, opts?: CallOptions): Promise<T[]> {
-    const result = await this.consulta(method, params, opts);
-    return ensureArray(result.FEXResultGet?.[itemKey] as T | T[] | undefined);
+  private async getParamList<T>(
+    method: string,
+    itemKey: keyof typeof S.FEX_TABLAS,
+    params: R,
+    opts?: CallOptions,
+  ): Promise<T[]> {
+    const result = await this.consulta<{ FEXResultGet?: T[] }>(method, params, S.tablaWsfex(itemKey), opts);
+    return result.FEXResultGet ?? [];
   }
 
   /** Tipos de comprobante de exportación. */
@@ -271,9 +304,17 @@ export class WsfexClient extends SoapServiceClient {
 
   /** Monedas con su cotización a una fecha (`FEXGetPARAM_MON_CON_COTIZACION`). */
   async getMonedasConCotizacion(auth: WsfeAuth, opts?: CallOptions & { fechaCtz?: string }): Promise<WsfexParamItem[]> {
-    const params: R = { Auth: auth };
-    if (opts?.fechaCtz !== undefined) params.Fecha_CTZ = opts.fechaCtz;
-    return this.getParamList('FEXGetPARAM_MON_CON_COTIZACION', 'ClsFEXResponse_Mon_CON_Cotizacion', params, opts);
+    const params = encodeRequest(
+      { Fecha_CTZ: opts?.fechaCtz },
+      S.FEX_MON_CON_COTIZACION_REQ,
+      'FEXGetPARAM_MON_CON_COTIZACION',
+    );
+    return this.getParamList(
+      'FEXGetPARAM_MON_CON_COTIZACION',
+      'ClsFEXResponse_Mon_CON_Cotizacion',
+      { Auth: auth, ...params },
+      opts,
+    );
   }
 
   /** Países destino (`FEXGetPARAM_DST_pais`). */
