@@ -36,8 +36,11 @@ export function decode<T>(node: unknown, schema: Schema, path: string): T {
  * lanza `ArcaPadronError`: nunca se inventa una persona vacía.
  */
 export function decodePersona<T>(result: unknown, persona: Schema, method: string): T {
-  return decode<{ persona: T }>(result, { persona: must(obj(persona)) }, `${method}.personaReturn`).persona;
+  return decode<{ persona: T }>(result, personaReturnSchema(persona), `${method}.personaReturn`).persona;
 }
+
+/** Schema del `personaReturn` (A4, A10, A13) que envuelve a un `persona`. */
+export const personaReturnSchema = (persona: Schema): Schema => ({ persona: must(obj(persona)) });
 
 // ---------------------------------------------------------------------------
 // Tipos comunes de los WSDL de A4, A10 y constancia (orden del WSDL)

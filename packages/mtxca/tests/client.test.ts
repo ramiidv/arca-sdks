@@ -680,6 +680,16 @@ describe('CAEA', () => {
     ]);
   });
 
+  it('informarCAEANoUtilizadoPtoVta: valida CAEA y punto de venta juntos, sin llamar', async () => {
+    const m = mockFetch();
+    const err = await client(m.fetch)
+      .informarCAEANoUtilizadoPtoVta(AUTH, '123', 0)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    expect((err as ArcaValidationError).details.map((d) => d.field)).toEqual(['caea', 'numeroPuntoVenta']);
+    expect(m.calls).toHaveLength(0);
+  });
+
   it('consultarPtosVtaCAEANoInformados: lista vacía sin errores, error lanza', async () => {
     const m = mockFetch(
       soapResponse('consultarPtosVtaCAEANoInformadosResponse', '<arrayPuntosVenta/>'),

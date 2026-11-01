@@ -8,8 +8,11 @@ export type PadronA100ClientConfig = PadronClientConfig;
 
 const METHOD = 'getParameterCollectionByName';
 
-/** Respuesta (WSDL parameterServiceA100, orden del WSDL; los `must()` son los que el SDK exige). */
-const ParameterCollectionReturnSchema: Schema = {
+/**
+ * Respuesta (WSDL parameterServiceA100, orden del WSDL; los `must()` son los que el SDK exige).
+ * @internal Exportado para los tests de contrato.
+ */
+export const ParameterCollectionReturnSchema: Schema = {
   parameterCollection: must(
     obj({
       name: str(),

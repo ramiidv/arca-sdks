@@ -45,8 +45,11 @@ export class PadronA13Client extends BasePadronClient {
       opts,
     );
     return (
-      decode<{ idPersona?: string[] }>(result, IdPersonaListReturn, 'getIdPersonaListByDocumento.idPersonaListReturn')
-        .idPersona ?? []
+      decode<{ idPersona?: string[] }>(
+        result,
+        IdPersonaListReturnSchema,
+        'getIdPersonaListByDocumento.idPersonaListReturn',
+      ).idPersona ?? []
     );
   }
 }
@@ -111,6 +114,7 @@ export const PersonaA13Schema: Schema = {
   tipoPersona: must(str({ minLen: 1 })),
 };
 
-const IdPersonaListReturn: Schema = {
+/** @internal Exportado para los tests de contrato. */
+export const IdPersonaListReturnSchema: Schema = {
   idPersona: list(id()),
 };

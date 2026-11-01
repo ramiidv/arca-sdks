@@ -63,11 +63,11 @@ export const CMP_RESP: Schema = {
   Opcionales: wrapped('Opcional', obj({ Id: must(str()), Valor: opt(str()) }), 0),
 };
 
-/** `CmpResponse` sin `CmpResp` (que se decodifica aparte) ni `Errors` (`checkServiceErrors`). */
+/** `CmpResponse` (en orden del WSDL) sin `CmpResp` (que se decodifica aparte) ni `Errors` (`checkServiceErrors`). */
 export const CONSTATAR_RESP: Schema = {
   Resultado: must(str()),
-  FchProceso: must(str()),
   Observaciones: wrapped('Obs', obj(MENSAJE), 0),
+  FchProceso: must(str()),
   Events: wrapped('Evt', obj(MENSAJE), 0),
 };
 

@@ -98,7 +98,11 @@ async function download(file, url) {
 }
 
 /** Normaliza saltos de línea y espacios finales, para que los diffs sean de contenido. */
-const normalize = (s) => `${s.replace(/\r\n/g, '\n').replace(/[ \t]+$/gm, '').trimEnd()}\n`;
+const normalize = (s) =>
+  `${s
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+$/gm, '')
+    .trimEnd()}\n`;
 
 const args = process.argv.slice(2);
 const write = args.includes('--write');

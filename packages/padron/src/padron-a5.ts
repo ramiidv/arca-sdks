@@ -70,7 +70,7 @@ export class PadronA5Client extends BasePadronClient {
     const result = await this.call('getPersonaList_v2', { ...this.authParams(auth), idPersona }, opts);
     const { persona } = decode<{ persona?: PersonaReturn[] }>(
       result,
-      { persona: list(obj(PersonaReturnSchema)) },
+      PersonaListReturnSchema,
       'getPersonaList_v2.personaListReturn',
     );
     return (persona ?? []).map(mapPersonaA5);
@@ -110,7 +110,8 @@ const ErrorRegimen: Schema = {
   mensaje: str(),
 };
 
-const PersonaReturnSchema: Schema = {
+/** @internal `personaReturn` (y `persona` de `personaListReturn`); exportado para los tests de contrato. */
+export const PersonaReturnSchema: Schema = {
   datosGenerales: obj({
     apellido: str(),
     caracterizacion: list(
@@ -182,6 +183,9 @@ const PersonaReturnSchema: Schema = {
   errorMonotributo: obj(ErrorRegimen),
   errorRegimenGeneral: obj(ErrorRegimen),
 };
+
+/** @internal `personaListReturn` de `getPersonaList_v2`. */
+export const PersonaListReturnSchema: Schema = { persona: list(obj(PersonaReturnSchema)) };
 
 /** `personaReturn` decodificado (las listas ausentes no aparecen). */
 interface PersonaReturn {

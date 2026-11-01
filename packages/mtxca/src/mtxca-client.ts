@@ -1,29 +1,34 @@
 import { ArcaSoapError, checkServiceErrors, parseServerStatus, SoapServiceClient } from '@ramiidv/arca-common';
 import type { ArcaEvent, CallOptions, LegacyTlsMode, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
-import { date, dec, decodeResponse, encodeRequest, int, must, obj, opt, wrapped } from '@ramiidv/arca-common/schema';
+import { decodeResponse, encodeRequest } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import { MTXCA_NAMESPACE } from './constants.js';
 import {
-  ACTIVIDAD_VIGENTE,
+  ACTIVIDADES_VIGENTES_RESPONSE,
+  CAEA_ENTRE_FECHAS_RESPONSE,
   CAEA_NO_UTILIZADO,
+  CAEA_NO_UTILIZADO_PTO_VTA,
   CAEA_RESPONSE,
-  CODIGOS,
-  CODIGOS_STRING,
   COMPROBANTE_CAE_RESPONSE,
   COMPROBANTE_CAEA_RESPONSE,
-  COMPROBANTE_CONSULTADO,
+  CON_CAEA,
+  CON_CAEA_PTO_VTA,
+  CONDICIONES_IVA_RECEPTOR_RESPONSE,
   CONSULTA_COMPROBANTE,
+  CONSULTA_COMPROBANTE_RESPONSE,
   CONSULTA_CONDICIONES_IVA,
   CONSULTA_ULTIMO,
   COTIZACION,
+  COTIZACION_RESPONSE,
   ENTRE_FECHAS,
-  EVENTO,
-  PTO_VTA,
-  PUNTO_VENTA,
+  FECHA_PROCESO,
+  PARAMETROS,
+  PUNTOS_VENTA_RESPONSE,
   RESULTADO,
   SOLICITUD_CAEA,
+  ULTIMO_RESPONSE,
 } from './schemas.js';
-import { buildComprobante, encodeCaea } from './serialize.js';
+import { buildComprobante, encodeConCaea } from './serialize.js';
 import type {
   ActividadVigente,
   CodigoDescripcion,
@@ -251,11 +256,12 @@ export class MtxcaClient extends SoapServiceClient {
   private resultado(
     result: R,
     method: string,
+    schema: Schema = RESULTADO,
   ): {
     resultado: MtxcaResultado;
     base: { observaciones: CodigoDescripcion[]; errores: CodigoDescripcion[]; evento?: CodigoDescripcion };
   } {
-    const r = decode<ResultadoRaw>(result, RESULTADO, method, 'emision');
+    const r = decode<ResultadoRaw>(result, schema, method, 'emision');
     if (!r.resultado) {
       checkServiceErrors(result, `${SERVICE} ${method}`);
       throw invalid(`Respuesta inválida: falta ${method}.resultado`, 'emision');
@@ -292,8 +298,8 @@ export class MtxcaClient extends SoapServiceClient {
 
   /** `consultarCAEA`: datos de un CAEA otorgado. */
   async consultarCAEA(auth: MtxcaAuth, caea: string, opts?: CallOptions): Promise<MtxcaCAEA> {
-    const CAEA = encodeCaea(caea, 'consultarCAEA');
-    const result = await this.consulta('consultarCAEA', auth, { CAEA }, opts);
+    const params = encodeConCaea({ caea }, CON_CAEA, 'consultarCAEA');
+    const result = await this.consulta('consultarCAEA', auth, params, opts);
     return this.parseCAEA(result, 'consultarCAEA', 'consulta');
   }
 
@@ -314,7 +320,7 @@ export class MtxcaClient extends SoapServiceClient {
     const result = await this.consulta('consultarCAEAEntreFechas', auth, params, opts);
     const { arrayCAEAResponse } = decode<{ arrayCAEAResponse: CAEARaw[] }>(
       result,
-      { arrayCAEAResponse: wrapped('CAEAResponse', obj(CAEA_RESPONSE), 0) },
+      CAEA_ENTRE_FECHAS_RESPONSE,
       'consultarCAEAEntreFechas',
       'consulta',
     );
@@ -348,12 +354,7 @@ export class MtxcaClient extends SoapServiceClient {
     const comprobanteCAEARequest = buildComprobante(comprobante, 'caea');
     const result = await this.callAuth(method, auth, { comprobanteCAEARequest }, 'emision', opts);
     const { resultado, base } = this.resultado(result, method);
-    const { fechaProceso } = decode<{ fechaProceso?: string }>(
-      result,
-      { fechaProceso: opt(date()) },
-      method,
-      'emision',
-    );
+    const { fechaProceso } = decode<{ fechaProceso?: string }>(result, FECHA_PROCESO, method, 'emision');
     if (resultado === 'R') return { resultado, fechaProceso, ...base };
     if (fechaProceso === undefined) throw invalid(`Respuesta inválida: falta ${method}.fechaProceso`, 'emision');
     requerido(result, 'comprobanteCAEAResponse', method, 'emision', true);
@@ -372,8 +373,8 @@ export class MtxcaClient extends SoapServiceClient {
     caea: string,
     opts?: CallOptions,
   ): Promise<MtxcaCAEANoUtilizadoResult> {
-    const CAEA = encodeCaea(caea, 'informarCAEANoUtilizado');
-    return this.caeaNoUtilizado('informarCAEANoUtilizado', auth, { CAEA }, opts);
+    const method = 'informarCAEANoUtilizado';
+    return this.caeaNoUtilizado(method, auth, encodeConCaea({ caea }, CON_CAEA, method), CAEA_NO_UTILIZADO, opts);
   }
 
   /** `informarCAEANoUtilizadoPtoVta`: informa que un CAEA no se usó en un punto de venta. */
@@ -384,22 +385,22 @@ export class MtxcaClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<MtxcaCAEANoUtilizadoResult> {
     const method = 'informarCAEANoUtilizadoPtoVta';
-    const CAEA = encodeCaea(caea, method);
-    const params = encodeRequest({ numeroPuntoVenta }, { numeroPuntoVenta: PTO_VTA }, method);
-    return this.caeaNoUtilizado(method, auth, { CAEA, ...params }, opts);
+    const params = encodeConCaea({ caea, numeroPuntoVenta }, CON_CAEA_PTO_VTA, method);
+    return this.caeaNoUtilizado(method, auth, params, CAEA_NO_UTILIZADO_PTO_VTA, opts);
   }
 
   private async caeaNoUtilizado(
     method: string,
     auth: MtxcaAuth,
     params: R,
+    schema: Schema,
     opts?: CallOptions,
   ): Promise<MtxcaCAEANoUtilizadoResult> {
     const result = await this.callAuth(method, auth, params, 'emision', opts);
-    const { resultado, base } = this.resultado(result, method);
+    const { resultado, base } = this.resultado(result, method, schema);
     const r = decode<{ fechaProceso?: string; CAEA?: string; numeroPuntoVenta?: number }>(
       result,
-      CAEA_NO_UTILIZADO,
+      schema,
       method,
       'emision',
     );
@@ -424,7 +425,7 @@ export class MtxcaClient extends SoapServiceClient {
   /** `consultarPtosVtaCAEANoInformados`: puntos de venta que todavía no informaron movimientos para el CAEA. */
   async consultarPtosVtaCAEANoInformados(auth: MtxcaAuth, caea: string, opts?: CallOptions): Promise<PuntoVenta[]> {
     const method = 'consultarPtosVtaCAEANoInformados';
-    const result = await this.consulta(method, auth, { CAEA: encodeCaea(caea, method) }, opts);
+    const result = await this.consulta(method, auth, encodeConCaea({ caea }, CON_CAEA, method), opts);
     return this.parsePuntosVenta(result, method);
   }
 
@@ -450,8 +451,7 @@ export class MtxcaClient extends SoapServiceClient {
       method,
     );
     const result = await this.consulta(method, auth, { consultaUltimoComprobanteAutorizadoRequest }, opts);
-    return decode<{ numeroComprobante: number }>(result, { numeroComprobante: must(int()) }, method, 'consulta')
-      .numeroComprobante;
+    return decode<{ numeroComprobante: number }>(result, ULTIMO_RESPONSE, method, 'consulta').numeroComprobante;
   }
 
   /** `consultarComprobante`: datos de un comprobante autorizado (CAE) o informado (CAEA). */
@@ -475,12 +475,7 @@ export class MtxcaClient extends SoapServiceClient {
       comprobante: ComprobanteRaw;
       arrayObservaciones: CodigoDescripcion[];
       evento?: CodigoDescripcion;
-    }>(
-      result,
-      { comprobante: obj(COMPROBANTE_CONSULTADO), arrayObservaciones: CODIGOS, evento: EVENTO },
-      method,
-      'consulta',
-    );
+    }>(result, CONSULTA_COMPROBANTE_RESPONSE, method, 'consulta');
     const {
       arrayComprobantesAsociados,
       arrayOtrosTributos,
@@ -511,33 +506,33 @@ export class MtxcaClient extends SoapServiceClient {
   // Parámetros
   // =========================================================================
 
-  /** Consulta cuya respuesta es un `ArrayCodigosDescripcionesType` obligatorio. */
+  /** Consulta cuya respuesta es un `ArrayCodigosDescripciones[String]Type` obligatorio (ver `PARAMETROS`). */
   private async codigos<T = CodigoDescripcion>(
-    method: string,
-    container: string,
+    method: keyof typeof PARAMETROS,
     auth: MtxcaAuth,
     opts?: CallOptions,
-    lista = CODIGOS,
   ): Promise<T[]> {
+    const schema: Schema = PARAMETROS[method];
+    const [container] = Object.keys(schema) as [string];
     const result = await this.consulta(method, auth, {}, opts);
     requerido(result, container, method, 'consulta');
-    return decode<Record<string, T[]>>(result, { [container]: lista }, method, 'consulta')[container];
+    return decode<Record<string, T[]>>(result, schema, method, 'consulta')[container];
   }
 
   consultarTiposComprobante(auth: MtxcaAuth, opts?: CallOptions): Promise<CodigoDescripcion[]> {
-    return this.codigos('consultarTiposComprobante', 'arrayTiposComprobante', auth, opts);
+    return this.codigos('consultarTiposComprobante', auth, opts);
   }
 
   consultarTiposDocumento(auth: MtxcaAuth, opts?: CallOptions): Promise<CodigoDescripcion[]> {
-    return this.codigos('consultarTiposDocumento', 'arrayTiposDocumento', auth, opts);
+    return this.codigos('consultarTiposDocumento', auth, opts);
   }
 
   consultarAlicuotasIVA(auth: MtxcaAuth, opts?: CallOptions): Promise<CodigoDescripcion[]> {
-    return this.codigos('consultarAlicuotasIVA', 'arrayAlicuotasIVA', auth, opts);
+    return this.codigos('consultarAlicuotasIVA', auth, opts);
   }
 
   consultarCondicionesIVA(auth: MtxcaAuth, opts?: CallOptions): Promise<CodigoDescripcion[]> {
-    return this.codigos('consultarCondicionesIVA', 'arrayCondicionesIVA', auth, opts);
+    return this.codigos('consultarCondicionesIVA', auth, opts);
   }
 
   /** Condiciones de IVA del receptor admitidas para un tipo de comprobante (RG 5616). */
@@ -555,26 +550,26 @@ export class MtxcaClient extends SoapServiceClient {
     const result = await this.consulta(method, auth, { consultaCondicionesIVAReceptorRequest }, opts);
     return decode<{ arrayCondicionesIVAReceptor: CodigoDescripcion[] }>(
       result,
-      { arrayCondicionesIVAReceptor: CODIGOS },
+      CONDICIONES_IVA_RECEPTOR_RESPONSE,
       method,
       'consulta',
     ).arrayCondicionesIVAReceptor;
   }
 
   consultarUnidadesMedida(auth: MtxcaAuth, opts?: CallOptions): Promise<CodigoDescripcion[]> {
-    return this.codigos('consultarUnidadesMedida', 'arrayUnidadesMedida', auth, opts);
+    return this.codigos('consultarUnidadesMedida', auth, opts);
   }
 
   consultarTiposTributo(auth: MtxcaAuth, opts?: CallOptions): Promise<CodigoDescripcion[]> {
-    return this.codigos('consultarTiposTributo', 'arrayTiposTributo', auth, opts);
+    return this.codigos('consultarTiposTributo', auth, opts);
   }
 
   consultarTiposDatosAdicionales(auth: MtxcaAuth, opts?: CallOptions): Promise<CodigoDescripcion[]> {
-    return this.codigos('consultarTiposDatosAdicionales', 'arrayTiposDatosAdicionales', auth, opts);
+    return this.codigos('consultarTiposDatosAdicionales', auth, opts);
   }
 
   consultarMonedas(auth: MtxcaAuth, opts?: CallOptions): Promise<CodigoDescripcionString[]> {
-    return this.codigos<CodigoDescripcionString>('consultarMonedas', 'arrayMonedas', auth, opts, CODIGOS_STRING);
+    return this.codigos<CodigoDescripcionString>('consultarMonedas', auth, opts);
   }
 
   /**
@@ -590,12 +585,7 @@ export class MtxcaClient extends SoapServiceClient {
     const method = 'consultarCotizacionMoneda';
     const params = encodeRequest({ codigoMoneda, fechaCotizacion }, COTIZACION, method);
     const result = await this.consulta(method, auth, params, opts);
-    const { cotizacionMoneda } = decode<{ cotizacionMoneda?: number }>(
-      result,
-      { cotizacionMoneda: opt(dec(6)) },
-      method,
-      'consulta',
-    );
+    const { cotizacionMoneda } = decode<{ cotizacionMoneda?: number }>(result, COTIZACION_RESPONSE, method, 'consulta');
     return {
       codigoMoneda: params['codigoMoneda'] as string,
       fechaCotizacion: params['fechaCotizacion'] as string,
@@ -606,12 +596,8 @@ export class MtxcaClient extends SoapServiceClient {
   /** `ArrayPuntosVentaType` (obligatorio salvo en `consultarPtosVtaCAEANoInformados`). */
   private parsePuntosVenta(result: R, method: string, obligatorio = false): PuntoVenta[] {
     if (obligatorio) requerido(result, 'arrayPuntosVenta', method, 'consulta');
-    return decode<{ arrayPuntosVenta: PuntoVenta[] }>(
-      result,
-      { arrayPuntosVenta: wrapped('puntoVenta', PUNTO_VENTA, 0) },
-      method,
-      'consulta',
-    ).arrayPuntosVenta;
+    return decode<{ arrayPuntosVenta: PuntoVenta[] }>(result, PUNTOS_VENTA_RESPONSE, method, 'consulta')
+      .arrayPuntosVenta;
   }
 
   private async puntosVenta(method: string, auth: MtxcaAuth, opts?: CallOptions): Promise<PuntoVenta[]> {
@@ -634,11 +620,7 @@ export class MtxcaClient extends SoapServiceClient {
   async consultarActividadesVigentes(auth: MtxcaAuth, opts?: CallOptions): Promise<ActividadVigente[]> {
     const method = 'consultarActividadesVigentes';
     const result = await this.consulta(method, auth, {}, opts);
-    return decode<{ arrayActividades: ActividadVigente[] }>(
-      result,
-      { arrayActividades: wrapped('actividad', ACTIVIDAD_VIGENTE, 0) },
-      method,
-      'consulta',
-    ).arrayActividades;
+    return decode<{ arrayActividades: ActividadVigente[] }>(result, ACTIVIDADES_VIGENTES_RESPONSE, method, 'consulta')
+      .arrayActividades;
   }
 }

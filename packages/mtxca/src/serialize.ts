@@ -1,27 +1,15 @@
 import { ArcaValidationError, validateCuit } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
-import { encodeRequest, formatDateTimeAR, must } from '@ramiidv/arca-common/schema';
+import { encodeRequest, formatDateTimeAR } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import { roundTo } from './format.js';
-import { CAEA, COMPROBANTE_CAE, COMPROBANTE_CAEA } from './schemas.js';
+import { COMPROBANTE_CAE, COMPROBANTE_CAEA } from './schemas.js';
 import type { MtxcaComprobanteBase, MtxcaComprobanteCAE, MtxcaComprobanteCAEA } from './types.js';
 
 type R = Record<string, unknown>;
 
 /** Reglas de negocio que se reportan junto con las del XSD (ver `validation.ts`). */
 export type ReglasComprobante = (c: MtxcaComprobanteBase, errors: ValidationErrorDetail[]) => void;
-
-/** Elementos de `ComprobanteType` que en la API tienen otro nombre que en el XML. */
-const XML_NAMES: Readonly<Record<string, string>> = {
-  caea: 'codigoAutorizacion',
-  comprobantesAsociados: 'arrayComprobantesAsociados',
-  otrosTributos: 'arrayOtrosTributos',
-  items: 'arrayItems',
-  subtotalesIVA: 'arraySubtotalesIVA',
-  datosAdicionales: 'arrayDatosAdicionales',
-  compradores: 'arrayCompradores',
-  actividades: 'arrayActividades',
-};
 
 /** Tipos de documento que son CUIT/CUIL (dígito verificador). */
 const DOC_CUIT = new Set([80, 86]);
@@ -56,7 +44,10 @@ function redondear(input: unknown, schema: Schema): unknown {
   return out;
 }
 
-/** Formas de entrada que la API admite y el XSD no: documentos/CAEA numéricos y `fechaHoraGen` como `Date`. */
+/**
+ * Formas de entrada que la API admite y el XSD no: documentos/CAEA numéricos,
+ * `fechaHoraGen` como `Date` y `actividades` como códigos (`ActividadType`).
+ */
 function normalizar(c: R): R {
   const out: R = { ...c };
   if (c['numeroDocumento'] !== undefined) out['numeroDocumento'] = digitos(c['numeroDocumento'], true);
@@ -70,6 +61,8 @@ function normalizar(c: R): R {
       isObject(x) ? { ...x, numeroDocumento: digitos(x['numeroDocumento'], true) } : x,
     );
   }
+  const actividades = c['actividades'];
+  if (Array.isArray(actividades)) out['actividades'] = actividades.map((codigo: unknown) => ({ codigo }));
   return out;
 }
 
@@ -91,15 +84,6 @@ function validarCuits(c: R, errors: ValidationErrorDetail[]): void {
       if (isObject(x)) check(x['codigoTipoDocumento'], x['numeroDocumento'], `compradores[${i}].numeroDocumento`);
     });
   }
-}
-
-/** Renombra a los elementos del XML (el orden de inserción es el del XSD). */
-function aXml(out: R): R {
-  const xml: R = {};
-  for (const [key, value] of Object.entries(out)) xml[XML_NAMES[key] ?? key] = value;
-  const actividades = xml['arrayActividades'] as { actividad: unknown[] } | undefined;
-  if (actividades) xml['arrayActividades'] = { actividad: actividades.actividad.map((codigo) => ({ codigo })) };
-  return xml;
 }
 
 /**
@@ -129,17 +113,16 @@ export function buildComprobante(
   }
   const schema = mode === 'cae' ? COMPROBANTE_CAE : COMPROBANTE_CAEA;
   const c = redondear(normalizar(input), schema);
-  const out = encodeRequest(c, schema, 'comprobante', (i, errors) => {
+  return encodeRequest(c, schema, 'comprobante', (i, errors) => {
     validarCuits(i, errors);
     if (!reglas || errors.length > 0) return;
     const negocio: ValidationErrorDetail[] = [];
     reglas(input, negocio);
     errors.push(...negocio.map((e) => ({ ...e, message: `${e.field}: ${e.message}` })));
   });
-  return aXml(out);
 }
 
-/** CAEA de un request (`xsd:long` de 14 dígitos; number o string). */
-export function encodeCaea(caea: unknown, method: string): string {
-  return encodeRequest({ caea: digitos(caea) }, { caea: must(CAEA) }, method)['caea'] as string;
+/** Request con `CAEA` (`xsd:long` de 14 dígitos; number o string): `CON_CAEA` / `CON_CAEA_PTO_VTA`. */
+export function encodeConCaea(input: { caea: unknown } & R, schema: Schema, method: string): R {
+  return encodeRequest({ ...input, caea: digitos(input.caea) }, schema, method);
 }

@@ -166,34 +166,34 @@ describe('WSLPG: liquidacionAutorizar', () => {
 
   it('errores 1 y N → ArcaAgroServiceError', async () => {
     const one = setup(() => lpgResp('liquidacionResp', 'liqReturn', ERROR_1));
-    const e1 = await one.agro.lpg.liquidacionAutorizar(liquidacion()).catch((e) => e);
+    const e1 = await one.agro.lpg.liquidacionAutorizar(liquidacion()).catch((e: any) => e);
     expect(e1).toBeInstanceOf(ArcaAgroServiceError);
     expect(e1).toBeInstanceOf(ArcaServiceError);
     expect(e1.service).toBe('WSLPG');
     expect(e1.errors).toEqual([{ code: 1105, msg: 'El número de orden ya fue utilizado.' }]);
 
     const many = setup(() => lpgResp('liquidacionResp', 'liqReturn', ERROR_N));
-    const eN = await many.agro.lpg.liquidacionAutorizar(liquidacion()).catch((e) => e);
+    const eN = await many.agro.lpg.liquidacionAutorizar(liquidacion()).catch((e: any) => e);
     expect(eN.errors.map((e: { code: number }) => e.code)).toEqual([1105, 1201]);
   });
 
   it('erroresFormato también se detectan (código no numérico en rawCode)', async () => {
     const { agro } = setup(() => lpgResp('liquidacionResp', 'liqReturn', ERROR_FORMATO));
-    const e = await agro.lpg.liquidacionAutorizar(liquidacion()).catch((err) => err);
+    const e = await agro.lpg.liquidacionAutorizar(liquidacion()).catch((err: any) => err);
     expect(e).toBeInstanceOf(ArcaAgroServiceError);
     expect(e.errors).toEqual([{ code: 0, msg: 'Campo precioRefTn mal formado', rawCode: 'CTG01' }]);
   });
 
   it('sin autorizacion.coe → ArcaAgroResponseError uncertain', async () => {
     const { agro } = setup(() => lpgResp('liquidacionResp', 'liqReturn', EVENTO));
-    const e = await agro.lpg.liquidacionAutorizar(liquidacion()).catch((err) => err);
+    const e = await agro.lpg.liquidacionAutorizar(liquidacion()).catch((err: any) => err);
     expect(e).toBeInstanceOf(ArcaAgroResponseError);
     expect(e.uncertain).toBe(true);
   });
 
   it('timeout → 1 fetch, uncertain', async () => {
     const { agro, fetchMock } = setup(hang, { timeout: 30 });
-    const e = await agro.lpg.liquidacionAutorizar(liquidacion()).catch((err) => err);
+    const e = await agro.lpg.liquidacionAutorizar(liquidacion()).catch((err: any) => err);
     expect(e).toBeInstanceOf(ArcaSoapError);
     expect(e.uncertain).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -201,7 +201,7 @@ describe('WSLPG: liquidacionAutorizar', () => {
 
   it('SOAP Fault en emisión → uncertain', async () => {
     const { agro, fetchMock } = setup(() => soapFaultResponse('S:Server', 'Error interno'));
-    const e = await agro.lpg.liquidacionAutorizar(liquidacion()).catch((err) => err);
+    const e = await agro.lpg.liquidacionAutorizar(liquidacion()).catch((err: any) => err);
     expect(e).toBeInstanceOf(ArcaSoapError);
     expect(e.faultString).toBe('Error interno');
     expect(e.uncertain).toBe(true);
@@ -215,7 +215,7 @@ describe('WSLPG: liquidacionAutorizar', () => {
     p.liquidacion.precioRefTn = NaN;
     (p.liquidacion as { liquidaCorredor: string }).liquidaCorredor = 'X';
     p.liquidacion.campaniaPPal = 100;
-    const e = await agro.lpg.liquidacionAutorizar(p).catch((err) => err);
+    const e = await agro.lpg.liquidacionAutorizar(p).catch((err: any) => err);
     expect(e).toBeInstanceOf(ArcaValidationError);
     expect(e.details.map((d: { field: string }) => d.field)).toEqual([
       'liquidacion.cuitVendedor',
@@ -403,16 +403,16 @@ describe.each(EMISIONES)('WSLPG $name (emisión)', ({ name, req, resp, ret, ok, 
 
   it('errores 1 y N lanzan', async () => {
     const one = setup(() => lpgResp(resp, ret, ERROR_1));
-    expect((await run(one.agro).catch((e) => e)).errors).toHaveLength(1);
+    expect(((await run(one.agro).catch((e: any) => e)) as any).errors).toHaveLength(1);
     const many = setup(() => lpgResp(resp, ret, ERROR_N));
-    const e = await run(many.agro).catch((err) => err);
+    const e: any = await run(many.agro).catch((err: any) => err);
     expect(e).toBeInstanceOf(ArcaAgroServiceError);
     expect(e.errors).toHaveLength(2);
   });
 
   it('503 → 1 fetch, uncertain', async () => {
     const { agro, fetchMock } = setup(http503);
-    const e = await run(agro).catch((err) => err);
+    const e: any = await run(agro).catch((err: any) => err);
     expect(e).toBeInstanceOf(ArcaSoapError);
     expect(e.uncertain).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);

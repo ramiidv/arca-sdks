@@ -412,21 +412,21 @@ describe.each(OPERACIONES)('WSCPE $method (emisión)', ({ method, run, order }) 
 
   it('errores de negocio (1 y N) lanzan ArcaAgroServiceError', async () => {
     const one = setup(() => cpeResp(`${capital(method)}Resp`, ERROR_1));
-    const e1 = await run(one.agro).catch((e) => e);
+    const e1: any = await run(one.agro).catch((e: any) => e);
     expect(e1).toBeInstanceOf(ArcaAgroServiceError);
     expect(e1).toBeInstanceOf(ArcaServiceError);
     expect(e1.errors).toEqual([{ code: 1501, msg: 'El número de orden ya fue utilizado.' }]);
     expect(e1.method).toBe(method);
 
     const many = setup(() => cpeResp(`${capital(method)}Resp`, ERROR_N));
-    const eN = await run(many.agro).catch((e) => e);
+    const eN: any = await run(many.agro).catch((e: any) => e);
     expect(eN).toBeInstanceOf(ArcaAgroServiceError);
     expect(eN.errors.map((e: { code: number }) => e.code)).toEqual([1501, 2104]);
   });
 
   it('no reintenta ante un 503 y el error es uncertain', async () => {
     const { agro, fetchMock } = setup(http503);
-    const e = await run(agro).catch((err) => err);
+    const e: any = await run(agro).catch((err: any) => err);
     expect(e).toBeInstanceOf(ArcaSoapError);
     expect(e.uncertain).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -436,7 +436,7 @@ describe.each(OPERACIONES)('WSCPE $method (emisión)', ({ method, run, order }) 
 describe('WSCPE: emisiones sin reintento', () => {
   it('autorizarCPEAutomotor: timeout → 1 fetch, uncertain', async () => {
     const { agro, fetchMock } = setup(hang, { timeout: 30 });
-    const e = await agro.cpe.autorizarCPEAutomotor(autorizarAutomotor()).catch((err) => err);
+    const e = await agro.cpe.autorizarCPEAutomotor(autorizarAutomotor()).catch((err: any) => err);
     expect(e).toBeInstanceOf(ArcaSoapError);
     expect(e.uncertain).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -448,7 +448,7 @@ describe('WSCPE: emisiones sin reintento', () => {
       (a: ArcaAgro) => a.cpe.autorizarCPEFerroviaria(autorizarFerroviaria()),
     ]) {
       const { agro, fetchMock } = setup(http503);
-      const e = await run(agro).catch((err) => err);
+      const e: any = await run(agro).catch((err: any) => err);
       expect(e.uncertain).toBe(true);
       expect(fetchMock).toHaveBeenCalledTimes(1);
     }
@@ -462,14 +462,14 @@ describe('WSCPE: emisiones sin reintento', () => {
 
   it('autorizar sin cabecera.nroCTG → ArcaAgroResponseError uncertain', async () => {
     const { agro } = setup(() => cpeResp('AutorizarCPEAutomotorResp', METADATA));
-    const e = await agro.cpe.autorizarCPEAutomotor(autorizarAutomotor()).catch((err) => err);
+    const e = await agro.cpe.autorizarCPEAutomotor(autorizarAutomotor()).catch((err: any) => err);
     expect(e).toBeInstanceOf(ArcaAgroResponseError);
     expect(e.uncertain).toBe(true);
   });
 
   it('autorizar con errores lanza aunque venga cabecera, y conserva la respuesta', async () => {
     const { agro } = setup(() => cpeResp('AutorizarCPEAutomotorResp', CABECERA() + ERROR_1));
-    const e = await agro.cpe.autorizarCPEAutomotor(autorizarAutomotor()).catch((err) => err);
+    const e = await agro.cpe.autorizarCPEAutomotor(autorizarAutomotor()).catch((err: any) => err);
     expect(e).toBeInstanceOf(ArcaAgroServiceError);
     expect(e.response.cabecera.nroCTG).toBe('010100012345');
   });
@@ -694,7 +694,7 @@ describe('WSCPE: validación local (no llama a ARCA)', () => {
     const { agro, fetchMock } = setup(() => '');
     const p = autorizarAutomotor();
     mutate(p);
-    const e = await agro.cpe.autorizarCPEAutomotor(p).catch((err) => err);
+    const e = await agro.cpe.autorizarCPEAutomotor(p).catch((err: any) => err);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(e).toBeInstanceOf(ArcaValidationError);
     return e;

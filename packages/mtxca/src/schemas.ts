@@ -2,8 +2,9 @@
  * Schemas de WSMTXCA (XSD del WSDL de producción) con el DSL de
  * `@ramiidv/arca-common/schema`.
  *
- * Los de `ComprobanteType` usan los nombres de la API (`items`, `caea`, ...),
- * que `serialize.ts` traduce a los del XML (`arrayItems`, `codigoAutorizacion`).
+ * Los de `ComprobanteType` usan los nombres de la API (`items`, `caea`, ...)
+ * con `xml()` para los elementos que en el XML se llaman distinto
+ * (`arrayItems`, `codigoAutorizacion`, ...).
  * Los campos obligatorios llevan `must()` para que el mismo schema sirva para
  * codificar requests y decodificar respuestas.
  *
@@ -14,7 +15,7 @@
  *
  * @internal No se exporta desde `index.ts`.
  */
-import { cuit, date, datetime, dec, id, int, must, obj, opt, str, wrapped } from '@ramiidv/arca-common/schema';
+import { cuit, date, datetime, dec, id, int, must, obj, opt, str, wrapped, xml } from '@ramiidv/arca-common/schema';
 import type { Field, Schema } from '@ramiidv/arca-common/schema';
 
 // ---------------------------------------------------------------------------
@@ -125,16 +126,23 @@ const CUERPO: Schema = {
   fechaVencimientoPago: opt(date()),
 };
 
-/** Los arrays de `ComprobanteType`; en el XML van como `array<Nombre>` (ver `serialize.ts`). */
+/**
+ * Los arrays de `ComprobanteType`; en el XML van como `array<Nombre>`.
+ * `actividades` es `number[]` en la API: `serialize.ts` arma cada
+ * `{ codigo }` (`ActividadType`) antes de codificar.
+ */
 const ARRAYS: Schema = {
-  comprobantesAsociados: lista('comprobanteAsociado', obj(COMPROBANTE_ASOCIADO)),
+  comprobantesAsociados: xml('arrayComprobantesAsociados', lista('comprobanteAsociado', obj(COMPROBANTE_ASOCIADO))),
   periodoComprobantesAsociados: opt(obj({ fechaDesde: must(date()), fechaHasta: must(date()) })),
-  otrosTributos: lista('otroTributo', obj(OTRO_TRIBUTO)),
-  items: must(wrapped('item', obj(ITEM))),
-  subtotalesIVA: lista('subtotalIVA', obj({ codigo: must(CODIGO), importe: must(IMPORTE_SUBTOTAL) })),
-  datosAdicionales: lista('datoAdicional', obj(DATO_ADICIONAL)),
-  compradores: lista('comprador', obj(COMPRADOR)),
-  actividades: lista('actividad', int(1, Number.MAX_SAFE_INTEGER)),
+  otrosTributos: xml('arrayOtrosTributos', lista('otroTributo', obj(OTRO_TRIBUTO))),
+  items: xml('arrayItems', must(wrapped('item', obj(ITEM)))),
+  subtotalesIVA: xml(
+    'arraySubtotalesIVA',
+    lista('subtotalIVA', obj({ codigo: must(CODIGO), importe: must(IMPORTE_SUBTOTAL) })),
+  ),
+  datosAdicionales: xml('arrayDatosAdicionales', lista('datoAdicional', obj(DATO_ADICIONAL))),
+  compradores: xml('arrayCompradores', lista('comprador', obj(COMPRADOR))),
+  actividades: xml('arrayActividades', lista('actividad', obj({ codigo: must(int(1, Number.MAX_SAFE_INTEGER)) }))),
 };
 
 /** `ComprobanteType` de `autorizarComprobante` / `autorizarAjusteIVA` (sin datos de CAEA). */
@@ -144,14 +152,17 @@ export const COMPROBANTE_CAE: Schema = { ...CABECERA, ...CUERPO, ...ARRAYS };
 export const COMPROBANTE_CAEA: Schema = {
   ...CABECERA,
   codigoTipoAutorizacion: opt(str({ values: ['A'] })),
-  caea: must(CAEA),
+  caea: xml('codigoAutorizacion', must(CAEA)),
   fechaVencimiento: opt(date()),
   ...CUERPO,
   fechaHoraGen: opt(datetime()),
   ...ARRAYS,
 };
 
-/** `ComprobanteType` como lo devuelve `consultarComprobante` (claves del XML; el orden no importa al decodificar). */
+/**
+ * `ComprobanteType` como lo devuelve `consultarComprobante`, con las claves del
+ * XML (los `xml()` de `ARRAYS` coinciden con la clave).
+ */
 export const COMPROBANTE_CONSULTADO: Schema = {
   ...CABECERA,
   codigoTipoAutorizacion: opt(str()),
@@ -190,6 +201,12 @@ export const COTIZACION: Schema = { codigoMoneda: must(texto(3)), fechaCotizacio
 
 /** Cuerpo de `consultarCAEAEntreFechas`. */
 export const ENTRE_FECHAS: Schema = { fechaDesde: must(date()), fechaHasta: must(date()) };
+
+/** Cuerpo de `consultarCAEA`, `informarCAEANoUtilizado` y `consultarPtosVtaCAEANoInformados`. */
+export const CON_CAEA: Schema = { caea: xml('CAEA', must(CAEA)) };
+
+/** Cuerpo de `informarCAEANoUtilizadoPtoVta`. */
+export const CON_CAEA_PTO_VTA: Schema = { ...CON_CAEA, numeroPuntoVenta: must(PTO_VTA) };
 
 // ---------------------------------------------------------------------------
 // Respuestas
@@ -237,13 +254,30 @@ export const COMPROBANTE_CAEA_RESPONSE: Schema = {
   numeroComprobante: must(int()),
 };
 
-/** `InformarCAEANoUtilizado[PtoVta]ResponseType` (obligatorios solo si no es rechazo). */
+/**
+ * `InformarCAEANoUtilizadoResponseType` (obligatorios solo si no es rechazo;
+ * `resultado` se chequea como en `RESULTADO`). No tiene `arrayObservaciones`.
+ */
 export const CAEA_NO_UTILIZADO: Schema = {
-  ...RESULTADO,
+  resultado: opt(str()),
+  fechaProceso: opt(date()),
+  CAEA: opt(id()),
+  arrayErrores: CODIGOS,
+  evento: EVENTO,
+};
+
+/** `InformarCAEANoUtilizadoPtoVtaResponseType`. */
+export const CAEA_NO_UTILIZADO_PTO_VTA: Schema = {
+  resultado: opt(str()),
   fechaProceso: opt(date()),
   CAEA: opt(id()),
   numeroPuntoVenta: opt(int()),
+  arrayErrores: CODIGOS,
+  evento: EVENTO,
 };
+
+/** `fechaProceso` de `Informar[ComprobanteCAEA|AjusteIVACAEA]ResponseType` (obligatorio solo si no es rechazo). */
+export const FECHA_PROCESO: Schema = { fechaProceso: opt(date()) };
 
 /** `CAEAResponseType`. */
 export const CAEA_RESPONSE: Schema = {
@@ -262,3 +296,40 @@ export const PUNTO_VENTA = obj({ numeroPuntoVenta: must(int()), bloqueado: must(
 
 /** `ActividadVigenteType`. */
 export const ACTIVIDAD_VIGENTE = obj({ codigo: must(int()), orden: must(int()), descripcion: must(str()) });
+
+/** `ConsultarCAEAEntreFechasResponseType`. */
+export const CAEA_ENTRE_FECHAS_RESPONSE: Schema = { arrayCAEAResponse: wrapped('CAEAResponse', obj(CAEA_RESPONSE), 0) };
+
+/** `ConsultarUltimoComprobanteAutorizadoResponseType` (los errores se chequean aparte). */
+export const ULTIMO_RESPONSE: Schema = { numeroComprobante: must(int()) };
+
+/** `ConsultarComprobanteResponseType` (los errores se chequean aparte). */
+export const CONSULTA_COMPROBANTE_RESPONSE: Schema = {
+  comprobante: obj(COMPROBANTE_CONSULTADO),
+  arrayObservaciones: CODIGOS,
+  evento: EVENTO,
+};
+
+/** `ConsultarCondicionesIVAReceptorResponseType`. */
+export const CONDICIONES_IVA_RECEPTOR_RESPONSE: Schema = { arrayCondicionesIVAReceptor: CODIGOS };
+
+/** `ConsultarCotizacionMonedaResponseType`. */
+export const COTIZACION_RESPONSE: Schema = { cotizacionMoneda: opt(dec(6)) };
+
+/** `ConsultarPuntosVenta*ResponseType` y `ConsultarPtosVtaCAEANoInformadosResponseType`. */
+export const PUNTOS_VENTA_RESPONSE: Schema = { arrayPuntosVenta: wrapped('puntoVenta', PUNTO_VENTA, 0) };
+
+/** `ConsultarActividadesVigentesResponseType`. */
+export const ACTIVIDADES_VIGENTES_RESPONSE: Schema = { arrayActividades: wrapped('actividad', ACTIVIDAD_VIGENTE, 0) };
+
+/** Respuestas de las consultas de parámetros: método → `{ contenedor: lista }`. */
+export const PARAMETROS = {
+  consultarTiposComprobante: { arrayTiposComprobante: CODIGOS },
+  consultarTiposDocumento: { arrayTiposDocumento: CODIGOS },
+  consultarAlicuotasIVA: { arrayAlicuotasIVA: CODIGOS },
+  consultarCondicionesIVA: { arrayCondicionesIVA: CODIGOS },
+  consultarUnidadesMedida: { arrayUnidadesMedida: CODIGOS },
+  consultarTiposTributo: { arrayTiposTributo: CODIGOS },
+  consultarTiposDatosAdicionales: { arrayTiposDatosAdicionales: CODIGOS },
+  consultarMonedas: { arrayMonedas: CODIGOS_STRING },
+} as const satisfies Record<string, Schema>;
