@@ -113,8 +113,10 @@ reporte); `npm run api:update` lo regenera. Las ramas que cambian la API
   3 vulnerabilidades de vitest 3 (`npm audit` limpio) y sigue soportando
   Node 20. Vitest 5 exige Node >= 22.12: subirlo junto con el cambio de
   `engines`.
-- Quitar los `any` que quedan (biome los marca como warnings, sobre todo en
-  facturacion).
+- ~~Quitar los `any` que quedan~~: common en `chore/ts7-vitest5`, facturacion
+  en `feat/majors-sin-deprecados` (`padron.ts` y `Contribuyente` se quitan
+  con la major). Con todo mergeado, biome no marca ninguno: se puede pasar
+  `noExplicitAny` de warning a error.
 - Cuando Node 20 deje de usarse en la práctica, subir `engines` a `>=22.12`,
   sacar 20.19 de la matriz de CI y pasar a vitest 5.
 
