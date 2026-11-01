@@ -1,6 +1,6 @@
 {
   "name": "@ramiidv/arca-cdc",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "SDK para el web service WSCDC de ARCA (ex AFIP) - Constatacion de Comprobantes",
   "type": "module",
   "main": "dist/index.js",
@@ -25,7 +25,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build && npm test"
   },
   "keywords": [
     "arca",
@@ -61,7 +61,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@ramiidv/arca-common": "^0.1.0"
+    "@ramiidv/arca-common": "^0.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

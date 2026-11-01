@@ -1,115 +1,155 @@
 // Shared types from common
-export type { AccessTicket, ArcaEvent, ServerStatus, SoapCallOptions } from '@ramiidv/arca-common';
-import type { ArcaEvent } from '@ramiidv/arca-common';
+export type {
+  AccessTicket,
+  ArcaEvent,
+  CallOptions,
+  LegacyTlsMode,
+  ServerStatus,
+  ServiceErrorDetail,
+  TicketStorage,
+  ValidationErrorDetail,
+} from '@ramiidv/arca-common';
+import type { ArcaBaseConfig } from '@ramiidv/arca-common';
+import type { CBTE_MODOS } from './constants.js';
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
-export interface ArcaCdcConfig {
-  /** PEM-encoded X.509 certificate */
-  cert: string;
-  /** PEM-encoded RSA private key */
-  key: string;
-  /** CUIT of the entity represented (e.g. 20123456789) */
-  cuit: number;
-  /** Use production endpoints (default: false = testing / homologacion) */
-  production?: boolean;
-  /** Request timeout in ms (default: 30000) */
-  timeout?: number;
-  /** Number of retries on 5xx / network errors (default: 1) */
-  retries?: number;
-  /** Base delay in ms for exponential backoff (default: 1000) */
-  retryDelayMs?: number;
-  /** Optional event callback */
-  onEvent?: (event: ArcaEvent) => void;
+export interface ArcaCdcConfig extends ArcaBaseConfig {
+  /** Endpoints propios (ej: un proxy). Si se indican, tienen prioridad sobre `production`. */
+  endpoints?: {
+    /** URL del WSCDC (`.../WSCDC/service.asmx`). */
+    wscdc?: string;
+    /** URL del WSAA (`.../ws/services/LoginCms`). */
+    wsaa?: string;
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Authentication (internal SOAP Auth block)
+// Authentication (bloque Auth del SOAP, tipo CmpAuthRequest)
 // ---------------------------------------------------------------------------
 
 export interface CdcAuth {
   Token: string;
   Sign: string;
-  Cuit: number;
+  /** CUIT representada (11 dígitos). */
+  Cuit: number | string;
 }
 
 // ---------------------------------------------------------------------------
-// ComprobanteConstatar - Input
+// ComprobanteConstatar - Input (tipo CmpDatos)
 // ---------------------------------------------------------------------------
+
+/** Modalidad de autorización del comprobante. */
+export type CbteModo = (typeof CBTE_MODOS)[number];
+
+/** Dato opcional (tipo `Opcional`). Ver `getTiposOpcionales()`. */
+export interface Opcional {
+  /** Código del opcional (hasta 4 caracteres). */
+  Id: string;
+  /** Valor (hasta 250 caracteres). */
+  Valor: string;
+}
 
 export interface ConstatarInput {
-  /** Tipo de comprobante (ver ComprobantesTipoConsultar) */
-  CbteTipo: number;
-  /** Punto de venta */
+  /** Modalidad por la cual fue autorizado el comprobante: `CAE`, `CAI` o `CAEA`. */
+  CbteModo: CbteModo;
+  /** CUIT del emisor del comprobante (11 dígitos, con o sin guiones). */
+  CuitEmisor: number | string;
+  /** Punto de venta (1 a 99998). */
   PtoVta: number;
-  /** Numero de comprobante */
+  /** Tipo de comprobante (ver `getTiposCbte()`). */
+  CbteTipo: number;
+  /** Número de comprobante (1 a 99999999). */
   CbteNro: number;
-  /** Fecha del comprobante (formato YYYYMMDD) */
-  CbteFch: string;
-  /** Importe total del comprobante */
+  /** Fecha del comprobante: `YYYYMMDD`, `YYYY-MM-DD` o `Date`. Se envía como `YYYYMMDD`. */
+  CbteFch: string | Date;
+  /** Importe total (>= 0, se redondea a 2 decimales). En comprobantes sin importe total, 0. */
   ImpTotal: number;
-  /** Codigo de autorizacion (CAE, CAI, o CAEA) */
+  /** Código de autorización (CAE, CAI o CAEA), 14 dígitos. */
   CodAutorizacion: string;
-  /** Tipo de documento del receptor (ver DocumentosTipoConsultar) */
-  DocTipoReceptor: number;
-  /** Numero de documento del receptor */
-  DocNroReceptor: number;
+  /**
+   * Tipo de documento del receptor (ver `getDocTipos()`). Obligatorio en
+   * comprobantes A/M y si el importe supera el tope de identificación; si se
+   * informa, también hay que informar `DocNroReceptor`.
+   */
+  DocTipoReceptor?: number | string;
+  /** Número de documento del receptor (solo dígitos, hasta 20). */
+  DocNroReceptor?: number | string;
+  /** Datos opcionales (ver `getTiposOpcionales()`). */
+  Opcionales?: Opcional[];
 }
 
 // ---------------------------------------------------------------------------
-// ComprobanteConstatar - Result
+// ComprobanteConstatar - Result (tipo CmpResponse)
 // ---------------------------------------------------------------------------
 
-export interface ConstatarObservacion {
+/** Observación (`Obs`) o evento (`Evt`) de ARCA. */
+export interface CdcMensaje {
   Code: number;
   Msg: string;
 }
 
-export interface ConstatarError {
-  Code: number;
-  Msg: string;
+/** Datos del comprobante tal como los devuelve ARCA en `CmpResp` (tipo CmpDatos). */
+export interface ComprobanteConstatado {
+  CbteModo: string;
+  CuitEmisor: string;
+  PtoVta: number;
+  CbteTipo: number;
+  CbteNro: number;
+  CbteFch: string;
+  ImpTotal: number;
+  CodAutorizacion: string;
+  DocTipoReceptor?: string;
+  DocNroReceptor?: string;
+  Opcionales?: Opcional[];
 }
 
 export interface ConstatarResult {
-  /** "A" = Aprobado, "R" = Rechazado */
+  /**
+   * `A` = comprobante constatado (puede traer observaciones no excluyentes, ej: 200
+   * para un CAEA aún no rendido). `R` = rechazado por validaciones funcionales: el
+   * detalle viene en `Observaciones`.
+   */
   Resultado: 'A' | 'R';
-  /** Observaciones del servicio (presentes cuando Resultado = "R") */
-  Observaciones?: ConstatarObservacion[];
-  /** Errores del servicio */
-  Errors?: ConstatarError[];
+  /** Fecha/hora de la constatación (`YYYYMMDDHHMMSS`). */
+  FchProceso: string;
+  /** Datos del comprobante constatado. ARCA los devuelve siempre según el manual (minOccurs=0 en el WSDL). */
+  CmpResp?: ComprobanteConstatado;
+  /** Observaciones (motivos del rechazo funcional, u observaciones no excluyentes). */
+  Observaciones: CdcMensaje[];
+  /** Eventos informados por ARCA. */
+  Events: CdcMensaje[];
 }
 
 // ---------------------------------------------------------------------------
-// ComprobantesModalidadConsultar
+// Tablas de parámetros
 // ---------------------------------------------------------------------------
 
+/** Modalidad de autorización (tipo `FacModTipo`). */
 export interface ModalidadItem {
-  Id: number;
+  /** Código de modalidad: `CAE`, `CAI`, `CAEA`. */
+  Cod: string;
   Desc: string;
   FchDesde?: string;
   FchHasta?: string;
 }
 
-// ---------------------------------------------------------------------------
-// ComprobantesTipoConsultar
-// ---------------------------------------------------------------------------
-
+/** Tipo de comprobante (tipo `CbteTipo`). */
 export interface TipoCbteItem {
   Id: number;
   Desc: string;
-  FchDesde?: string;
-  FchHasta?: string;
 }
 
-// ---------------------------------------------------------------------------
-// DocumentosTipoConsultar
-// ---------------------------------------------------------------------------
-
+/** Tipo de documento (tipo `DocTipo`; `Id` es `xs:string` en el WSDL). */
 export interface DocTipoItem {
-  Id: number;
+  Id: string;
   Desc: string;
-  FchDesde?: string;
-  FchHasta?: string;
+}
+
+/** Tipo de dato opcional (tipo `OpcionalTipo`). */
+export interface OpcionalTipoItem {
+  Id: string;
+  Desc: string;
 }

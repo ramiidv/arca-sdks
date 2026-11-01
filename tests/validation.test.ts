@@ -1,121 +1,105 @@
 import { describe, it, expect } from 'vitest';
-import { validateConstatarInput } from '../src/validation.js';
-import type { ConstatarInput } from '../src/types.js';
+import { ArcaValidationError, validateConstatarInput } from '../src/index.js';
+import type { ConstatarInput } from '../src/index.js';
 
 const validInput: ConstatarInput = {
-  CbteTipo: 1,
+  CbteModo: 'CAE',
+  CuitEmisor: 30712345671,
   PtoVta: 1,
+  CbteTipo: 1,
   CbteNro: 150,
   CbteFch: '20260315',
   ImpTotal: 12100,
   CodAutorizacion: '73429843294823',
   DocTipoReceptor: 80,
-  DocNroReceptor: 30712345678,
+  DocNroReceptor: 20123456786,
 };
 
+function fieldsOf(input: ConstatarInput): string[] {
+  try {
+    validateConstatarInput(input);
+    return [];
+  } catch (e) {
+    expect(e).toBeInstanceOf(ArcaValidationError);
+    return (e as ArcaValidationError).details.map((d) => d.field);
+  }
+}
+
 describe('validateConstatarInput', () => {
-  it('acepta input valido', () => {
-    expect(() => validateConstatarInput(validInput)).not.toThrow();
+  it('acepta input válido', () => {
+    expect(fieldsOf(validInput)).toEqual([]);
   });
 
-  it('acepta ImpTotal = 0', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, ImpTotal: 0 }),
-    ).not.toThrow();
+  it('acepta CAI y CAEA, CUIT con guiones, fecha ISO y Date', () => {
+    expect(fieldsOf({ ...validInput, CbteModo: 'CAI', CuitEmisor: '30-71234567-1', CbteFch: '2026-03-15' })).toEqual([]);
+    expect(fieldsOf({ ...validInput, CbteModo: 'CAEA', CbteFch: new Date('2026-03-15T15:00:00Z') })).toEqual([]);
   });
 
-  it('acepta DocTipoReceptor = 0 (consumidor final)', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, DocTipoReceptor: 0, DocNroReceptor: 0 }),
-    ).not.toThrow();
+  it('acepta ImpTotal = 0 y receptor omitido', () => {
+    const { DocTipoReceptor: _t, DocNroReceptor: _n, ...rest } = validInput;
+    expect(fieldsOf({ ...rest, ImpTotal: 0 })).toEqual([]);
   });
 
-  it('rechaza CbteTipo = 0', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, CbteTipo: 0 }),
-    ).toThrow('CbteTipo');
+  it('rechaza CbteModo desconocido', () => {
+    expect(fieldsOf({ ...validInput, CbteModo: 'CAX' as never })).toEqual(['CbteModo']);
   });
 
-  it('rechaza PtoVta negativo', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, PtoVta: -1 }),
-    ).toThrow('PtoVta');
+  it('rechaza CuitEmisor con dígito verificador inválido', () => {
+    expect(fieldsOf({ ...validInput, CuitEmisor: 30712345672 })).toEqual(['CuitEmisor']);
   });
 
-  it('rechaza CbteNro = 0', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, CbteNro: 0 }),
-    ).toThrow('CbteNro');
+  it('rechaza PtoVta, CbteTipo y CbteNro fuera de rango o no enteros', () => {
+    expect(fieldsOf({ ...validInput, PtoVta: 0 })).toEqual(['PtoVta']);
+    expect(fieldsOf({ ...validInput, PtoVta: 99999 })).toEqual(['PtoVta']);
+    expect(fieldsOf({ ...validInput, CbteTipo: 1.5 })).toEqual(['CbteTipo']);
+    expect(fieldsOf({ ...validInput, CbteNro: 100_000_000 })).toEqual(['CbteNro']);
   });
 
-  it('rechaza CbteFch con formato incorrecto (YYYY-MM-DD)', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, CbteFch: '2026-03-15' }),
-    ).toThrow('CbteFch');
+  it('rechaza fechas inválidas o inexistentes', () => {
+    expect(fieldsOf({ ...validInput, CbteFch: '15/03/2026' })).toEqual(['CbteFch']);
+    expect(fieldsOf({ ...validInput, CbteFch: '20230230' })).toEqual(['CbteFch']);
+    expect(fieldsOf({ ...validInput, CbteFch: '' })).toEqual(['CbteFch']);
   });
 
-  it('rechaza CbteFch vacio', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, CbteFch: '' }),
-    ).toThrow('CbteFch');
+  it('rechaza ImpTotal negativo, NaN, Infinity o con más de 13 enteros', () => {
+    for (const ImpTotal of [-1, NaN, Infinity, 1e13]) {
+      expect(fieldsOf({ ...validInput, ImpTotal })).toEqual(['ImpTotal']);
+    }
   });
 
-  it('rechaza CbteFch con letras', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, CbteFch: 'abcdefgh' }),
-    ).toThrow('CbteFch');
+  it('rechaza CodAutorizacion que no tenga 14 dígitos', () => {
+    expect(fieldsOf({ ...validInput, CodAutorizacion: '12345' })).toEqual(['CodAutorizacion']);
+    expect(fieldsOf({ ...validInput, CodAutorizacion: '7342984329482A' })).toEqual(['CodAutorizacion']);
   });
 
-  it('rechaza ImpTotal negativo', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, ImpTotal: -1 }),
-    ).toThrow('ImpTotal');
+  it('exige DocTipoReceptor y DocNroReceptor juntos', () => {
+    expect(fieldsOf({ ...validInput, DocNroReceptor: undefined })).toEqual(['DocNroReceptor']);
+    expect(fieldsOf({ ...validInput, DocTipoReceptor: undefined })).toEqual(['DocTipoReceptor']);
   });
 
-  it('rechaza CodAutorizacion con menos de 14 digitos', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, CodAutorizacion: '12345' }),
-    ).toThrow('CodAutorizacion');
+  it('valida el documento del receptor', () => {
+    expect(fieldsOf({ ...validInput, DocTipoReceptor: 123 })).toEqual(['DocTipoReceptor']);
+    expect(fieldsOf({ ...validInput, DocTipoReceptor: 96, DocNroReceptor: '12.345.678' })).toEqual(['DocNroReceptor']);
+    expect(fieldsOf({ ...validInput, DocTipoReceptor: 96, DocNroReceptor: '12345678' })).toEqual([]);
+    // DocTipo 80 (CUIT): dígito verificador
+    expect(fieldsOf({ ...validInput, DocNroReceptor: 20123456789 })).toEqual(['DocNroReceptor']);
   });
 
-  it('rechaza CodAutorizacion con mas de 14 digitos', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, CodAutorizacion: '123456789012345' }),
-    ).toThrow('CodAutorizacion');
-  });
-
-  it('rechaza CodAutorizacion con letras', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, CodAutorizacion: '7342984329AB23' }),
-    ).toThrow('CodAutorizacion');
-  });
-
-  it('rechaza CodAutorizacion vacio', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, CodAutorizacion: '' }),
-    ).toThrow('CodAutorizacion');
-  });
-
-  it('rechaza DocTipoReceptor negativo', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, DocTipoReceptor: -1 }),
-    ).toThrow('DocTipoReceptor');
-  });
-
-  it('rechaza DocNroReceptor negativo', () => {
-    expect(() =>
-      validateConstatarInput({ ...validInput, DocNroReceptor: -1 }),
-    ).toThrow('DocNroReceptor');
-  });
-
-  it('reporta multiples errores a la vez', () => {
-    expect(() =>
-      validateConstatarInput({
+  it('valida Opcionales', () => {
+    expect(fieldsOf({ ...validInput, Opcionales: [] })).toEqual(['Opcionales']);
+    expect(
+      fieldsOf({
         ...validInput,
-        CbteTipo: 0,
-        PtoVta: 0,
-        CodAutorizacion: 'bad',
+        Opcionales: [
+          { Id: '01', Valor: 'x' },
+          { Id: '01', Valor: 'y' },
+          { Id: '12345', Valor: '' },
+        ],
       }),
-    ).toThrow('CbteTipo');
+    ).toEqual(['Opcionales[1].Id', 'Opcionales[2].Id', 'Opcionales[2].Valor']);
+  });
+
+  it('informa todos los errores juntos', () => {
+    expect(fieldsOf({ ...validInput, PtoVta: 0, CbteNro: 0, ImpTotal: -1 })).toEqual(['PtoVta', 'CbteNro', 'ImpTotal']);
   });
 });
