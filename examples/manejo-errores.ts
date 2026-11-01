@@ -1,78 +1,70 @@
 /**
- * Ejemplo: Manejo de errores
+ * Ejemplo: manejo de errores al emitir.
  *
- * El SDK provee clases de error especificas para catch granular:
- *   - ArcaAuthError: falla de autenticacion WSAA
- *   - ArcaSireServiceError: error de negocio de SIRE (con codigos)
- *   - ArcaSoapError: error HTTP/SOAP (timeout, servidor caido)
- *   - ArcaValidationError: datos de entrada invalidos
+ * - ArcaValidationError: datos inválidos (no se llamó a ARCA).
+ * - ArcaSireServiceError: ARCA rechazó el certificado (no se emitió).
+ * - ArcaSoapError con uncertain=true: no se sabe si se emitió. No reintentar a ciegas.
+ * - ArcaAuthError: falla de WSAA.
  */
-
-import fs from "fs";
+import { readFileSync } from 'node:fs';
 import {
-  ArcaSire,
   ArcaAuthError,
-  ArcaSoapError,
+  ArcaSire,
   ArcaSireServiceError,
+  ArcaSoapError,
+  ArcaValidationError,
+  Condicion,
   TipoComprobante,
-  TipoRetencion,
-  Regimen,
-  TipoOperacion,
-} from "@ramiidv/arca-sire";
-import { ArcaValidationError } from "@ramiidv/arca-common";
+} from '@ramiidv/arca-sire';
+import type { EmitirCertificadoParams } from '@ramiidv/arca-sire';
 
 async function main() {
   const sire = new ArcaSire({
-    cert: fs.readFileSync("./certs/certificado.crt", "utf-8"),
-    key: fs.readFileSync("./certs/clave.key", "utf-8"),
-    cuit: "20123456789",
+    cert: readFileSync('./certs/certificado.crt', 'utf-8'),
+    key: readFileSync('./certs/clave.key', 'utf-8'),
+    cuit: '20123456786',
     production: false,
-    timeout: 60_000, // 60s para servidores lentos
+    timeout: 60_000,
   });
 
+  const datos: EmitirCertificadoParams = {
+    codigoTrazabilidad: 'OP-2026-000124', // guardalo junto con la operación antes de llamar
+    regimen: 831,
+    condicion: Condicion.NO_INSCRIPTO,
+    fechaRetencion: new Date(),
+    imposibilidadRetencion: false,
+    importeRetencion: 1500.5,
+    importeBaseCalculo: 10000,
+    regimenExclusion: false,
+    tipoComprobante: TipoComprobante.RECIBO,
+    fechaComprobante: new Date(),
+    numeroComprobante: '00001-00000042',
+    importeComprobante: 12100,
+    cuitRetenido: '30500010912',
+  };
+
   try {
-    const resultado = await sire.registrarRetencion({
-      tipoComprobante: TipoComprobante.C2005,
-      fechaEmision: "2026-03-31",
-      tipoRetencion: TipoRetencion.RETENCION,
-      codigoRegimen: Regimen.IVA_GENERAL,
-      tipoOperacion: TipoOperacion.NORMAL,
-      cuitRetenido: "30712345678",
-      fechaRetencion: "2026-03-31",
-      importeOperacion: 100_000,
-      importeRetenido: 21_000,
-    });
-
-    console.log(`Comprobante: ${resultado.nroComprobante}`);
-
-    // Verificar si hubo errores parciales
-    if (resultado.errores && resultado.errores.length > 0) {
-      for (const err of resultado.errores) {
-        console.warn(`Advertencia [${err.code}]: ${err.msg}`);
-      }
-    }
-  } catch (e) {
-    if (e instanceof ArcaValidationError) {
-      // Datos de entrada invalidos (CUIT mal formada, periodo invalido, etc.)
-      console.error("Error de validacion:", e.message);
-      for (const detail of e.details) {
-        console.error(`  Campo: ${detail.field} - ${detail.message}`);
-      }
-    } else if (e instanceof ArcaAuthError) {
-      // Certificado invalido, expirado, o respuesta WSAA inesperada
-      console.error("Error de autenticacion:", e.message);
-    } else if (e instanceof ArcaSireServiceError) {
-      // Error de negocio de SIRE con codigos especificos
-      for (const err of e.errors) {
-        console.error(`SIRE [${err.code}]: ${err.msg}`);
-      }
-    } else if (e instanceof ArcaSoapError) {
-      // Timeout, HTTP 500, SOAP Fault
-      console.error("Error de conexion:", e.message);
+    const res = await sire.emitirCertificado(datos);
+    console.log('Emitido:', res.certificadoNro);
+  } catch (err) {
+    if (err instanceof ArcaValidationError) {
+      for (const d of err.details) console.error(`Campo ${d.field}: ${d.message}`);
+    } else if (err instanceof ArcaSireServiceError) {
+      console.error('ARCA rechazó el certificado:', err.message);
+    } else if (err instanceof ArcaSoapError && err.uncertain) {
+      console.error(
+        `Resultado incierto para ${datos.codigoTrazabilidad}: verificar en el micrositio SIRE antes de reintentar.`,
+        err.message,
+      );
+    } else if (err instanceof ArcaAuthError) {
+      console.error('Error de autenticación WSAA:', err.message);
     } else {
-      throw e;
+      throw err;
     }
   }
 }
 
-main().catch(console.error);
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

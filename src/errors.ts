@@ -1,25 +1,26 @@
-// Base errors re-exported from common
-export { ArcaError, ArcaAuthError, ArcaSoapError, ArcaServiceError } from '@ramiidv/arca-common';
-import { ArcaError, ArcaServiceError } from '@ramiidv/arca-common';
+import { ArcaServiceError } from '@ramiidv/arca-common';
+import type { ServiceErrorDetail } from '@ramiidv/arca-common';
 
 /**
- * Base error for SIRE SDK.
- * Extends ArcaError from common for backward compatibility.
- */
-export class ArcaSireError extends ArcaError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ArcaSireError';
-  }
-}
-
-/**
- * Error de servicio de SIRE (errores de negocio).
- * Extiende ArcaServiceError de common.
+ * Rechazo de SIRE: el servicio respondió con un SOAP Fault que indica que el
+ * request no se procesó (error de negocio `soapenv:Client`, XML que no cumple
+ * el schema, request mal formado o token/sign inválido).
+ *
+ * Es determinístico: el certificado **no** se emitió/anuló. `message` y
+ * `errors[0].msg` tienen el texto de ARCA; `cause` es el `ArcaSoapError` original.
  */
 export class ArcaSireServiceError extends ArcaServiceError {
-  constructor(message: string, errors: { code: number; msg: string }[]) {
-    super(message, errors);
+  static override readonly code: string = 'ARCA_SIRE_SERVICE_ERROR';
+  /** `faultcode` del SOAP Fault (ej: `soapenv:Client`). */
+  public readonly faultCode?: string;
+
+  constructor(
+    message: string,
+    errors: ServiceErrorDetail[],
+    options?: { cause?: unknown; faultCode?: string },
+  ) {
+    super(message, errors, options?.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = 'ArcaSireServiceError';
+    this.faultCode = options?.faultCode;
   }
 }

@@ -1,197 +1,64 @@
 # @ramiidv/arca-sire
 
-> TypeScript SDK para el web service SIRE (Sistema Integral de Retenciones Electronicas) de ARCA (ex AFIP). Gestiona certificados de retencion/percepcion electronicos. Reemplaza el antiguo SICORE.
+> TypeScript SDK para el web service SIRE de ARCA (ex AFIP): emite y anula certificados de retención electrónicos de IVA (formulario C2005, RG 4523/2019). Autenticación WSAA automática (servicio "sire-ws"). ESM, Node >= 18.
 
-## Instalacion
+## Operaciones (WSDL oficial: solo existen estas tres)
 
-```bash
-npm install @ramiidv/arca-sire
-```
+- `emitirCertificado(params, opts?)` → operación `emitir`. Devuelve `{ certificadoNro: string, codigoSeguridad: string }`.
+- `anularCertificado({ numeroCertificado, motivoAnulacion, codigoTrazabilidad? }, opts?)` → operación `anular`. Devuelve el certificado de anulación `{ certificadoNro, codigoSeguridad }`.
+- `status(opts?)` → operación `dummy`. Devuelve `{ appserver, dbserver, authserver }` ("OK").
 
-Requisitos: Node.js >= 18 (fetch nativo). ESM only.
+No hay operaciones de consulta de certificados ni de tablas. No inventes métodos como consultarRetenciones, registrarRetencion o consultarRegimenes: no existen.
 
-## Configuracion
+## Configuración
 
 ```typescript
-import { ArcaSire } from '@ramiidv/arca-sire';
+import { ArcaSire, Condicion, TipoComprobante, MotivoAnulacion } from '@ramiidv/arca-sire';
 
 const sire = new ArcaSire({
-  cert: string,          // PEM X.509 certificate
-  key: string,           // PEM RSA private key
-  cuit: string,          // CUIT del agente de retencion (ej: "20123456789")
-  production?: boolean,  // default: false (homologacion)
-  timeout?: number,      // default: 30000
-  retries?: number,      // default: 1
-  retryDelayMs?: number, // default: 1000
-  onEvent?: (event: ArcaEvent) => void,
+  cert: string,              // PEM
+  key: string,               // PEM
+  cuit: '20123456786',       // CUIT del agente de retención (cuitAgente), se valida el dígito verificador
+  production?: boolean,      // default false (homologación)
+  endpoints?: { sire?: string; wsaa?: string },
+  timeout?, retries?, retryDelayMs?, ticketStorage?, tokenTTLMinutes?, clockOffsetMs?,
+  autoClockSkew?, loginErrorCooldownMs?, fetch?, legacyTls?, onEvent?,
 });
 ```
 
-## Metodos principales
+Endpoints: homologación https://ws-aplicativos-reca.homo.afip.gob.ar/sire/ws/v1/c2005/2005 ; producción https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005 . Namespace: http://www.afip.gob.ar/sire/c2005/ (elementos hijos sin namespace).
 
-### registrarRetencion(retencion: Retencion): Promise<RetencionResult>
-Registra una nueva retencion/percepcion. Tipos de comprobante: C2005 (IVA retencion/percepcion), C2003 (Ganancias beneficiarios exterior), C2004 (Seguridad Social). Campos requeridos: tipoComprobante, fechaEmision, tipoRetencion, codigoRegimen, tipoOperacion, cuitRetenido, fechaRetencion, importeOperacion, importeRetenido. Campos opcionales: porcentajeRetencion, nroComprobanteOriginal, condicion, nroCertificadoPropio, tipoDocRetenido, importeBaseCalculo, fechaComprobanteOriginal, tipoComprobanteOriginal, observaciones.
+## emitirCertificado: campos
 
-### consultarRetenciones(consulta: ConsultaRetencionesParams): Promise<ConsultaRetencionesResult>
-Consulta retenciones registradas por periodo. Parametros: periodo (YYYYMM, requerido), quincena (1 o 2, opcional), tipoComprobante (opcional), cuitRetenido (opcional). Devuelve array de CertificadoRetencion y cantidadRegistros.
+version (100) e impuesto (216) los completa el SDK. motivoAnulacion NO se envía en emitir.
 
-### anularRetencion(nroComprobante: string): Promise<RetencionResult>
-Anula una retencion previamente registrada por numero de comprobante.
+Obligatorios: regimen (int, ej 831), fechaRetencion (FechaHora), imposibilidadRetencion (boolean), importeRetencion, importeBaseCalculo (number), regimenExclusion (boolean), tipoComprobante (TipoComprobante), fechaComprobante (FechaHora), numeroComprobante (string; "99999-99999999" para tipos 1-4 y 17-20, hasta 16 caracteres para 5/9/11, hasta 12 para 6), importeComprobante (number), cuitRetenido (CUIT).
 
-### consultarComprobante(nroComprobante: string): Promise<CertificadoRetencion>
-Consulta un certificado de retencion especifico por numero de comprobante.
+Condicionales: condicion (1 inscripto, 2 no inscripto) obligatoria para régimen 831; motivoNoRetencion (≤30) si imposibilidadRetencion=true; porcentajeExclusion (50 o 100) y fechaPublicacion si regimenExclusion=true; motivoEmisionNotaCredito (≤30) solo y obligatorio para tipo 3; numeroCertificadoOriginal (≤25), fechaRetencionCertificadoOriginal, importeCertificadoOriginal solo y obligatorios para tipos 3, 19, 20.
 
-### generarCertificado(nroComprobante: string): Promise<CertificadoRetencion>
-Genera un certificado de retencion (datos/PDF).
+Opcionales: codigoTrazabilidad (texto libre ≤36), coe (≤12), coeOriginal (≤12), cae (≤14).
 
-### consultarAlicuotas(codigoRegimen?: number): Promise<AlicuotaItem[]>
-Consulta alicuotas/tasas aplicables, opcionalmente filtradas por codigo de regimen.
-
-### consultarRegimenes(): Promise<RegimenItem[]>
-Consulta regimenes de retencion/percepcion disponibles.
-
-### consultarTiposComprobante(): Promise<TipoComprobanteItem[]>
-Consulta tipos de comprobante validos.
-
-### consultarTiposOperacion(): Promise<TipoOperacionItem[]>
-Consulta tipos de operacion validos.
-
-### consultarCondicion(): Promise<CondicionItem[]>
-Consulta condiciones del sujeto retenido.
-
-### status(): Promise<ServerStatus>
-Health check del servicio SIRE. No requiere autenticacion.
-
-## Tipos principales
-
-```typescript
-interface Retencion {
-  tipoComprobante: number;
-  fechaEmision: string;       // YYYY-MM-DD
-  tipoRetencion: number;      // 1=Retencion, 2=Percepcion
-  codigoRegimen: number;
-  tipoOperacion: number;      // 1=Normal, 2=Anulacion
-  cuitRetenido: string;
-  fechaRetencion: string;     // YYYY-MM-DD
-  importeOperacion: number;
-  importeRetenido: number;
-  porcentajeRetencion?: number;
-  nroComprobanteOriginal?: string;
-  condicion?: number;
-  nroCertificadoPropio?: string;
-  tipoDocRetenido?: number;
-  importeBaseCalculo?: number;
-  fechaComprobanteOriginal?: string;
-  tipoComprobanteOriginal?: number;
-  observaciones?: string;
-}
-
-interface RetencionResult {
-  nroComprobante: string;
-  nroCertificado?: string;
-  codigoAutorizacion?: string;
-  fechaProceso: string;
-  resultado: string;
-  observaciones?: string;
-  errores?: { code: number; msg: string }[];
-}
-
-interface CertificadoRetencion {
-  nroComprobante: string;
-  nroCertificado: string;
-  tipoComprobante: number;
-  cuitAgente: string;
-  cuitRetenido: string;
-  fechaEmision: string;
-  fechaRetencion: string;
-  tipoRetencion: number;
-  codigoRegimen: number;
-  importeOperacion: number;
-  importeRetenido: number;
-  porcentajeRetencion?: number;
-  estado: string;            // 'V'=Vigente, 'A'=Anulado
-  codigoAutorizacion?: string;
-  condicion?: number;
-  observaciones?: string;
-}
-
-interface ConsultaRetencionesParams {
-  periodo: string;           // YYYYMM
-  quincena?: number;         // 1 o 2
-  tipoComprobante?: number;
-  cuitRetenido?: string;
-}
-
-interface ConsultaRetencionesResult {
-  retenciones: CertificadoRetencion[];
-  cantidadRegistros: number;
-}
-
-interface RegimenItem {
-  codigo: number;
-  descripcion: string;
-  tipoRetencion?: number;
-  estado?: string;
-  vigenciaDesde?: string;
-  vigenciaHasta?: string;
-}
-
-interface AlicuotaItem {
-  codigoRegimen: number;
-  porcentaje: number;
-  importeMinimo?: number;
-  importeExcedente?: number;
-  descripcion?: string;
-  vigenciaDesde?: string;
-  vigenciaHasta?: string;
-}
-
-interface TipoComprobanteItem { codigo: number; descripcion: string; }
-interface TipoOperacionItem { codigo: number; descripcion: string; }
-interface CondicionItem { codigo: number; descripcion: string; }
-interface ServerStatus { appserver: string; dbserver: string; authserver: string; }
-```
+FechaHora = Date | "YYYY-MM-DD" | "YYYYMMDD" | "YYYY-MM-DDThh:mm[:ss[.SSS]]" (hora Argentina) | ISO con Z/±hh:mm. Se envía como "AAAA-MM-DDThh:mm:ss.SSS-03:00".
+Importes: finitos, >= 0, máximo 11 enteros, se envían con 2 decimales.
 
 ## Errores
 
-4-class hierarchy:
-- ArcaSireError: base class
-- ArcaAuthError: WSAA authentication failures
-- ArcaSireServiceError: business errors from SIRE (has errors: {code: number, msg: string}[])
-- ArcaSoapError: HTTP/transport errors (has statusCode?: number)
+- ArcaValidationError: validación local (antes de autenticar). `details[]` por campo.
+- ArcaSireServiceError (extends ArcaServiceError): ARCA rechazó (SOAP Fault soapenv:Client, XML fuera de schema, request mal formado, token/sign). Seguro: no se emitió. `message`, `errors[0].msg`, `faultCode`, `cause`.
+- ArcaSoapError con `uncertain: true`: timeout, red, 5xx, respuesta inválida o Fault soapenv:Server de sistema durante emitir/anular. El certificado PUDO emitirse. emitir/anular nunca se reintentan.
+- ArcaAuthError / ArcaTicketVigenteError: WSAA.
 
-```typescript
-import { ArcaAuthError, ArcaSireServiceError, ArcaSoapError } from '@ramiidv/arca-sire';
+Resultado incierto: SIRE no tiene consulta y no documenta deduplicación por codigoTrazabilidad. No reenvíes automáticamente: verificá en el micrositio SIRE (clave fiscal); si quedó duplicado, anulalo con anularCertificado.
 
-try {
-  await sire.registrarRetencion(retencion);
-} catch (error) {
-  if (error instanceof ArcaAuthError) { /* auth failure */ }
-  if (error instanceof ArcaSireServiceError) { /* business error, check error.errors */ }
-  if (error instanceof ArcaSoapError) { /* HTTP/network error, check error.statusCode */ }
-}
-```
+## Tablas exportadas (manual para el desarrollador v1.0.3, anexo)
 
-## Eventos
+- TipoComprobante: FACTURA=1, RECIBO=2, NOTA_CREDITO=3, NOTA_DEBITO=4, OTRO_COMPROBANTE=5, ORDEN_DE_PAGO=6, ESCRITURA_PUBLICA=9, FACTURA_16_DIGITOS=11, LIQUIDACION_SERVICIOS_PUBLICOS_A=17, LIQUIDACION_SERVICIOS_PUBLICOS_B=18, LIQUIDACION_SERVICIOS_PUBLICOS_A_NEGATIVA=19, LIQUIDACION_SERVICIOS_PUBLICOS_B_NEGATIVA=20
+- Condicion: INSCRIPTO=1, NO_INSCRIPTO=2
+- MotivoAnulacion: CUIT_ERRONEA_SUJETO_RETENIDO=1, FECHA_RETENCION_ERRONEA=2, REGIMEN_INCORRECTO=3, OTROS=4
+- REGIMENES_CON_CONDICION = [831]; SIRE_VERSION = 100; IMPUESTO_IVA = 216; SIRE_SERVICE_ID = 'sire-ws'
 
-Discriminated union types: auth:login, auth:cache-hit, request:start, request:end, request:retry, request:error.
+## Bajo nivel
 
-## Enums
-
-- TipoComprobante: C2005=2005 (IVA retencion/percepcion), C2003=2003 (Ganancias beneficiarios exterior), C2004=2004 (Seguridad Social)
-- TipoRetencion: RETENCION=1, PERCEPCION=2
-- Regimen: IVA_GENERAL=499, GANANCIAS_GENERAL=1, SUSS_GENERAL=800
-- TipoOperacion: NORMAL=1, ANULACION=2
-- CondicionSujeto: INSCRIPTO=1, NO_INSCRIPTO=2, EXENTO=3, NO_CATEGORIZADO=4
-- EstadoComprobante: VIGENTE='V', ANULADO='A'
-
-## Clientes de bajo nivel
-
-Accesibles como propiedades publicas: sire.wsaa (WsaaClient), sire.client (SireClient).
-
-## Utilidades exportadas
-
-- ensureArray<T>(value): T[] - normaliza single/array SOAP responses
-- parseXml(xml): Record<string, unknown> - parse XML with CUIT-safe options
-- buildXml(obj): string - build XML from object
-- checkServiceErrors(result, serviceName): void - throws on ARCA business errors
+- `sire.client: SireClient` con `dummy()`, `emitir(auth, cuitAgente, CertificadoRequest)`, `anular(auth, cuitAgente, CertificadoAnulacionRequest)`.
+- `buildCertificadoRequest(params)`, `buildAnulacionRequest(params)`, `formatSireDateTime(value)`, `formatImporte(n)`.
+- `sire.wsaa: WsaaClient` de @ramiidv/arca-common.

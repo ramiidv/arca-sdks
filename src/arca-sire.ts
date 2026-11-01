@@ -1,224 +1,115 @@
 import { WsaaClient } from '@ramiidv/arca-common';
-import type { ArcaEvent, SoapCallOptions } from '@ramiidv/arca-common';
-import { ENDPOINTS } from './constants.js';
+import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
+import { ENDPOINTS, SIRE_SERVICE_ID } from './constants.js';
 import { SireClient } from './sire-client.js';
-import { validateRetencion, validatePeriodo } from './validation.js';
+import { buildAnulacionRequest, buildCertificadoRequest, toCuitNumber } from './validation.js';
 import type {
+  AnularCertificadoParams,
   ArcaSireConfig,
+  CertificadoResult,
+  EmitirCertificadoParams,
   WsAuth,
-  Retencion,
-  RetencionResult,
-  CertificadoRetencion,
-  ConsultaRetencionesParams,
-  ConsultaRetencionesResult,
-  RegimenItem,
-  AlicuotaItem,
-  TipoComprobanteItem,
-  TipoOperacionItem,
-  CondicionItem,
-  ServerStatus,
 } from './types.js';
 
 /**
- * Main orchestrator class for the ARCA SIRE web service.
+ * SDK del web service SIRE de ARCA para emitir y anular certificados de
+ * retención electrónicos de IVA (formulario C2005, RG 4523/2019).
  *
- * Provides high-level methods that handle WSAA authentication automatically
- * and expose retention/perception management operations.
+ * Autentica con WSAA (servicio `sire-ws`), valida los datos localmente y
+ * serializa el request según el XSD oficial.
  *
  * @example
  * ```ts
- * import { ArcaSire } from '@ramiidv/arca-sire';
- * import { readFileSync } from 'fs';
- *
- * const sire = new ArcaSire({
- *   cert: readFileSync('cert.pem', 'utf-8'),
- *   key: readFileSync('key.pem', 'utf-8'),
- *   cuit: '20123456789',
- *   production: false,
+ * const sire = new ArcaSire({ cert, key, cuit: '20123456786', production: false });
+ * const { certificadoNro, codigoSeguridad } = await sire.emitirCertificado({
+ *   regimen: 831,
+ *   condicion: Condicion.INSCRIPTO,
+ *   fechaRetencion: '2026-10-30T11:16:00',
+ *   imposibilidadRetencion: false,
+ *   importeRetencion: 2100,
+ *   importeBaseCalculo: 20000,
+ *   regimenExclusion: false,
+ *   tipoComprobante: TipoComprobante.FACTURA,
+ *   fechaComprobante: '2026-10-30',
+ *   numeroComprobante: '00003-00008497',
+ *   importeComprobante: 24200,
+ *   cuitRetenido: '30500010912',
  * });
- *
- * // Register a retention
- * const result = await sire.registrarRetencion({
- *   tipoComprobante: 2005,
- *   fechaEmision: '2026-03-31',
- *   tipoRetencion: 1,
- *   codigoRegimen: 499,
- *   tipoOperacion: 1,
- *   cuitRetenido: '30712345678',
- *   fechaRetencion: '2026-03-31',
- *   importeOperacion: 10000,
- *   importeRetenido: 2100,
- * });
- * console.log(result.nroComprobante);
  * ```
  */
 export class ArcaSire {
-  /** Low-level WSAA client for direct access */
+  /** Cliente WSAA (ej: `await sire.wsaa.clearTicket('sire-ws')`). */
   public readonly wsaa: WsaaClient;
-  /** Low-level SIRE SOAP client for direct access */
+  /** Cliente SOAP de bajo nivel. */
   public readonly client: SireClient;
 
-  private readonly cuit: string;
-  private readonly onEvent?: (event: ArcaEvent) => void;
+  private readonly cuitAgente: number;
 
   constructor(config: ArcaSireConfig) {
-    const isProduction = config.production ?? false;
-    const env = isProduction ? 'production' : 'testing';
-    this.cuit = config.cuit;
-    this.onEvent = config.onEvent;
-
-    const soapOptions: Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs'> = {
-      timeout: config.timeout,
-      retries: config.retries,
-      retryDelayMs: config.retryDelayMs,
-    };
+    this.cuitAgente = toCuitNumber(config.cuit, 'cuit');
+    const env = config.production ? 'production' : 'testing';
 
     this.wsaa = new WsaaClient({
       cert: config.cert,
       key: config.key,
-      production: isProduction,
+      production: config.production,
+      endpoint: config.endpoints?.wsaa,
+      tokenTTLMinutes: config.tokenTTLMinutes,
       timeout: config.timeout,
       retries: config.retries,
       retryDelayMs: config.retryDelayMs,
       onEvent: config.onEvent,
+      ticketStorage: config.ticketStorage,
+      clockOffsetMs: config.clockOffsetMs,
+      autoClockSkew: config.autoClockSkew,
+      loginErrorCooldownMs: config.loginErrorCooldownMs,
+      fetch: config.fetch,
+      legacyTls: config.legacyTls,
     });
 
     this.client = new SireClient({
-      endpoint: ENDPOINTS.sire[env],
-      namespace: ENDPOINTS.sire.namespace,
-      soapOptions,
+      endpoint: config.endpoints?.sire ?? ENDPOINTS.sire[env],
+      timeout: config.timeout,
+      retries: config.retries,
+      retryDelayMs: config.retryDelayMs,
       onEvent: config.onEvent,
+      fetch: config.fetch,
+      legacyTls: config.legacyTls,
     });
   }
 
-  // -------------------------------------------------------------------------
-  // Registro y gestion de retenciones
-  // -------------------------------------------------------------------------
-
   /**
-   * Register a new retention/perception.
-   * Authenticates automatically via WSAA.
-   * @param retencion - Retention data to register
+   * Emite un certificado de retención C2005 (`emitir`).
+   *
+   * Los datos se validan antes de autenticar (`ArcaValidationError`). Un
+   * rechazo de ARCA lanza `ArcaSireServiceError` (no se emitió nada). Un
+   * `ArcaSoapError` con `uncertain: true` significa que el certificado pudo
+   * haberse emitido: no reintentes a ciegas (ver README, "Resultado incierto").
    */
-  async registrarRetencion(retencion: Retencion): Promise<RetencionResult> {
-    validateRetencion(retencion);
-    const auth = await this.getAuth();
-    return this.client.registrarRetencion(auth, retencion);
+  async emitirCertificado(params: EmitirCertificadoParams, opts?: CallOptions): Promise<CertificadoResult> {
+    const certificado = buildCertificadoRequest(params);
+    const auth = await this.auth(opts);
+    return this.client.emitir(auth, this.cuitAgente, certificado, opts);
   }
 
   /**
-   * Query retentions for a given period.
-   * Authenticates automatically via WSAA.
-   * @param consulta - Query parameters (period, optional filters)
+   * Anula un certificado C2005 ya emitido (`anular`). Devuelve el número y el
+   * código de seguridad del certificado de anulación. Mismo manejo de errores
+   * que `emitirCertificado`.
    */
-  async consultarRetenciones(consulta: ConsultaRetencionesParams): Promise<ConsultaRetencionesResult> {
-    validatePeriodo(consulta.periodo);
-    const auth = await this.getAuth();
-    return this.client.consultarRetenciones(auth, consulta);
+  async anularCertificado(params: AnularCertificadoParams, opts?: CallOptions): Promise<CertificadoResult> {
+    const certificadoAnulacion = buildAnulacionRequest(params);
+    const auth = await this.auth(opts);
+    return this.client.anular(auth, this.cuitAgente, certificadoAnulacion, opts);
   }
 
-  /**
-   * Cancel a previously registered retention.
-   * Authenticates automatically via WSAA.
-   * @param nroComprobante - Certificate number to cancel
-   */
-  async anularRetencion(nroComprobante: string): Promise<RetencionResult> {
-    const auth = await this.getAuth();
-    return this.client.anularRetencion(auth, nroComprobante);
+  /** Estado de los servidores de SIRE (`dummy`, sin autenticación). */
+  async status(opts?: CallOptions): Promise<ServerStatus> {
+    return this.client.dummy(opts);
   }
 
-  /**
-   * Query a specific retention certificate by number.
-   * Authenticates automatically via WSAA.
-   * @param nroComprobante - Certificate number to query
-   */
-  async consultarComprobante(nroComprobante: string): Promise<CertificadoRetencion> {
-    const auth = await this.getAuth();
-    return this.client.consultarComprobante(auth, nroComprobante);
-  }
-
-  /**
-   * Generate a retention certificate.
-   * Authenticates automatically via WSAA.
-   * @param nroComprobante - Certificate number to generate
-   */
-  async generarCertificado(nroComprobante: string): Promise<CertificadoRetencion> {
-    const auth = await this.getAuth();
-    return this.client.generarCertificado(auth, nroComprobante);
-  }
-
-  // -------------------------------------------------------------------------
-  // Tablas de parametros
-  // -------------------------------------------------------------------------
-
-  /**
-   * Query applicable withholding rates.
-   * Authenticates automatically via WSAA.
-   * @param codigoRegimen - Optional regime code to filter by
-   */
-  async consultarAlicuotas(codigoRegimen?: number): Promise<AlicuotaItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarAlicuotas(auth, codigoRegimen);
-  }
-
-  /**
-   * Query applicable regimes.
-   * Authenticates automatically via WSAA.
-   */
-  async consultarRegimenes(): Promise<RegimenItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarRegimenes(auth);
-  }
-
-  /**
-   * Query valid voucher types.
-   * Authenticates automatically via WSAA.
-   */
-  async consultarTiposComprobante(): Promise<TipoComprobanteItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarTiposComprobante(auth);
-  }
-
-  /**
-   * Query operation types.
-   * Authenticates automatically via WSAA.
-   */
-  async consultarTiposOperacion(): Promise<TipoOperacionItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarTiposOperacion(auth);
-  }
-
-  /**
-   * Query condition types.
-   * Authenticates automatically via WSAA.
-   */
-  async consultarCondicion(): Promise<CondicionItem[]> {
-    const auth = await this.getAuth();
-    return this.client.consultarCondicion(auth);
-  }
-
-  // -------------------------------------------------------------------------
-  // Health check
-  // -------------------------------------------------------------------------
-
-  /**
-   * Health check for the SIRE service.
-   * Does not require authentication.
-   */
-  async status(): Promise<ServerStatus> {
-    return this.client.dummy();
-  }
-
-  // -------------------------------------------------------------------------
-  // Private helpers
-  // -------------------------------------------------------------------------
-
-  private async getAuth(): Promise<WsAuth> {
-    const ticket = await this.wsaa.getAccessTicket(ENDPOINTS.sire.serviceId);
-    return {
-      Token: ticket.token,
-      Sign: ticket.sign,
-      CuitRepresentada: this.cuit,
-    };
+  private async auth(opts?: CallOptions): Promise<WsAuth> {
+    const ticket = await this.wsaa.getAccessTicket(SIRE_SERVICE_ID, opts);
+    return { token: ticket.token, sign: ticket.sign };
   }
 }

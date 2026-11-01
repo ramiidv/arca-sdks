@@ -1,238 +1,167 @@
-// Shared types from common
-export type { AccessTicket, ArcaEvent, ServerStatus, SoapCallOptions } from '@ramiidv/arca-common';
-import type { ArcaEvent } from '@ramiidv/arca-common';
+import type { ArcaBaseConfig } from '@ramiidv/arca-common';
+import type { Condicion, MotivoAnulacion, TipoComprobante } from './constants.js';
 
 // ---------------------------------------------------------------------------
-// Configuration
+// Configuración
 // ---------------------------------------------------------------------------
 
-export interface ArcaSireConfig {
-  /** PEM-encoded X.509 certificate */
-  cert: string;
-  /** PEM-encoded RSA private key */
-  key: string;
-  /** CUIT of the withholding agent (e.g. "20123456789") */
-  cuit: string;
-  /** Use production endpoints (default: false = testing / homologacion) */
-  production?: boolean;
-  /** Request timeout in ms (default: 30000) */
-  timeout?: number;
-  /** Number of retries on 5xx / network errors (default: 1) */
-  retries?: number;
-  /** Base delay in ms for exponential backoff (default: 1000) */
-  retryDelayMs?: number;
-  /** Optional event callback */
-  onEvent?: (event: ArcaEvent) => void;
+/** Configuración de `ArcaSire`. `cuit` es el CUIT del agente de retención (`cuitAgente`). */
+export interface ArcaSireConfig extends ArcaBaseConfig {
+  /** Endpoints propios (ej: proxy). Si se omiten se usan los de `ENDPOINTS` según `production`. */
+  endpoints?: {
+    /** URL del servicio SIRE C2005. */
+    sire?: string;
+    /** URL de WSAA. */
+    wsaa?: string;
+  };
 }
 
-// ---------------------------------------------------------------------------
-// Authentication
-// ---------------------------------------------------------------------------
-
+/** Credenciales del Ticket de Acceso de WSAA. */
 export interface WsAuth {
-  Token: string;
-  Sign: string;
-  CuitRepresentada: string;
+  token: string;
+  sign: string;
 }
 
+/**
+ * Fecha y hora (`xs:dateTime`). Acepta:
+ * - `Date`: se envía en hora de Argentina (`-03:00`).
+ * - `"YYYY-MM-DD"` o `"YYYYMMDD"`: se envía como las 00:00 de Argentina.
+ * - `"YYYY-MM-DDThh:mm[:ss[.SSS]]"` (hora de Argentina) o con zona (`Z`, `±hh:mm`).
+ *
+ * Siempre se serializa como `AAAA-MM-DDThh:mm:ss.SSS-03:00` (manual, 5.1).
+ */
+export type FechaHora = Date | string;
+
 // ---------------------------------------------------------------------------
-// Retencion - Datos de una retencion/percepcion a registrar
+// emitir
 // ---------------------------------------------------------------------------
 
-export interface Retencion {
-  /** Tipo de comprobante (C2005, C2003, C2004) */
-  tipoComprobante: number;
-  /** Fecha de emision del comprobante (formato YYYY-MM-DD) */
-  fechaEmision: string;
-  /** Tipo de retencion: 1=Retencion, 2=Percepcion */
-  tipoRetencion: number;
-  /** Codigo de regimen de retencion/percepcion */
-  codigoRegimen: number;
-  /** Tipo de operacion: 1=Normal, 2=Anulacion */
-  tipoOperacion: number;
-  /** CUIT del sujeto retenido/percibido (11 digitos) */
-  cuitRetenido: string;
-  /** Fecha de la retencion (formato YYYY-MM-DD) */
+/**
+ * Datos del certificado C2005 a emitir (`certificado` del XSD, manual 3.2.1).
+ * `version` (100) e `impuesto` (216) se completan automáticamente.
+ * `motivoAnulacion` no se envía en `emitir` (manual 3.2.1).
+ */
+export interface EmitirCertificadoParams {
+  /** Texto libre de hasta 36 caracteres para identificar el certificado en el sistema del agente. */
+  codigoTrazabilidad?: string;
+  /** Código de régimen (hasta 3 dígitos), existente en la tabla REGIMEN para el impuesto 216. */
+  regimen: number;
+  /** Fecha de la retención (a partir del 01/12/2019). */
+  fechaRetencion: FechaHora;
+  /** Condición del sujeto retenido. Obligatoria para los regímenes de `REGIMENES_CON_CONDICION` (831). */
+  condicion?: Condicion | number;
+  /** `false`: retención efectuada. `true`: retención no efectuada. */
+  imposibilidadRetencion: boolean;
+  /** Motivo (hasta 30 caracteres). Obligatorio si `imposibilidadRetencion` es `true`. */
+  motivoNoRetencion?: string;
+  /** Importe de la retención (11 enteros, 2 decimales). */
+  importeRetencion: number;
+  /** Importe sobre el cual se calcula la retención (11 enteros, 2 decimales). */
+  importeBaseCalculo: number;
+  /** `true` si el régimen está excluido (certificado de exclusión). */
+  regimenExclusion: boolean;
+  /** Porcentaje de exclusión: 50 o 100. Obligatorio si `regimenExclusion` es `true`. */
+  porcentajeExclusion?: number;
+  /** Fecha de publicación del certificado de exclusión. Obligatoria si `regimenExclusion` es `true`. */
+  fechaPublicacion?: FechaHora;
+  /** Tipo de comprobante (tabla TIPO_COMPROBANTE). */
+  tipoComprobante: TipoComprobante | number;
+  /** Fecha del comprobante: menor o igual a `fechaRetencion` (igual para tipos 3, 19 y 20). */
+  fechaComprobante: FechaHora;
+  /**
+   * Número del comprobante, con el formato del tipo (ej: `"00003-00008497"`).
+   * Obligatorio para todos los tipos de la tabla TIPO_COMPROBANTE.
+   */
+  numeroComprobante?: string;
+  /** COE (hasta 12 caracteres). */
+  coe?: string;
+  /** COE original (hasta 12 caracteres). */
+  coeOriginal?: string;
+  /** CAE (hasta 14 caracteres). */
+  cae?: string;
+  /** Importe del comprobante (11 enteros, 2 decimales). */
+  importeComprobante: number;
+  /** Motivo de la nota de crédito (hasta 30 caracteres). Obligatorio solo para `tipoComprobante` 3. */
+  motivoEmisionNotaCredito?: string;
+  /** CUIT/CUIL del sujeto retenido. */
+  cuitRetenido: string | number;
+  /** Número del certificado que origina la nota de crédito (hasta 25). Obligatorio solo para tipos 3, 19 y 20. */
+  numeroCertificadoOriginal?: string;
+  /** Fecha de retención del certificado original. Obligatoria solo para tipos 3, 19 y 20. */
+  fechaRetencionCertificadoOriginal?: FechaHora;
+  /** Importe del certificado original. Obligatorio solo para tipos 3, 19 y 20. */
+  importeCertificadoOriginal?: number;
+}
+
+/**
+ * Hijos de `certificado` tal como se envían (ya validados y serializados),
+ * en el orden del XSD. Los opcionales ausentes no se envían.
+ */
+export interface CertificadoRequest {
+  version: number;
+  codigoTrazabilidad?: string;
+  impuesto: number;
+  regimen: number;
+  /** `AAAA-MM-DDThh:mm:ss.SSS-03:00` */
   fechaRetencion: string;
-  /** Importe total de la operacion */
-  importeOperacion: number;
-  /** Importe retenido/percibido */
-  importeRetenido: number;
-  /** Porcentaje/alicuota aplicada */
-  porcentajeRetencion?: number;
-  /** Numero de comprobante original (para percepciones) */
-  nroComprobanteOriginal?: string;
-  /** Condicion del sujeto retenido */
   condicion?: number;
-  /** Numero de certificado propio (opcional) */
-  nroCertificadoPropio?: string;
-  /** Tipo de documento del retenido (80=CUIT, 86=CUIL, etc.) */
-  tipoDocRetenido?: number;
-  /** Importe base de calculo */
-  importeBaseCalculo?: number;
-  /** Fecha del comprobante original (formato YYYY-MM-DD) */
-  fechaComprobanteOriginal?: string;
-  /** Tipo de comprobante original */
-  tipoComprobanteOriginal?: number;
-  /** Descripcion u observaciones */
-  observaciones?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Resultado de registro de retencion
-// ---------------------------------------------------------------------------
-
-export interface RetencionResult {
-  /** Numero de comprobante asignado por SIRE */
-  nroComprobante: string;
-  /** Numero de certificado generado */
-  nroCertificado?: string;
-  /** Codigo de autorizacion electronica (CAE equivalente) */
-  codigoAutorizacion?: string;
-  /** Fecha de proceso */
-  fechaProceso: string;
-  /** Resultado de la operacion */
-  resultado: string;
-  /** Observaciones del servicio */
-  observaciones?: string;
-  /** Errores de la operacion (si los hay) */
-  errores?: { code: number; msg: string }[];
-}
-
-// ---------------------------------------------------------------------------
-// Certificado de retencion
-// ---------------------------------------------------------------------------
-
-export interface CertificadoRetencion {
-  /** Numero de comprobante */
-  nroComprobante: string;
-  /** Numero de certificado */
-  nroCertificado: string;
-  /** Tipo de comprobante */
+  imposibilidadRetencion: boolean;
+  motivoNoRetencion?: string;
+  /** Importe con 2 decimales (ej: `"2100.00"`). */
+  importeRetencion: string;
+  importeBaseCalculo: string;
+  regimenExclusion: boolean;
+  porcentajeExclusion?: string;
+  fechaPublicacion?: string;
   tipoComprobante: number;
-  /** CUIT del agente de retencion */
-  cuitAgente: string;
-  /** CUIT del sujeto retenido */
-  cuitRetenido: string;
-  /** Fecha de emision (YYYY-MM-DD) */
-  fechaEmision: string;
-  /** Fecha de retencion (YYYY-MM-DD) */
-  fechaRetencion: string;
-  /** Tipo de retencion: 1=Retencion, 2=Percepcion */
-  tipoRetencion: number;
-  /** Codigo de regimen */
-  codigoRegimen: number;
-  /** Importe de la operacion */
-  importeOperacion: number;
-  /** Importe retenido */
-  importeRetenido: number;
-  /** Porcentaje de retencion */
-  porcentajeRetencion?: number;
-  /** Estado del comprobante (V=Vigente, A=Anulado) */
-  estado: string;
-  /** Codigo de autorizacion */
-  codigoAutorizacion?: string;
-  /** Condicion del sujeto */
-  condicion?: number;
-  /** Observaciones */
-  observaciones?: string;
+  fechaComprobante: string;
+  numeroComprobante?: string;
+  coe?: string;
+  coeOriginal?: string;
+  cae?: string;
+  importeComprobante: string;
+  motivoEmisionNotaCredito?: string;
+  cuitRetenido: number;
+  numeroCertificadoOriginal?: string;
+  fechaRetencionCertificadoOriginal?: string;
+  importeCertificadoOriginal?: string;
+  motivoAnulacion?: number;
 }
 
 // ---------------------------------------------------------------------------
-// Consulta de retenciones (filtros)
+// anular
 // ---------------------------------------------------------------------------
 
-export interface ConsultaRetencionesParams {
-  /** Periodo fiscal (formato YYYYMM) */
-  periodo: string;
-  /** Quincena: 1 o 2 (opcional) */
-  quincena?: number;
-  /** Tipo de comprobante (filtro opcional) */
-  tipoComprobante?: number;
-  /** CUIT del sujeto retenido (filtro opcional) */
-  cuitRetenido?: string;
+/** Datos del certificado a anular (`certificadoAnulacion`, manual 3.3.1). */
+export interface AnularCertificadoParams {
+  /** Número del certificado a anular (hasta 25 caracteres), el `certificadoNro` devuelto por `emitir`. */
+  numeroCertificado: string;
+  /** Motivo de la anulación (tabla MOTIVO_DE_ANULACION). */
+  motivoAnulacion: MotivoAnulacion | number;
+  /** Texto libre de hasta 36 caracteres. */
+  codigoTrazabilidad?: string;
+}
+
+/** Hijos de `certificadoAnulacion` tal como se envían, en el orden del XSD. */
+export interface CertificadoAnulacionRequest {
+  version: number;
+  codigoTrazabilidad?: string;
+  impuesto: number;
+  numeroCertificado: string;
+  motivoAnulacion: number;
 }
 
 // ---------------------------------------------------------------------------
-// Resultado de consulta de retenciones
+// Respuestas
 // ---------------------------------------------------------------------------
 
-export interface ConsultaRetencionesResult {
-  /** Retenciones encontradas */
-  retenciones: CertificadoRetencion[];
-  /** Cantidad total de registros */
-  cantidadRegistros: number;
-}
-
-// ---------------------------------------------------------------------------
-// Regimen (tabla de parametros)
-// ---------------------------------------------------------------------------
-
-export interface RegimenItem {
-  /** Codigo de regimen */
-  codigo: number;
-  /** Descripcion del regimen */
-  descripcion: string;
-  /** Tipo de retencion asociado */
-  tipoRetencion?: number;
-  /** Estado del regimen (vigente/no vigente) */
-  estado?: string;
-  /** Fecha de vigencia desde (YYYY-MM-DD) */
-  vigenciaDesde?: string;
-  /** Fecha de vigencia hasta (YYYY-MM-DD) */
-  vigenciaHasta?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Alicuota (tabla de parametros)
-// ---------------------------------------------------------------------------
-
-export interface AlicuotaItem {
-  /** Codigo de regimen */
-  codigoRegimen: number;
-  /** Porcentaje de la alicuota */
-  porcentaje: number;
-  /** Importe minimo sujeto a retencion */
-  importeMinimo?: number;
-  /** Importe excedente no sujeto a retencion */
-  importeExcedente?: number;
-  /** Descripcion */
-  descripcion?: string;
-  /** Fecha de vigencia desde (YYYY-MM-DD) */
-  vigenciaDesde?: string;
-  /** Fecha de vigencia hasta (YYYY-MM-DD) */
-  vigenciaHasta?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Tipo de comprobante (tabla de parametros)
-// ---------------------------------------------------------------------------
-
-export interface TipoComprobanteItem {
-  /** Codigo del tipo de comprobante */
-  codigo: number;
-  /** Descripcion */
-  descripcion: string;
-}
-
-// ---------------------------------------------------------------------------
-// Tipo de operacion (tabla de parametros)
-// ---------------------------------------------------------------------------
-
-export interface TipoOperacionItem {
-  /** Codigo del tipo de operacion */
-  codigo: number;
-  /** Descripcion */
-  descripcion: string;
-}
-
-// ---------------------------------------------------------------------------
-// Condicion (tabla de parametros)
-// ---------------------------------------------------------------------------
-
-export interface CondicionItem {
-  /** Codigo de la condicion */
-  codigo: number;
-  /** Descripcion */
-  descripcion: string;
+/**
+ * Respuesta de `emitir` y `anular` (`emitirResponse` / `anularResponse`).
+ * En `anular` son los datos del certificado que anula al informado.
+ */
+export interface CertificadoResult {
+  /** Número del certificado SIRE. */
+  certificadoNro: string;
+  /** Código que se pide junto con el número en el micrositio SIRE para imprimir el certificado. */
+  codigoSeguridad: string;
 }

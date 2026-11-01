@@ -1,95 +1,92 @@
 import { WSAA_ENDPOINTS } from '@ramiidv/arca-common';
 
+// Fuentes:
+// - WSDL/XSD oficiales: https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005?wsdl
+//   y https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/C2005_schema.xsd
+// - "Certificado de retención electrónico - Manual para el desarrollador" v1.0.3
+//   (19-10-2020): https://www.afip.gob.ar/sire/documentos/SOAP-SIRE-IVA-Manualparaeldesarrollador_V1_0_0.pdf
+
 // ---------------------------------------------------------------------------
-// Endpoints
+// Servicio
 // ---------------------------------------------------------------------------
 
+/** ID del servicio para pedir el Ticket de Acceso a WSAA (manual, 1.3 / 2.2). */
+export const SIRE_SERVICE_ID = 'sire-ws';
+
+/** Namespace del WSDL (`targetNamespace`, `elementFormDefault="unqualified"`). */
+export const SIRE_NAMESPACE = 'http://www.afip.gob.ar/sire/c2005/';
+
+/** Endpoints del web service SIRE certificado C2005 (`soap:address` de los WSDL). */
 export const ENDPOINTS = {
   wsaa: WSAA_ENDPOINTS,
   sire: {
-    testing: 'https://fwshomo.afip.gob.ar/sire/ws/v1.0/',
-    production: 'https://serviciosjava.afip.gob.ar/sire/ws/v1.0/',
-    namespace: 'https://serviciosjava.afip.gob.ar/sire/ws/',
-    serviceId: 'sire-ws',
+    testing: 'https://ws-aplicativos-reca.homo.afip.gob.ar/sire/ws/v1/c2005/2005',
+    production: 'https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005',
   },
 } as const;
 
+/** Valor fijo de `version` en `emitir` y `anular` (manual, 3.2.2 y 3.3.2). */
+export const SIRE_VERSION = 100;
+
+/** Código de impuesto: valor fijo 216 (IVA) en `emitir` y `anular` (manual, 3.2.2 y 3.3.2). */
+export const IMPUESTO_IVA = 216;
+
 // ---------------------------------------------------------------------------
-// Tipos de comprobante de retencion/percepcion
+// Tablas del anexo del manual
 // ---------------------------------------------------------------------------
 
-/** Tipos de comprobante que se pueden emitir en SIRE */
+/** Tabla TIPO_COMPROBANTE (manual, 5.3). */
 export enum TipoComprobante {
-  /** Retencion/Percepcion IVA */
-  C2005 = 2005,
-  /** Retencion Impuesto a las Ganancias - Beneficiarios del exterior */
-  C2003 = 2003,
-  /** Certificado de retenciones de Seguridad Social */
-  C2004 = 2004,
+  /** Formato `99999-99999999` */
+  FACTURA = 1,
+  /** Formato `99999-99999999` */
+  RECIBO = 2,
+  /** Formato `99999-99999999` */
+  NOTA_CREDITO = 3,
+  /** Formato `99999-99999999` */
+  NOTA_DEBITO = 4,
+  /** Hasta 16 caracteres alfanuméricos */
+  OTRO_COMPROBANTE = 5,
+  /** Hasta 12 caracteres alfanuméricos */
+  ORDEN_DE_PAGO = 6,
+  /** Hasta 16 caracteres alfanuméricos */
+  ESCRITURA_PUBLICA = 9,
+  /** Factura de 16 dígitos: hasta 16 caracteres alfanuméricos */
+  FACTURA_16_DIGITOS = 11,
+  /** Liquidación de servicios públicos clase A. Formato `99999-99999999` */
+  LIQUIDACION_SERVICIOS_PUBLICOS_A = 17,
+  /** Liquidación de servicios públicos clase B. Formato `99999-99999999` */
+  LIQUIDACION_SERVICIOS_PUBLICOS_B = 18,
+  /** Liquidación de servicios públicos clase A con valor negativo. Formato `99999-99999999` */
+  LIQUIDACION_SERVICIOS_PUBLICOS_A_NEGATIVA = 19,
+  /** Liquidación de servicios públicos clase B con valor negativo. Formato `99999-99999999` */
+  LIQUIDACION_SERVICIOS_PUBLICOS_B_NEGATIVA = 20,
 }
 
-// ---------------------------------------------------------------------------
-// Tipos de retencion
-// ---------------------------------------------------------------------------
-
-/** Tipo de operacion de retencion o percepcion */
-export enum TipoRetencion {
-  /** Retencion */
-  RETENCION = 1,
-  /** Percepcion */
-  PERCEPCION = 2,
-}
-
-// ---------------------------------------------------------------------------
-// Regimenes
-// ---------------------------------------------------------------------------
-
-/** Regimenes de retencion/percepcion mas comunes */
-export enum Regimen {
-  /** IVA - Regimen general */
-  IVA_GENERAL = 499,
-  /** Ganancias - Regimen general */
-  GANANCIAS_GENERAL = 1,
-  /** SUSS - Regimen general */
-  SUSS_GENERAL = 800,
-}
-
-// ---------------------------------------------------------------------------
-// Tipos de operacion
-// ---------------------------------------------------------------------------
-
-/** Tipo de operacion informada */
-export enum TipoOperacion {
-  /** Operacion normal */
-  NORMAL = 1,
-  /** Anulacion */
-  ANULACION = 2,
-}
-
-// ---------------------------------------------------------------------------
-// Condicion del sujeto retenido
-// ---------------------------------------------------------------------------
-
-/** Condicion impositiva del sujeto retenido */
-export enum CondicionSujeto {
-  /** Inscripto */
+/** Tabla CONDICION (manual, 5.4). */
+export enum Condicion {
   INSCRIPTO = 1,
-  /** No inscripto */
   NO_INSCRIPTO = 2,
-  /** Exento */
-  EXENTO = 3,
-  /** No categorizado */
-  NO_CATEGORIZADO = 4,
 }
 
-// ---------------------------------------------------------------------------
-// Estado del comprobante
-// ---------------------------------------------------------------------------
-
-/** Estado del comprobante de retencion */
-export enum EstadoComprobante {
-  /** Vigente */
-  VIGENTE = 'V',
-  /** Anulado */
-  ANULADO = 'A',
+/** Tabla MOTIVO_DE_ANULACION (manual, 5.6). */
+export enum MotivoAnulacion {
+  CUIT_ERRONEA_SUJETO_RETENIDO = 1,
+  FECHA_RETENCION_ERRONEA = 2,
+  REGIMEN_INCORRECTO = 3,
+  OTROS = 4,
 }
+
+/**
+ * Tabla REGIMEN_CONDICION (manual, 5.5): regímenes para los que `condicion` es
+ * obligatoria. El manual no publica la tabla REGIMEN completa (los regímenes
+ * válidos para el impuesto 216 los valida ARCA).
+ */
+export const REGIMENES_CON_CONDICION: readonly number[] = [831];
+
+/**
+ * Tipos de comprobante que exigen los datos del certificado original
+ * (`numeroCertificadoOriginal`, `fechaRetencionCertificadoOriginal`,
+ * `importeCertificadoOriginal`) (manual, 3.2.1).
+ */
+export const TIPOS_CON_CERTIFICADO_ORIGINAL: readonly number[] = [3, 19, 20];

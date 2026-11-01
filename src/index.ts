@@ -1,61 +1,57 @@
-// Main class
+// API principal
 export { ArcaSire } from './arca-sire.js';
+export { SireClient } from './sire-client.js';
+export type { SireClientConfig } from './sire-client.js';
 
-// Error classes (base from common, domain-specific local)
+// Errores
 export {
   ArcaError,
   ArcaAuthError,
   ArcaSoapError,
   ArcaServiceError,
-  ArcaSireError,
-  ArcaSireServiceError,
-} from './errors.js';
+  ArcaValidationError,
+  ArcaTicketVigenteError,
+} from '@ramiidv/arca-common';
+export { ArcaSireServiceError } from './errors.js';
 
-// Low-level client
-export { SireClient, type SireClientConfig } from './sire-client.js';
-
-// WSAA re-export
-export { WsaaClient } from './wsaa.js';
-export type { WsaaClientConfig } from './wsaa.js';
-
-// Types
-export type {
-  ArcaSireConfig,
-  AccessTicket,
-  WsAuth,
-  SoapCallOptions,
-  ServerStatus,
-  ArcaEvent,
-  Retencion,
-  RetencionResult,
-  CertificadoRetencion,
-  ConsultaRetencionesParams,
-  ConsultaRetencionesResult,
-  RegimenItem,
-  AlicuotaItem,
-  TipoComprobanteItem,
-  TipoOperacionItem,
-  CondicionItem,
-} from './types.js';
-
-// Constants and enums
+// Constantes y tablas
 export {
   ENDPOINTS,
+  SIRE_NAMESPACE,
+  SIRE_SERVICE_ID,
+  SIRE_VERSION,
+  IMPUESTO_IVA,
   TipoComprobante,
-  TipoRetencion,
-  Regimen,
-  TipoOperacion,
-  CondicionSujeto,
-  EstadoComprobante,
+  Condicion,
+  MotivoAnulacion,
+  REGIMENES_CON_CONDICION,
+  TIPOS_CON_CERTIFICADO_ORIGINAL,
 } from './constants.js';
 
-// Validation
+// Validación y serialización
 export {
-  validateRetencion,
-  validatePeriodo,
+  buildCertificadoRequest,
+  buildAnulacionRequest,
+  formatSireDateTime,
+  formatImporte,
 } from './validation.js';
-export { ArcaValidationError } from '@ramiidv/arca-common';
-export type { ValidationErrorDetail } from '@ramiidv/arca-common';
 
-// Utilities (from common)
-export { ensureArray, parseXml, buildXml, checkServiceErrors } from './soap-client.js';
+// Tipos
+export type {
+  ArcaSireConfig,
+  WsAuth,
+  FechaHora,
+  EmitirCertificadoParams,
+  CertificadoRequest,
+  AnularCertificadoParams,
+  CertificadoAnulacionRequest,
+  CertificadoResult,
+} from './types.js';
+export type {
+  ArcaEvent,
+  CallOptions,
+  ServerStatus,
+  TicketStorage,
+  ValidationErrorDetail,
+  ServiceErrorDetail,
+} from '@ramiidv/arca-common';
