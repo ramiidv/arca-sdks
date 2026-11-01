@@ -1,99 +1,76 @@
 /**
- * Example: Liquidacion Primaria de Granos (WSLPG)
+ * Ejemplo: Liquidación Primaria de Granos (WSLPG).
  *
- * Demonstrates how to:
- * 1. Authorize a grain liquidation
- * 2. Query liquidations
- * 3. Adjust a liquidation (ajuste unificado)
+ * 1. Paramétricas (granos, puertos, tipos de operación)
+ * 2. Último número de orden + autorización
+ * 3. Consulta por COE (con PDF) y anulación
  */
 import fs from 'node:fs';
+import { FileTicketStorage } from '@ramiidv/arca-common';
 import { ArcaAgro } from '@ramiidv/arca-agro';
 
+const CUIT = '20123456786';
+
 const agro = new ArcaAgro({
-  cuit: 20123456789,
+  cuit: CUIT,
   cert: fs.readFileSync('cert.pem', 'utf-8'),
   key: fs.readFileSync('key.pem', 'utf-8'),
   production: false,
+  ticketStorage: new FileTicketStorage('.arca-tickets'),
 });
 
 async function main() {
-  // -------------------------------------------------------------------------
-  // 1. Authorize a grain liquidation
-  // -------------------------------------------------------------------------
-  console.log('--- Authorizing liquidation ---');
+  // 1. Paramétricas
+  console.log('Granos:', (await agro.lpg.tipoGranoConsultar()).slice(0, 5));
+  console.log('Puertos:', (await agro.lpg.puertoConsultar()).slice(0, 5));
+  console.log('Actividades:', await agro.lpg.tipoActividadRepresentadoConsultar());
+  console.log('Tipos de operación (act. 40):', await agro.lpg.tipoOperacionXActividadConsultar(40));
 
-  const liqResult = await agro.lpg.liquidacionAutorizar({
-    cuitComprador: 30111222334,
-    cuitVendedor: 20123456789,
-    codGrano: 23, // Soja
-    pesoNeto: 30000,
-    precioRefTn: 350000, // price per ton in ARS
-    precioFleteTn: 15000,
-    codGrado: 'G2',
-    fechaEmision: '2026-03-31',
-    codTipoOperacion: 1,
-    ptoEmision: 1,
+  // 2. Autorización
+  const ptoEmision = 1;
+  const nroOrden = (await agro.lpg.liquidacionUltimoNroOrdenConsultar(ptoEmision)) + 1;
+
+  // Valores ilustrativos: los códigos de actividad, operación, puerto, grano,
+  // deducciones y retenciones salen de las paramétricas (tipoActividad*, tipoOperacion*,
+  // puertoConsultar, tipoGranoConsultar, tipoDeduccionConsultar, tipoRetencionConsultar).
+  const { autorizacion, eventos } = await agro.lpg.liquidacionAutorizar({
+    liquidacion: {
+      ptoEmision,
+      nroOrden,
+      cuitComprador: CUIT,
+      nroActComprador: 40,
+      nroIngBrutoComprador: 901234567,
+      codTipoOperacion: '1',
+      esLiquidacionPropia: 'N',
+      esCanje: 'N',
+      codPuerto: 14,
+      desPuertoLocalidad: 'Puerto Rosario',
+      codGrano: 31,
+      cuitVendedor: '30712345671',
+      nroIngBrutoVendedor: 900123,
+      actuaCorredor: 'N',
+      liquidaCorredor: 'N',
+      fechaPrecioOperacion: '2026-10-30',
+      precioRefTn: 250000,
+      precioFleteTn: 0,
+      alicIvaOperacion: 10.5,
+      campaniaPPal: 2526,
+      codLocalidadProcedencia: 3,
+      codProvProcedencia: 1,
+      pesoNetoSinCertificado: 30000,
+    },
+    deducciones: [{ codigoConcepto: 'CO', detalleAclaratorio: 'Comisión', comisionGastosAdm: 1.5, alicuotaIva: 21 }],
+    retenciones: [{ codigoConcepto: 'RG', baseCalculo: 7500000, alicuota: 2 }],
   });
+  console.log('COE:', autorizacion.coe, 'neto a pagar:', autorizacion.totalNetoAPagar);
+  for (const e of eventos) console.log(`Evento ${e.codigo}: ${e.descripcion}`);
 
-  console.log('Liquidation authorized:', {
-    codOperacion: liqResult.codOperacion,
-    nroOrden: liqResult.nroOrden,
-    resultado: liqResult.resultado,
-    totalPagar: liqResult.totalPagar,
-    totalDeducciones: liqResult.totalDeducciones,
-  });
+  // 3. Consulta con PDF y anulación
+  const consulta = await agro.lpg.liquidacionXCoeConsultar(autorizacion.coe, { pdf: true });
+  if (consulta.pdf) fs.writeFileSync(`lpg-${autorizacion.coe}.pdf`, Buffer.from(consulta.pdf, 'base64'));
 
-  // -------------------------------------------------------------------------
-  // 2. Query liquidations
-  // -------------------------------------------------------------------------
-  console.log('\n--- Querying liquidations ---');
-
-  const liquidaciones = await agro.lpg.liquidacionConsultar({
-    fechaDesde: '2026-03-01',
-    fechaHasta: '2026-03-31',
-    codTipoOperacion: 1,
-  });
-
-  console.log(`Found ${liquidaciones.length} liquidation(s):`);
-  for (const l of liquidaciones) {
-    console.log(`  #${l.nroOrden} - ${l.resultado} - $${l.totalPagar}`);
-  }
-
-  // -------------------------------------------------------------------------
-  // 3. Adjust a liquidation
-  // -------------------------------------------------------------------------
-  if (liqResult.nroOrden) {
-    console.log('\n--- Adjusting liquidation ---');
-
-    const ajusteResult = await agro.lpg.liquidacionAjustarUnificado({
-      nroOrdenOriginal: liqResult.nroOrden,
-      ptoEmisionOriginal: 1,
-      tipoAjuste: 'credito',
-      liquidacion: {
-        codGrano: 23,
-        pesoNeto: 30000,
-        precioRefTn: 355000, // adjusted price
-      },
-      observaciones: 'Ajuste por diferencia de precio',
-    });
-
-    console.log('Adjustment result:', {
-      codOperacion: ajusteResult.codOperacion,
-      nroOrden: ajusteResult.nroOrden,
-      resultado: ajusteResult.resultado,
-    });
-  }
-
-  // -------------------------------------------------------------------------
-  // Query parameters (grain types, etc.)
-  // -------------------------------------------------------------------------
-  console.log('\n--- Querying grain types ---');
-
-  const granos = await agro.lpg.consultarParametros('tipoGrano');
-  console.log(`Available grain types: ${granos.length}`);
-  for (const g of granos.slice(0, 5)) {
-    console.log(`  ${JSON.stringify(g)}`);
-  }
+  const anulacion = await agro.lpg.liquidacionAnular(autorizacion.coe);
+  console.log('Anulación:', anulacion.resultado);
 }
 
 main().catch(console.error);

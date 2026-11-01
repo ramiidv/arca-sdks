@@ -1,270 +1,327 @@
-import {
-  afipSoapCall,
-  ensureArray,
-  checkServiceErrors,
-} from '@ramiidv/arca-common';
-import type { ArcaEvent, SoapCallOptions, ServerStatus } from '@ramiidv/arca-common';
-import { LPG_ENDPOINTS, LPG_NAMESPACE } from './constants.js';
+import { afipSoapCall } from '@ramiidv/arca-common';
+import type { CallOptions, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
+import { LPG_NAMESPACE } from './constants.js';
+import type { ServiceContext } from './context.js';
+import { ArcaAgroResponseError, throwOnServiceErrors } from './errors.js';
+import { decodeResponse, encodeRequest, obj, wrapped } from './schema.js';
+import type { Schema } from './schema.js';
+import * as S from './lpg-schemas.js';
+import type { CodigoDescripcion } from './types.js';
 import type {
-  AgroAuth,
-  Liquidacion,
-  LiquidacionResult,
-  ConsultaLiquidacionParams,
   AjusteUnificadoParams,
-  Certificacion,
-  CertificacionResult,
-  LpgParameterQueryParams,
-} from './types.js';
+  AjusteUnificadoResultado,
+  AnulacionCertificacionResultado,
+  AnulacionLiquidacionResultado,
+  CertificacionResultado,
+  CgAutorizarParams,
+  GradoEntregadoLpg,
+  LiquidacionAutorizarParams,
+  LiquidacionConsultaResultado,
+  LiquidacionResultado,
+} from './lpg-types.js';
+import { requireAjuste } from './validation.js';
 
-export interface LpgClientOptions {
-  timeoutMs?: number;
-  retries?: number;
-  retryDelayMs?: number;
-  onEvent?: (event: ArcaEvent) => void;
+const SERVICE = 'WSLPG';
+const ERROR_CONTAINERS = ['errores', 'erroresFormato'] as const;
+
+/** Elementos de request/response de cada operación (del WSDL). */
+interface Op {
+  method: string;
+  req: string;
+  resp: string;
 }
 
+const op = (method: string, req: string, resp = req.replace(/Req$/, 'Resp')): Op => ({ method, req, resp });
+
+const OPS = {
+  liquidacionAutorizar: op('liquidacionAutorizar', 'liquidacionReq'),
+  liquidacionXCoeConsultar: op('liquidacionXCoeConsultar', 'liqConsXCoeReq'),
+  liquidacionXNroOrdenConsultar: op('liquidacionXNroOrdenConsultar', 'liqConsXNroOrdenReq'),
+  liquidacionUltimoNroOrdenConsultar: op('liquidacionUltimoNroOrdenConsultar', 'liqUltNroOrdenReq'),
+  liquidacionAnular: op('liquidacionAnular', 'anulacionReq'),
+  liquidacionAjustarUnificado: op('liquidacionAjustarUnificado', 'ajustarUnificadoReq'),
+  cgAutorizar: op('cgAutorizar', 'cgAutorizarReq'),
+  cgSolicitarAnulacion: op('cgSolicitarAnulacion', 'cgSolicitarAnulacionReq'),
+  cgConfirmarAnulacion: op('cgConfirmarAnulacion', 'cgConfirmarAnulacionReq'),
+  cgConsultarUltimoNroOrden: op('cgConsultarUltimoNroOrden', 'cgConsultarUltimoNroOrdenReq'),
+  provinciasConsultar: op('provinciasConsultar', 'provinciasReq'),
+  localidadXProvinciaConsultar: op('localidadXProvinciaConsultar', 'localidadReq'),
+  tipoOperacionXActividadConsultar: op('tipoOperacionXActividadConsultar', 'tipoOperacionReq'),
+  puertoConsultar: op('puertoConsultar', 'puertoReq'),
+  tipoActividadConsultar: op('tipoActividadConsultar', 'tipoActividadReq'),
+  tipoActividadRepresentadoConsultar: op('tipoActividadRepresentadoConsultar', 'tipoActividadRepresentadoReq'),
+  tipoCertificadoDepositoConsultar: op('tipoCertificadoDepositoConsultar', 'tipoCertificadoDepReq'),
+  tipoRetencionConsultar: op('tipoRetencionConsultar', 'tipoRetencionReq'),
+  tipoDeduccionConsultar: op('tipoDeduccionConsultar', 'tipoDeduccionReq'),
+  tipoGranoConsultar: op('tipoGranoConsultar', 'tipoGranoReq'),
+  codigoGradoReferenciaConsultar: op('codigoGradoReferenciaConsultar', 'gradoReferenciaReq'),
+  codigoGradoEntregadoXTipoGranoConsultar: op('codigoGradoEntregadoXTipoGranoConsultar', 'gradoEntregadoReq'),
+  campaniasConsultar: op('campaniasConsultar', 'campaniaReq'),
+  dummy: op('dummy', '', 'dummyResp'),
+} as const;
+
 /**
- * Cliente de bajo nivel para WSLPG (Liquidación Primaria de Granos).
- * Gestiona liquidaciones y certificaciones de operaciones de granos.
+ * Cliente de WSLPG (Liquidación Primaria de Granos). Se accede como `agro.lpg`.
+ *
+ * Cubre liquidación primaria (autorizar, consultar, anular, último número de
+ * orden, ajuste unificado), certificación primaria (`cg*`: autorizar, último
+ * número de orden, anulación) y las paramétricas principales.
+ *
+ * Las autorizaciones, anulaciones y ajustes son emisiones: nunca se
+ * reintentan y, si la respuesta se pierde, el `ArcaSoapError` tiene
+ * `uncertain: true` (ver README, "Recuperar una emisión incierta").
  */
 export class LpgClient {
-  private readonly endpoint: string;
-  private readonly soapOpts: Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs' | 'onEvent'>;
+  readonly #ctx: ServiceContext;
 
-  constructor(production: boolean, opts: LpgClientOptions = {}) {
-    this.endpoint = production
-      ? LPG_ENDPOINTS.production
-      : LPG_ENDPOINTS.testing;
-    this.soapOpts = {
-      timeout: opts.timeoutMs,
-      retries: opts.retries,
-      retryDelayMs: opts.retryDelayMs,
-      onEvent: opts.onEvent,
-    };
+  /** @internal Se construye desde `ArcaAgro`. */
+  constructor(ctx: ServiceContext) {
+    this.#ctx = ctx;
   }
 
-  private async call(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const result = await afipSoapCall(
-      this.endpoint,
-      LPG_NAMESPACE,
-      method,
-      params,
-      this.soapOpts,
-    );
-    checkServiceErrors(result, 'WSLPG');
+  // ============================================================
+  // Internos
+  // ============================================================
+
+  /** `LpgAuthType`: token, sign y cuit (no `cuitRepresentada`). */
+  async #auth(opts?: CallOptions) {
+    const ticket = await this.#ctx.getTicket(opts);
+    return { token: ticket.token, sign: ticket.sign, cuit: this.#ctx.cuit };
+  }
+
+  /**
+   * Llama a una operación de WSLPG y devuelve el nodo `*Return` (common lo
+   * desenvuelve), después de verificar `errores` y `erroresFormato`.
+   */
+  async #call(
+    o: Op,
+    body: Record<string, unknown> | null,
+    kind: SoapOperationKind,
+    opts?: CallOptions,
+  ): Promise<Record<string, unknown>> {
+    const params = body === null ? {} : { auth: await this.#auth(opts), ...body };
+    const result = await afipSoapCall(this.#ctx.endpoint, LPG_NAMESPACE, o.method, params, {
+      ...this.#ctx.soap,
+      kind,
+      signal: opts?.signal,
+      requestElement: body === null ? null : o.req,
+      responseElement: o.resp,
+      soapActionFromMethod: true,
+    });
+    throwOnServiceErrors(result, ERROR_CONTAINERS, SERVICE, o.method);
     return result;
   }
 
-  private parseLiquidacionResult(raw: Record<string, unknown>): LiquidacionResult {
-    const errores = ensureArray(
-      (raw['errores'] ?? raw['arrayErrores']) as Record<string, unknown>[] | undefined,
-    ).map((e) => ({
-      Code: Number(e['codigo'] ?? e['Code'] ?? 0),
-      Msg: String(e['descripcion'] ?? e['Msg'] ?? ''),
-    }));
-
-    const eventos = ensureArray(
-      (raw['eventos'] ?? raw['arrayEventos']) as Record<string, unknown>[] | undefined,
-    ).map((e) => ({
-      Code: Number(e['codigo'] ?? e['Code'] ?? 0),
-      Msg: String(e['descripcion'] ?? e['Msg'] ?? ''),
-    }));
-
-    return {
-      codOperacion: raw['codOperacion'] as number | undefined,
-      nroOrden: raw['nroOrden'] as number | undefined,
-      fechaLiquidacion: raw['fechaLiquidacion'] as string | undefined,
-      totalPagar: raw['totalPagar'] as number | undefined,
-      totalDeducciones: raw['totalDeducciones'] as number | undefined,
-      totalPesoNeto: raw['totalPesoNeto'] as number | undefined,
-      nroContrato: raw['nroContrato'] as number | undefined,
-      resultado: raw['resultado'] as string | undefined,
-      errores: errores.length > 0 ? errores : undefined,
-      eventos: eventos.length > 0 ? eventos : undefined,
-      raw,
-    };
+  #decode<T>(node: unknown, schema: Schema, method: string, kind: SoapOperationKind): T {
+    try {
+      return decodeResponse<T>(node, schema, method);
+    } catch (e) {
+      if (e instanceof ArcaAgroResponseError && kind === 'emision') throw new ArcaAgroResponseError(e.message, true);
+      throw e;
+    }
   }
 
-  private parseCertificacionResult(raw: Record<string, unknown>): CertificacionResult {
-    const errores = ensureArray(
-      (raw['errores'] ?? raw['arrayErrores']) as Record<string, unknown>[] | undefined,
-    ).map((e) => ({
-      Code: Number(e['codigo'] ?? e['Code'] ?? 0),
-      Msg: String(e['descripcion'] ?? e['Msg'] ?? ''),
-    }));
+  /** Exige que `node[key].coe` esté presente. */
+  #requireCoe<T>(result: T, key: keyof T & string, method: string, kind: SoapOperationKind): T {
+    const inner = result[key] as { coe?: string } | undefined;
+    if (!inner?.coe) {
+      throw new ArcaAgroResponseError(`${SERVICE} ${method}: la respuesta no tiene ${key}.coe`, kind === 'emision');
+    }
+    return result;
+  }
 
-    const eventos = ensureArray(
-      (raw['eventos'] ?? raw['arrayEventos']) as Record<string, unknown>[] | undefined,
-    ).map((e) => ({
-      Code: Number(e['codigo'] ?? e['Code'] ?? 0),
-      Msg: String(e['descripcion'] ?? e['Msg'] ?? ''),
-    }));
+  async #ultimoNroOrden(o: Op, ptoEmision: number, opts?: CallOptions): Promise<number> {
+    const body = encodeRequest({ ptoEmision }, S.ULT_NRO_ORDEN, o.method);
+    const r = await this.#call(o, body, 'consulta', opts);
+    return this.#decode<{ nroOrden: number }>(r, S.R_ULT_NRO_ORDEN, o.method, 'consulta').nroOrden;
+  }
 
-    return {
-      nroCertificacion: raw['nroCertificacion'] as number | undefined,
-      codOperacion: raw['codOperacion'] as number | undefined,
-      fechaCertificacion: raw['fechaCertificacion'] as string | undefined,
-      resultado: raw['resultado'] as string | undefined,
-      errores: errores.length > 0 ? errores : undefined,
-      eventos: eventos.length > 0 ? eventos : undefined,
-      raw,
-    };
+  async #parametrica<T = CodigoDescripcion>(
+    o: Op,
+    container: string,
+    body: Record<string, unknown> = {},
+    opts?: CallOptions,
+    item = 'codigoDescripcion',
+    itemSchema: Schema = S.R_CODIGO_DESCRIPCION,
+  ): Promise<T[]> {
+    const r = await this.#call(o, body, 'consulta', opts);
+    const schema: Schema = { [container]: wrapped(item, obj(itemSchema), 0) };
+    return this.#decode<Record<string, T[]>>(r, schema, o.method, 'consulta')[container];
   }
 
   // ============================================================
-  // Liquidaciones
+  // Liquidación primaria
   // ============================================================
 
   /**
-   * Autoriza una liquidación primaria de granos.
+   * Autoriza una liquidación primaria de granos. Emisión: si falla con
+   * `uncertain`, consultá `liquidacionUltimoNroOrdenConsultar(ptoEmision)` y
+   * `liquidacionXNroOrdenConsultar` antes de reintentar.
    */
-  async liquidacionAutorizar(auth: AgroAuth, liquidacion: Liquidacion): Promise<LiquidacionResult> {
-    const result = await this.call('liquidacionAutorizar', {
-      auth: {
-        token: auth.Token,
-        sign: auth.Sign,
-        cuitRepresentada: auth.Cuit,
-      },
-      liquidacion,
-    });
-    return this.parseLiquidacionResult(result);
+  async liquidacionAutorizar(params: LiquidacionAutorizarParams, opts?: CallOptions): Promise<LiquidacionResultado> {
+    const o = OPS.liquidacionAutorizar;
+    const body = encodeRequest(params, S.LIQUIDACION_AUTORIZAR, o.method);
+    const r = await this.#call(o, body, 'emision', opts);
+    const res = this.#decode<LiquidacionResultado>(r, S.R_LIQ_RETURN, o.method, 'emision');
+    return this.#requireCoe(res, 'autorizacion', o.method, 'emision');
+  }
+
+  /** Consulta una liquidación por COE. `pdf: true` pide la constancia en base64. */
+  async liquidacionXCoeConsultar(
+    coe: string | number,
+    params: { pdf?: boolean } = {},
+    opts?: CallOptions,
+  ): Promise<LiquidacionConsultaResultado> {
+    const o = OPS.liquidacionXCoeConsultar;
+    const body = encodeRequest({ coe, pdf: params.pdf === undefined ? undefined : params.pdf ? 'S' : 'N' }, S.CONSULTA_X_COE, o.method);
+    const r = await this.#call(o, body, 'consulta', opts);
+    const res = this.#decode<LiquidacionConsultaResultado>(r, S.R_LIQ_CONS_RETURN, o.method, 'consulta');
+    return this.#requireCoe(res, 'autorizacion', o.method, 'consulta');
+  }
+
+  /** Consulta una liquidación por punto de emisión y número de orden. */
+  async liquidacionXNroOrdenConsultar(
+    ptoEmision: number,
+    nroOrden: number,
+    opts?: CallOptions,
+  ): Promise<LiquidacionConsultaResultado> {
+    const o = OPS.liquidacionXNroOrdenConsultar;
+    const body = encodeRequest({ ptoEmision, nroOrden }, S.CONSULTA_X_NRO_ORDEN, o.method);
+    const r = await this.#call(o, body, 'consulta', opts);
+    const res = this.#decode<LiquidacionConsultaResultado>(r, S.R_LIQ_CONS_RETURN, o.method, 'consulta');
+    return this.#requireCoe(res, 'autorizacion', o.method, 'consulta');
   }
 
   /**
-   * Consulta una liquidación previamente autorizada.
+   * Último número de orden de liquidación para un punto de emisión.
+   * @throws ArcaAgroResponseError si ARCA no devuelve `nroOrden`.
    */
-  async liquidacionConsultar(auth: AgroAuth, params: ConsultaLiquidacionParams): Promise<LiquidacionResult[]> {
-    const result = await this.call('liquidacionConsultar', {
-      auth: {
-        token: auth.Token,
-        sign: auth.Sign,
-        cuitRepresentada: auth.Cuit,
-      },
-      solicitud: params,
-    });
-    const items = ensureArray(
-      (result['liquidacion'] ?? result['resultado'] ?? result) as Record<string, unknown>[] | Record<string, unknown>,
-    );
-    return items.map((item) => this.parseLiquidacionResult(item as Record<string, unknown>));
+  async liquidacionUltimoNroOrdenConsultar(ptoEmision: number, opts?: CallOptions): Promise<number> {
+    return this.#ultimoNroOrden(OPS.liquidacionUltimoNroOrdenConsultar, ptoEmision, opts);
   }
 
-  /**
-   * Anula una liquidación previamente autorizada.
-   */
-  async liquidacionAnular(auth: AgroAuth, ptoEmision: number, nroOrden: number): Promise<LiquidacionResult> {
-    const result = await this.call('liquidacionAnular', {
-      auth: {
-        token: auth.Token,
-        sign: auth.Sign,
-        cuitRepresentada: auth.Cuit,
-      },
-      solicitud: {
-        ptoEmision,
-        nroOrden,
-      },
-    });
-    return this.parseLiquidacionResult(result);
+  /** Anula una liquidación por COE. Emisión. */
+  async liquidacionAnular(coe: string | number, opts?: CallOptions): Promise<AnulacionLiquidacionResultado> {
+    const o = OPS.liquidacionAnular;
+    const body = encodeRequest({ coe }, S.ANULACION, o.method);
+    const r = await this.#call(o, body, 'emision', opts);
+    return this.#decode<AnulacionLiquidacionResultado>(r, S.R_ANULACION_RETURN, o.method, 'emision');
   }
 
-  /**
-   * Ajusta una liquidación mediante ajuste unificado (débito/crédito en un solo paso).
-   */
-  async liquidacionAjustarUnificado(auth: AgroAuth, params: AjusteUnificadoParams): Promise<LiquidacionResult> {
-    const result = await this.call('liquidacionAjustarUnificado', {
-      auth: {
-        token: auth.Token,
-        sign: auth.Sign,
-        cuitRepresentada: auth.Cuit,
-      },
-      solicitud: {
-        nroOrdenOriginal: params.nroOrdenOriginal,
-        ptoEmisionOriginal: params.ptoEmisionOriginal,
-        tipoAjuste: params.tipoAjuste,
-        liquidacion: params.liquidacion,
-        ...(params.observaciones !== undefined && { observaciones: params.observaciones }),
-      },
-    });
-    return this.parseLiquidacionResult(result);
+  /** Ajuste unificado (crédito y/o débito) de una liquidación. Emisión. */
+  async liquidacionAjustarUnificado(params: AjusteUnificadoParams, opts?: CallOptions): Promise<AjusteUnificadoResultado> {
+    const o = OPS.liquidacionAjustarUnificado;
+    const body = encodeRequest(params, S.AJUSTE_UNIFICADO, o.method, requireAjuste);
+    const r = await this.#call(o, body, 'emision', opts);
+    const res = this.#decode<AjusteUnificadoResultado>(r, S.R_AJUSTE_UNIFICADO_RETURN, o.method, 'emision');
+    return this.#requireCoe(res, 'ajusteUnificado', o.method, 'emision');
   }
 
   // ============================================================
-  // Certificaciones
+  // Certificación primaria de granos (cg*)
   // ============================================================
 
   /**
-   * Autoriza una certificación de granos (depósito, retiro, transferencia, preexistencia).
+   * Autoriza una certificación (primaria, retiro/transferencia o preexistente).
+   * Emisión: si falla con `uncertain`, consultá `cgConsultarUltimoNroOrden`.
    */
-  async certificacionAutorizar(auth: AgroAuth, certificacion: Certificacion): Promise<CertificacionResult> {
-    const result = await this.call('certificacionAutorizar', {
-      auth: {
-        token: auth.Token,
-        sign: auth.Sign,
-        cuitRepresentada: auth.Cuit,
-      },
-      certificacion,
-    });
-    return this.parseCertificacionResult(result);
+  async cgAutorizar(params: CgAutorizarParams, opts?: CallOptions): Promise<CertificacionResultado> {
+    const o = OPS.cgAutorizar;
+    const body = encodeRequest(params, S.CG_AUTORIZAR, o.method);
+    const r = await this.#call(o, body, 'emision', opts);
+    const res = this.#decode<CertificacionResultado>(r, S.R_CG_AUTORIZAR_RETURN, o.method, 'emision');
+    return this.#requireCoe(res, 'autorizacion', o.method, 'emision');
   }
 
-  /**
-   * Anula una certificación previamente autorizada.
-   */
-  async certificacionAnular(auth: AgroAuth, tipoCertificacion: number, nroCertificacion: number): Promise<CertificacionResult> {
-    const result = await this.call('certificacionAnular', {
-      auth: {
-        token: auth.Token,
-        sign: auth.Sign,
-        cuitRepresentada: auth.Cuit,
-      },
-      solicitud: {
-        tipoCertificacion,
-        nroCertificacion,
-      },
-    });
-    return this.parseCertificacionResult(result);
+  /** Último número de orden de certificación para un punto de emisión. */
+  async cgConsultarUltimoNroOrden(ptoEmision: number, opts?: CallOptions): Promise<number> {
+    return this.#ultimoNroOrden(OPS.cgConsultarUltimoNroOrden, ptoEmision, opts);
   }
 
-  // ============================================================
-  // Consultas de parámetros
-  // ============================================================
+  /** Solicita la anulación de una certificación. Emisión. */
+  async cgSolicitarAnulacion(coe: string | number, params: { pdf?: boolean } = {}, opts?: CallOptions): Promise<AnulacionCertificacionResultado> {
+    return this.#cgAnulacion(OPS.cgSolicitarAnulacion, coe, params, opts);
+  }
 
-  /**
-   * Consulta de parámetros genérica del WSLPG.
-   * Puede consultar tipos de grano, grados, puertos, tipos de operación, etc.
-   */
-  async consultarParametros(auth: AgroAuth, tipoParametro: string, params?: LpgParameterQueryParams): Promise<Record<string, unknown>[]> {
-    const result = await this.call(tipoParametro, {
-      auth: {
-        token: auth.Token,
-        sign: auth.Sign,
-        cuitRepresentada: auth.Cuit,
-      },
-      ...(params ?? {}),
-    });
-    // El resultado viene en un key que varía según el tipo de parámetro
-    const values = Object.values(result).find((v) => Array.isArray(v) || (typeof v === 'object' && v !== null));
-    return ensureArray(values as Record<string, unknown>[] | Record<string, unknown> | undefined);
+  /** Confirma la anulación de una certificación. Emisión. */
+  async cgConfirmarAnulacion(coe: string | number, params: { pdf?: boolean } = {}, opts?: CallOptions): Promise<AnulacionCertificacionResultado> {
+    return this.#cgAnulacion(OPS.cgConfirmarAnulacion, coe, params, opts);
+  }
+
+  async #cgAnulacion(o: Op, coe: string | number, params: { pdf?: boolean }, opts?: CallOptions) {
+    const body = encodeRequest({ coe, pdf: params.pdf === undefined ? undefined : params.pdf ? 'S' : 'N' }, S.CONSULTA_X_COE, o.method);
+    const r = await this.#call(o, body, 'emision', opts);
+    return this.#decode<AnulacionCertificacionResultado>(r, S.R_CG_ANULACION_RETURN, o.method, 'emision');
   }
 
   // ============================================================
-  // Estado del servicio
+  // Paramétricas
   // ============================================================
 
-  /**
-   * Verifica el estado de los servidores del WSLPG.
-   */
-  async dummy(): Promise<ServerStatus> {
-    const result = await afipSoapCall(
-      this.endpoint,
-      LPG_NAMESPACE,
-      'dummy',
-      {},
-      this.soapOpts,
-    );
-    return {
-      appserver: String(result['appserver'] ?? result['AppServer'] ?? ''),
-      dbserver: String(result['dbserver'] ?? result['DbServer'] ?? ''),
-      authserver: String(result['authserver'] ?? result['AuthServer'] ?? ''),
-    };
+  async provinciasConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.#parametrica(OPS.provinciasConsultar, 'provincias', {}, opts);
+  }
+
+  /** Localidades de una provincia (`codProvincia` es `xs:string` en el XSD). */
+  async localidadXProvinciaConsultar(codProvincia: string | number, opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    const o = OPS.localidadXProvinciaConsultar;
+    const body = encodeRequest({ codProvincia: String(codProvincia) }, S.LOCALIDADES, o.method);
+    return this.#parametrica(o, 'localidades', body, opts);
+  }
+
+  /** Tipos de operación habilitados para una actividad. */
+  async tipoOperacionXActividadConsultar(nroActLiquida: number, opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    const o = OPS.tipoOperacionXActividadConsultar;
+    const body = encodeRequest({ nroActLiquida }, S.TIPO_OPERACION, o.method);
+    return this.#parametrica(o, 'tiposOperacion', body, opts);
+  }
+
+  async puertoConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.#parametrica(OPS.puertoConsultar, 'puertos', {}, opts);
+  }
+
+  async tipoActividadConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.#parametrica(OPS.tipoActividadConsultar, 'tiposActividad', {}, opts);
+  }
+
+  async tipoActividadRepresentadoConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.#parametrica(OPS.tipoActividadRepresentadoConsultar, 'tiposActividad', {}, opts);
+  }
+
+  async tipoCertificadoDepositoConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.#parametrica(OPS.tipoCertificadoDepositoConsultar, 'tiposCertDep', {}, opts);
+  }
+
+  async tipoRetencionConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.#parametrica(OPS.tipoRetencionConsultar, 'tiposRetencion', {}, opts);
+  }
+
+  async tipoDeduccionConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.#parametrica(OPS.tipoDeduccionConsultar, 'tiposDeduccion', {}, opts);
+  }
+
+  async tipoGranoConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.#parametrica(OPS.tipoGranoConsultar, 'granos', {}, opts);
+  }
+
+  async codigoGradoReferenciaConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.#parametrica(OPS.codigoGradoReferenciaConsultar, 'gradosRef', {}, opts);
+  }
+
+  /** Grados entregados (con su valor) para un tipo de grano. */
+  async codigoGradoEntregadoXTipoGranoConsultar(codGrano: number, opts?: CallOptions): Promise<GradoEntregadoLpg[]> {
+    const o = OPS.codigoGradoEntregadoXTipoGranoConsultar;
+    const body = encodeRequest({ codGrano }, S.GRADO_ENTREGADO, o.method);
+    return this.#parametrica<GradoEntregadoLpg>(o, 'gradoEnt', body, opts, 'gradoEnt', S.R_GRADO_ENTREGADO);
+  }
+
+  async campaniasConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.#parametrica(OPS.campaniasConsultar, 'campanias', {}, opts);
+  }
+
+  /** Estado de los servidores de WSLPG (no requiere autenticación). */
+  async dummy(opts?: CallOptions): Promise<ServerStatus> {
+    const r = await this.#call(OPS.dummy, null, 'consulta', opts);
+    return this.#decode<ServerStatus>(r, S.R_DUMMY, 'dummy', 'consulta');
   }
 }

@@ -1,84 +1,140 @@
 // ---------------------------------------------------------------------------
-// Main orchestrator
+// Cliente principal y sub-clientes (los sub-clientes se obtienen como agro.cpe / agro.lpg)
 // ---------------------------------------------------------------------------
 export { ArcaAgro } from './arca-agro.js';
+export type { CpeClient } from './cpe-client.js';
+export type { LpgClient } from './lpg-client.js';
 
 // ---------------------------------------------------------------------------
-// Low-level clients
-// ---------------------------------------------------------------------------
-export { CpeClient } from './cpe-client.js';
-export type { CpeClientOptions } from './cpe-client.js';
-
-export { CtgClient } from './ctg-client.js';
-export type { CtgClientOptions } from './ctg-client.js';
-
-export { LpgClient } from './lpg-client.js';
-export type { LpgClientOptions } from './lpg-client.js';
-
-// ---------------------------------------------------------------------------
-// Types
+// Tipos
 // ---------------------------------------------------------------------------
 export type {
-  // Config
   ArcaAgroConfig,
-  AgroAuth,
-  AgroError,
-  // Re-exports from common
+  AgroServiceStatus,
+  CuitInput,
+  FechaInput,
+  FechaHoraInput,
+  CodigoDescripcion,
   AccessTicket,
   ArcaEvent,
+  CallOptions,
   ServerStatus,
-  // CPE
-  CartaPorteAutomotor,
-  CartaPorteResult,
-  ConsultaCPEParams,
-  ConsultaCPEPorDestinoParams,
-  ConfirmadoArriboCPEParams,
-  RechazoAnulacionCPEParams,
-  EditarCPEParams,
-  ContingenciaCPEParams,
-  // CTG
-  SolicitudCTG,
-  CTGResult,
-  ConsultaCTGParams,
-  ConfirmarArriboCTGParams,
-  RechazoCTGParams,
-  AnulacionCTGParams,
-  CTGActivosResult,
-  // LPG
-  Liquidacion,
-  LiquidacionResult,
-  ConsultaLiquidacionParams,
-  AjusteUnificadoParams,
-  Certificacion,
-  CertificacionResult,
-  LpgParameterQueryParams,
+  TicketStorage,
 } from './types.js';
 
-// ---------------------------------------------------------------------------
-// Validators
-// ---------------------------------------------------------------------------
-export { validateCPE, validateCTG, validateLiquidacion } from './validation.js';
+export type {
+  // Requests
+  CartaPorteId,
+  DestinoCPE,
+  DestinatarioCPE,
+  RetiroProductorCPE,
+  IntervinientesCPE,
+  CoordenadaGMS,
+  CoordenadasGPSCPE,
+  OrigenCPEAutomotor,
+  SemillaCPE,
+  TransporteAutomotorModificaCPE,
+  RamalCPE,
+  TransporteFerroviariaModificaCPE,
+  AutorizarCPEAutomotorParams,
+  AutorizarCPEFerroviariaParams,
+  ConsultarCPEParams,
+  EditarCPEAutomotorParams,
+  EditarCPEFerroviariaParams,
+  EditarCPEConfirmadaParams,
+  AnularCPEParams,
+  RechazoCPEParams,
+  SolicitanteCartaPorteParams,
+  ConfirmacionDefinitivaCPEAutomotorParams,
+  ConfirmacionDefinitivaCPEFerroviariaParams,
+  NuevoDestinoDestinatarioCPEAutomotorParams,
+  NuevoDestinoDestinatarioCPEFerroviariaParams,
+  RegresoOrigenCPEAutomotorParams,
+  RegresoOrigenCPEFerroviariaParams,
+  DesvioCPEAutomotorParams,
+  DesvioCPEFerroviariaParams,
+  InformarContingenciaParams,
+  CerrarContingenciaCPEParams,
+  ConsultarCPEPorDestinoParams,
+  ConsultarCPEPendientesParams,
+  // Respuestas
+  CabeceraCPE,
+  MetadataCPE,
+  CPEResultado,
+  DestinoCPERespuesta,
+  CPEAutomotorDetalle,
+  CPEFerroviariaDetalle,
+  CPEResumen,
+  OperativoFerroviarioCPE,
+  PlantaCPE,
+  CoordenadaCPE,
+  LocalidadProductorCPE,
+  VariedadSemillaCPE,
+} from './cpe-types.js';
+
+export type {
+  SiNo,
+  // Requests
+  CertificadoDepositoLpg,
+  LiquidacionLpg,
+  DeduccionLpg,
+  RetencionLpg,
+  PercepcionLpg,
+  LiquidacionAutorizarParams,
+  AjusteCreditoDebitoLpg,
+  AjusteUnificadoParams,
+  MermasCg,
+  CgAutorizarParams,
+  // Respuestas
+  DeduccionLiquidadaLpg,
+  RetencionLiquidadaLpg,
+  LiquidacionAutorizadaLpg,
+  LiquidacionResultado,
+  LiquidacionConsultadaLpg,
+  LiquidacionConsultaResultado,
+  AnulacionLiquidacionResultado,
+  AjusteCreditoDebitoResultadoLpg,
+  AjusteUnificadoLpg,
+  AjusteUnificadoResultado,
+  GradoEntregadoLpg,
+  CertificacionAutorizadaLpg,
+  CertificacionResultado,
+  AnulacionCertificacionResultado,
+} from './lpg-types.js';
 
 // ---------------------------------------------------------------------------
-// Constants
+// Validadores
+// ---------------------------------------------------------------------------
+export {
+  validateAutorizarCPEAutomotor,
+  validateAutorizarCPEFerroviaria,
+  validateLiquidacion,
+  validateAjusteUnificado,
+} from './validation.js';
+
+// ---------------------------------------------------------------------------
+// Constantes
 // ---------------------------------------------------------------------------
 export {
   WSAA_SERVICES,
   CPE_ENDPOINTS,
   CPE_NAMESPACE,
-  CTG_ENDPOINTS,
-  CTG_NAMESPACE,
+  TIPO_CPE,
+  ESTADOS_CPE,
   LPG_ENDPOINTS,
   LPG_NAMESPACE,
 } from './constants.js';
 
 // ---------------------------------------------------------------------------
-// Errors (re-export from common for convenience)
+// Errores
 // ---------------------------------------------------------------------------
+export { ArcaAgroServiceError, ArcaAgroResponseError } from './errors.js';
 export {
   ArcaError,
   ArcaAuthError,
   ArcaSoapError,
   ArcaServiceError,
   ArcaValidationError,
+  ArcaTicketVigenteError,
 } from '@ramiidv/arca-common';
+export type { ServiceErrorDetail, ValidationErrorDetail } from '@ramiidv/arca-common';

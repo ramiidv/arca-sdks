@@ -1,7 +1,7 @@
 {
   "name": "@ramiidv/arca-agro",
-  "version": "0.2.0",
-  "description": "SDK para servicios agropecuarios de ARCA (ex AFIP) - WSCPE, WSCTG, WSLPG",
+  "version": "0.3.0",
+  "description": "SDK para servicios agropecuarios de ARCA (ex AFIP) - WSCPE (Carta de Porte Electrónica) y WSLPG (Liquidación Primaria de Granos)",
   "author": "ramiidv",
   "license": "MIT",
   "type": "module",
@@ -28,7 +28,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run clean && npm run build"
+    "prepublishOnly": "npm run clean && npm run build && npm test"
   },
   "keywords": [
     "arca",
@@ -36,15 +36,14 @@
     "agro",
     "granos",
     "carta-de-porte",
-    "ctg",
     "liquidacion",
     "argentina",
     "wscpe",
-    "wsctg",
     "wslpg",
     "soap",
     "sdk",
-    "typescript"
+    "typescript",
+    "cpe"
   ],
   "repository": {
     "type": "git",
@@ -61,7 +60,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@ramiidv/arca-common": "^0.1.0"
+    "@ramiidv/arca-common": "^0.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

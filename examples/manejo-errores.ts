@@ -1,163 +1,93 @@
 /**
- * Example: Error handling patterns for all 3 agro services
+ * Ejemplo: manejo de errores y recuperación de emisiones inciertas.
  *
- * Demonstrates how to handle:
- * - Validation errors (ArcaValidationError) - bad input data
- * - Service errors (ArcaServiceError) - ARCA rejected the request
- * - SOAP/HTTP errors (ArcaSoapError) - network or protocol issues
- * - Auth errors (ArcaAuthError) - certificate or WSAA issues
+ * - ArcaValidationError: datos inválidos, detectados antes de llamar a ARCA.
+ * - ArcaAgroServiceError (extiende ArcaServiceError): ARCA rechazó la operación
+ *   (`errores.error[]`, y en WSLPG también `erroresFormato`).
+ * - ArcaSoapError: red, timeout, HTTP o SOAP Fault. `uncertain: true` en una
+ *   emisión significa que ARCA pudo haberla procesado.
+ * - ArcaAgroResponseError: respuesta sin un dato imprescindible (ej: nroCTG).
  */
 import fs from 'node:fs';
 import {
   ArcaAgro,
-  ArcaValidationError,
-  ArcaServiceError,
-  ArcaSoapError,
+  ArcaAgroResponseError,
+  ArcaAgroServiceError,
   ArcaAuthError,
-  ArcaError,
+  ArcaSoapError,
+  ArcaValidationError,
+  TIPO_CPE,
 } from '@ramiidv/arca-agro';
+import type { AutorizarCPEAutomotorParams, CPEAutomotorDetalle } from '@ramiidv/arca-agro';
 
 const agro = new ArcaAgro({
-  cuit: 20123456789,
+  cuit: '20123456786',
   cert: fs.readFileSync('cert.pem', 'utf-8'),
   key: fs.readFileSync('key.pem', 'utf-8'),
-  production: false,
 });
 
-// ---------------------------------------------------------------------------
-// Pattern 1: Validation errors (caught before hitting the network)
-// ---------------------------------------------------------------------------
-async function validationErrorExample() {
-  console.log('--- Validation error example ---');
+/**
+ * Autoriza una CPE y, si el resultado es incierto, consulta en ARCA si se
+ * emitió antes de reintentar (manual WSCPE §1.3).
+ */
+async function autorizarConRecuperacion(params: AutorizarCPEAutomotorParams): Promise<CPEAutomotorDetalle> {
+  const { sucursal, nroOrden, tipoCP } = params.cabecera;
   try {
-    await agro.cpe.autorizarCPEAutomotor({
-      cuitTitularCartaPorte: 123, // invalid: not 11 digits
-      sucursal: 0,                // invalid: must be > 0
-      nroOrden: -1,               // invalid: must be >= 0
-      codTipoCartaPorte: 1,
-      codGrano: 0,                // invalid: must be > 0
-      codLocalidadProcedencia: 10270,
-      codProvProcedencia: 1,
-      codLocalidadDestino: 10350,
-      codProvDestino: 1,
-      cuitDestino: 30111222334,
-      plantaDestino: 1,
-      pesoNeto: -100,             // invalid: must be > 0
-      pesoBruto: 32000,
-      pesoTara: 2000,
-      patente: 'ABC123',
-      cuitTransportista: 20999888777,
-      fechaEmision: '2026-03-31',
-    });
+    return await agro.cpe.autorizarCPEAutomotor(params);
   } catch (error) {
-    if (error instanceof ArcaValidationError) {
-      console.log('Validation failed!');
-      console.log('  Field:', error.field);
-      console.log('  Details:');
-      for (const detail of error.details) {
-        console.log(`    - ${detail.field}: ${detail.message} (value: ${detail.value})`);
-      }
-    }
-  }
-}
+    const incierto =
+      (error instanceof ArcaSoapError && error.uncertain) || (error instanceof ArcaAgroResponseError && error.uncertain);
+    if (!incierto) throw error;
 
-// ---------------------------------------------------------------------------
-// Pattern 2: Service errors (ARCA rejected the business request)
-// ---------------------------------------------------------------------------
-async function serviceErrorExample() {
-  console.log('\n--- Service error example ---');
-  try {
-    await agro.ctg.solicitarCTGInicial({
-      nroCartaPorte: 9999999,
-      codEspecie: 23,
-      cuitDestino: 30111222334,
-      cuitDestinatario: 30111222334,
-      codLocalidadOrigen: 10270,
-      codLocalidadDestino: 10350,
-      codCosecha: 2526,
-      pesoNeto: 30000,
-    });
-  } catch (error) {
-    if (error instanceof ArcaServiceError) {
-      console.log('Service rejected the request:');
-      for (const e of error.errors) {
-        console.log(`  Error ${e.code}: ${e.msg}`);
-      }
+    // ¿Llegó a autorizarse? El último número de orden lo dice.
+    const ultimo = await agro.cpe.consultarUltNroOrden(sucursal, tipoCP);
+    if (ultimo >= nroOrden) {
+      return agro.cpe.consultarCPEAutomotor({ cartaPorte: { tipoCPE: tipoCP, sucursal, nroOrden } });
     }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Pattern 3: Network / SOAP errors
-// ---------------------------------------------------------------------------
-async function soapErrorExample() {
-  console.log('\n--- SOAP error example ---');
-  try {
-    await agro.lpg.liquidacionAutorizar({
-      cuitComprador: 30111222334,
-      cuitVendedor: 20123456789,
-      codGrano: 23,
-      pesoNeto: 30000,
-    });
-  } catch (error) {
-    if (error instanceof ArcaSoapError) {
-      console.log('SOAP/HTTP error:');
-      console.log('  Message:', error.message);
-      console.log('  Status code:', error.statusCode);
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Pattern 4: Authentication errors
-// ---------------------------------------------------------------------------
-async function authErrorExample() {
-  console.log('\n--- Auth error example ---');
-  try {
-    // This would fail if the certificate is invalid or expired
-    await agro.cpe.dummy();
-  } catch (error) {
-    if (error instanceof ArcaAuthError) {
-      console.log('Authentication failed:');
-      console.log('  Message:', error.message);
-      console.log('  Check your certificate and private key.');
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Pattern 5: Generic catch-all using base ArcaError
-// ---------------------------------------------------------------------------
-async function genericErrorExample() {
-  console.log('\n--- Generic error handling ---');
-  try {
-    await agro.lpg.liquidacionConsultar({
-      fechaDesde: '2026-03-01',
-      fechaHasta: '2026-03-31',
-    });
-  } catch (error) {
-    if (error instanceof ArcaValidationError) {
-      console.log('Input validation failed:', error.details);
-    } else if (error instanceof ArcaServiceError) {
-      console.log('ARCA service error:', error.errors);
-    } else if (error instanceof ArcaSoapError) {
-      console.log('Network/SOAP error:', error.message);
-    } else if (error instanceof ArcaAuthError) {
-      console.log('Authentication error:', error.message);
-    } else if (error instanceof ArcaError) {
-      console.log('Unknown ARCA error:', error.message);
-    } else {
-      console.log('Unexpected error:', error);
-    }
+    // No se emitió: es seguro reintentar con el mismo número de orden.
+    return agro.cpe.autorizarCPEAutomotor(params);
   }
 }
 
 async function main() {
-  await validationErrorExample();
-  await serviceErrorExample();
-  await soapErrorExample();
-  await authErrorExample();
-  await genericErrorExample();
+  try {
+    await autorizarConRecuperacion({
+      cabecera: { tipoCP: TIPO_CPE.AUTOMOTOR, cuitSolicitante: '20123456786', sucursal: 1, nroOrden: 1 },
+      origen: { operador: { codProvincia: 12, codLocalidad: 5244, planta: 1938 } },
+      correspondeRetiroProductor: false,
+      esSolicitanteCampo: false,
+      datosCarga: { codGrano: 23, cosecha: 2526, pesoBruto: 42000, pesoTara: 12000 },
+      destino: { cuit: '30500011129', esDestinoCampo: false, codProvincia: 12, codLocalidad: 5244, planta: 2000 },
+      destinatario: { cuit: '30500011129' },
+      transporte: {
+        cuitTransportista: '20999888772',
+        dominio: ['AB123CD'],
+        fechaHoraPartida: new Date(),
+        kmRecorrer: 30,
+        cuitChofer: '27300000008',
+        cuitPagadorFlete: '30712345671',
+        mercaderiaFumigada: false,
+      },
+    });
+  } catch (error) {
+    if (error instanceof ArcaValidationError) {
+      for (const d of error.details) console.log(`Dato inválido ${d.field}: ${d.message}`);
+    } else if (error instanceof ArcaAgroServiceError) {
+      console.log(`${error.service} ${error.method} rechazó la operación:`);
+      for (const e of error.errors) console.log(`  [${e.rawCode ?? e.code}] ${e.msg}`);
+    } else if (error instanceof ArcaAuthError) {
+      console.log('Error de autenticación WSAA:', error.message);
+    } else if (error instanceof ArcaSoapError) {
+      console.log('Error de comunicación:', error.message, 'incierto:', error.uncertain);
+    } else {
+      throw error;
+    }
+  }
+
+  // Estado de los servicios: una falla no oculta el estado del otro.
+  const estado = await agro.serverStatus();
+  console.log('WSCPE:', estado.cpe.ok ? estado.cpe.status : estado.cpe.error.message);
+  console.log('WSLPG:', estado.lpg.ok ? estado.lpg.status : estado.lpg.error.message);
 }
 
 main().catch(console.error);

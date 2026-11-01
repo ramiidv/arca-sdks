@@ -1,187 +1,106 @@
-# @ramiidv/arca-agro - Technical Reference
+# @ramiidv/arca-agro - Technical Reference (v0.3.0)
 
 ## Overview
 
-TypeScript SDK for ARCA (Argentina's tax authority, formerly AFIP) agricultural web services. Bundles three SOAP services into a single package with automatic WSAA authentication.
+TypeScript SDK for ARCA (Argentina's tax authority, formerly AFIP) agricultural SOAP web services, with automatic WSAA authentication (via @ramiidv/arca-common ^0.4.0).
 
-- **WSCPE** - Carta de Porte Electrónica: electronic bill of lading for grain transport
-- **WSCTG** - Código de Trazabilidad de Granos: grain traceability codes
-- **WSLPG** - Liquidación Primaria de Granos: primary grain settlement and certification
+- WSCPE - Carta de Porte Electrónica (grain bill of lading; road "automotor" and rail "ferroviaria")
+- WSLPG - Liquidación Primaria de Granos (primary grain settlement) and certificación primaria (cg*)
+
+WSCTG (Código de Trazabilidad de Granos) is NOT included: it was repealed on 2021-11-01 (RG 5017/2021) and its endpoints return 404. The CTG number is now returned by WSCPE (`cabecera.nroCTG`).
 
 ## Architecture
 
 ```
-ArcaAgro (orchestrator)
-├── .cpe  → CpeClient  (WSCPE)  → WSAA service: "wscpe"
-├── .ctg  → CtgClient  (WSCTG)  → WSAA service: "wsctg"
-└── .lpg  → LpgClient  (WSLPG)  → WSAA service: "wslpg"
+ArcaAgro
+├── .cpe → CpeClient (WSCPE) → WSAA service "wscpe"
+└── .lpg → LpgClient (WSLPG) → WSAA service "wslpg"
 ```
 
-All shared utilities (WsaaClient, afipSoapCall, errors, types) come from `@ramiidv/arca-common`. No duplication.
+Sub-clients are only obtained from `ArcaAgro` (their classes are exported as types). Every public method takes an optional last argument `opts?: { signal?: AbortSignal }`.
 
-## WSAA Service Identifiers
+## Endpoints and namespaces
 
-| Service | WSAA ID |
-|---------|---------|
-| WSCPE   | `wscpe` |
-| WSCTG   | `wsctg` |
-| WSLPG   | `wslpg` |
+| Service | Testing | Production | Namespace |
+|---|---|---|---|
+| WSCPE | https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap | https://cpea-ws.afip.gob.ar/wscpe/services/soap | https://serviciosjava.afip.gob.ar/wscpe/ |
+| WSLPG | https://fwshomo.afip.gov.ar/wslpg/LpgService | https://serviciosjava.afip.gob.ar/wslpg/LpgService | http://serviciosjava.afip.gob.ar/wslpg/ (http!) |
 
-## Endpoints
+SOAP details (from the official WSDLs):
+- WSCPE: request element `<Op>Req` (capitalized operation, e.g. `AutorizarCPEAutomotorReq`), response `<Op>Resp` with a `respuesta` child; SOAPAction = namespace + operation; auth `{token, sign, cuitRepresentada}`; business errors in `respuesta.errores.error[]{codigo,descripcion}`.
+- WSLPG: request/response elements per WSDL (e.g. `liquidacionReq`/`liquidacionResp` → `liqReturn`); SOAPAction = namespace + operation; auth `{token, sign, cuit}`; errors in `errores.error[]` and `erroresFormato.error[]`; info in `eventos.evento[]`.
+- `dummy` (both): empty SOAP Body, no auth.
 
-### WSCPE
-- Testing: `https://fwshomo.afip.gov.ar/wscpe/services/soap`
-- Production: `https://serviciosjava.afip.gob.ar/wscpe/services/soap`
+## Configuration (ArcaAgroConfig extends ArcaBaseConfig)
 
-### WSCTG
-- Testing: `https://fwshomo.afip.gov.ar/wsctg/services/CTGService_v4.0`
-- Production: `https://serviciosjava.afip.gob.ar/wsctg/services/CTGService_v4.0`
+cuit (number|string, validated with check digit), cert, key, production=false, timeout=30000, retries=1 (queries only), retryDelayMs=1000, tokenTTLMinutes=720, ticketStorage, clockOffsetMs, autoClockSkew, loginErrorCooldownMs, fetch, legacyTls, onEvent, endpoints?: { cpe?, lpg?, wsaa? }.
 
-### WSLPG
-- Testing: `https://fwshomo.afip.gov.ar/wslpg/LpgService`
-- Production: `https://serviciosjava.afip.gob.ar/wslpg/LpgService`
+## ArcaAgro
 
-## API Methods
+- `cpe: CpeClient`, `lpg: LpgClient`
+- `serverStatus(opts?)` → `{ cpe: AgroServiceStatus, lpg: AgroServiceStatus }` where `AgroServiceStatus = { ok: true, status: ServerStatus } | { ok: false, error: Error }` (Promise.allSettled)
+- `clearAuthCache(): Promise<void>`
+- `on(type, handler)`, `off(type, handler)`
 
-### agro.cpe.* (WSCPE)
+## CpeClient (agro.cpe)
 
-| Method | Description |
-|--------|-------------|
-| `autorizarCPEAutomotor(cpe)` | Authorize electronic bill of lading for road transport |
-| `confirmadoArriboCPE(params)` | Confirm arrival at destination |
-| `rechazoCPE(params)` | Reject a CPE |
-| `anularCPE(params)` | Cancel a CPE |
-| `editarCPE(params)` | Edit fields of an authorized CPE |
-| `informarContingencia(params)` | Report a contingency on a CPE |
-| `consultarCPE(params)` | Query CPEs by search criteria |
-| `consultarCPEPorDestino(params)` | Query CPEs by destination |
-| `consultarUltNroOrden(sucursal)` | Get last order number for a branch |
-| `siguienteNroOrden(sucursal)` | Get next order number (last + 1) |
-| `consultarConstanciaCPEPDF(nroCTG)` | Get CPE certificate as base64 PDF |
-| `dummy()` | Check WSCPE server status |
+Constants: `TIPO_CPE = { AUTOMOTOR: 74, FERROVIARIA: 75, AUTOMOTOR_FLETE_CORTO: 274 }`, `ESTADOS_CPE` (AC, AN, BR, CF, CN, CO, DE, RE, PA, AP, DD, PE, IN, PO).
 
-### agro.ctg.* (WSCTG)
+Requests mirror the XSD (`solicitud` content). `CartaPorteId = { tipoCPE, sucursal, nroOrden }`.
 
-| Method | Description |
-|--------|-------------|
-| `solicitarCTGInicial(solicitud)` | Request initial CTG for grain transport |
-| `confirmarArribo(params)` | Confirm CTG arrival at destination |
-| `rechazarCTG(params)` | Reject a CTG |
-| `anularCTG(params)` | Cancel a CTG |
-| `consultarCTG(params)` | Query CTGs by search criteria |
-| `consultarCTGExcel(params)` | Query CTGs and get Excel export (base64) |
-| `consultarConstanciaCTGPDF(nroCTG)` | Get CTG certificate as base64 PDF |
-| `obtenerCTGActivos()` | Get active (pending) CTGs |
-| `dummy()` | Check WSCTG server status |
+Emissions (kind 'emision', never retried):
+- `autorizarCPEAutomotor(AutorizarCPEAutomotorParams)` → `CPEAutomotorDetalle` (requires `cabecera.nroCTG`)
+  - params: `{ cabecera: {tipoCP, cuitSolicitante, sucursal, nroOrden}, origen: {operador?|productor?}, correspondeRetiroProductor, esSolicitanteCampo, retiroProductor?, intervinientes?, datosCarga: {codGrano, cosecha, semilla?, pesoBruto, pesoTara}, destino: {cuit, esDestinoCampo, codProvincia, codLocalidad, planta?}, destinatario: {cuit}, transporte: {cuitTransportista, dominio[], fechaHoraPartida, kmRecorrer, codigoTurno?, cuitChofer, tarifa?, cuitPagadorFlete, cuitIntermediarioFlete?, mercaderiaFumigada}, observaciones? }`
+- `autorizarCPEFerroviaria(AutorizarCPEFerroviariaParams)` → `CPEFerroviariaDetalle`
+- returning `CPEResultado { cabecera?, pdf?, metadata? }`: `editarCPEAutomotor`, `editarCPEConfirmadaAutomotor`, `confirmarArriboCPE`, `confirmacionDefinitivaCPEAutomotor`, `descargadoDestinoCPE`, `rechazoCPE`, `anularCPE`, `nuevoDestinoDestinatarioCPEAutomotor`, `regresoOrigenCPEAutomotor`, `desvioCPEAutomotor`, `informarContingencia`, `cerrarContingenciaCPE`, `editarCPEFerroviaria`, `editarCPEConfirmadaFerroviaria`, `confirmacionDefinitivaCPEFerroviaria`, `nuevoDestinoDestinatarioCPEFerroviaria`, `regresoOrigenCPEFerroviaria`, `desvioCPEFerroviaria`
 
-### agro.lpg.* (WSLPG)
+Queries:
+- `consultarCPEAutomotor({cuitSolicitante?, cartaPorte? | nroCTG?})` → `CPEAutomotorDetalle`
+- `consultarCPEFerroviaria(...)` → `CPEFerroviariaDetalle`
+- `consultaCPEFerroviariaPorNroOperativo(nroOperativo)` → `OperativoFerroviarioCPE`
+- `consultarCPEPorDestino({planta, fechaPartidaDesde, fechaPartidaHasta, tipoCartaPorte?})` → `CPEResumen[]`
+- `consultarCPEPPendientesDeResolucion({perfil: 'S'|'D', planta?})` → `CPEResumen[]`
+- `consultarUltNroOrden(sucursal, tipoCPE)` → number (throws if missing)
+- `siguienteNroOrden(sucursal, tipoCPE)` → number (NOT atomic: concurrent callers get the same number)
+- `consultarProvincias()`, `consultarLocalidadesPorProvincia(codProvincia)`, `consultarTiposGrano()`, `consultarCategoriasSemillas()` → `CodigoDescripcion[]` (`codigo` is string)
+- `consultarPlantas(cuit)` → `PlantaCPE[]`; `consultarLocalidadesProductor(cuit)` → `LocalidadProductorCPE[]`; `consultarVariedadesSemillas(codGrano?)` → `VariedadSemillaCPE[]`
+- `dummy()` → ServerStatus
 
-| Method | Description |
-|--------|-------------|
-| `liquidacionAutorizar(liquidacion)` | Authorize a primary grain settlement |
-| `liquidacionConsultar(params)` | Query authorized settlements |
-| `liquidacionAnular(ptoEmision, nroOrden)` | Cancel a settlement |
-| `liquidacionAjustarUnificado(params)` | Unified adjustment (debit/credit) |
-| `certificacionAutorizar(certificacion)` | Authorize a grain certification |
-| `certificacionAnular(tipo, nro)` | Cancel a certification |
-| `consultarParametros(tipo, params?)` | Query WSLPG parameters (grain types, grades, ports, etc.) |
-| `dummy()` | Check WSLPG server status |
+Not supported: derivados granarios (DG, types 284-287), ductos, consultarRenspa, consultarDomiciliosPorCUIT, DG parametrics.
 
-### Global
+## LpgClient (agro.lpg)
 
-| Method | Description |
-|--------|-------------|
-| `serverStatus()` | Check all 3 services at once |
-| `clearAuthCache()` | Invalidate all cached WSAA tokens |
-| `on(event, handler)` | Subscribe to SDK events |
-| `off(event, handler)` | Unsubscribe from events |
+Emissions:
+- `liquidacionAutorizar({ liquidacion: LiquidacionLpg, deducciones?, retenciones?, percepciones? })` → `{ autorizacion: LiquidacionAutorizadaLpg (coe: string), eventos }`
+- `liquidacionAnular(coe)` → `{ coe?, resultado, pdf?, eventos }`
+- `liquidacionAjustarUnificado({ ajusteBase, ajusteCredito?, ajusteDebito? })` → `{ ajusteUnificado (coe: string), eventos }`
+- `cgAutorizar(CgAutorizarParams)` → `{ autorizacion (coe: string), eventos }`
+- `cgSolicitarAnulacion(coe, {pdf?})`, `cgConfirmarAnulacion(coe, {pdf?})` → `{ estadoCertificado, pdf?, eventos }`
 
-## Key Types
+Queries:
+- `liquidacionXCoeConsultar(coe, {pdf?})`, `liquidacionXNroOrdenConsultar(ptoEmision, nroOrden)` → `{ liquidacion?, autorizacion, pdf?, eventos }`
+- `liquidacionUltimoNroOrdenConsultar(ptoEmision)`, `cgConsultarUltimoNroOrden(ptoEmision)` → number
+- parametrics → `CodigoDescripcion[]`: `provinciasConsultar`, `localidadXProvinciaConsultar(codProvincia)`, `tipoOperacionXActividadConsultar(nroActLiquida)`, `puertoConsultar`, `tipoActividadConsultar`, `tipoActividadRepresentadoConsultar`, `tipoCertificadoDepositoConsultar`, `tipoRetencionConsultar`, `tipoDeduccionConsultar`, `tipoGranoConsultar`, `codigoGradoReferenciaConsultar`, `campaniasConsultar`; `codigoGradoEntregadoXTipoGranoConsultar(codGrano)` → `GradoEntregadoLpg[]`
+- `dummy()`
 
-### Configuration
+`LiquidacionLpg` (LpgLiquidacionBaseType, XSD order): ptoEmision, nroOrden, numeroContrato?, cuitComprador, nroActComprador, nroIngBrutoComprador, codTipoOperacion, esLiquidacionPropia?, esCanje?, codPuerto, desPuertoLocalidad?, codGrano, pesoNetoSinCertificado?, codLocalidadProcedenciaSinCertificado?, codProvProcedenciaSinCertificado?, cuitVendedor, nroIngBrutoVendedor, actuaCorredor?, liquidaCorredor, cuitCorredor?, comisionCorredor?, nroIngBrutoCorredor?, fechaPrecioOperacion, precioRefTn, codGradoRef?, codGradoEnt?, valGradoEnt?, factorEnt?, precioFleteTn, contProteico?, alicIvaOperacion?, campaniaPPal, codLocalidadProcedencia, codProvProcedencia, datosAdicionales?, certificados?[], opcionales?[].
 
-```ts
-interface ArcaAgroConfig {
-  cuit: number;
-  cert: string;         // PEM certificate
-  key: string;          // PEM private key
-  production?: boolean; // default: false
-  tokenTTLMinutes?: number;    // default: 720
-  requestTimeoutMs?: number;   // default: 30000
-  retries?: number;            // default: 1
-  retryDelayMs?: number;       // default: 1000
-  onEvent?: (event: ArcaEvent) => void;
-}
-```
+Not supported: lsg*, anticipos, anulación contra documento, ajuste por contrato, cgBuscarCtg, cgBuscarCertConSaldoDisponible, cgConsultarXCoe/XNroOrden, cgInformarCalidad.
 
-### CPE Types
+## Validation
 
-- `CartaPorteAutomotor` - Input for CPE authorization
-- `CartaPorteResult` - CPE operation result (nroCTG, nroCartaPorte, estado, errores, raw)
-- `ConsultaCPEParams` - CPE query parameters
-- `ConfirmadoArriboCPEParams` - Arrival confirmation input
-- `RechazoAnulacionCPEParams` - Rejection/cancellation input
-- `EditarCPEParams` - Edit input
-- `ContingenciaCPEParams` - Contingency report input
+All requests are validated locally against the XSD before sending (ArcaValidationError with all `details[]`): required fields, unknown fields, ranges/lengths/enums, CUIT check digit (validateCuit), finite numbers, decimals rounded to `fractionDigits`, `xsd:date` (Date | AAAAMMDD | AAAA-MM-DD → AAAA-MM-DD), `xsd:dateTime` (Date → Argentina time -03:00, or ISO string). Exported: `validateAutorizarCPEAutomotor`, `validateAutorizarCPEFerroviaria`, `validateLiquidacion`, `validateAjusteUnificado`.
 
-### CTG Types
+## Errors
 
-- `SolicitudCTG` - Input for CTG request
-- `CTGResult` - CTG operation result (nroCTG, estado, vigencia, errores, raw)
-- `ConsultaCTGParams` - CTG query parameters
-- `ConfirmarArriboCTGParams` - Arrival confirmation input
-- `RechazoCTGParams` - Rejection input
-- `AnulacionCTGParams` - Cancellation input
-- `CTGActivosResult` - Active CTGs result
+- `ArcaValidationError` - invalid input (no request sent)
+- `ArcaAgroServiceError extends ArcaServiceError` - ARCA business errors; `errors[]`, `service`, `method`, `response`
+- `ArcaSoapError` - transport/HTTP/SOAP Fault; `uncertain` for emissions
+- `ArcaAgroResponseError` - response missing a required datum (nroCTG, coe, nroOrden); `uncertain` for emissions
+- `ArcaAuthError`, `ArcaTicketVigenteError` - WSAA
 
-### LPG Types
+## Recovering an uncertain emission
 
-- `Liquidacion` - Input for settlement authorization
-- `LiquidacionResult` - Settlement result (codOperacion, nroOrden, totalPagar, errores, raw)
-- `ConsultaLiquidacionParams` - Settlement query parameters
-- `AjusteUnificadoParams` - Unified adjustment input
-- `Certificacion` - Certification input
-- `CertificacionResult` - Certification result
-
-## Error Hierarchy
-
-All errors extend from `ArcaError` (from `@ramiidv/arca-common`):
-
-- `ArcaAuthError` - WSAA authentication failures
-- `ArcaSoapError` - HTTP/SOAP transport errors (includes `statusCode`)
-- `ArcaServiceError` - Business logic errors from ARCA (includes `errors[]` with code + msg)
-- `ArcaValidationError` - Input validation errors
-
-## Low-Level Clients
-
-For direct control over auth, use the individual clients:
-
-```ts
-import { CpeClient, CtgClient, LpgClient } from '@ramiidv/arca-agro';
-import { WsaaClient } from '@ramiidv/arca-common';
-
-const cpe = new CpeClient(production, { timeoutMs, retries, retryDelayMs, onEvent });
-const ctg = new CtgClient(production, { ... });
-const lpg = new LpgClient(production, { ... });
-```
-
-Each client method takes `auth: AgroAuth` as first parameter:
-```ts
-interface AgroAuth { Token: string; Sign: string; Cuit: number; }
-```
-
-## Source Files
-
-| File | Purpose |
-|------|---------|
-| `src/constants.ts` | Endpoints, namespaces, WSAA service IDs |
-| `src/types.ts` | All TypeScript interfaces for the 3 services |
-| `src/cpe-client.ts` | Low-level WSCPE SOAP client |
-| `src/ctg-client.ts` | Low-level WSCTG SOAP client |
-| `src/lpg-client.ts` | Low-level WSLPG SOAP client |
-| `src/arca-agro.ts` | Main orchestrator with auto-auth and namespaced API |
-| `src/index.ts` | Public exports |
-
-## Dependencies
-
-- `@ramiidv/arca-common` (^0.1.0) - WsaaClient, afipSoapCall, errors, types, validators
+- CPE: `consultarUltNroOrden(sucursal, tipoCPE) >= nroOrden` → it was authorized; fetch it with `consultarCPEAutomotor({cartaPorte})`. Otherwise retry with the same nroOrden.
+- LPG: `liquidacionUltimoNroOrdenConsultar(ptoEmision)` + `liquidacionXNroOrdenConsultar`; for anular/ajuste use `liquidacionXCoeConsultar(coe)`.
+- CG: `cgConsultarUltimoNroOrden(ptoEmision)`.

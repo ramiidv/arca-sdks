@@ -1,381 +1,120 @@
 import { EventEmitter } from 'node:events';
-import { WsaaClient } from '@ramiidv/arca-common';
-import type { ArcaEvent, ServerStatus } from '@ramiidv/arca-common';
+import { WsaaClient, safeEmit, validateCuit } from '@ramiidv/arca-common';
+import type { ArcaEvent, CallOptions } from '@ramiidv/arca-common';
 import { CpeClient } from './cpe-client.js';
-import { CtgClient } from './ctg-client.js';
 import { LpgClient } from './lpg-client.js';
-import { WSAA_SERVICES } from './constants.js';
-import { validateCPE, validateCTG, validateLiquidacion } from './validation.js';
-import type {
-  ArcaAgroConfig,
-  AgroAuth,
-  CartaPorteAutomotor,
-  CartaPorteResult,
-  ConsultaCPEParams,
-  ConsultaCPEPorDestinoParams,
-  ConfirmadoArriboCPEParams,
-  RechazoAnulacionCPEParams,
-  EditarCPEParams,
-  ContingenciaCPEParams,
-  SolicitudCTG,
-  CTGResult,
-  ConsultaCTGParams,
-  ConfirmarArriboCTGParams,
-  RechazoCTGParams,
-  AnulacionCTGParams,
-  CTGActivosResult,
-  Liquidacion,
-  LiquidacionResult,
-  ConsultaLiquidacionParams,
-  AjusteUnificadoParams,
-  Certificacion,
-  CertificacionResult,
-  LpgParameterQueryParams,
-} from './types.js';
+import { CPE_ENDPOINTS, LPG_ENDPOINTS, WSAA_SERVICES } from './constants.js';
+import type { ServiceContext } from './context.js';
+import type { AgroServiceStatus, ArcaAgroConfig } from './types.js';
 
 /**
- * Orquestador principal para los servicios agropecuarios de ARCA.
- * Expone los tres servicios (WSCPE, WSCTG, WSLPG) con autenticación automática.
+ * Cliente de los servicios agropecuarios de ARCA: WSCPE (Carta de Porte
+ * Electrónica) y WSLPG (Liquidación Primaria de Granos), con autenticación
+ * WSAA automática.
  *
  * @example
  * ```ts
  * const agro = new ArcaAgro({
- *   cuit: 20123456789,
+ *   cuit: '20-12345678-6',
  *   cert: fs.readFileSync('cert.pem', 'utf-8'),
  *   key: fs.readFileSync('key.pem', 'utf-8'),
- *   production: false,
  * });
- *
- * // Carta de Porte
+ * const nroOrden = await agro.cpe.siguienteNroOrden(1, TIPO_CPE.AUTOMOTOR);
  * const cpe = await agro.cpe.autorizarCPEAutomotor({ ... });
- *
- * // CTG
- * const ctg = await agro.ctg.solicitarCTGInicial({ ... });
- *
- * // Liquidaciones
- * const liq = await agro.lpg.liquidacionAutorizar({ ... });
+ * const liq = await agro.lpg.liquidacionAutorizar({ liquidacion: { ... } });
  * ```
  */
 export class ArcaAgro {
-  private readonly wsaa: WsaaClient;
-  private readonly cpeClient: CpeClient;
-  private readonly ctgClient: CtgClient;
-  private readonly lpgClient: LpgClient;
-  private readonly cuit: number;
-  private readonly production: boolean;
-  private readonly emitter = new EventEmitter();
-  private readonly onEventCb?: (event: ArcaEvent) => void;
+  /** WSCPE: Carta de Porte Electrónica (automotor y ferroviaria). */
+  public readonly cpe: CpeClient;
+  /** WSLPG: Liquidación Primaria de Granos y certificaciones. */
+  public readonly lpg: LpgClient;
 
-  /** Acceso a los servicios de Carta de Porte Electrónica (WSCPE). */
-  public readonly cpe: ArcaAgroCpe;
-  /** Acceso a los servicios de Código de Trazabilidad de Granos (WSCTG). */
-  public readonly ctg: ArcaAgroCtg;
-  /** Acceso a los servicios de Liquidación Primaria de Granos (WSLPG). */
-  public readonly lpg: ArcaAgroLpg;
+  readonly #wsaa: WsaaClient;
+  readonly #emitter = new EventEmitter();
 
+  /** @throws ArcaValidationError si el CUIT es inválido. */
   constructor(config: ArcaAgroConfig) {
-    this.cuit = config.cuit;
-    this.production = config.production ?? false;
-    this.onEventCb = config.onEvent;
-
-    const timeoutMs = config.requestTimeoutMs ?? 30_000;
-    const retries = config.retries ?? 1;
-    const retryDelayMs = config.retryDelayMs ?? 1_000;
+    const cuit = validateCuit(config.cuit);
+    const production = config.production ?? false;
 
     const emit = (event: ArcaEvent) => {
-      this.onEventCb?.(event);
-      this.emitter.emit(event.type, event);
+      safeEmit(config.onEvent, event);
+      safeEmit((e) => this.#emitter.emit(e.type, e), event);
     };
 
-    const clientOpts = { timeoutMs, retries, retryDelayMs, onEvent: emit };
-
-    this.wsaa = new WsaaClient({
+    this.#wsaa = new WsaaClient({
       cert: config.cert,
       key: config.key,
-      production: this.production,
-      tokenTTLMinutes: config.tokenTTLMinutes ?? 720,
-      timeout: timeoutMs,
-      retries,
-      retryDelayMs,
+      production,
+      endpoint: config.endpoints?.wsaa,
+      tokenTTLMinutes: config.tokenTTLMinutes,
+      timeout: config.timeout,
+      retries: config.retries,
+      retryDelayMs: config.retryDelayMs,
       onEvent: emit,
+      ticketStorage: config.ticketStorage,
+      clockOffsetMs: config.clockOffsetMs,
+      autoClockSkew: config.autoClockSkew,
+      loginErrorCooldownMs: config.loginErrorCooldownMs,
+      fetch: config.fetch,
+      legacyTls: config.legacyTls,
     });
 
-    this.cpeClient = new CpeClient(this.production, clientOpts);
-    this.ctgClient = new CtgClient(this.production, clientOpts);
-    this.lpgClient = new LpgClient(this.production, clientOpts);
+    const soap: ServiceContext['soap'] = {
+      timeout: config.timeout,
+      retries: config.retries,
+      retryDelayMs: config.retryDelayMs,
+      onEvent: emit,
+      fetch: config.fetch,
+      legacyTls: config.legacyTls,
+    };
+    const env = production ? 'production' : 'testing';
 
-    this.cpe = new ArcaAgroCpe(this);
-    this.ctg = new ArcaAgroCtg(this);
-    this.lpg = new ArcaAgroLpg(this);
+    this.cpe = new CpeClient({
+      endpoint: config.endpoints?.cpe ?? CPE_ENDPOINTS[env],
+      cuit,
+      soap,
+      getTicket: (opts) => this.#wsaa.getAccessTicket(WSAA_SERVICES.cpe, opts),
+    });
+    this.lpg = new LpgClient({
+      endpoint: config.endpoints?.lpg ?? LPG_ENDPOINTS[env],
+      cuit,
+      soap,
+      getTicket: (opts) => this.#wsaa.getAccessTicket(WSAA_SERVICES.lpg, opts),
+    });
   }
 
-  // ============================================================
-  // Eventos
-  // ============================================================
-
   /**
-   * Suscribirse a eventos del SDK.
-   *
-   * @example
-   * ```ts
-   * agro.on('request:end', (e) => console.log(`${e.method} took ${e.durationMs}ms`));
-   * agro.on('auth:login', (e) => console.log(`Login ${e.service} in ${e.durationMs}ms`));
-   * ```
+   * Suscribirse a eventos del SDK (`auth:*`, `request:*`).
+   * Los errores de los handlers se ignoran.
    */
   on(event: ArcaEvent['type'], handler: (event: ArcaEvent) => void): this {
-    this.emitter.on(event, handler);
+    this.#emitter.on(event, handler);
     return this;
   }
 
   /** Desuscribirse de un evento. */
   off(event: ArcaEvent['type'], handler: (event: ArcaEvent) => void): this {
-    this.emitter.off(event, handler);
+    this.#emitter.off(event, handler);
     return this;
   }
 
-  // ============================================================
-  // Auth helpers (internal)
-  // ============================================================
-
-  /** @internal */
-  async getAuth(service: string): Promise<AgroAuth> {
-    const ticket = await this.wsaa.getAccessTicket(service);
-    return {
-      Token: ticket.token,
-      Sign: ticket.sign,
-      Cuit: this.cuit,
-    };
+  /**
+   * Estado de los servidores de WSCPE y WSLPG (`dummy`, sin autenticación).
+   * Una falla de un servicio no impide conocer el estado del otro.
+   */
+  async serverStatus(opts?: CallOptions): Promise<{ cpe: AgroServiceStatus; lpg: AgroServiceStatus }> {
+    const [cpe, lpg] = await Promise.allSettled([this.cpe.dummy(opts), this.lpg.dummy(opts)]);
+    const toStatus = (r: PromiseSettledResult<Awaited<ReturnType<CpeClient['dummy']>>>): AgroServiceStatus =>
+      r.status === 'fulfilled'
+        ? { ok: true, status: r.value }
+        : { ok: false, error: r.reason instanceof Error ? r.reason : new Error(String(r.reason)) };
+    return { cpe: toStatus(cpe), lpg: toStatus(lpg) };
   }
 
-  /** @internal */
-  getCpeClient(): CpeClient { return this.cpeClient; }
-
-  /** @internal */
-  getCtgClient(): CtgClient { return this.ctgClient; }
-
-  /** @internal */
-  getLpgClient(): LpgClient { return this.lpgClient; }
-
-  // ============================================================
-  // Estado de servicios
-  // ============================================================
-
-  /** Verifica el estado de los servidores de los 3 servicios agro. */
-  async serverStatus(): Promise<{
-    cpe: ServerStatus;
-    ctg: ServerStatus;
-    lpg: ServerStatus;
-  }> {
-    const [cpe, ctg, lpg] = await Promise.all([
-      this.cpeClient.dummy(),
-      this.ctgClient.dummy(),
-      this.lpgClient.dummy(),
-    ]);
-    return { cpe, ctg, lpg };
-  }
-
-  // ============================================================
-  // Cache
-  // ============================================================
-
-  /** Invalida los tickets de acceso cacheados para todos los servicios agro. */
-  clearAuthCache(): void {
-    this.wsaa.clearTicket(WSAA_SERVICES.cpe);
-    this.wsaa.clearTicket(WSAA_SERVICES.ctg);
-    this.wsaa.clearTicket(WSAA_SERVICES.lpg);
-  }
-}
-
-// ============================================================
-// Namespace: CPE
-// ============================================================
-
-/**
- * Namespace con métodos de Carta de Porte Electrónica (WSCPE).
- * Se accede a través de `agro.cpe.*`.
- */
-class ArcaAgroCpe {
-  constructor(private readonly agro: ArcaAgro) {}
-
-  private auth() { return this.agro.getAuth(WSAA_SERVICES.cpe); }
-  private client() { return this.agro.getCpeClient(); }
-
-  /** Autoriza una CPE para transporte automotor. */
-  async autorizarCPEAutomotor(cpe: CartaPorteAutomotor): Promise<CartaPorteResult> {
-    validateCPE(cpe);
-    return this.client().autorizarCPEAutomotor(await this.auth(), cpe);
-  }
-
-  /** Confirma el arribo de una CPE en destino. */
-  async confirmadoArriboCPE(params: ConfirmadoArriboCPEParams): Promise<CartaPorteResult> {
-    return this.client().confirmadoArriboCPE(await this.auth(), params);
-  }
-
-  /** Rechaza una CPE. */
-  async rechazoCPE(params: RechazoAnulacionCPEParams): Promise<CartaPorteResult> {
-    return this.client().rechazoCPE(await this.auth(), params);
-  }
-
-  /** Anula una CPE. */
-  async anularCPE(params: RechazoAnulacionCPEParams): Promise<CartaPorteResult> {
-    return this.client().anularCPE(await this.auth(), params);
-  }
-
-  /** Edita campos de una CPE previamente autorizada. */
-  async editarCPE(params: EditarCPEParams): Promise<CartaPorteResult> {
-    return this.client().editarCPE(await this.auth(), params);
-  }
-
-  /** Informa una contingencia sobre una CPE. */
-  async informarContingencia(params: ContingenciaCPEParams): Promise<CartaPorteResult> {
-    return this.client().informarContingencia(await this.auth(), params);
-  }
-
-  /** Consulta CPEs según criterios de búsqueda. */
-  async consultarCPE(params: ConsultaCPEParams): Promise<CartaPorteResult[]> {
-    return this.client().consultarCPE(await this.auth(), params);
-  }
-
-  /** Consulta CPEs por destino. */
-  async consultarCPEPorDestino(params: ConsultaCPEPorDestinoParams): Promise<CartaPorteResult[]> {
-    return this.client().consultarCPEPorDestino(await this.auth(), params);
-  }
-
-  /** Consulta el último número de orden utilizado para una sucursal. */
-  async consultarUltNroOrden(sucursal: number): Promise<number> {
-    return this.client().consultarUltNroOrden(await this.auth(), sucursal);
-  }
-
-  /** Obtiene el siguiente número de orden (último + 1). */
-  async siguienteNroOrden(sucursal: number): Promise<number> {
-    const ultimo = await this.consultarUltNroOrden(sucursal);
-    return ultimo + 1;
-  }
-
-  /** Obtiene la constancia PDF de una CPE en base64. */
-  async consultarConstanciaCPEPDF(nroCTG: number): Promise<string> {
-    return this.client().consultarConstanciaCPEPDF(await this.auth(), nroCTG);
-  }
-
-  /** Verifica el estado de los servidores del WSCPE. */
-  async dummy(): Promise<ServerStatus> {
-    return this.client().dummy();
-  }
-}
-
-// ============================================================
-// Namespace: CTG
-// ============================================================
-
-/**
- * Namespace con métodos de Código de Trazabilidad de Granos (WSCTG).
- * Se accede a través de `agro.ctg.*`.
- */
-class ArcaAgroCtg {
-  constructor(private readonly agro: ArcaAgro) {}
-
-  private auth() { return this.agro.getAuth(WSAA_SERVICES.ctg); }
-  private client() { return this.agro.getCtgClient(); }
-
-  /** Solicita un CTG inicial para el transporte de granos. */
-  async solicitarCTGInicial(solicitud: SolicitudCTG): Promise<CTGResult> {
-    validateCTG(solicitud);
-    return this.client().solicitarCTGInicial(await this.auth(), solicitud);
-  }
-
-  /** Confirma el arribo de un CTG en destino. */
-  async confirmarArribo(params: ConfirmarArriboCTGParams): Promise<CTGResult> {
-    return this.client().confirmarArribo(await this.auth(), params);
-  }
-
-  /** Rechaza un CTG. */
-  async rechazarCTG(params: RechazoCTGParams): Promise<CTGResult> {
-    return this.client().rechazarCTG(await this.auth(), params);
-  }
-
-  /** Anula un CTG. */
-  async anularCTG(params: AnulacionCTGParams): Promise<CTGResult> {
-    return this.client().anularCTG(await this.auth(), params);
-  }
-
-  /** Consulta CTGs según criterios de búsqueda. */
-  async consultarCTG(params: ConsultaCTGParams): Promise<CTGResult[]> {
-    return this.client().consultarCTG(await this.auth(), params);
-  }
-
-  /** Consulta CTGs y retorna el resultado en formato Excel (base64). */
-  async consultarCTGExcel(params: ConsultaCTGParams): Promise<string> {
-    return this.client().consultarCTGExcel(await this.auth(), params);
-  }
-
-  /** Obtiene la constancia PDF de un CTG en base64. */
-  async consultarConstanciaCTGPDF(nroCTG: number): Promise<string> {
-    return this.client().consultarConstanciaCTGPDF(await this.auth(), nroCTG);
-  }
-
-  /** Obtiene los CTGs activos (pendientes). */
-  async obtenerCTGActivos(): Promise<CTGActivosResult> {
-    return this.client().obtenerCTGActivos(await this.auth());
-  }
-
-  /** Verifica el estado de los servidores del WSCTG. */
-  async dummy(): Promise<ServerStatus> {
-    return this.client().dummy();
-  }
-}
-
-// ============================================================
-// Namespace: LPG
-// ============================================================
-
-/**
- * Namespace con métodos de Liquidación Primaria de Granos (WSLPG).
- * Se accede a través de `agro.lpg.*`.
- */
-class ArcaAgroLpg {
-  constructor(private readonly agro: ArcaAgro) {}
-
-  private auth() { return this.agro.getAuth(WSAA_SERVICES.lpg); }
-  private client() { return this.agro.getLpgClient(); }
-
-  /** Autoriza una liquidación primaria de granos. */
-  async liquidacionAutorizar(liquidacion: Liquidacion): Promise<LiquidacionResult> {
-    validateLiquidacion(liquidacion);
-    return this.client().liquidacionAutorizar(await this.auth(), liquidacion);
-  }
-
-  /** Consulta liquidaciones previamente autorizadas. */
-  async liquidacionConsultar(params: ConsultaLiquidacionParams): Promise<LiquidacionResult[]> {
-    return this.client().liquidacionConsultar(await this.auth(), params);
-  }
-
-  /** Anula una liquidación previamente autorizada. */
-  async liquidacionAnular(ptoEmision: number, nroOrden: number): Promise<LiquidacionResult> {
-    return this.client().liquidacionAnular(await this.auth(), ptoEmision, nroOrden);
-  }
-
-  /** Ajusta una liquidación mediante ajuste unificado. */
-  async liquidacionAjustarUnificado(params: AjusteUnificadoParams): Promise<LiquidacionResult> {
-    return this.client().liquidacionAjustarUnificado(await this.auth(), params);
-  }
-
-  /** Autoriza una certificación de granos. */
-  async certificacionAutorizar(certificacion: Certificacion): Promise<CertificacionResult> {
-    return this.client().certificacionAutorizar(await this.auth(), certificacion);
-  }
-
-  /** Anula una certificación previamente autorizada. */
-  async certificacionAnular(tipoCertificacion: number, nroCertificacion: number): Promise<CertificacionResult> {
-    return this.client().certificacionAnular(await this.auth(), tipoCertificacion, nroCertificacion);
-  }
-
-  /** Consulta parámetros del WSLPG (tipos de grano, grados, puertos, etc.). */
-  async consultarParametros(tipoParametro: string, params?: LpgParameterQueryParams): Promise<Record<string, unknown>[]> {
-    return this.client().consultarParametros(await this.auth(), tipoParametro, params);
-  }
-
-  /** Verifica el estado de los servidores del WSLPG. */
-  async dummy(): Promise<ServerStatus> {
-    return this.client().dummy();
+  /** Invalida los tickets de acceso (memoria y `ticketStorage`) de WSCPE y WSLPG. */
+  async clearAuthCache(): Promise<void> {
+    await Promise.all([this.#wsaa.clearTicket(WSAA_SERVICES.cpe), this.#wsaa.clearTicket(WSAA_SERVICES.lpg)]);
   }
 }

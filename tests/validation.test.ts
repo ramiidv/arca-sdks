@@ -1,347 +1,82 @@
 import { describe, it, expect } from 'vitest';
-import { validateCPE, validateCTG, validateLiquidacion } from '../src/validation.js';
-import { ArcaValidationError } from '@ramiidv/arca-common';
-import type { CartaPorteAutomotor, SolicitudCTG, Liquidacion } from '../src/types.js';
+import {
+  ArcaValidationError,
+  validateAjusteUnificado,
+  validateAutorizarCPEAutomotor,
+  validateAutorizarCPEFerroviaria,
+  validateLiquidacion,
+} from '../src/index.js';
+import { formatDateTimeAR, encodeRequest, decodeResponse, dec, int, id, list, str, opt, obj, must } from '../src/schema.js';
+import { ArcaAgroResponseError } from '../src/errors.js';
 
-// ---------------------------------------------------------------------------
-// Helpers: valid baseline objects
-// ---------------------------------------------------------------------------
-
-function validCPE(): CartaPorteAutomotor {
-  return {
-    cuitTitularCartaPorte: 20123456789,
-    sucursal: 1,
-    nroOrden: 0,
-    codTipoCartaPorte: 1,
-    codGrano: 23,
-    codLocalidadProcedencia: 10270,
-    codProvProcedencia: 1,
-    codLocalidadDestino: 10350,
-    codProvDestino: 1,
-    cuitDestino: 30111222334,
-    plantaDestino: 1,
-    pesoNeto: 30000,
-    pesoBruto: 32000,
-    pesoTara: 2000,
-    patente: 'ABC123',
-    cuitTransportista: 20999888777,
-    fechaEmision: '2026-03-31',
-  };
-}
-
-function validCTG(): SolicitudCTG {
-  return {
-    nroCartaPorte: 1000001,
-    codEspecie: 23,
-    cuitDestino: 30111222334,
-    cuitDestinatario: 30111222334,
-    codLocalidadOrigen: 10270,
-    codLocalidadDestino: 10350,
-    codCosecha: 2526,
-    pesoNeto: 30000,
-  };
-}
-
-function validLiquidacion(): Liquidacion {
-  return {
-    cuitComprador: 30111222334,
-    cuitVendedor: 20123456789,
-    codGrano: 23,
-    pesoNeto: 30000,
-    precioRefTn: 350000,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// CPE Validation
-// ---------------------------------------------------------------------------
-
-describe('validateCPE', () => {
-  it('should pass with valid CPE input', () => {
-    expect(() => validateCPE(validCPE())).not.toThrow();
-  });
-
-  it('should pass with nroOrden = 0 (non-negative)', () => {
-    const cpe = validCPE();
-    cpe.nroOrden = 0;
-    expect(() => validateCPE(cpe)).not.toThrow();
-  });
-
-  it('should throw when cuitTitularCartaPorte is missing', () => {
-    const cpe = validCPE();
-    (cpe as Record<string, unknown>).cuitTitularCartaPorte = undefined;
-    expect(() => validateCPE(cpe)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when sucursal is 0', () => {
-    const cpe = validCPE();
-    cpe.sucursal = 0;
-    expect(() => validateCPE(cpe)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when nroOrden is negative', () => {
-    const cpe = validCPE();
-    cpe.nroOrden = -1;
-    expect(() => validateCPE(cpe)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when codGrano is 0', () => {
-    const cpe = validCPE();
-    cpe.codGrano = 0;
-    expect(() => validateCPE(cpe)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when pesoNeto is 0', () => {
-    const cpe = validCPE();
-    cpe.pesoNeto = 0;
-    expect(() => validateCPE(cpe)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when pesoNeto is negative', () => {
-    const cpe = validCPE();
-    cpe.pesoNeto = -500;
-    expect(() => validateCPE(cpe)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when cuitDestino has wrong format', () => {
-    const cpe = validCPE();
-    cpe.cuitDestino = 123 as unknown as number; // not 11 digits
-    expect(() => validateCPE(cpe)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when cuitTransportista has wrong format', () => {
-    const cpe = validCPE();
-    cpe.cuitTransportista = 999 as unknown as number;
-    expect(() => validateCPE(cpe)).toThrow(ArcaValidationError);
-  });
-
-  it('should collect multiple errors at once', () => {
-    const cpe = validCPE();
-    cpe.sucursal = 0;
-    cpe.codGrano = 0;
-    cpe.pesoNeto = -1;
-
-    try {
-      validateCPE(cpe);
-      expect.unreachable('Should have thrown');
-    } catch (error) {
-      expect(error).toBeInstanceOf(ArcaValidationError);
-      const valError = error as ArcaValidationError;
-      expect(valError.details.length).toBeGreaterThanOrEqual(3);
+describe('schema: encode', () => {
+  it('redondea decimales según fractionDigits y rechaza NaN/Infinity/negativos', () => {
+    const s = { a: dec(2, 0), b: opt(dec(3, 0)) };
+    expect(encodeRequest({ a: 1.005, b: 2 }, s, 't')).toEqual({ a: '1.01', b: '2.000' });
+    for (const bad of [NaN, Infinity, -1, '1']) {
+      expect(() => encodeRequest({ a: bad }, s, 't')).toThrow(ArcaValidationError);
     }
+  });
+
+  it('enteros: rechaza decimales y respeta minExclusive', () => {
+    expect(() => encodeRequest({ a: 1.5 }, { a: int() }, 't')).toThrow(ArcaValidationError);
+    expect(() => encodeRequest({ a: 0 }, { a: int(0, 9, true) }, 't')).toThrow(ArcaValidationError);
+    expect(encodeRequest({ a: 1 }, { a: int(0, 9, true) }, 't')).toEqual({ a: 1 });
+  });
+
+  it('ids largos: number o string de dígitos → string', () => {
+    expect(encodeRequest({ a: 10100012345 }, { a: id() }, 't')).toEqual({ a: '10100012345' });
+    expect(encodeRequest({ a: '010100012345' }, { a: id() }, 't')).toEqual({ a: '010100012345' });
+    expect(() => encodeRequest({ a: '12A' }, { a: id() }, 't')).toThrow(ArcaValidationError);
+  });
+
+  it('listas: mínimo de elementos', () => {
+    expect(() => encodeRequest({ a: [] }, { a: list(str()) }, 't')).toThrow(ArcaValidationError);
+    expect(encodeRequest({ a: [] }, { a: opt(list(str(), 0)) }, 't')).toEqual({});
+  });
+
+  it('reporta todos los errores juntos, con la ruta del campo', () => {
+    try {
+      encodeRequest({ x: { a: 'no', b: undefined }, extra: 1 }, { x: obj({ a: int(), b: str() }) }, 't');
+      expect.unreachable();
+    } catch (e) {
+      expect((e as ArcaValidationError).details.map((d) => d.field)).toEqual(['extra', 'x.a', 'x.b']);
+    }
+  });
+
+  it('formatDateTimeAR usa hora de Argentina (-03:00)', () => {
+    expect(formatDateTimeAR(new Date('2026-01-01T02:15:30Z'))).toBe('2025-12-31T23:15:30-03:00');
   });
 });
 
-// ---------------------------------------------------------------------------
-// CTG Validation
-// ---------------------------------------------------------------------------
-
-describe('validateCTG', () => {
-  it('should pass with valid CTG input', () => {
-    expect(() => validateCTG(validCTG())).not.toThrow();
+describe('schema: decode', () => {
+  it('xs:string queda string aunque parezca número; listas ausentes → []', () => {
+    const r = decodeResponse<Record<string, unknown>>({ codigo: 1, n: '42', l: undefined }, { codigo: str(), n: int(), l: list(str(), 0) }, 'r');
+    expect(r).toEqual({ codigo: '1', n: 42, l: [] });
   });
 
-  it('should throw when nroCartaPorte is missing', () => {
-    const ctg = validCTG();
-    (ctg as Record<string, unknown>).nroCartaPorte = undefined;
-    expect(() => validateCTG(ctg)).toThrow(ArcaValidationError);
+  it('campo obligatorio faltante → ArcaAgroResponseError', () => {
+    expect(() => decodeResponse({}, { a: must(str()) }, 'r')).toThrow(ArcaAgroResponseError);
   });
 
-  it('should throw when codEspecie is 0', () => {
-    const ctg = validCTG();
-    ctg.codEspecie = 0;
-    expect(() => validateCTG(ctg)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when pesoNeto is 0', () => {
-    const ctg = validCTG();
-    ctg.pesoNeto = 0;
-    expect(() => validateCTG(ctg)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when cuitDestino is invalid', () => {
-    const ctg = validCTG();
-    ctg.cuitDestino = 12345 as unknown as number;
-    expect(() => validateCTG(ctg)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when cuitDestinatario is invalid', () => {
-    const ctg = validCTG();
-    ctg.cuitDestinatario = 0 as unknown as number;
-    expect(() => validateCTG(ctg)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when codLocalidadOrigen is 0', () => {
-    const ctg = validCTG();
-    ctg.codLocalidadOrigen = 0;
-    expect(() => validateCTG(ctg)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when codLocalidadDestino is 0', () => {
-    const ctg = validCTG();
-    ctg.codLocalidadDestino = 0;
-    expect(() => validateCTG(ctg)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when codCosecha is missing', () => {
-    const ctg = validCTG();
-    (ctg as Record<string, unknown>).codCosecha = undefined;
-    expect(() => validateCTG(ctg)).toThrow(ArcaValidationError);
-  });
-
-  it('should validate optional cuitTransportista when provided', () => {
-    const ctg = validCTG();
-    ctg.cuitTransportista = 999; // invalid
-    expect(() => validateCTG(ctg)).toThrow(ArcaValidationError);
-  });
-
-  it('should pass when optional cuitTransportista is omitted', () => {
-    const ctg = validCTG();
-    delete ctg.cuitTransportista;
-    expect(() => validateCTG(ctg)).not.toThrow();
-  });
-
-  it('should collect multiple errors at once', () => {
-    const ctg = validCTG();
-    ctg.codEspecie = 0;
-    ctg.pesoNeto = 0;
-    ctg.codLocalidadOrigen = 0;
-
-    try {
-      validateCTG(ctg);
-      expect.unreachable('Should have thrown');
-    } catch (error) {
-      expect(error).toBeInstanceOf(ArcaValidationError);
-      const valError = error as ArcaValidationError;
-      expect(valError.details.length).toBeGreaterThanOrEqual(3);
-    }
+  it('valor no numérico donde se espera número → error (no NaN)', () => {
+    expect(() => decodeResponse({ a: 'abc' }, { a: int() }, 'r')).toThrow(ArcaAgroResponseError);
   });
 });
 
-// ---------------------------------------------------------------------------
-// Liquidacion Validation
-// ---------------------------------------------------------------------------
-
-describe('validateLiquidacion', () => {
-  it('should pass with valid liquidacion input', () => {
-    expect(() => validateLiquidacion(validLiquidacion())).not.toThrow();
+describe('validadores exportados', () => {
+  it('validateAutorizarCPEAutomotor detecta errores sin llamar a ARCA', () => {
+    expect(() => validateAutorizarCPEAutomotor({} as never)).toThrow(ArcaValidationError);
   });
 
-  it('should pass when precioRefTn is 0', () => {
-    const liq = validLiquidacion();
-    liq.precioRefTn = 0;
-    expect(() => validateLiquidacion(liq)).not.toThrow();
+  it('validateAutorizarCPEFerroviaria', () => {
+    expect(() => validateAutorizarCPEFerroviaria({} as never)).toThrow(ArcaValidationError);
   });
 
-  it('should pass when precioRefTn is omitted', () => {
-    const liq = validLiquidacion();
-    delete liq.precioRefTn;
-    expect(() => validateLiquidacion(liq)).not.toThrow();
-  });
-
-  it('should throw when cuitComprador is missing', () => {
-    const liq = validLiquidacion();
-    (liq as Record<string, unknown>).cuitComprador = undefined;
-    expect(() => validateLiquidacion(liq)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when cuitVendedor is missing', () => {
-    const liq = validLiquidacion();
-    (liq as Record<string, unknown>).cuitVendedor = undefined;
-    expect(() => validateLiquidacion(liq)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when codGrano is 0', () => {
-    const liq = validLiquidacion();
-    liq.codGrano = 0;
-    expect(() => validateLiquidacion(liq)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when pesoNeto is 0', () => {
-    const liq = validLiquidacion();
-    liq.pesoNeto = 0;
-    expect(() => validateLiquidacion(liq)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when pesoNeto is negative', () => {
-    const liq = validLiquidacion();
-    liq.pesoNeto = -100;
-    expect(() => validateLiquidacion(liq)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw when precioRefTn is negative', () => {
-    const liq = validLiquidacion();
-    liq.precioRefTn = -1;
-    expect(() => validateLiquidacion(liq)).toThrow(ArcaValidationError);
-  });
-
-  it('should validate optional cuitCorredorVendedor when provided', () => {
-    const liq = validLiquidacion();
-    liq.cuitCorredorVendedor = 555; // invalid
-    expect(() => validateLiquidacion(liq)).toThrow(ArcaValidationError);
-  });
-
-  it('should validate optional cuitCorredorComprador when provided', () => {
-    const liq = validLiquidacion();
-    liq.cuitCorredorComprador = 555; // invalid
-    expect(() => validateLiquidacion(liq)).toThrow(ArcaValidationError);
-  });
-
-  it('should collect multiple errors at once', () => {
-    const liq = validLiquidacion();
-    (liq as Record<string, unknown>).cuitComprador = undefined;
-    (liq as Record<string, unknown>).cuitVendedor = undefined;
-    liq.codGrano = 0;
-    liq.pesoNeto = -1;
-
-    try {
-      validateLiquidacion(liq);
-      expect.unreachable('Should have thrown');
-    } catch (error) {
-      expect(error).toBeInstanceOf(ArcaValidationError);
-      const valError = error as ArcaValidationError;
-      expect(valError.details.length).toBeGreaterThanOrEqual(4);
-    }
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Invalid CUIT format (cross-cutting)
-// ---------------------------------------------------------------------------
-
-describe('Invalid CUIT format', () => {
-  it('should throw for CPE with non-11-digit cuitTitularCartaPorte', () => {
-    const cpe = validCPE();
-    cpe.cuitTitularCartaPorte = 12345;
-    expect(() => validateCPE(cpe)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw for CTG with non-11-digit cuitDestino', () => {
-    const ctg = validCTG();
-    ctg.cuitDestino = 9999999;
-    expect(() => validateCTG(ctg)).toThrow(ArcaValidationError);
-  });
-
-  it('should throw for Liquidacion with non-11-digit cuitComprador', () => {
-    const liq = validLiquidacion();
-    liq.cuitComprador = 1;
-    expect(() => validateLiquidacion(liq)).toThrow(ArcaValidationError);
-  });
-
-  it('should include field details in the thrown error', () => {
-    const cpe = validCPE();
-    cpe.cuitTitularCartaPorte = 12345;
-
-    try {
-      validateCPE(cpe);
-      expect.unreachable('Should have thrown');
-    } catch (error) {
-      expect(error).toBeInstanceOf(ArcaValidationError);
-      const valError = error as ArcaValidationError;
-      const cuitDetail = valError.details.find(d => d.field === 'cuitTitularCartaPorte');
-      expect(cuitDetail).toBeDefined();
-      expect(cuitDetail!.message).toContain('11 digitos');
-      expect(cuitDetail!.value).toBe(12345);
-    }
+  it('validateLiquidacion y validateAjusteUnificado', () => {
+    expect(() => validateLiquidacion({ liquidacion: {} } as never)).toThrow(ArcaValidationError);
+    expect(() =>
+      validateAjusteUnificado({ ajusteBase: { ptoEmision: 1, nroOrden: 1, coeAjustado: '1', codLocalidad: 1, codProv: 1 } }),
+    ).toThrow(/ajusteCredito/);
   });
 });

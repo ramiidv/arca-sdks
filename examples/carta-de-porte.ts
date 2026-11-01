@@ -1,102 +1,83 @@
 /**
- * Example: Carta de Porte Electronica (WSCPE)
+ * Ejemplo: Carta de Porte Electrónica automotor (WSCPE), circuito completo.
  *
- * Demonstrates how to:
- * 1. Authorize a CPE for grain transport (autorizarCPEAutomotor)
- * 2. Confirm arrival at destination
- * 3. Query CPEs
+ * 1. Paramétricas (provincias, localidades, granos, plantas)
+ * 2. Número de orden + autorización (tipo 74)
+ * 3. Arribo, confirmación definitiva y consulta
  */
 import fs from 'node:fs';
-import { ArcaAgro } from '@ramiidv/arca-agro';
+import { FileTicketStorage } from '@ramiidv/arca-common';
+import { ArcaAgro, TIPO_CPE } from '@ramiidv/arca-agro';
+
+const CUIT = '20123456786'; // CUIT representada (homologación: el de tu certificado)
 
 const agro = new ArcaAgro({
-  cuit: 20123456789,
+  cuit: CUIT,
   cert: fs.readFileSync('cert.pem', 'utf-8'),
   key: fs.readFileSync('key.pem', 'utf-8'),
-  production: false, // testing/homologacion
-  onEvent: (event) => console.log(`[${event.type}]`, event),
+  production: false, // homologación
+  ticketStorage: new FileTicketStorage('.arca-tickets'), // persiste el TA entre reinicios
+  onEvent: (event) => console.log(`[${event.type}]`, 'method' in event ? event.method : ''),
 });
 
 async function main() {
-  // -------------------------------------------------------------------------
-  // 1. Authorize a CPE for grain transport
-  // -------------------------------------------------------------------------
-  console.log('--- Authorizing CPE ---');
+  // 1. Paramétricas
+  const provincias = await agro.cpe.consultarProvincias();
+  console.log('Provincias:', provincias.slice(0, 3));
+  const localidades = await agro.cpe.consultarLocalidadesPorProvincia(12);
+  console.log('Localidades de Santa Fe:', localidades.length);
+  const granos = await agro.cpe.consultarTiposGrano();
+  console.log('Granos:', granos.slice(0, 3));
+  const plantas = await agro.cpe.consultarPlantas('30500011129');
+  console.log('Plantas del destino:', plantas);
 
-  const cpeResult = await agro.cpe.autorizarCPEAutomotor({
-    cuitTitularCartaPorte: 20123456789,
-    sucursal: 1,
-    nroOrden: 1,
-    codTipoCartaPorte: 1,
-    codGrano: 23, // Soja
-    codLocalidadProcedencia: 10270,
-    codProvProcedencia: 1, // Buenos Aires
-    codLocalidadDestino: 10350,
-    codProvDestino: 1,
-    cuitDestino: 30111222334,
-    plantaDestino: 1,
-    pesoNeto: 30000,
-    pesoBruto: 32000,
-    pesoTara: 2000,
-    patente: 'ABC123',
-    cuitTransportista: 20999888777,
-    fechaEmision: '2026-03-31',
+  // 2. Autorización. Ojo: siguienteNroOrden no es atómico (ver README).
+  const sucursal = 1;
+  const nroOrden = await agro.cpe.siguienteNroOrden(sucursal, TIPO_CPE.AUTOMOTOR);
+
+  const cpe = await agro.cpe.autorizarCPEAutomotor({
+    cabecera: { tipoCP: TIPO_CPE.AUTOMOTOR, cuitSolicitante: CUIT, sucursal, nroOrden },
+    origen: { productor: { codProvincia: 1, codLocalidad: 10270 } },
+    correspondeRetiroProductor: false,
+    esSolicitanteCampo: true,
+    datosCarga: { codGrano: 23, cosecha: 2526, pesoBruto: 42000, pesoTara: 12000 },
+    destino: { cuit: '30500011129', esDestinoCampo: false, codProvincia: 12, codLocalidad: 5244, planta: 1938 },
+    destinatario: { cuit: '30500011129' },
+    transporte: {
+      cuitTransportista: '20999888772',
+      dominio: ['AB123CD'],
+      fechaHoraPartida: new Date(Date.now() + 60 * 60 * 1000),
+      kmRecorrer: 250,
+      cuitChofer: '27300000008',
+      tarifa: 1500.5,
+      cuitPagadorFlete: '30712345671',
+      mercaderiaFumigada: false,
+    },
   });
+  console.log('CTG:', cpe.cabecera.nroCTG, 'estado:', cpe.cabecera.estado);
+  if (cpe.pdf) fs.writeFileSync(`cpe-${cpe.cabecera.nroCTG}.pdf`, Buffer.from(cpe.pdf, 'base64'));
 
-  console.log('CPE authorized:', {
-    nroCTG: cpeResult.nroCTG,
-    nroCartaPorte: cpeResult.nroCartaPorte,
-    estado: cpeResult.estado,
+  const cartaPorte = { tipoCPE: TIPO_CPE.AUTOMOTOR, sucursal, nroOrden };
+
+  // 3. Arribo y confirmación definitiva (las hace el destino)
+  await agro.cpe.confirmarArriboCPE({ cuitSolicitante: CUIT, cartaPorte });
+  const confirmada = await agro.cpe.confirmacionDefinitivaCPEAutomotor({
+    cuitSolicitante: CUIT,
+    cartaPorte,
+    pesoBrutoDescarga: 41900,
+    pesoTaraDescarga: 12000,
   });
+  console.log('Estado:', confirmada.cabecera?.estado);
 
-  // -------------------------------------------------------------------------
-  // 2. Confirm arrival at destination
-  // -------------------------------------------------------------------------
-  if (cpeResult.nroCTG && cpeResult.nroCartaPorte) {
-    console.log('\n--- Confirming arrival ---');
+  const detalle = await agro.cpe.consultarCPEAutomotor({ nroCTG: cpe.cabecera.nroCTG });
+  console.log('Detalle:', detalle.cabecera, detalle.datosCarga);
 
-    const arriboResult = await agro.cpe.confirmadoArriboCPE({
-      nroCTG: cpeResult.nroCTG,
-      nroCartaPorte: cpeResult.nroCartaPorte,
-      cuitDestino: 30111222334,
-      pesoNeto: 29800, // actual weight at destination
-      fechaArribo: '2026-04-01',
-    });
-
-    console.log('Arrival confirmed:', {
-      estado: arriboResult.estado,
-    });
-  }
-
-  // -------------------------------------------------------------------------
-  // 3. Query CPEs
-  // -------------------------------------------------------------------------
-  console.log('\n--- Querying CPEs ---');
-
-  const cpes = await agro.cpe.consultarCPE({
-    cuitSolicitante: 20123456789,
-    fechaDesde: '2026-03-01',
-    fechaHasta: '2026-03-31',
-    codGrano: 23,
+  const recibidas = await agro.cpe.consultarCPEPorDestino({
+    planta: 1938,
+    fechaPartidaDesde: '2026-11-01',
+    fechaPartidaHasta: '2026-11-07',
   });
-
-  console.log(`Found ${cpes.length} CPE(s):`);
-  for (const c of cpes) {
-    console.log(`  CTG #${c.nroCTG} - CP #${c.nroCartaPorte} - ${c.estado}`);
-  }
-
-  // -------------------------------------------------------------------------
-  // Query by destination
-  // -------------------------------------------------------------------------
-  console.log('\n--- Querying CPEs by destination ---');
-
-  const cpesByDest = await agro.cpe.consultarCPEPorDestino({
-    cuitDestino: 30111222334,
-    fechaDesde: '2026-03-01',
-    fechaHasta: '2026-03-31',
-  });
-
-  console.log(`Found ${cpesByDest.length} CPE(s) by destination`);
+  console.log('CPE con destino en la planta:', recibidas.length);
 }
 
 main().catch(console.error);
