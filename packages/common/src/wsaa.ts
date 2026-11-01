@@ -474,7 +474,8 @@ export class WsaaClient {
         },
         {
           type: forge.pki.oids.signingTime,
-          value: this.now() as any,
+          // node-forge tipa `value` como string, pero para signingTime espera un Date.
+          value: this.now() as unknown as string,
         },
       ],
     });
