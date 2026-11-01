@@ -8,6 +8,7 @@ export {
   ArcaServiceError,
   ArcaValidationError,
   ArcaTicketVigenteError,
+  ArcaResponseError,
 } from './errors.js';
 export type { ValidationErrorDetail, ArcaSoapErrorOptions, ServiceErrorDetail } from './errors.js';
 

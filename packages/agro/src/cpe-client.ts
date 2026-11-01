@@ -92,6 +92,7 @@ export class CpeClient extends SoapServiceClient {
       requestElement: body === null ? null : `${element}Req`,
       responseElement: `${element}Resp`,
       soapActionFromMethod: true,
+      parseNumbers: false,
     });
     // `<respuesta/>` vacía (ej: una lista sin resultados) se parsea como ''.
     const respuesta = result['respuesta'] === '' ? {} : result['respuesta'];

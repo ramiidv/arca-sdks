@@ -193,3 +193,20 @@ export interface ValidationErrorDetail {
   message: string;
   value?: unknown;
 }
+
+/**
+ * Respuesta de ARCA con una forma inesperada (falta un elemento obligatorio,
+ * un valor no es numérico, etc.). En una emisión, `uncertain: true` indica que
+ * ARCA respondió pero no se puede confirmar el resultado: consultá el estado
+ * antes de reintentar.
+ */
+export class ArcaResponseError extends ArcaError {
+  static override readonly code: string = 'ARCA_RESPONSE_ERROR';
+  public readonly uncertain: boolean;
+
+  constructor(message: string, uncertain = false, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'ArcaResponseError';
+    this.uncertain = uncertain;
+  }
+}

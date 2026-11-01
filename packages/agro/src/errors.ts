@@ -1,4 +1,4 @@
-import { ArcaError, ArcaServiceError, extractServiceErrors } from '@ramiidv/arca-common';
+import { ArcaResponseError, ArcaServiceError, extractServiceErrors } from '@ramiidv/arca-common';
 import type { ServiceErrorDetail } from '@ramiidv/arca-common';
 
 /**
@@ -27,17 +27,11 @@ export class ArcaAgroServiceError extends ArcaServiceError {
  * La respuesta de ARCA no tiene la forma del XSD o le falta un dato
  * imprescindible (ej: `nroCTG` en una autorización, `coe` en una liquidación).
  */
-export class ArcaAgroResponseError extends ArcaError {
+export class ArcaAgroResponseError extends ArcaResponseError {
   static override readonly code: string = 'ARCA_AGRO_RESPONSE_ERROR';
-  /**
-   * `true` si la operación era una emisión: ARCA respondió pero no se puede
-   * confirmar el resultado (consultá el estado antes de reintentar).
-   */
-  public readonly uncertain: boolean;
   constructor(message: string, uncertain = false) {
-    super(message);
+    super(message, uncertain);
     this.name = 'ArcaAgroResponseError';
-    this.uncertain = uncertain;
   }
 }
 

@@ -106,6 +106,7 @@ export class LpgClient extends SoapServiceClient {
       requestElement: body === null ? null : o.req,
       responseElement: o.resp,
       soapActionFromMethod: true,
+      parseNumbers: false,
     });
     throwOnServiceErrors(result, SERVICE, o.method);
     return result;
