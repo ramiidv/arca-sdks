@@ -89,7 +89,7 @@ interface ArcaPadronConfig extends ArcaBaseConfig {
 > **Persisti el Ticket de Acceso.** WSAA rechaza el login si ya hay un TA vigente para el
 > certificado y servicio. Sin `ticketStorage`, un reinicio del proceso te deja sin poder consultar
 > hasta que venza (hasta 12 horas, `ArcaTicketVigenteError`). Ver `TicketStorage` en
-> [`@ramiidv/arca-common`](https://github.com/ramiidv/arca-common).
+> [`@ramiidv/arca-common`](https://github.com/ramiidv/arca-sdks/tree/main/packages/common).
 
 Si usas tambien `@ramiidv/arca-facturacion` con el mismo certificado, comparti el cliente WSAA:
 
@@ -206,14 +206,14 @@ La coleccion de categorias de monotributo no se incluye porque su nombre aparece
 #### `status(): Promise<PadronStatus>`
 
 Verifica el estado de los servicios (`dummy`, no requiere autenticacion). Consulta los cinco en
-paralelo con `Promise.allSettled`: cada uno es un `PromiseSettledResult<ServerStatus>`, asi que un
-servicio caido no oculta el estado de los demas.
+paralelo: cada uno es un `ServiceStatus` de arca-common (`{ ok: true, status }` o
+`{ ok: false, error }`), asi que un servicio caido no oculta el estado de los demas.
 
 ```typescript
 const estado = await padron.status();
-if (estado.a4.status === 'fulfilled')
-  console.log(estado.a4.value.appserver); // "OK"
-else console.error('A4 caido:', estado.a4.reason);
+if (estado.a4.ok)
+  console.log(estado.a4.status.appserver); // "OK"
+else console.error('A4 caido:', estado.a4.error);
 ```
 
 ### Acceso a clientes de bajo nivel
@@ -426,8 +426,8 @@ const tieneIva = contribuyente.impuesto?.some(
 // EMPLEADOR = 301, AUTONOMOS = 308 (manuales de ARCA). IVA_EXENTO (32) e IVA_NO_ALCANZADO (34)
 // no figuran en los manuales del padron.
 //
-// `TipoDocumento` esta deprecado: es `DocTipo` (codigos numericos de WSFEv1), no el
-// `tipoDocumento` string del padron ("DNI", "LC"...).
+// `DocTipo` son los codigos numericos de WSFEv1, no el `tipoDocumento` string del padron
+// ("DNI", "LC"...).
 ```
 
 ## Requisitos

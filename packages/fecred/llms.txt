@@ -92,5 +92,5 @@ await fecred.informarFacturaAgtDptoCltv({ idCtaCte, ctaAgente: { cuitAgente, idC
 - Los códigos de formas de cancelación, motivos de rechazo, ajustes y retenciones salen de `consultarTipos*()`; no hay enums.
 - Enums del XSD (objeto + tipo literal): `RolCtaCte`, `EstadoCtaCte`, `EstadoComprobante`, `TipoFechaFiltro`, `OpcionTransferencia`, `TipoCancelacion`, `TipoAceptacion`, `Resultado`.
 - `codCtaCte`, CUITs y `codAutorizacion` se devuelven como string; importes como number; S/N como boolean.
-- Cliente de bajo nivel: `fecred.fecred` (`FecredClient`), con `{ token, sign, cuitRepresentada }` como primer parámetro.
+- Cliente de bajo nivel: `fecred.client` (`FecredClient`), con `{ token, sign, cuitRepresentada }` como primer parámetro.
 - Endpoints: homologación `https://fwshomo.afip.gob.ar/wsfecred/FECredService`, producción `https://serviciosjava.afip.gob.ar/wsfecred/FECredService`. Namespace `http://ar.gob.afip.wsfecred/FECredService/`; SOAPAction = namespace + operación.

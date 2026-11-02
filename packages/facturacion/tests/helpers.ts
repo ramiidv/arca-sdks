@@ -7,7 +7,7 @@ import {
   xmlResponse,
 } from '@ramiidv/arca-common/testing';
 import type { MockReply } from '@ramiidv/arca-common/testing';
-import { Arca } from '../src/arca.js';
+import { ArcaFacturacion } from '../src/arca.js';
 import { ENDPOINTS, WSFE_NAMESPACE, WSFEX_NAMESPACE } from '../src/constants.js';
 import type { ArcaConfig } from '../src/types.js';
 
@@ -186,9 +186,9 @@ export function comprobanteConsultado(o: {
   );
 }
 
-/** Arca con un ticket vigente en el storage (los tests no pasan por WSAA). */
-export async function arcaDePrueba(extra: Partial<ArcaConfig> = {}): Promise<Arca> {
-  return new Arca({
+/** ArcaFacturacion con un ticket vigente en el storage (los tests no pasan por WSAA). */
+export async function arcaDePrueba(extra: Partial<ArcaConfig> = {}): Promise<ArcaFacturacion> {
+  return new ArcaFacturacion({
     cuit: CUIT_EMISOR,
     cert: '-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----',
     key: 'KEY',

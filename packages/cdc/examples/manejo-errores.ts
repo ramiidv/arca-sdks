@@ -35,22 +35,22 @@ async function main() {
   try {
     const result = await cdc.constatar(
       {
-        CbteModo: 'CAE',
-        CuitEmisor: 30712345671,
-        PtoVta: 1,
-        CbteTipo: 6, // Factura B: el receptor es opcional
-        CbteNro: 150,
-        CbteFch: '20260315',
-        ImpTotal: 12100,
-        CodAutorizacion: '73429843294823',
+        cbteModo: 'CAE',
+        cuitEmisor: 30712345671,
+        ptoVta: 1,
+        cbteTipo: 6, // Factura B: el receptor es opcional
+        cbteNro: 150,
+        cbteFch: '20260315',
+        impTotal: 12100,
+        codAutorizacion: '73429843294823',
       },
       { signal: AbortSignal.timeout(90_000) },
     );
 
-    if (result.Resultado === 'R') {
+    if (result.resultado === 'R') {
       console.error('Comprobante rechazado:');
-      for (const obs of result.Observaciones) {
-        console.error(`  [${obs.Code}] ${obs.Msg}`);
+      for (const obs of result.observaciones) {
+        console.error(`  [${obs.code}] ${obs.msg}`);
       }
       return;
     }

@@ -18,22 +18,22 @@ async function main() {
 
   console.log('Modalidades (CbteModo):');
   for (const mod of await cdc.getModalidades()) {
-    console.log(`  [${mod.Cod}] ${mod.Desc}`);
+    console.log(`  [${mod.cod}] ${mod.desc}`);
   }
 
   console.log('\nTipos de comprobante:');
   for (const tipo of await cdc.getTiposCbte()) {
-    console.log(`  [${tipo.Id}] ${tipo.Desc}`);
+    console.log(`  [${tipo.id}] ${tipo.desc}`);
   }
 
   console.log('\nTipos de documento:');
   for (const doc of await cdc.getDocTipos()) {
-    console.log(`  [${doc.Id}] ${doc.Desc}`);
+    console.log(`  [${doc.id}] ${doc.desc}`);
   }
 
   console.log('\nTipos de datos opcionales:');
   for (const op of await cdc.getTiposOpcionales()) {
-    console.log(`  [${op.Id}] ${op.Desc}`);
+    console.log(`  [${op.id}] ${op.desc}`);
   }
 }
 

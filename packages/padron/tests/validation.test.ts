@@ -648,7 +648,7 @@ describe('A100', () => {
 // ---------------------------------------------------------------------------
 
 describe('status', () => {
-  it('un servicio caído no oculta a los demás (Promise.allSettled)', async () => {
+  it('un servicio caído no oculta a los demás (ServiceStatus)', async () => {
     const client = await padron({ retries: 0 });
     const fn = vi.fn(async (url: string) => {
       if (url === ENDPOINTS.a10.testing) return new Response('Service Unavailable', { status: 503 });
@@ -661,12 +661,10 @@ describe('status', () => {
     });
     vi.stubGlobal('fetch', fn);
     const s = await client.status();
-    expect(s.a4).toEqual({ status: 'fulfilled', value: { appserver: 'OK', authserver: 'OK', dbserver: 'OK' } });
-    expect(s.a10.status).toBe('rejected');
-    expect((s.a10 as PromiseRejectedResult).reason).toBeInstanceOf(ArcaSoapError);
-    expect(s.a5.status).toBe('fulfilled');
-    expect(s.a13.status).toBe('fulfilled');
-    expect(s.a100.status).toBe('fulfilled');
+    expect(s.a4).toEqual({ ok: true, status: { appserver: 'OK', authserver: 'OK', dbserver: 'OK' } });
+    expect(s.a10.ok).toBe(false);
+    expect(!s.a10.ok && s.a10.error).toBeInstanceOf(ArcaSoapError);
+    expect(s.a5.ok && s.a13.ok && s.a100.ok).toBe(true);
   });
 });
 

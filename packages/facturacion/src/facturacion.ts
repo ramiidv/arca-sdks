@@ -1,4 +1,4 @@
-import { ensureArray, formatDate, normalizeCuit } from '@ramiidv/arca-common';
+import { formatDate, normalizeCuit } from '@ramiidv/arca-common';
 import {
   IVA_RATES,
   Concepto,
@@ -18,8 +18,8 @@ import type {
   InvoiceDetail,
   AlicuotaIva,
   FECAESolicitarResult,
+  CaeaRegInfResult,
   FECompConsultarResult,
-  WsError,
   ComprobanteArmado,
   IntentoComprobante,
   ComprobanteAsociado,
@@ -51,17 +51,6 @@ export function redondear2(n: number): number {
 /** Alícuota en puntos básicos (21% → 2100, 10,5% → 1050) para operar con enteros. */
 function rateBasisPoints(ivaId: number): number {
   return Math.round(IVA_RATES[ivaId as keyof typeof IVA_RATES] * 100);
-}
-
-/**
- * Convierte un Date o string YYYYMMDD / YYYY-MM-DD a string YYYYMMDD (un Date
- * se toma en la zona horaria de Argentina).
- *
- * @deprecated Usar `formatDate` de `@ramiidv/arca-common` (es la misma
- * función): valida que la fecha exista y lanza `ArcaValidationError` si no.
- */
-export function toDateString(d: Date | string): string {
-  return formatDate(d);
 }
 
 let fechaHoraFormatter: Intl.DateTimeFormat | undefined;
@@ -144,7 +133,7 @@ function itemAmountCents(item: LineItem): { neto: number; total: number } {
  */
 export function calcularTotales(
   items: LineItem[],
-  opts?: { tributos?: { Importe: number }[]; tipoC?: boolean; descuentoGlobal?: number },
+  opts?: { tributos?: { importe: number }[]; tipoC?: boolean; descuentoGlobal?: number },
 ): { importes: Importes; iva: AlicuotaIva[] } {
   validateItems(items, opts?.descuentoGlobal);
   const tipoC = opts?.tipoC ?? false;
@@ -223,13 +212,13 @@ export function calcularTotales(
     } else {
       impNeto += base;
       impIVA += iva;
-      ivaArray.push({ Id: b.key, BaseImp: fromCents(base), Importe: fromCents(iva) });
+      ivaArray.push({ id: b.key, baseImp: fromCents(base), importe: fromCents(iva) });
     }
   });
 
   let impTrib = 0;
   for (const t of opts?.tributos ?? []) {
-    impTrib += toCents(t.Importe);
+    impTrib += toCents(t.importe);
   }
 
   const impTotal = impNeto + impIVA + impOpEx + impTotConc + impTrib;
@@ -310,74 +299,74 @@ export function buildInvoiceDetail(
   const cotizacion = opts.cotizacion ?? (moneda === Moneda.PESOS ? 1 : undefined);
 
   const detail: InvoiceDetail = {
-    Concepto: concepto,
-    DocTipo: opts.docTipo ?? DocTipo.CONSUMIDOR_FINAL,
-    DocNro: opts.docNro ?? 0,
-    CbteDesde: cbteNum,
-    CbteHasta: cbteNum,
-    CbteFch: fecha,
-    ImpTotal: importes.total,
-    ImpTotConc: importes.noGravado,
-    ImpNeto: importes.neto,
-    ImpOpEx: importes.exento,
-    ImpTrib: importes.tributos,
-    ImpIVA: importes.iva,
-    MonId: moneda,
+    concepto: concepto,
+    docTipo: opts.docTipo ?? DocTipo.CONSUMIDOR_FINAL,
+    docNro: opts.docNro ?? 0,
+    cbteDesde: cbteNum,
+    cbteHasta: cbteNum,
+    cbteFch: fecha,
+    impTotal: importes.total,
+    impTotConc: importes.noGravado,
+    impNeto: importes.neto,
+    impOpEx: importes.exento,
+    impTrib: importes.tributos,
+    impIva: importes.iva,
+    monId: moneda,
   };
-  if (cotizacion !== undefined) detail.MonCotiz = cotizacion;
+  if (cotizacion !== undefined) detail.monCotiz = cotizacion;
 
   // CondicionIVAReceptorId: obligatorio según RG 5616 (ARCA rechaza sin él desde el
   // 01/12/2026). Solo se completa por defecto para consumidor final sin identificar.
   const docTipo = opts.docTipo ?? DocTipo.CONSUMIDOR_FINAL;
   if (opts.condicionIva != null) {
-    detail.CondicionIVAReceptorId = opts.condicionIva;
+    detail.condicionIvaReceptorId = opts.condicionIva;
   } else if (docTipo === DocTipo.CONSUMIDOR_FINAL) {
-    detail.CondicionIVAReceptorId = CondicionIva.CONSUMIDOR_FINAL;
+    detail.condicionIvaReceptorId = CondicionIva.CONSUMIDOR_FINAL;
   }
 
   // CanMisMonExt: requerido para moneda extranjera
   if (opts.canMisMonExt) {
-    detail.CanMisMonExt = opts.canMisMonExt;
+    detail.canMisMonExt = opts.canMisMonExt;
   }
 
   if (ivaArray.length > 0) {
-    detail.Iva = ivaArray;
+    detail.iva = ivaArray;
   }
 
   if (opts.servicio) {
-    detail.FchServDesde = formatDate(opts.servicio.desde);
-    detail.FchServHasta = formatDate(opts.servicio.hasta);
-    detail.FchVtoPago = formatDate(opts.servicio.vtoPago);
+    detail.fchServDesde = formatDate(opts.servicio.desde);
+    detail.fchServHasta = formatDate(opts.servicio.hasta);
+    detail.fchVtoPago = formatDate(opts.servicio.vtoPago);
   }
 
   if (opts.tributos && opts.tributos.length > 0) {
-    detail.Tributos = opts.tributos.map(
-      (t): Tributo => ({ ...t, BaseImp: redondear2(t.BaseImp), Importe: redondear2(t.Importe) }),
+    detail.tributos = opts.tributos.map(
+      (t): Tributo => ({ ...t, baseImp: redondear2(t.baseImp), importe: redondear2(t.importe) }),
     );
   }
 
   if (opts.cbtesAsoc && opts.cbtesAsoc.length > 0) {
-    detail.CbtesAsoc = opts.cbtesAsoc.map(
+    detail.cbtesAsoc = opts.cbtesAsoc.map(
       (c): ComprobanteAsociado => ({
-        Tipo: c.tipo,
-        PtoVta: c.ptoVta,
-        Nro: c.nro,
-        ...(c.cuit !== undefined && { Cuit: normalizeCuit(c.cuit) }),
-        ...(c.fecha !== undefined && { CbteFch: formatDate(c.fecha) }),
+        tipo: c.tipo,
+        ptoVta: c.ptoVta,
+        nro: c.nro,
+        ...(c.cuit !== undefined && { cuit: normalizeCuit(c.cuit) }),
+        ...(c.fecha !== undefined && { cbteFch: formatDate(c.fecha) }),
       }),
     );
   }
 
   if (opts.opcionales && opts.opcionales.length > 0) {
-    detail.Opcionales = opts.opcionales;
+    detail.opcionales = opts.opcionales;
   }
 
   if (opts.periodoAsoc) {
-    detail.PeriodoAsoc = { FchDesde: formatDate(opts.periodoAsoc.desde), FchHasta: formatDate(opts.periodoAsoc.hasta) };
+    detail.periodoAsoc = { fchDesde: formatDate(opts.periodoAsoc.desde), fchHasta: formatDate(opts.periodoAsoc.hasta) };
   }
 
   if (opts.actividades && opts.actividades.length > 0) {
-    detail.Actividades = opts.actividades.map((id) => ({ Id: id }));
+    detail.actividades = opts.actividades.map((id) => ({ id }));
   }
 
   return { detail, importes };
@@ -412,11 +401,11 @@ export function intentoDesdeComprobante(ptoVta: number, cbteTipo: number, detail
   return {
     ptoVta,
     cbteTipo,
-    cbteNro: detail.CbteDesde,
-    importeTotal: detail.ImpTotal,
-    docTipo: detail.DocTipo,
-    docNro: Number(detail.DocNro),
-    fecha: detail.CbteFch,
+    cbteNro: detail.cbteDesde,
+    importeTotal: detail.impTotal,
+    docTipo: detail.docTipo,
+    docNro: Number(detail.docNro),
+    fecha: detail.cbteFch,
   };
 }
 
@@ -426,59 +415,58 @@ export function intentoDesdeComprobante(ptoVta: number, cbteTipo: number, detail
  * de 0,01) y el comprobante está aprobado.
  */
 export function coincideConIntento(consulta: FECompConsultarResult, intento: IntentoComprobante): boolean {
-  const r = consulta.ResultGet;
+  const r = consulta.resultGet;
   if (!r) return false;
   return (
-    (r.Resultado === undefined || r.Resultado === 'A') &&
-    Math.abs(Number(r.ImpTotal) - intento.importeTotal) <= 0.01 + 1e-9 &&
-    Number(r.DocTipo) === Number(intento.docTipo) &&
-    Number(r.DocNro) === Number(intento.docNro) &&
-    String(r.CbteFch) === String(intento.fecha)
+    (r.resultado === undefined || r.resultado === 'A') &&
+    Math.abs(Number(r.impTotal) - intento.importeTotal) <= 0.01 + 1e-9 &&
+    Number(r.docTipo) === Number(intento.docTipo) &&
+    Number(r.docNro) === Number(intento.docNro) &&
+    String(r.cbteFch) === String(intento.fecha)
   );
 }
 
-/** Normaliza los `Events.Evt` de una respuesta de WSFEv1. */
-export function eventosWsfe(result: { Events?: unknown } | undefined): MensajeArca[] {
-  const events = (result as { Events?: { Evt?: WsError | WsError[] } } | undefined)?.Events;
-  return ensureArray(events?.Evt).map((e) => ({ code: Number(e.Code), msg: String(e.Msg ?? '') }));
+/** `events` de una respuesta decodificada de WSFEv1 (el `msg` faltante queda como `""`). */
+export function eventosWsfe(result: { events?: MensajeArca[] } | undefined): MensajeArca[] {
+  return mensajes(result?.events);
 }
 
-function parseObservaciones(obs?: { Obs: WsError | WsError[] }): MensajeArca[] {
-  return ensureArray(obs?.Obs).map((o) => ({ code: Number(o.Code), msg: String(o.Msg ?? '') }));
+function mensajes(list?: MensajeArca[]): MensajeArca[] {
+  return (list ?? []).map((m) => ({ code: m.code, msg: m.msg ?? '' }));
 }
 
 /**
- * Parsea el resultado crudo de FECAESolicitar (o FECAEARegInformativo adaptado)
+ * Parsea el resultado crudo de FECAESolicitar (o FECAEARegInformativo)
  * a un FacturaResult limpio.
  *
  * @param enviado - Moneda y cotización enviadas (no vienen en la respuesta), para el QR.
  */
 export function parseFacturaResult(
-  result: FECAESolicitarResult,
+  result: FECAESolicitarResult | CaeaRegInfResult,
   importes: Importes,
   enviado?: { moneda?: string; cotizacion?: number; tipoCodAut?: 'E' | 'A' },
 ): FacturaResult {
-  const det = ensureArray(result.FeDetResp.FECAEDetResponse)[0];
+  const det = result.feDetResp[0];
   if (!det) throw new TypeError('Respuesta sin FECAEDetResponse');
-  const aprobada = det.Resultado === 'A';
+  const aprobada = det.resultado === 'A';
 
   return {
     aprobada,
     // En FECAEARegInformativo el código es el CAEA y no hay vencimiento por comprobante.
-    cae: aprobada ? optString(det.CAE ?? det.CAEA) : undefined,
-    caeVencimiento: aprobada ? optString(det.CAEFchVto) : undefined,
-    cbteNro: Number(det.CbteDesde),
-    ptoVta: Number(result.FeCabResp.PtoVta),
-    cbteTipo: Number(result.FeCabResp.CbteTipo),
+    cae: aprobada ? optString(det.cae ?? det.caea) : undefined,
+    caeVencimiento: aprobada ? optString(det.caeFchVto) : undefined,
+    cbteNro: Number(det.cbteDesde),
+    ptoVta: Number(result.feCabResp.ptoVta),
+    cbteTipo: Number(result.feCabResp.cbteTipo),
     importes,
-    observaciones: parseObservaciones(det.Observaciones),
+    observaciones: mensajes(det.observaciones),
     eventos: eventosWsfe(result),
-    fecha: optString(det.CbteFch),
-    docTipo: det.DocTipo === undefined ? undefined : Number(det.DocTipo),
-    docNro: det.DocNro === undefined ? undefined : Number(det.DocNro),
+    fecha: optString(det.cbteFch),
+    docTipo: det.docTipo === undefined ? undefined : Number(det.docTipo),
+    docNro: det.docNro === undefined ? undefined : Number(det.docNro),
     moneda: enviado?.moneda,
     cotizacion: enviado?.cotizacion,
-    tipoCodAut: enviado?.tipoCodAut ?? (det.CAEA !== undefined ? 'A' : 'E'),
+    tipoCodAut: enviado?.tipoCodAut ?? (det.caea !== undefined ? 'A' : 'E'),
     raw: result,
   };
 }
@@ -488,31 +476,31 @@ export function parseFacturaResult(
  * (lo usa `recuperarComprobante`).
  */
 export function facturaResultDesdeConsulta(consulta: FECompConsultarResult): FacturaResult {
-  const r = consulta.ResultGet;
-  const aprobada = r.Resultado === undefined || r.Resultado === 'A';
+  const r = consulta.resultGet;
+  const aprobada = r.resultado === undefined || r.resultado === 'A';
   return {
     aprobada,
-    cae: aprobada ? optString(r.CodAutorizacion) : undefined,
-    caeVencimiento: aprobada ? optString(r.FchVto) : undefined,
-    cbteNro: Number(r.CbteDesde),
-    ptoVta: Number(r.PtoVta),
-    cbteTipo: Number(r.CbteTipo),
+    cae: aprobada ? optString(r.codAutorizacion) : undefined,
+    caeVencimiento: aprobada ? optString(r.fchVto) : undefined,
+    cbteNro: Number(r.cbteDesde),
+    ptoVta: Number(r.ptoVta),
+    cbteTipo: Number(r.cbteTipo),
     importes: {
-      total: Number(r.ImpTotal),
-      neto: Number(r.ImpNeto),
-      iva: Number(r.ImpIVA),
-      exento: Number(r.ImpOpEx),
-      noGravado: Number(r.ImpTotConc),
-      tributos: Number(r.ImpTrib),
+      total: Number(r.impTotal),
+      neto: Number(r.impNeto),
+      iva: Number(r.impIva),
+      exento: Number(r.impOpEx),
+      noGravado: Number(r.impTotConc),
+      tributos: Number(r.impTrib),
     },
-    observaciones: parseObservaciones(r.Observaciones),
+    observaciones: mensajes(r.observaciones),
     eventos: eventosWsfe(consulta),
-    fecha: optString(r.CbteFch),
-    docTipo: Number(r.DocTipo),
-    docNro: Number(r.DocNro),
-    moneda: optString(r.MonId),
-    cotizacion: r.MonCotiz === undefined || r.MonCotiz === null ? undefined : Number(r.MonCotiz),
-    tipoCodAut: r.EmisionTipo === 'CAEA' ? 'A' : 'E',
+    fecha: optString(r.cbteFch),
+    docTipo: Number(r.docTipo),
+    docNro: Number(r.docNro),
+    moneda: optString(r.monId),
+    cotizacion: r.monCotiz === undefined || r.monCotiz === null ? undefined : Number(r.monCotiz),
+    tipoCodAut: r.emisionTipo === 'CAEA' ? 'A' : 'E',
     raw: consulta,
   };
 }

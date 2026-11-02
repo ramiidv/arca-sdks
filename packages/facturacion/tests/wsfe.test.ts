@@ -3,7 +3,7 @@ import { ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/a
 import { ArcaResultadoIncierto, ArcaWSFEError } from '../src/errors.js';
 import { CbteTipo, CondicionIva, DocTipo, IvaTipo, Moneda, TributoTipo } from '../src/constants.js';
 import { requiereRecuperacion } from '../src/facturacion.js';
-import { Arca, ArcaFacturacion } from '../src/index.js';
+import { ArcaFacturacion } from '../src/index.js';
 import {
   arcaDePrueba,
   caeAprobado,
@@ -45,8 +45,8 @@ describe('FECAESolicitar: XML enviado', () => {
       canMisMonExt: 'N',
       servicio: { desde: '20261001', hasta: '20261031', vtoPago: '20261110' },
       items: [{ neto: 100, iva: IvaTipo.IVA_21 }],
-      tributos: [{ Id: TributoTipo.PERCEP_IIBB, Desc: 'Percepción IIBB', BaseImp: 100.004, Alic: 3, Importe: 3.0049 }],
-      opcionales: [{ Id: '2101', Valor: '0000003100012345678901' }],
+      tributos: [{ id: TributoTipo.PERCEP_IIBB, desc: 'Percepción IIBB', baseImp: 100.004, alic: 3, importe: 3.0049 }],
+      opcionales: [{ id: '2101', valor: '0000003100012345678901' }],
       actividades: [620100],
       comprobanteOriginal: { tipo: CbteTipo.FACTURA_A, ptoVta: 2, nro: 7, cuit: '20-12345678-6', fecha: '20261029' },
     });
@@ -157,7 +157,7 @@ describe('FECAESolicitar: XML enviado', () => {
       fecha: '20261030',
       ...RI,
       items: [{ neto: 1000, iva: IvaTipo.IVA_21 }],
-      opcionales: [{ Id: '22', Valor: 'N' }],
+      opcionales: [{ id: '22', valor: 'N' }],
       comprobanteOriginal: { tipo: CbteTipo.FCE_FACTURA_A, ptoVta: 1, nro: 15, cuit: 20123456786, fecha: '20261020' },
     });
     expect(res.cbteTipo).toBe(CbteTipo.FCE_NOTA_CREDITO_A);
@@ -316,8 +316,8 @@ describe('validaciones antes de tocar la red', () => {
     ['canMisMonExt S con PES', { canMisMonExt: 'S' as const }, 'canMisMonExt'],
     [
       'tributo negativo',
-      { tributos: [{ Id: 99, Desc: 'x', BaseImp: 0, Alic: 0, Importe: -1 }] },
-      'tributos[0].Importe',
+      { tributos: [{ id: 99, desc: 'x', baseImp: 0, alic: 0, importe: -1 }] },
+      'tributos[0].importe',
     ],
     ['CUIT del receptor inválido', { docTipo: 80, docNro: 20123456789, condicionIva: 1 }, 'docNro'],
     ['periodoAsoc en una factura', { periodoAsoc: { desde: '20261001', hasta: '20261031' } }, 'periodoAsoc'],
@@ -366,7 +366,7 @@ describe('parámetros', () => {
       ),
     });
     const cot = await arca.getCotizacion('DOL', { fecha: '2026-10-29' });
-    expect(cot).toEqual({ MonId: 'DOL', MonCotiz: 1015.5, FchCotiz: '20261029' });
+    expect(cot).toEqual({ monId: 'DOL', monCotiz: 1015.5, fchCotiz: '20261029' });
     const { params } = mock.last('FEParamGetCotizacion');
     expect(orden(params)).toEqual(['Auth', 'MonId', 'FchCotiz']);
     expect(params.FchCotiz).toBe('20261029');
@@ -411,7 +411,7 @@ describe('parámetros', () => {
     });
     const items = await arca.getCondicionesIva({ claseCmp: 'A' });
     expect(items).toHaveLength(2);
-    expect(items[0]).toEqual({ Id: 1, Desc: 'IVA Responsable Inscripto', Cmp_Clase: 'A/M/C' });
+    expect(items[0]).toEqual({ id: 1, desc: 'IVA Responsable Inscripto', cmpClase: 'A/M/C' });
     expect(mock.last('FEParamGetCondicionIvaReceptor').params.ClaseCmp).toBe('A');
   });
 
@@ -428,11 +428,11 @@ describe('parámetros', () => {
       ),
     });
     expect(await arca.getActividades()).toEqual([
-      { Id: 620100, Orden: 1, Desc: 'Servicios de consultores en informática' },
+      { id: 620100, orden: 1, desc: 'Servicios de consultores en informática' },
     ]);
     expect(await arca.getTiposPaises()).toEqual([
-      { Id: 200, Desc: 'ARGENTINA' },
-      { Id: 203, Desc: 'BRASIL' },
+      { id: 200, desc: 'ARGENTINA' },
+      { id: 203, desc: 'BRASIL' },
     ]);
   });
 
@@ -458,9 +458,9 @@ describe('parámetros', () => {
     await arca.getPuntosVenta();
     const ptos = await arca.getPuntosVenta();
     expect(mock.count('FEParamGetPtosVenta')).toBe(2);
-    expect(ptos).toEqual([{ Nro: 1, EmisionTipo: 'CAE - RECE', Bloqueado: 'N', FchBaja: 'NULL' }]);
+    expect(ptos).toEqual([{ nro: 1, emisionTipo: 'CAE - RECE', bloqueado: 'N', fchBaja: 'NULL' }]);
     const monedas = await arca.getMonedas();
-    expect(monedas.map((m) => m.Id)).toEqual(['060', 'DOL']);
+    expect(monedas.map((m) => m.id)).toEqual(['060', 'DOL']);
     arca.clearParamCache();
     await arca.getTiposIva();
     expect(mock.count('FEParamGetTiposIva')).toBe(2);
@@ -505,7 +505,7 @@ describe('config', () => {
 
   it('comparte el WsaaClient pasado en config.wsaa', async () => {
     const arca = await arcaDePrueba();
-    const otra = new Arca({ cuit: 20123456786, cert: '', key: '', wsaa: arca.wsaa });
+    const otra = new ArcaFacturacion({ cuit: 20123456786, cert: '', key: '', wsaa: arca.wsaa });
     expect(otra.wsaa).toBe(arca.wsaa);
   });
 
@@ -513,9 +513,7 @@ describe('config', () => {
     const arca = await arcaDePrueba();
     const spy = vi.spyOn(arca.wsaa, 'clearTicket').mockResolvedValue();
     await arca.clearAuthCache();
-    expect(spy.mock.calls.map((c) => c[0]).sort()).toEqual(
-      ['wsfe', 'wsfex', 'ws_sr_constancia_inscripcion', 'ws_sr_padron_a13'].sort(),
-    );
+    expect(spy.mock.calls.map((c) => c[0]).sort()).toEqual(['wsfe', 'wsfex']);
   });
 
   it('on/off: suscribe y desuscribe handlers de eventos', async () => {
@@ -542,25 +540,5 @@ describe('status', () => {
     expect(r.wsfe).toEqual({ ok: true, status: { appserver: 'OK', dbserver: 'OK', authserver: 'OK' } });
     expect(r.wsfex.ok).toBe(false);
     expect(!r.wsfex.ok && r.wsfex.error).toBeInstanceOf(ArcaSoapError);
-  });
-
-  it('Arca (deprecado) es el mismo cliente que ArcaFacturacion', () => {
-    expect(Arca).toBe(ArcaFacturacion);
-  });
-});
-
-describe('serverStatus (deprecado)', () => {
-  it('FEDummy → AppServer/DbServer/AuthServer', async () => {
-    const arca = await arcaDePrueba();
-    mockArcaFetch({
-      FEDummy: wsfeResponse('FEDummy', '<AppServer>OK</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer>'),
-    });
-    expect(await arca.serverStatus()).toEqual({ AppServer: 'OK', DbServer: 'OK', AuthServer: 'OK' });
-  });
-
-  it('respuesta incompleta: ArcaSoapError', async () => {
-    const arca = await arcaDePrueba();
-    mockArcaFetch({ FEDummy: wsfeResponse('FEDummy', '<AppServer>OK</AppServer><DbServer>OK</DbServer>') });
-    await expect(arca.serverStatus()).rejects.toBeInstanceOf(ArcaSoapError);
   });
 });

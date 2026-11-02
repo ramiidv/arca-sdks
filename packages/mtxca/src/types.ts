@@ -20,16 +20,6 @@ export interface ArcaMtxcaConfig extends ArcaSdkConfig {
    * se indiquen usan las oficiales.
    */
   endpoints?: { mtxca?: string; wsaa?: string };
-  /**
-   * URL de WSMTXCA. Si se indica, ignora `production`.
-   * @deprecated Usar `endpoints.mtxca` (tiene prioridad si se indican ambas).
-   */
-  endpoint?: string;
-  /**
-   * URL de WSAA. Si se indica, ignora `production` para el login.
-   * @deprecated Usar `endpoints.wsaa` (tiene prioridad si se indican ambas).
-   */
-  wsaaEndpoint?: string;
 }
 
 /** Credenciales de cada request (`AuthRequestType`). */

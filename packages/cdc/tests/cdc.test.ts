@@ -4,16 +4,16 @@ import type { ConstatarInput } from '../src/index.js';
 import { asmxResponse, childOrder, CUIT, makeCdc, mockFetch, NS, requestBody } from './helpers.js';
 
 const input: ConstatarInput = {
-  CbteModo: 'CAE',
-  CuitEmisor: '30-71234567-1',
-  PtoVta: 1,
-  CbteTipo: 1,
-  CbteNro: 150,
-  CbteFch: '2026-03-15',
-  ImpTotal: 12100.456,
-  CodAutorizacion: '73429843294823',
-  DocTipoReceptor: 80,
-  DocNroReceptor: CUIT,
+  cbteModo: 'CAE',
+  cuitEmisor: '30-71234567-1',
+  ptoVta: 1,
+  cbteTipo: 1,
+  cbteNro: 150,
+  cbteFch: '2026-03-15',
+  impTotal: 12100.456,
+  codAutorizacion: '73429843294823',
+  docTipoReceptor: 80,
+  docNroReceptor: CUIT,
 };
 
 const CMP_RESP =
@@ -79,13 +79,13 @@ describe('ComprobanteConstatar', () => {
     const fetch = mockFetch(
       asmxResponse('ComprobanteConstatar', `<Resultado>A</Resultado><FchProceso>20261101120000</FchProceso>`),
     );
-    const { DocTipoReceptor: _t, DocNroReceptor: _n, ...sinReceptor } = input;
+    const { docTipoReceptor: _t, docNroReceptor: _n, ...sinReceptor } = input;
     await makeCdc(fetch).constatar({
       ...sinReceptor,
-      CbteTipo: 6,
-      Opcionales: [
-        { Id: '01', Valor: 'uno' },
-        { Id: '2', Valor: 'dos' },
+      cbteTipo: 6,
+      opcionales: [
+        { id: '01', valor: 'uno' },
+        { id: '2', valor: 'dos' },
       ],
     });
     const xml = fetch.calls[0].body;
@@ -116,24 +116,24 @@ describe('ComprobanteConstatar', () => {
     );
     const r = await makeCdc(fetch).constatar(input);
     expect(r).toEqual({
-      Resultado: 'A',
-      FchProceso: '20130724113214',
-      Observaciones: [{ Code: 200, Msg: 'Existe CAEA, no fue rendido.' }],
-      Events: [
-        { Code: 1, Msg: 'evento 1' },
-        { Code: 2, Msg: 'evento 2' },
+      resultado: 'A',
+      fchProceso: '20130724113214',
+      observaciones: [{ code: 200, msg: 'Existe CAEA, no fue rendido.' }],
+      events: [
+        { code: 1, msg: 'evento 1' },
+        { code: 2, msg: 'evento 2' },
       ],
-      CmpResp: {
-        CbteModo: 'CAE',
-        CuitEmisor: '30712345671',
-        PtoVta: 1,
-        CbteTipo: 1,
-        CbteNro: 150,
-        CbteFch: '20260315',
-        ImpTotal: 12100.46,
-        CodAutorizacion: '73429843294823',
-        DocTipoReceptor: '80',
-        DocNroReceptor: CUIT,
+      cmpResp: {
+        cbteModo: 'CAE',
+        cuitEmisor: '30712345671',
+        ptoVta: 1,
+        cbteTipo: 1,
+        cbteNro: 150,
+        cbteFch: '20260315',
+        impTotal: 12100.46,
+        codAutorizacion: '73429843294823',
+        docTipoReceptor: '80',
+        docNroReceptor: CUIT,
       },
     });
   });
@@ -148,9 +148,9 @@ describe('ComprobanteConstatar', () => {
       ),
     );
     const r = await makeCdc(fetch).constatar(input);
-    expect(r.Resultado).toBe('R');
-    expect(r.Observaciones.map((o) => o.Code)).toEqual([100, 110]);
-    expect(r.Events).toEqual([]);
+    expect(r.resultado).toBe('R');
+    expect(r.observaciones.map((o) => o.code)).toEqual([100, 110]);
+    expect(r.events).toEqual([]);
   });
 
   it('Resultado R con Errors (respuesta real ante token inválido) lanza ArcaServiceError', async () => {
@@ -192,7 +192,7 @@ describe('ComprobanteConstatar', () => {
 
   it('valida antes de llamar a ARCA', async () => {
     const fetch = mockFetch();
-    await expect(makeCdc(fetch).constatar({ ...input, CuitEmisor: 30712345672 })).rejects.toBeInstanceOf(
+    await expect(makeCdc(fetch).constatar({ ...input, cuitEmisor: 30712345672 })).rejects.toBeInstanceOf(
       ArcaValidationError,
     );
     expect(fetch.calls).toHaveLength(0);
@@ -204,7 +204,7 @@ describe('ComprobanteConstatar', () => {
       asmxResponse('ComprobanteConstatar', '<Resultado>A</Resultado><FchProceso>20261101120000</FchProceso>'),
     );
     const r = await makeCdc(fetch, { retries: 1 }).constatar(input);
-    expect(r.Resultado).toBe('A');
+    expect(r.resultado).toBe('A');
     expect(fetch.calls).toHaveLength(2);
   });
 });
@@ -238,7 +238,7 @@ describe('ComprobantesModalidadConsultar', () => {
       ),
     );
     const r = await makeCdc(fetch).getModalidades();
-    expect(r).toEqual([{ Cod: 'CAE', Desc: 'Autorizado mediante CAE' }]);
+    expect(r).toEqual([{ cod: 'CAE', desc: 'Autorizado mediante CAE' }]);
     expect(fetch.calls[0].soapAction).toBe(`${NS}ComprobantesModalidadConsultar`);
     expect(fetch.calls[0].headers.soapaction).toBe(`"${NS}ComprobantesModalidadConsultar"`);
     expect(fetch.calls[0].body).toContain(`<ComprobantesModalidadConsultar xmlns="${NS}">`);
@@ -259,9 +259,9 @@ describe('ComprobantesModalidadConsultar', () => {
     );
     const r = await makeCdc(fetch).getModalidades();
     expect(r).toEqual([
-      { Cod: 'CAE', Desc: 'CAE' },
-      { Cod: 'CAI', Desc: 'CAI', FchDesde: '20130101' },
-      { Cod: 'CAEA', Desc: 'CAEA', FchDesde: '20130101', FchHasta: 'NULL' },
+      { cod: 'CAE', desc: 'CAE' },
+      { cod: 'CAI', desc: 'CAI', fchDesde: '20130101' },
+      { cod: 'CAEA', desc: 'CAEA', fchDesde: '20130101', fchHasta: 'NULL' },
     ]);
   });
 
@@ -289,10 +289,10 @@ describe('Tablas de parámetros', () => {
       ),
     );
     const cdc = makeCdc(fetch);
-    expect(await cdc.getTiposCbte()).toEqual([{ Id: 1, Desc: 'Factura A' }]);
+    expect(await cdc.getTiposCbte()).toEqual([{ id: 1, desc: 'Factura A' }]);
     expect(await cdc.getTiposCbte()).toEqual([
-      { Id: 1, Desc: 'Factura A' },
-      { Id: 6, Desc: 'Factura B' },
+      { id: 1, desc: 'Factura A' },
+      { id: 6, desc: 'Factura B' },
     ]);
     expect(fetch.calls[0].soapAction).toBe(`${NS}ComprobantesTipoConsultar`);
     expect(fetch.calls[0].headers.soapaction).toBe(`"${NS}ComprobantesTipoConsultar"`);
@@ -307,10 +307,10 @@ describe('Tablas de parámetros', () => {
       ),
     );
     const cdc = makeCdc(fetch);
-    expect(await cdc.getDocTipos()).toEqual([{ Id: '80', Desc: 'CUIT' }]);
+    expect(await cdc.getDocTipos()).toEqual([{ id: '80', desc: 'CUIT' }]);
     expect(await cdc.getDocTipos()).toEqual([
-      { Id: '80', Desc: 'CUIT' },
-      { Id: '96', Desc: 'DNI' },
+      { id: '80', desc: 'CUIT' },
+      { id: '96', desc: 'DNI' },
     ]);
     expect(fetch.calls[0].soapAction).toBe(`${NS}DocumentosTipoConsultar`);
     expect(fetch.calls[0].headers.soapaction).toBe(`"${NS}DocumentosTipoConsultar"`);
@@ -328,10 +328,10 @@ describe('Tablas de parámetros', () => {
       ),
     );
     const cdc = makeCdc(fetch);
-    expect(await cdc.getTiposOpcionales()).toEqual([{ Id: '01', Desc: 'Uno' }]);
+    expect(await cdc.getTiposOpcionales()).toEqual([{ id: '01', desc: 'Uno' }]);
     expect(await cdc.getTiposOpcionales()).toEqual([
-      { Id: '01', Desc: 'Uno' },
-      { Id: '2', Desc: 'Dos' },
+      { id: '01', desc: 'Uno' },
+      { id: '2', desc: 'Dos' },
     ]);
     expect(fetch.calls[0].soapAction).toBe(`${NS}OpcionalesTipoConsultar`);
     expect(fetch.calls[0].headers.soapaction).toBe(`"${NS}OpcionalesTipoConsultar"`);
@@ -424,23 +424,23 @@ describe('Decodificación de respuestas (texto, sin perder ceros)', () => {
       ),
     );
     const cdc = makeCdc(fetch);
-    expect(await cdc.getTiposOpcionales()).toEqual([{ Id: '0012', Desc: 'Doce' }]);
-    expect(await cdc.getDocTipos()).toEqual([{ Id: '080', Desc: 'CUIT' }]);
+    expect(await cdc.getTiposOpcionales()).toEqual([{ id: '0012', desc: 'Doce' }]);
+    expect(await cdc.getDocTipos()).toEqual([{ id: '080', desc: 'CUIT' }]);
     const r = await cdc.constatar(input);
-    expect(r.CmpResp).toEqual({
-      CbteModo: 'CAE',
-      CuitEmisor: '30712345671',
-      PtoVta: 1,
-      CbteTipo: 1,
-      CbteNro: 150,
-      CbteFch: '20260315',
-      ImpTotal: 100.5,
-      CodAutorizacion: '07342984329482',
-      DocTipoReceptor: '96',
-      DocNroReceptor: '0012345678',
-      Opcionales: [
-        { Id: '01', Valor: '0099' },
-        { Id: '2', Valor: '' },
+    expect(r.cmpResp).toEqual({
+      cbteModo: 'CAE',
+      cuitEmisor: '30712345671',
+      ptoVta: 1,
+      cbteTipo: 1,
+      cbteNro: 150,
+      cbteFch: '20260315',
+      impTotal: 100.5,
+      codAutorizacion: '07342984329482',
+      docTipoReceptor: '96',
+      docNroReceptor: '0012345678',
+      opcionales: [
+        { id: '01', valor: '0099' },
+        { id: '2', valor: '' },
       ],
     });
   });
@@ -458,12 +458,12 @@ describe('Decodificación de respuestas (texto, sin perder ceros)', () => {
       ),
     );
     const cdc = makeCdc(fetch);
-    expect(await cdc.getModalidades()).toEqual([{ Cod: 'CAE', Desc: 'CAE' }]);
+    expect(await cdc.getModalidades()).toEqual([{ cod: 'CAE', desc: 'CAE' }]);
     expect(await cdc.constatar(input)).toEqual({
-      Resultado: 'R',
-      FchProceso: '20261101120000',
-      Observaciones: [{ Code: 100, Msg: '' }],
-      Events: [],
+      resultado: 'R',
+      fchProceso: '20261101120000',
+      observaciones: [{ code: 100, msg: '' }],
+      events: [],
     });
   });
 
@@ -479,10 +479,10 @@ describe('Decodificación de respuestas (texto, sin perder ceros)', () => {
     );
     const cdc = makeCdc(fetch);
     const cases: [() => Promise<unknown>, RegExp][] = [
-      [() => cdc.getTiposCbte(), /ComprobantesTipoConsultar\.ResultGet\[0\]\.Id no es numérico/],
-      [() => cdc.getDocTipos(), /falta DocumentosTipoConsultar\.ResultGet\[0\]\.Desc/],
+      [() => cdc.getTiposCbte(), /ComprobantesTipoConsultar\.resultGet\[0\]\.id no es numérico/],
+      [() => cdc.getDocTipos(), /falta DocumentosTipoConsultar\.resultGet\[0\]\.desc/],
       [() => cdc.constatar(input), /Resultado desconocido "X"/],
-      [() => cdc.constatar(input), /falta ComprobanteConstatar\.CmpResp\.CuitEmisor/],
+      [() => cdc.constatar(input), /falta ComprobanteConstatar\.CmpResp\.cuitEmisor/],
     ];
     for (const [call, message] of cases) {
       const err = await call().catch((e: unknown) => e);

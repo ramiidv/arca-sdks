@@ -10,7 +10,7 @@ Primera versión publicada desde el monorepo (con trusted publishing y provenanc
 | Paquete | Versión | Notas |
 |---|---|---|
 | `@ramiidv/arca-common` | 0.5.0 | `ArcaSdkBase`, `SoapServiceClient`, `/schema` (DSL del XSD), `/testing` (mocks y contratos contra el WSDL) |
-| `@ramiidv/arca-facturacion` | 5.0.0 | ESM-only. WSFE/WSFEX todavía sin el DSL |
+| `@ramiidv/arca-facturacion` | 5.0.0 | ESM-only. WSFE/WSFEX sobre el DSL en `main` (sin publicar) |
 | `@ramiidv/arca-padron` | 0.5.0 | DSL + contratos |
 | `@ramiidv/arca-agro` | 0.4.0 | DSL + contratos (WSCPE, WSLPG) |
 | `@ramiidv/arca-cdc` | 0.4.0 | DSL + contratos |
@@ -25,95 +25,101 @@ configuración, `wsaa`, `cuit`, `production`, `on`/`off`, `config.wsaa`,
 
 ## Pendientes operativos
 
-- [ ] Desplegar arca-sdk.dev (`~/projects/arca-sdk-web/landing`). Ya está
-      actualizado y compilado con las versiones nuevas, los links al
-      monorepo, `ArcaFacturacion` y Node 20.19+; falta `npx vercel deploy --prod`.
-- [ ] Mergear en arca-server la branch `chore/sdks-nuevas-versiones`, que sube
-      todos los SDKs a estas versiones (typecheck, tests y build verificados) y
-      después redesplegar.
-- [ ] Archivar los 9 repos anteriores (`ramiidv/arca-common`,
-      `ramiidv/arca-facturacion`...) con un aviso en su README que apunte acá.
-- [ ] Opcional: `npm deprecate` de las versiones anteriores al monorepo, con un
-      mensaje que indique la versión nueva.
+- [x] Desplegar arca-sdk.dev (`../arca-sdk-web/landing`), 2026-11-01. Los
+      cambios de la landing siguen sin commitear en `ramiidv/arca-sdk-web`.
+- [x] Mergear en arca-server la branch `chore/sdks-nuevas-versiones` (PR #1).
+- [ ] Redesplegar arca-server con los SDKs nuevos.
+- [x] Archivar los 9 repos anteriores (`ramiidv/arca-common`,
+      `ramiidv/arca-facturacion`...) con un aviso en su README que apunta acá.
+- [x] `npm deprecate` de las versiones anteriores al monorepo (`<0.4.0`,
+      `<0.5.0` en common y padron, `<5.0.0` en facturacion).
 
 ## Próximos pasos técnicos
 
 En orden de prioridad.
 
-### 1. facturacion: WSFE y WSFEX sobre el DSL
+### 1. ~~facturacion: WSFE y WSFEX sobre el DSL~~ (hecho, pendiente de release)
 
-Es el paquete más usado y el único que todavía serializa y parsea a mano
-(`src/wsfe.ts`, `src/wsfex.ts`, `src/facturacion.ts`, `src/validation.ts`).
+Changeset `wsfe-wsfex-dsl` (minor). `src/schemas.ts` describe requests y
+respuestas, `src/decode.ts` decodifica respetando la forma `X | X[]` de los
+tipos públicos y `tests/contract.test.ts` compara contra los dos WSDL.
 
-- Describir los requests y respuestas con `@ramiidv/arca-common/schema`. Son
-  servicios ASMX: elementos `qualified`, nombres en PascalCase y fechas
-  `AAAAMMDD` (`date8()`).
-- Pedir las respuestas con `parseNumbers: false` y decodificarlas con el
-  schema. Hoy no se pierden datos porque los campos largos (CAE, CUIT, fechas)
-  quedan como string por `skipLike`, pero los códigos y descripciones cortos
-  pueden perder ceros y decimales.
-- Agregar `tests/contract.test.ts` contra `wsdl/wsfev1.wsdl` y
-  `wsdl/wsfexv1.wsdl`, como en los otros paquetes.
-- Mantener la API pública. Es un minor.
+Queda para facturacion 6.0: las respuestas crudas pueden pasar a usar arrays
+siempre (`wrapped()`), sin el `restoreSingles` de `decode.ts`. También
+`validation.ts` podría apoyarse en los schemas en vez de validar a mano.
 
-### 2. Próximas majors: quitar lo deprecado
+### 2. ~~Próximas majors: quitar lo deprecado~~ (hecho, pendiente de release)
 
-| Paquete | Qué se quita | Reemplazo |
-|---|---|---|
-| facturacion 6.0 | `Arca` | `ArcaFacturacion` |
-| facturacion 6.0 | `serverStatus()`, `serverStatusExpo()` y su `ServerStatus` en mayúsculas | `status()` |
-| facturacion 6.0 | `src/padron.ts`, `consultarCuit`, `consultarCuitDetalle`, `endpoints.padronA5/A13` | `@ramiidv/arca-padron` |
-| facturacion 6.0 | `requestTimeoutMs` | `timeout` |
-| agro 0.5 | `serverStatus()` | `status()` |
-| fecred 0.5 | `ArcaFecred.fecred`, `FecredClientConfig.soapOptions`/`onEvent` | `client`, `transport` |
-| mtxca 0.5 | `endpoint`, `wsaaEndpoint` | `endpoints: { mtxca, wsaa }` |
-| padron 0.6 | `status()` con `PromiseSettledResult` | `status()` con `ServiceStatus` (`statusOf` de common), igual que agro y facturacion |
+Rama `feat/majors-sin-deprecados` (sobre `feat/wsfe-wsfex-dsl`), con changesets:
+facturacion 6.0, agro 0.5, fecred 0.5, mtxca 0.5 y padron 0.6. Además de lo
+planeado, facturacion 6.0 quita `extractCAE`, `formatDate`/`calcularTotales`
+estáticos y `toDateString`; las respuestas crudas usan arrays siempre; y
+padron 0.6 quita `TipoDocumento`, `IVA_NO_INSCRIPTO`, `checkServiceErrors` y
+`ArcaPadronEvent`.
 
-En facturacion 6.0, revisar también la convención de nombres. cdc usa los
-nombres de AFIP (`CbteModo`, PascalCase) y padron tiene métodos en inglés
-(`getConstanciaInscripcion`). Decidir si se unifican o se documenta la regla
-(por ejemplo, PascalCase en los servicios ASMX y camelCase en los Java).
+Para subir arca-server a estas versiones: `src/routes/afip.ts` (`padron.status()`
+devuelve `ServiceStatus`, no `PromiseSettledResult`) y `tests/arca-sdk.test.ts`
+(`Arca` → `ArcaFacturacion`). El resto compila y pasa sus tests contra las
+versiones nuevas.
 
-### 3. Mejoras al DSL y al comparador de contratos (common)
+Convención de nombres (decidida): todo en camelCase. Los campos de ARCA se
+pasan a camelCase con las siglas como palabras (`CAEFchVto` → `caeFchVto`,
+`Fecha_cbte` → `fechaCbte`) y las listas son arrays sin el contenedor del XML.
+Con el DSL, cada schema usa `xml('NombreArca', …)` para el nombre del XML. Se
+aplicó en facturacion 6.0, cdc 0.5 y `WsAuth` de padron 0.6; el resto de los
+SDKs ya era camelCase.
 
-- `xsd:choice` nativo en el DSL. fecred tiene su propio `choice()` en
-  `src/schemas.ts`; moverlo a common.
-- El comparador trata `xsd:all` como secuencia ordenada (más estricto de lo
-  necesario) y en respuestas no verifica que un `choice` traiga al menos una
-  opción.
-- Un `str()` con mensaje propio para `pattern` (ej: "no puede estar vacío" en
-  lugar de `formato inválido (\S)`).
-- Que el orden de los errores de `extraCheck` se intercale con el de los del
-  schema (hoy van al final).
+### 3. ~~Mejoras al DSL y al comparador de contratos (common)~~ (hecho, pendiente de release)
 
-### 4. Tests de integración contra homologación
+Rama `feat/dsl-choice` (desde `main`): `choice()` nativo en common (fecred lo
+usa en lugar del suyo), `str({ patternMessage })` (mtxca y sire lo usan para
+"no puede estar vacío"), errores de `extraCheck` intercalados y, en el
+comparador, `xsd:all` sin orden y `xsd:choice` ↔ `choice()`.
 
-Solo facturacion tiene `tests/integration` (se saltean sin certificado).
+### 4. Tests de integración contra homologación (en curso)
 
-- Guardar un certificado de homologación en los secrets del repo.
-- Agregar un workflow nightly o manual que corra `dummy` y alguna consulta de
-  cada servicio contra homologación.
-- Grabar respuestas reales, sin token, sign ni CUIT reales, como fixtures para
-  los tests unitarios.
+Rama `feat/integracion-homologacion`: cada paquete tiene `tests/integration`
+(dummy sin autenticación y una consulta autenticada si `ARCA_TEST_SERVICES`
+incluye el servicio), `npm run test:integration` y el workflow
+`integracion.yml` (nightly y manual, con los tickets de WSAA en `actions/cache`).
+Los dummy de los 7 servicios se probaron contra homologación el 2026-11-01.
 
-### 5. Detección de cambios incompatibles
+- [ ] Cargar en el repo los secrets `ARCA_TEST_CERT`, `ARCA_TEST_KEY` y
+      `ARCA_TEST_CUIT`, y la variable `ARCA_TEST_SERVICES` con los servicios
+      autorizados para ese certificado.
+- [ ] Grabar respuestas reales, sin token, sign ni CUIT reales, como fixtures
+      para los tests unitarios (requiere el certificado).
 
-- `@microsoft/api-extractor` por paquete, con el reporte `*.api.md` versionado:
-  un PR que cambia la API pública lo muestra en el diff y obliga a decidir si
-  es major.
+### 5. ~~Detección de cambios incompatibles~~ (hecho)
+
+Rama `chore/api-extractor`: `scripts/api-report.mjs` corre api-extractor por
+cada entry point de `exports` y deja el reporte en `packages/*/api/*.api.md`.
+CI corre `npm run api:check` (falla si la API cambió sin actualizar el
+reporte); `npm run api:update` lo regenera. Las ramas que cambian la API
+(`feat/majors-sin-deprecados`, `feat/dsl-choice`) tienen que correr
+`api:update` después de rebasear sobre esta.
 
 ### 6. Mantenimiento
 
-- Evaluar TypeScript 7 (compilador nativo) y vitest 5. Hoy: TS 6 y vitest 3.2.
-- Quitar los `any` que quedan (biome los marca como warnings, sobre todo en
-  facturacion).
-- Cuando Node 20 deje de usarse en la práctica, subir `engines` a `>=22.12` y
-  sacar 20.19 de la matriz de CI.
+- ~~Evaluar TypeScript 7 y vitest 5~~. Rama `chore/ts7-vitest5`: TypeScript
+  7.0.2 (build, typecheck y tests iguales; los `.js` emitidos no cambian y
+  en los `.d.ts` solo cambian las comillas) y vitest 4.1.12, que arregla las
+  3 vulnerabilidades de vitest 3 (`npm audit` limpio) y sigue soportando
+  Node 20. Vitest 5 exige Node >= 22.12: subirlo junto con el cambio de
+  `engines`.
+- ~~Quitar los `any` que quedan~~: common en `chore/ts7-vitest5`, facturacion
+  en `feat/majors-sin-deprecados` (`padron.ts` y `Contribuyente` se quitan
+  con la major). Con todo mergeado, biome no marca ninguno: se puede pasar
+  `noExplicitAny` de warning a error.
+- Cuando Node 20 deje de usarse en la práctica, subir `engines` a `>=22.12`,
+  sacar 20.19 de la matriz de CI y pasar a vitest 5.
 
 ## Cómo publicar
 
 1. Cada PR que cambia un paquete publicado agrega un changeset
-   (`npm run changeset`), con patch, minor o major por paquete.
+   (`npm run changeset`), con patch, minor o major por paquete. Si cambia la
+   API pública, `npm run api:update` y commitear el `.api.md`: el diff ayuda a
+   elegir el tipo de cambio.
 2. Al mergear a `main`, el workflow Release abre o actualiza el PR "chore:
    version packages", con versiones, CHANGELOGs y rangos internos.
 3. Al mergear ese PR, el workflow publica en npm con trusted publishing (OIDC),

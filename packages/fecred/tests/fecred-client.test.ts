@@ -71,7 +71,7 @@ describe('dummy', () => {
 });
 
 describe('config', () => {
-  it('sigue aceptando soapOptions y onEvent (deprecados)', async () => {
+  it('usa transport (reintentos y onEvent)', async () => {
     const fetch = mockFetch(
       xmlResponse('Service Unavailable', 503),
       ok('consultarCtasCtes', '<consultarCtasCtesReturn/>'),
@@ -80,8 +80,7 @@ describe('config', () => {
     const c = new FecredClient({
       endpoint: URL,
       namespace: NS,
-      soapOptions: { fetch, retries: 1, retryDelayMs: 1 },
-      onEvent,
+      transport: { fetch, retries: 1, retryDelayMs: 1, onEvent },
     });
     await c.consultarCtasCtes(AUTH, { rol: 'Emisor' });
     expect(fetch.calls).toHaveLength(2);

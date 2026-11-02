@@ -2,20 +2,20 @@
 
 [![npm](https://img.shields.io/npm/v/@ramiidv/arca-common)](https://www.npmjs.com/package/@ramiidv/arca-common)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Node >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
+[![Node >= 20.19](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen)](https://nodejs.org)
 
 Utilidades compartidas para el ecosistema de SDKs de **ARCA** (ex AFIP) en TypeScript.
 
 Este paquete es la base sobre la que se construyen los SDKs de dominio:
 
-- [`@ramiidv/arca-facturacion`](https://github.com/ramiidv/arca-facturacion) — Facturacion electronica (WSFEv1, WSFEX, CAEA)
-- [`@ramiidv/arca-padron`](https://github.com/ramiidv/arca-padron) — Consulta de contribuyentes (Constancia de Inscripcion, Padron A4, A10, A13, A100)
-- [`@ramiidv/arca-empleados`](https://github.com/ramiidv/arca-empleados) — Ingreso masivo de relaciones laborales (Simplificación Registral)
-- [`@ramiidv/arca-cdc`](https://github.com/ramiidv/arca-cdc) — Constatacion de comprobantes (WSCDC)
-- [`@ramiidv/arca-fecred`](https://github.com/ramiidv/arca-fecred) — Factura de Credito Electronica MiPyME (WSFECRED)
-- [`@ramiidv/arca-sire`](https://github.com/ramiidv/arca-sire) — Retenciones electronicas (SIRE)
-- [`@ramiidv/arca-agro`](https://github.com/ramiidv/arca-agro) — Carta de porte y liquidaciones de granos (WSCPE, WSLPG)
-- [`@ramiidv/arca-mtxca`](https://github.com/ramiidv/arca-mtxca) — Facturacion con detalle de articulos (WSMTXCA)
+- [`@ramiidv/arca-facturacion`](https://github.com/ramiidv/arca-sdks/tree/main/packages/facturacion) — Facturacion electronica (WSFEv1, WSFEX, CAEA)
+- [`@ramiidv/arca-padron`](https://github.com/ramiidv/arca-sdks/tree/main/packages/padron) — Consulta de contribuyentes (Constancia de Inscripcion, Padron A4, A10, A13, A100)
+- [`@ramiidv/arca-empleados`](https://github.com/ramiidv/arca-sdks/tree/main/packages/empleados) — Ingreso masivo de relaciones laborales (Simplificación Registral)
+- [`@ramiidv/arca-cdc`](https://github.com/ramiidv/arca-sdks/tree/main/packages/cdc) — Constatacion de comprobantes (WSCDC)
+- [`@ramiidv/arca-fecred`](https://github.com/ramiidv/arca-sdks/tree/main/packages/fecred) — Factura de Credito Electronica MiPyME (WSFECRED)
+- [`@ramiidv/arca-sire`](https://github.com/ramiidv/arca-sdks/tree/main/packages/sire) — Retenciones electronicas (SIRE)
+- [`@ramiidv/arca-agro`](https://github.com/ramiidv/arca-sdks/tree/main/packages/agro) — Carta de porte y liquidaciones de granos (WSCPE, WSLPG)
+- [`@ramiidv/arca-mtxca`](https://github.com/ramiidv/arca-sdks/tree/main/packages/mtxca) — Facturacion con detalle de articulos (WSMTXCA)
 
 ## Instalacion
 
@@ -321,6 +321,29 @@ console.log(Provincia.BUENOS_AIRES); // 1
 console.log(Provincia.CORDOBA); // 3
 console.log(Provincia.CHACO); // 16 (no existe el 15)
 ```
+
+## Schemas del XSD (`@ramiidv/arca-common/schema`)
+
+Mini-DSL con el que los SDKs describen los tipos complejos de cada WSDL. Con el mismo schema se
+valida y codifica un request (orden del XSD, obligatorios, rangos, CUIT, decimales, fechas) y se
+decodifica una respuesta pedida con `parseNumbers: false` (`xs:string` → `string` sin perder
+ceros, números → `number`, listas → arrays).
+
+```typescript
+import { choice, decodeResponse, encodeRequest, id, int, must, obj, opt, str, wrapped } from '@ramiidv/arca-common/schema';
+
+const Request = {
+  // xsd:choice: en un request va exactamente una opción; en una respuesta, al menos una.
+  idCtaCte: choice({ codCtaCte: id(), idFactura: obj({ nro: int(1) }) }),
+  obs: opt(str({ maxLen: 250, pattern: /\S/, patternMessage: 'no puede estar vacío' })),
+};
+const body = encodeRequest(input, Request, 'consultarCtaCte'); // ArcaValidationError con todos los errores
+const resp = decodeResponse(result, { items: wrapped('item', obj({ codigo: must(str()) }), 0) }, 'consultarResponse');
+```
+
+`@ramiidv/arca-common/testing` incluye `loadXsdTypes` y `checkSchemaAgainstXsd` para tests de
+contrato contra el WSDL oficial: nombres, orden de la `xsd:sequence` (un `xsd:all` no tiene
+orden), obligatorios, cardinalidad y `xsd:choice` marcados con `choice()`.
 
 ## API
 

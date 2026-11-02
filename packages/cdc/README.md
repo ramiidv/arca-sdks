@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@ramiidv/arca-cdc)](https://www.npmjs.com/package/@ramiidv/arca-cdc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Node >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
+[![Node >= 20.19](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen)](https://nodejs.org)
 
 SDK en TypeScript para el web service **WSCDC** (Constatación de Comprobantes) de **ARCA** (ex AFIP).
 
@@ -40,22 +40,22 @@ const cdc = new ArcaCdc({
 });
 
 const r = await cdc.constatar({
-  CbteModo: 'CAE', // CAE | CAI | CAEA
-  CuitEmisor: 30712345671, // CUIT de quien emitió el comprobante
-  PtoVta: 1,
-  CbteTipo: 1, // Factura A
-  CbteNro: 150,
-  CbteFch: '20260315', // YYYYMMDD, YYYY-MM-DD o Date
-  ImpTotal: 12100,
-  CodAutorizacion: '73429843294823',
-  DocTipoReceptor: 80, // opcional (obligatorio en comprobantes A)
-  DocNroReceptor: 20123456786, // se informa junto con DocTipoReceptor
+  cbteModo: 'CAE', // CAE | CAI | CAEA
+  cuitEmisor: 30712345671, // CUIT de quien emitió el comprobante
+  ptoVta: 1,
+  cbteTipo: 1, // Factura A
+  cbteNro: 150,
+  cbteFch: '20260315', // YYYYMMDD, YYYY-MM-DD o Date
+  impTotal: 12100,
+  codAutorizacion: '73429843294823',
+  docTipoReceptor: 80, // opcional (obligatorio en comprobantes A)
+  docNroReceptor: 20123456786, // se informa junto con docTipoReceptor
 });
 
-if (r.Resultado === 'A') {
-  console.log('Constatado', r.FchProceso, r.Observaciones); // puede traer observaciones no excluyentes (ej: 200)
+if (r.resultado === 'A') {
+  console.log('Constatado', r.fchProceso, r.observaciones); // puede traer observaciones no excluyentes (ej: 200)
 } else {
-  console.log('Rechazado:', r.Observaciones); // ej: [{ Code: 100, Msg: "..." }]
+  console.log('Rechazado:', r.observaciones); // ej: [{ code: 100, msg: "..." }]
 }
 ```
 
@@ -88,47 +88,47 @@ Todos aceptan un último parámetro opcional `opts?: { signal?: AbortSignal }`.
 | ---------------------- | -------------------------------- | --------------------------------------------------------------------- |
 | `constatar(input)`     | `ComprobanteConstatar`           | `ConstatarResult`                                                     |
 | `status()`             | `ComprobanteDummy` (sin auth)    | `{ appserver, dbserver, authserver }`                                 |
-| `getModalidades()`     | `ComprobantesModalidadConsultar` | `{ Cod, Desc, FchDesde?, FchHasta? }[]` (`Cod`: `CAE`, `CAI`, `CAEA`) |
-| `getTiposCbte()`       | `ComprobantesTipoConsultar`      | `{ Id: number, Desc }[]`                                              |
-| `getDocTipos()`        | `DocumentosTipoConsultar`        | `{ Id: string, Desc }[]`                                              |
-| `getTiposOpcionales()` | `OpcionalesTipoConsultar`        | `{ Id: string, Desc }[]`                                              |
+| `getModalidades()`     | `ComprobantesModalidadConsultar` | `{ cod, desc, fchDesde?, fchHasta? }[]` (`cod`: `CAE`, `CAI`, `CAEA`) |
+| `getTiposCbte()`       | `ComprobantesTipoConsultar`      | `{ id: number, desc }[]`                                              |
+| `getDocTipos()`        | `DocumentosTipoConsultar`        | `{ id: string, desc }[]`                                              |
+| `getTiposOpcionales()` | `OpcionalesTipoConsultar`        | `{ id: string, desc }[]`                                              |
 | `clearAuthCache()`     | --                               | `Promise<void>`: descarta los tickets WSAA                            |
 
 ### `constatar(input)`
 
 ```typescript
 interface ConstatarInput {
-  CbteModo: 'CAE' | 'CAI' | 'CAEA';
-  CuitEmisor: number | string; // 11 dígitos, con o sin guiones
-  PtoVta: number; // 1..99998
-  CbteTipo: number; // ver getTiposCbte()
-  CbteNro: number; // 1..99999999
-  CbteFch: string | Date; // se envía YYYYMMDD
-  ImpTotal: number; // >= 0, se redondea a 2 decimales; 0 si el comprobante no tiene total
-  CodAutorizacion: string; // 14 dígitos
-  DocTipoReceptor?: number | string; // ver getDocTipos(); se informa junto con DocNroReceptor
-  DocNroReceptor?: number | string; // solo dígitos (CUIT validado si DocTipoReceptor = 80)
-  Opcionales?: { Id: string; Valor: string }[]; // ver getTiposOpcionales()
+  cbteModo: 'CAE' | 'CAI' | 'CAEA';
+  cuitEmisor: number | string; // 11 dígitos, con o sin guiones
+  ptoVta: number; // 1..99998
+  cbteTipo: number; // ver getTiposCbte()
+  cbteNro: number; // 1..99999999
+  cbteFch: string | Date; // se envía YYYYMMDD
+  impTotal: number; // >= 0, se redondea a 2 decimales; 0 si el comprobante no tiene total
+  codAutorizacion: string; // 14 dígitos
+  docTipoReceptor?: number | string; // ver getDocTipos(); se informa junto con DocNroReceptor
+  docNroReceptor?: number | string; // solo dígitos (CUIT validado si DocTipoReceptor = 80)
+  opcionales?: { id: string; valor: string }[]; // ver getTiposOpcionales()
 }
 
 interface ConstatarResult {
-  Resultado: 'A' | 'R';
-  FchProceso: string; // YYYYMMDDHHMMSS
-  CmpResp?: ComprobanteConstatado; // los datos del comprobante tal como los devuelve ARCA
-  Observaciones: { Code: number; Msg: string }[];
-  Events: { Code: number; Msg: string }[];
+  resultado: 'A' | 'R';
+  fchProceso: string; // YYYYMMDDHHMMSS
+  cmpResp?: ComprobanteConstatado; // los datos del comprobante tal como los devuelve ARCA
+  observaciones: { code: number; msg: string }[];
+  events: { code: number; msg: string }[];
 }
 ```
 
 Cómo interpretar la respuesta (manual WSCDC, 2.2.3):
 
-- **`Resultado: 'A'`**: el comprobante está registrado y autorizado. Puede traer observaciones no
+- **`resultado: 'A'`**: el comprobante está registrado y autorizado. Puede traer observaciones no
   excluyentes (ej: `200`, CAEA aún no rendido pero en plazo).
-- **`Resultado: 'R'`**: rechazo por validaciones funcionales (`100` código inexistente, `102` CUIT
-  emisor no coincide, `110` importe no coincide, etc.). El detalle está en `Observaciones`.
+- **`resultado: 'R'`**: rechazo por validaciones funcionales (`100` código inexistente, `102` CUIT
+  emisor no coincide, `110` importe no coincide, etc.). El detalle está en `observaciones`.
 - **`Errors` de ARCA** (validaciones de formato `1`-`10`, autenticación `600`-`602`,
   infraestructura `500`-`503`): el SDK **lanza `ArcaServiceError`**, porque el comprobante no se
-  llegó a constatar. ARCA en esos casos también responde `Resultado: R`, pero no significa que el
+  llegó a constatar. ARCA en esos casos también responde `resultado: R`, pero no significa que el
   comprobante sea inválido.
 
 El importe se compara con margen: error relativo <= 0,01% o absoluto <= 1 (manual, 2.8).
@@ -189,7 +189,7 @@ const client = new CdcClient({ endpoint: WSCDC_ENDPOINTS.testing });
 await client.dummy();
 
 const ticket = await cdc.wsaa.getAccessTicket('wscdc');
-const auth = { Token: ticket.token, Sign: ticket.sign, Cuit: '20123456786' };
+const auth = { token: ticket.token, sign: ticket.sign, cuit: '20123456786' };
 await client.constatar(auth, input);
 await client.getTiposOpcionales(auth);
 ```

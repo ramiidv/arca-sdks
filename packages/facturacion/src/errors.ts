@@ -117,17 +117,17 @@ export class ArcaResultadoInciertoExpo extends ArcaError {
   constructor(request: WsfexInvoice, options?: { cause?: unknown }) {
     const causa = options?.cause instanceof Error ? `: ${options.cause.message}` : '';
     super(
-      `Resultado incierto de FEXAuthorize (Id ${request.Id}) para el comprobante ` +
-        `${request.Cbte_Tipo}-${request.Punto_vta}-${request.Cbte_nro}${causa}. No se reintentó. ` +
+      `Resultado incierto de FEXAuthorize (Id ${request.id}) para el comprobante ` +
+        `${request.cbteTipo}-${request.puntoVta}-${request.cbteNro}${causa}. No se reintentó. ` +
         'Reenviar la misma solicitud con el mismo Id (WSFEX responde Reproceso="S" si ya estaba autorizada).',
       options,
     );
     this.name = 'ArcaResultadoInciertoExpo';
-    this.id = request.Id;
-    this.cbteTipo = request.Cbte_Tipo;
-    this.ptoVta = request.Punto_vta;
-    this.cbteNro = request.Cbte_nro;
-    this.intento = { id: request.Id, cbteNro: request.Cbte_nro, fecha: request.Fecha_cbte };
+    this.id = request.id;
+    this.cbteTipo = request.cbteTipo;
+    this.ptoVta = request.puntoVta;
+    this.cbteNro = request.cbteNro;
+    this.intento = { id: request.id, cbteNro: request.cbteNro, fecha: request.fechaCbte };
     this.request = request;
   }
 }

@@ -35,7 +35,14 @@ import { formatDate, validateCuit } from './validators.js';
 // ---------------------------------------------------------------------------
 
 type Scalar =
-  | { kind: 'str'; minLen?: number; maxLen?: number; values?: readonly string[]; pattern?: RegExp }
+  | {
+      kind: 'str';
+      minLen?: number;
+      maxLen?: number;
+      values?: readonly string[];
+      pattern?: RegExp;
+      patternMessage?: string;
+    }
   | { kind: 'int'; min?: number; max?: number; minExclusive?: boolean }
   | { kind: 'id' }
   | { kind: 'dec'; digits: number; min?: number; max?: number; minExclusive?: boolean }
@@ -77,6 +84,12 @@ export interface Field {
    * API (ver `xml()`). Los errores usan el nombre de la API.
    */
   readonly xml?: string;
+  /**
+   * El contenido del elemento es un `xsd:choice` entre los campos de `schema`
+   * (ver `choice()`): en un request va exactamente uno; en una respuesta tiene
+   * que venir al menos uno.
+   */
+  readonly choice?: boolean;
 }
 
 export type Schema = { readonly [element: string]: Field };
@@ -85,8 +98,12 @@ export type Schema = { readonly [element: string]: Field };
 // Constructores
 // ---------------------------------------------------------------------------
 
+/**
+ * `xsd:string`. `patternMessage` reemplaza el mensaje por defecto cuando no se
+ * cumple `pattern` (ej: `str({ pattern: /\S/, patternMessage: 'no puede estar vacío' })`).
+ */
 export const str = (
-  o: { minLen?: number; maxLen?: number; values?: readonly string[]; pattern?: RegExp } = {},
+  o: { minLen?: number; maxLen?: number; values?: readonly string[]; pattern?: RegExp; patternMessage?: string } = {},
 ): Field => ({
   scalar: { kind: 'str', ...o },
 });
@@ -133,6 +150,15 @@ export const date8 = (): Field => ({ scalar: { kind: 'date8' } });
 export const datetime = (): Field => ({ scalar: { kind: 'datetime' } });
 export const base64 = (): Field => ({ scalar: { kind: 'base64' } });
 export const obj = (schema: Schema): Field => ({ schema });
+/**
+ * Elemento cuyo contenido es un `xsd:choice` entre los campos de `schema`
+ * (todos opcionales): `{ idCtaCte: choice({ codCtaCte: id(), idFactura: obj(...) }) }`.
+ * En un request tiene que venir exactamente uno; en una respuesta, al menos uno.
+ */
+export const choice = (schema: Schema): Field => ({
+  schema: Object.fromEntries(Object.entries(schema).map(([k, f]) => [k, { ...f, optional: true }])),
+  choice: true,
+});
 export const opt = (f: Field): Field => ({ ...f, optional: true });
 /** Respuestas: el elemento es obligatorio según el XSD (`minOccurs=1`). */
 export const must = (f: Field): Field => ({ ...f, required: true });
@@ -201,7 +227,7 @@ function encodeScalar(v: unknown, s: Scalar, path: string, errors: ValidationErr
       if (s.values && !s.values.includes(v)) return fail(`valores permitidos: ${s.values.join(', ')}`);
       if (s.minLen !== undefined && v.length < s.minLen) return fail(`debe tener al menos ${s.minLen} caracteres`);
       if (s.maxLen !== undefined && v.length > s.maxLen) return fail(`debe tener como máximo ${s.maxLen} caracteres`);
-      if (s.pattern && !s.pattern.test(v)) return fail(`formato inválido (${s.pattern.source})`);
+      if (s.pattern && !s.pattern.test(v)) return fail(s.patternMessage ?? `formato inválido (${s.pattern.source})`);
       return v;
     }
     case 'int': {
@@ -267,8 +293,20 @@ function encodeScalar(v: unknown, s: Scalar, path: string, errors: ValidationErr
   }
 }
 
+/** Opciones presentes de un `choice` (nombres de la API). */
+function choiceOptions(v: unknown, schema: Schema): string[] {
+  if (!isPlainObject(v)) return [];
+  return Object.keys(schema).filter((k) => v[k] !== undefined && v[k] !== null);
+}
+
 function encodeValue(v: unknown, f: Field, path: string, errors: ValidationErrorDetail[]): unknown {
-  if (f.schema) return encodeObject(v, f.schema, path, errors);
+  if (f.schema) {
+    if (f.choice && isPlainObject(v) && choiceOptions(v, f.schema).length !== 1) {
+      const options = Object.keys(f.schema).join(', ');
+      errors.push({ field: path, message: `${path}: debe tener exactamente uno de ${options}`, value: v });
+    }
+    return encodeObject(v, f.schema, path, errors);
+  }
   return encodeScalar(v, f.scalar!, path, errors);
 }
 
@@ -316,7 +354,20 @@ function encodeObject(
 }
 
 /**
- * Valida y codifica un request según el schema (orden XSD).
+ * Ordena los errores según el campo de primer nivel en el schema (estable: a
+ * igual campo, los del schema van antes que los de `extraCheck`). Los campos
+ * que no están en el schema van al final.
+ */
+function sortBySchemaOrder(errors: ValidationErrorDetail[], schema: Schema): void {
+  const order = new Map(Object.keys(schema).map((k, i) => [k, i]));
+  const rank = (e: ValidationErrorDetail) => order.get(e.field.split(/[.[]/)[0]) ?? order.size;
+  const sorted = errors.map((e, i) => ({ e, i })).sort((a, b) => rank(a.e) - rank(b.e) || a.i - b.i);
+  errors.splice(0, errors.length, ...sorted.map((x) => x.e));
+}
+
+/**
+ * Valida y codifica un request según el schema (orden XSD). Los errores de
+ * `extraCheck` se intercalan con los del schema según el orden de los campos.
  * @throws ArcaValidationError con todos los campos inválidos.
  */
 export function encodeRequest(
@@ -327,7 +378,10 @@ export function encodeRequest(
 ): Record<string, unknown> {
   const errors: ValidationErrorDetail[] = [];
   const out = encodeObject(input, schema, '', errors);
-  if (extraCheck && isPlainObject(input)) extraCheck(input, errors);
+  if (extraCheck && isPlainObject(input)) {
+    extraCheck(input, errors);
+    sortBySchemaOrder(errors, schema);
+  }
   if (errors.length > 0) {
     throw new ArcaValidationError(
       `Validación de ${context} fallida: ${errors.map((e) => e.message).join('; ')}`,
@@ -411,7 +465,13 @@ function decodeScalar(raw: unknown, s: Scalar, path: string, error: ResponseErro
 }
 
 function decodeValue(v: unknown, f: Field, path: string, ctx: DecodeContext): unknown {
-  if (f.schema) return decodeNode(v, f.schema, path, ctx);
+  if (f.schema) {
+    const out = decodeNode(v, f.schema, path, ctx);
+    if (f.choice && Object.keys(f.schema).every((k) => out[k] === undefined || out[k] === '')) {
+      throw ctx.error(`Respuesta inválida: falta ${path}.${Object.keys(f.schema).join('|')}`);
+    }
+    return out;
+  }
   return decodeScalar(v, f.scalar!, path, ctx.error);
 }
 
@@ -462,7 +522,8 @@ function decodeNode(node: unknown, schema: Schema, path: string, ctx: DecodeCont
     }
     if (Array.isArray(v)) throw ctx.error(`Respuesta inválida: ${p} aparece más de una vez`);
 
-    if (f.schema && isEmptyElement(v) && !f.required) continue;
+    // Un `choice` presente pero vacío no trae ninguna opción: lo rechaza `decodeValue`.
+    if (f.schema && !f.choice && isEmptyElement(v) && !f.required) continue;
     const decoded = decodeValue(v, f, p, ctx);
     if (decoded === undefined || (decoded === '' && f.required)) {
       if (f.required) throw ctx.error(`Respuesta inválida: ${p} vacío`);

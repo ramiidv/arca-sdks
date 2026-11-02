@@ -5,14 +5,7 @@ import {
   extractServiceErrors,
   parseServerStatus,
 } from '@ramiidv/arca-common';
-import type {
-  ArcaEvent,
-  CallOptions,
-  LegacyTlsMode,
-  ServerStatus,
-  SoapOperationKind,
-  SoapServiceClientConfig,
-} from '@ramiidv/arca-common';
+import type { CallOptions, ServerStatus, SoapOperationKind, SoapServiceClientConfig } from '@ramiidv/arca-common';
 import { decode, encode, REQ, RESP, SERVICE } from './schemas.js';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import type {
@@ -50,24 +43,7 @@ import type {
 // Client config
 // ---------------------------------------------------------------------------
 
-export interface FecredClientConfig extends SoapServiceClientConfig {
-  /**
-   * Opciones de transporte SOAP.
-   * @deprecated Usá `transport` (se ignora si se pasa `transport`).
-   */
-  soapOptions?: {
-    timeout?: number;
-    retries?: number;
-    retryDelayMs?: number;
-    fetch?: typeof fetch;
-    legacyTls?: LegacyTlsMode;
-  };
-  /**
-   * Callback de eventos.
-   * @deprecated Usá `transport.onEvent` (se ignora si se pasa `transport`).
-   */
-  onEvent?: (event: ArcaEvent) => void;
-}
+export type FecredClientConfig = SoapServiceClientConfig;
 
 type Xml = Record<string, unknown>;
 
@@ -93,11 +69,7 @@ export type WsAuthSource = WsAuth | (() => Promise<WsAuth>);
  */
 export class FecredClient extends SoapServiceClient {
   constructor(config: FecredClientConfig) {
-    super({
-      endpoint: config.endpoint,
-      namespace: config.namespace,
-      transport: config.transport ?? { ...config.soapOptions, onEvent: config.onEvent },
-    });
+    super(config);
   }
 
   // -------------------------------------------------------------------------

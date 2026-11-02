@@ -13,7 +13,7 @@ describe('calcularTotales', () => {
     expect(importes.noGravado).toBe(0);
     expect(importes.tributos).toBe(0);
     expect(iva).toHaveLength(1);
-    expect(iva[0]).toEqual({ Id: IvaTipo.IVA_21, BaseImp: 100, Importe: 21 });
+    expect(iva[0]).toEqual({ id: IvaTipo.IVA_21, baseImp: 100, importe: 21 });
   });
 
   it('agrupa múltiples items por alícuota', () => {
@@ -28,13 +28,13 @@ describe('calcularTotales', () => {
     expect(importes.total).toBe(2036);
     expect(iva).toHaveLength(2);
 
-    const iva21 = iva.find((i) => i.Id === IvaTipo.IVA_21)!;
-    expect(iva21.BaseImp).toBe(1500);
-    expect(iva21.Importe).toBe(315);
+    const iva21 = iva.find((i) => i.id === IvaTipo.IVA_21)!;
+    expect(iva21.baseImp).toBe(1500);
+    expect(iva21.importe).toBe(315);
 
-    const iva105 = iva.find((i) => i.Id === IvaTipo.IVA_10_5)!;
-    expect(iva105.BaseImp).toBe(200);
-    expect(iva105.Importe).toBe(21);
+    const iva105 = iva.find((i) => i.id === IvaTipo.IVA_10_5)!;
+    expect(iva105.baseImp).toBe(200);
+    expect(iva105.importe).toBe(21);
   });
 
   it('maneja items exentos', () => {
@@ -60,7 +60,7 @@ describe('calcularTotales', () => {
 
   it('incluye tributos en el total', () => {
     const { importes } = calcularTotales([{ neto: 1000, iva: IvaTipo.IVA_21 }], {
-      tributos: [{ Importe: 50 }, { Importe: 30 }],
+      tributos: [{ importe: 50 }, { importe: 30 }],
     });
 
     expect(importes.tributos).toBe(80);
@@ -85,7 +85,7 @@ describe('calcularTotales', () => {
     expect(importes.iva).toBe(0);
     expect(importes.total).toBe(500);
     expect(iva).toHaveLength(1);
-    expect(iva[0]).toEqual({ Id: IvaTipo.IVA_0, BaseImp: 500, Importe: 0 });
+    expect(iva[0]).toEqual({ id: IvaTipo.IVA_0, baseImp: 500, importe: 0 });
   });
 
   it('redondea a 2 decimales', () => {

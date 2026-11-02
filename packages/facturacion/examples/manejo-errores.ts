@@ -31,7 +31,7 @@ async function main() {
     cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
     key: fs.readFileSync('./certs/clave.key', 'utf-8'),
     production: false,
-    requestTimeoutMs: 60_000, // 60s para servidores lentos
+    timeout: 60_000, // 60s para servidores lentos
     ticketStorage: new FileTicketStorage('./.arca-tickets'),
   });
 

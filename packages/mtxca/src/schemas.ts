@@ -41,7 +41,7 @@ const DECIMAL = dec(6, 0, DECIMAL_MAX);
 /** `PorcentajeSimpleType`. */
 const PORCENTAJE = dec(2, 0, 100);
 /** `xsd:string` no vacío (con largo máximo del manual). */
-const texto = (maxLen?: number) => str({ maxLen, pattern: /\S/ });
+const texto = (maxLen?: number) => str({ maxLen, pattern: /\S/, patternMessage: 'no puede estar vacío' });
 /** `xsd:long` de un número de documento (la API acepta number o string; ver `serialize.ts`). */
 const DOCUMENTO = str({ pattern: /^\d{1,18}$/ });
 /** CAE/CAEA (`xsd:long` de 14 dígitos). */

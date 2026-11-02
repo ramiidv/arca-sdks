@@ -29,14 +29,14 @@ async function main() {
 
   // 1. Solicitar CAEA para noviembre 2026, primera quincena
   const caea = await arca.solicitarCAEA('202611', 1);
-  console.log(`CAEA: ${caea.CAEA}`);
-  console.log(`Vigencia: ${caea.FchVigDesde} - ${caea.FchVigHasta}`);
-  console.log(`Tope informar: ${caea.FchTopeInf}`);
+  console.log(`CAEA: ${caea.caea}`);
+  console.log(`Vigencia: ${caea.fchVigDesde} - ${caea.fchVigHasta}`);
+  console.log(`Tope informar: ${caea.fchTopeInf}`);
 
   // 2-3. Informar un comprobante emitido offline con el CAEA.
   //    Misma interfaz que facturar() (calcula IVA y totales) más la fecha y
   //    hora de generación. La fecha del comprobante sale de esa fecha y hora.
-  const result = await arca.registrarFacturaCAEA(caea.CAEA, {
+  const result = await arca.registrarFacturaCAEA(caea.caea, {
     ptoVta: 5, // punto de venta CAEA (contingencia)
     cbteTipo: CbteTipo.FACTURA_B,
     cbteNro: 120, // el número que se usó al emitirlo offline
@@ -57,7 +57,7 @@ async function main() {
 
   // Consultar un CAEA existente
   const existente = await arca.consultarCAEA('202611', 1);
-  console.log('CAEA consultado:', existente.CAEA);
+  console.log('CAEA consultado:', existente.caea);
 }
 
 main().catch(console.error);

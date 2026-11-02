@@ -168,12 +168,12 @@ export function validateFacturarOpts(opts: FacturarOpts): void {
   if (opts.tributos) {
     opts.tributos.forEach((t, i) => {
       const f = (n: string) => `tributos[${i}].${n}`;
-      if (t.Id == null || !Number.isInteger(t.Id)) fail(f('Id'), 'tributo.Id es requerido y debe ser un entero', t.Id);
-      if (!isAmount(t.Importe) || t.Importe < 0)
-        fail(f('Importe'), 'tributo.Importe debe ser un número >= 0', t.Importe);
-      if (!isAmount(t.BaseImp) || t.BaseImp < 0)
-        fail(f('BaseImp'), 'tributo.BaseImp debe ser un número >= 0', t.BaseImp);
-      if (!isAmount(t.Alic) || t.Alic < 0) fail(f('Alic'), 'tributo.Alic debe ser un número >= 0', t.Alic);
+      if (t.id == null || !Number.isInteger(t.id)) fail(f('id'), 'tributo.id es requerido y debe ser un entero', t.id);
+      if (!isAmount(t.importe) || t.importe < 0)
+        fail(f('importe'), 'tributo.importe debe ser un número >= 0', t.importe);
+      if (!isAmount(t.baseImp) || t.baseImp < 0)
+        fail(f('baseImp'), 'tributo.baseImp debe ser un número >= 0', t.baseImp);
+      if (!isAmount(t.alic) || t.alic < 0) fail(f('alic'), 'tributo.alic debe ser un número >= 0', t.alic);
     });
   }
 
@@ -299,8 +299,8 @@ export function validateFacturarExpoOpts(opts: FacturarExpoOpts): void {
   }
 
   opts.permisos?.forEach((p, i) => {
-    if (!p.Id_permiso) fail(`permisos[${i}].Id_permiso`, 'Id_permiso es requerido');
-    checkEntero(`permisos[${i}].Dst_merc`, p.Dst_merc, 0);
+    if (!p.idPermiso) fail(`permisos[${i}].idPermiso`, 'idPermiso es requerido');
+    checkEntero(`permisos[${i}].dstMerc`, p.dstMerc, 0);
   });
   opts.actividades?.forEach((a, i) => checkEntero(`actividades[${i}]`, a, 1));
 
@@ -322,43 +322,43 @@ function validateExpoLineItem(item: ExpoLineItem, index: number): void {
 const FECHA_HORA_RE = /^\d{14}$/;
 
 export function validateInvoiceRequest(req: InvoiceRequest): void {
-  if (!req.PtoVta || req.PtoVta < 1) fail('PtoVta', 'PtoVta debe ser >= 1');
-  if (!req.CbteTipo) fail('CbteTipo', 'CbteTipo es requerido');
-  if (isTipoE(req.CbteTipo))
-    fail('CbteTipo', 'los comprobantes clase E se emiten por WSFEX (crearFacturaExportacion)', req.CbteTipo);
+  if (!req.ptoVta || req.ptoVta < 1) fail('ptoVta', 'ptoVta debe ser >= 1');
+  if (!req.cbteTipo) fail('cbteTipo', 'cbteTipo es requerido');
+  if (isTipoE(req.cbteTipo))
+    fail('cbteTipo', 'los comprobantes clase E se emiten por WSFEX (crearFacturaExportacion)', req.cbteTipo);
   if (!req.invoices || req.invoices.length === 0) fail('invoices', 'invoices no puede estar vacío');
 
   req.invoices.forEach((inv, i) => {
     const f = (name: string) => `invoices[${i}].${name}`;
-    for (const k of ['ImpTotal', 'ImpTotConc', 'ImpNeto', 'ImpOpEx', 'ImpTrib', 'ImpIVA'] as const) {
+    for (const k of ['impTotal', 'impTotConc', 'impNeto', 'impOpEx', 'impTrib', 'impIva'] as const) {
       if (inv[k] == null) fail(f(k), `${k} es requerido`);
       if (!isAmount(inv[k])) fail(f(k), `${k} debe ser un número finito`, inv[k]);
     }
-    if (inv.CbteDesde == null) fail(f('CbteDesde'), 'CbteDesde es requerido');
-    if (inv.CbteHasta == null) fail(f('CbteHasta'), 'CbteHasta es requerido');
-    if (!inv.CbteFch) fail(f('CbteFch'), 'CbteFch es requerido');
-    if (!/^\d{8}$/.test(inv.CbteFch)) fail(f('CbteFch'), 'CbteFch debe tener formato YYYYMMDD', inv.CbteFch);
-    checkFecha(f('CbteFch'), inv.CbteFch);
-    for (const k of ['FchServDesde', 'FchServHasta', 'FchVtoPago'] as const) {
+    if (inv.cbteDesde == null) fail(f('cbteDesde'), 'cbteDesde es requerido');
+    if (inv.cbteHasta == null) fail(f('cbteHasta'), 'cbteHasta es requerido');
+    if (!inv.cbteFch) fail(f('cbteFch'), 'cbteFch es requerido');
+    if (!/^\d{8}$/.test(inv.cbteFch)) fail(f('cbteFch'), 'cbteFch debe tener formato YYYYMMDD', inv.cbteFch);
+    checkFecha(f('cbteFch'), inv.cbteFch);
+    for (const k of ['fchServDesde', 'fchServHasta', 'fchVtoPago'] as const) {
       const v = inv[k];
       if (v !== undefined && v !== '') {
         if (!/^\d{8}$/.test(v)) fail(f(k), `${k} debe tener formato YYYYMMDD`, v);
         checkFecha(f(k), v);
       }
     }
-    if (!inv.MonId) fail(f('MonId'), 'MonId es requerido');
-    if (inv.MonCotiz == null && inv.CanMisMonExt !== 'S')
-      fail(f('MonCotiz'), 'MonCotiz es requerido (salvo moneda extranjera con CanMisMonExt "S")');
-    checkMoneda(f, inv.MonId, inv.MonCotiz ?? undefined, inv.CanMisMonExt, {
-      cotizacion: 'MonCotiz',
-      canMisMonExt: 'CanMisMonExt',
+    if (!inv.monId) fail(f('monId'), 'monId es requerido');
+    if (inv.monCotiz == null && inv.canMisMonExt !== 'S')
+      fail(f('monCotiz'), 'monCotiz es requerido (salvo moneda extranjera con canMisMonExt "S")');
+    checkMoneda(f, inv.monId, inv.monCotiz ?? undefined, inv.canMisMonExt, {
+      cotizacion: 'monCotiz',
+      canMisMonExt: 'canMisMonExt',
     });
-    if (inv.DocTipo !== DocTipo.CONSUMIDOR_FINAL && inv.CondicionIVAReceptorId == null)
+    if (inv.docTipo !== DocTipo.CONSUMIDOR_FINAL && inv.condicionIvaReceptorId == null)
       fail(
-        f('CondicionIVAReceptorId'),
-        'CondicionIVAReceptorId es requerido cuando el receptor está identificado (RG 5616)',
+        f('condicionIvaReceptorId'),
+        'condicionIvaReceptorId es requerido cuando el receptor está identificado (RG 5616)',
       );
-    if (inv.CbteFchHsGen !== undefined && !FECHA_HORA_RE.test(inv.CbteFchHsGen))
-      fail(f('CbteFchHsGen'), 'CbteFchHsGen debe tener formato yyyymmddhhmmss (validación 1441)', inv.CbteFchHsGen);
+    if (inv.cbteFchHsGen !== undefined && !FECHA_HORA_RE.test(inv.cbteFchHsGen))
+      fail(f('cbteFchHsGen'), 'cbteFchHsGen debe tener formato yyyymmddhhmmss (validación 1441)', inv.cbteFchHsGen);
   });
 }

@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FileTicketStorage } from '@ramiidv/arca-common';
 import type { ArcaEvent } from '@ramiidv/arca-common';
-import { Arca } from '../../src/arca.js';
+import { ArcaFacturacion } from '../../src/arca.js';
 import { CbteTipo, CondicionIva, DocTipo, IvaTipo } from '../../src/constants.js';
 import type { FacturaResult } from '../../src/types.js';
 
@@ -38,7 +38,7 @@ describe.skipIf(!habilitado)('integración ARCA homologación', { timeout: 120_0
   const ticketsDir = env.ARCA_TEST_TICKETS_DIR ?? join(tmpdir(), 'arca-test-tickets');
 
   const nuevaInstancia = (events: ArcaEvent[] = []) =>
-    new Arca({
+    new ArcaFacturacion({
       cuit: Number(env.ARCA_TEST_CUIT),
       cert: pem(env.ARCA_TEST_CERT!),
       key: pem(env.ARCA_TEST_KEY!),
@@ -47,7 +47,7 @@ describe.skipIf(!habilitado)('integración ARCA homologación', { timeout: 120_0
       onEvent: (e) => events.push(e),
     });
 
-  let arca: Arca;
+  let arca: ArcaFacturacion;
   let facturaA: FacturaResult;
 
   beforeAll(() => {
@@ -115,8 +115,7 @@ describe.skipIf(!habilitado)('integración ARCA homologación', { timeout: 120_0
       importeTotal: facturaA.importes.total,
       docTipo: DocTipo.CUIT,
       docNro: cuitReceptor,
-      fecha: (facturaA.raw as { FeDetResp: { FECAEDetResponse: { CbteFch: string } } }).FeDetResp.FECAEDetResponse
-        .CbteFch,
+      fecha: facturaA.fecha!,
     });
     expect(r.estado).toBe('autorizado');
     if (r.estado === 'autorizado') expect(r.resultado.cae).toBe(facturaA.cae);

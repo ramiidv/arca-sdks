@@ -15,7 +15,7 @@ import type { Field, Schema } from '@ramiidv/arca-common/schema';
 const IMPORTE_MAX = 99_999_999_999.99;
 
 /** Texto no vacío (ni solo espacios) de hasta `maxLen` caracteres. */
-const texto = (maxLen?: number): Field => str({ maxLen, pattern: /\S/ });
+const texto = (maxLen?: number): Field => str({ maxLen, pattern: /\S/, patternMessage: 'no puede estar vacío' });
 /** Importe `xs:double` del manual: 11 enteros + 2 decimales, sin signo. */
 const importe = (): Field => dec(2, 0, IMPORTE_MAX);
 /** `xs:dateTime` ya serializado por `formatSireDateTime`. */

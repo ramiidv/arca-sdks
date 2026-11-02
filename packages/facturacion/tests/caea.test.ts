@@ -38,12 +38,12 @@ describe('CAEA: solicitar y consultar', () => {
     expect(orden(params)).toEqual(['Auth', 'Periodo', 'Orden']);
     expect(params.Periodo).toBe(202611);
     expect(res).toMatchObject({
-      CAEA,
-      Periodo: '202611',
-      Orden: 1,
-      FchVigDesde: '20261101',
-      FchVigHasta: '20261115',
-      FchTopeInf: '20261123',
+      caea: CAEA,
+      periodo: '202611',
+      orden: 1,
+      fchVigDesde: '20261101',
+      fchVigHasta: '20261115',
+      fchTopeInf: '20261123',
       eventos: [{ code: 1, msg: 'Recordá informar los comprobantes' }],
     });
   });
@@ -106,28 +106,28 @@ describe('CAEA: informar comprobantes (FECAEARegInformativo)', () => {
     const arca = await arcaDePrueba();
     const mock = mockArcaFetch({});
     const inv = {
-      Concepto: 1,
-      DocTipo: 99,
-      DocNro: 0,
-      CbteDesde: 1,
-      CbteHasta: 1,
-      CbteFch: '20261103',
-      ImpTotal: 121,
-      ImpTotConc: 0,
-      ImpNeto: 100,
-      ImpOpEx: 0,
-      ImpTrib: 0,
-      ImpIVA: 21,
-      MonId: 'PES',
-      MonCotiz: 1,
-      CondicionIVAReceptorId: 5,
-      CAEA,
+      concepto: 1,
+      docTipo: 99,
+      docNro: 0,
+      cbteDesde: 1,
+      cbteHasta: 1,
+      cbteFch: '20261103',
+      impTotal: 121,
+      impTotConc: 0,
+      impNeto: 100,
+      impOpEx: 0,
+      impTrib: 0,
+      impIva: 21,
+      monId: 'PES',
+      monCotiz: 1,
+      condicionIvaReceptorId: 5,
+      caea: CAEA,
     };
-    await expect(arca.registrarCAEA({ PtoVta: 5, CbteTipo: 6, invoices: [inv as never] })).rejects.toBeInstanceOf(
+    await expect(arca.registrarCAEA({ ptoVta: 5, cbteTipo: 6, invoices: [inv as never] })).rejects.toBeInstanceOf(
       ArcaValidationError,
     );
     await expect(
-      arca.registrarCAEA({ PtoVta: 5, CbteTipo: 6, invoices: [{ ...inv, CbteFchHsGen: '20261103256000' }] }),
+      arca.registrarCAEA({ ptoVta: 5, cbteTipo: 6, invoices: [{ ...inv, cbteFchHsGen: '20261103256000' }] }),
     ).rejects.toBeInstanceOf(ArcaValidationError);
     expect(mock.fn).not.toHaveBeenCalled();
   });
@@ -167,7 +167,7 @@ describe('CAEA sin movimiento', () => {
     });
     const res = await arca.sinMovimientoCAEA(CAEA, 5);
     expect(orden(mock.last('FECAEASinMovimientoInformar').params)).toEqual(['Auth', 'PtoVta', 'CAEA']);
-    expect(res).toMatchObject({ CAEA, Resultado: 'A', PtoVta: 5 });
+    expect(res).toMatchObject({ caea: CAEA, resultado: 'A', ptoVta: 5 });
   });
 
   it('FECAEASinMovimientoInformar: 503 → una sola llamada, uncertain', async () => {
@@ -189,9 +189,9 @@ describe('CAEA sin movimiento', () => {
         wsfeResponse('FECAEASinMovimientoConsultar', `<ResultGet>${item(5)}${item(6)}</ResultGet>`),
       ],
     });
-    expect(await arca.consultarSinMovimientoCAEA(CAEA, 5)).toEqual([{ CAEA, FchProceso: '20261116', PtoVta: 5 }]);
+    expect(await arca.consultarSinMovimientoCAEA(CAEA, 5)).toEqual([{ caea: CAEA, fchProceso: '20261116', ptoVta: 5 }]);
     expect(orden(mock.last('FECAEASinMovimientoConsultar').params)).toEqual(['Auth', 'CAEA', 'PtoVta']);
-    expect((await arca.consultarSinMovimientoCAEA(CAEA, 5)).map((i) => i.PtoVta)).toEqual([5, 6]);
+    expect((await arca.consultarSinMovimientoCAEA(CAEA, 5)).map((i) => i.ptoVta)).toEqual([5, 6]);
   });
 });
 

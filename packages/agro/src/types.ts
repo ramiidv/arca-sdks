@@ -39,6 +39,5 @@ export interface CodigoDescripcion {
   descripcion: string;
 }
 
-/** Resultado de `serverStatus()` para un servicio. */
 /** Estado de un servicio en `status()` (`ServiceStatus` de arca-common). */
 export type AgroServiceStatus = ServiceStatus;

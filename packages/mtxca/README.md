@@ -82,7 +82,6 @@ if (res.resultado === 'R') {
 | `cuit`                                                                      | CUIT representada (número o string, con o sin guiones). Se valida el dígito verificador. |
 | `production`                                                                | `false` (default) = homologación.                                                        |
 | `endpoints`                                                                 | `{ mtxca?, wsaa? }`: URLs propias (proxy, mock). Ignoran `production`.                   |
-| `endpoint`, `wsaaEndpoint`                                                  | Deprecated: usar `endpoints.mtxca` / `endpoints.wsaa`.                                   |
 | `wsaa`                                                                      | `WsaaClient` compartido con otros SDKs del mismo certificado.                            |
 | `signal`                                                                    | `AbortSignal` global: cancela todas las llamadas de la instancia.                        |
 | `timeout`, `retries`, `retryDelayMs`                                        | Transporte. `retries` solo aplica a consultas.                                           |
