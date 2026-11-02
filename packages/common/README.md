@@ -85,9 +85,10 @@ rechaza con `ArcaAuthError`.
 ### Datos del certificado
 
 ```typescript
+import { readFileSync } from 'node:fs';
 import { certificateInfo } from '@ramiidv/arca-common';
 
-const info = certificateInfo(fs.readFileSync('./cert.crt', 'utf-8'));
+const info = certificateInfo(readFileSync('./cert.crt', 'utf-8'));
 // { subject: 'CN=miapp, SERIALNUMBER=CUIT 20123456786', issuer: '...', notBefore, notAfter, cuit: '20123456786' }
 if (info.notAfter.getTime() - Date.now() < 30 * 86_400_000) console.warn('El certificado vence pronto');
 ```
@@ -115,6 +116,9 @@ La key que recibe el storage identifica entorno, certificado y servicio
 
 ```typescript
 import type { TicketStorage, AccessTicket } from '@ramiidv/arca-common';
+
+// `db`: tu cliente de base de datos (ej: node-postgres)
+declare const db: { query(sql: string, params: unknown[]): Promise<{ value: string } | undefined> };
 
 const dbStorage: TicketStorage = {
   async get(key) {
@@ -286,7 +290,15 @@ validateCBU('0110599-5 00000041817221'); // "0110599500000041817221" (quita espa
 ## Fechas, redondeo y QR
 
 ```typescript
-import { formatDate, parseArcaDate, formatDateTimeAR, validateFechaRango, roundHalfEven, generarUrlQR } from '@ramiidv/arca-common';
+import {
+  formatDate,
+  parseArcaDate,
+  formatDateTimeAR,
+  validateFechaRango,
+  roundHalfEven,
+  roundHalfUp,
+  generarUrlQR,
+} from '@ramiidv/arca-common';
 
 // Todo en hora de Argentina (America/Argentina/Buenos_Aires), sin importar la zona del proceso
 formatDate(new Date()); // "20260331"
@@ -348,7 +360,10 @@ valida y codifica un request (orden del XSD, obligatorios, rangos, CUIT, decimal
 decodifica una respuesta pedida con `parseNumbers: false`.
 
 ```typescript
-import { decodeResponse, encodeRequest, importe, nonEmptyStr, porcentaje, int, must, obj, opt, wrapped } from '@ramiidv/arca-common/schema';
+import { decodeResponse, encodeRequest, importe, nonEmptyStr, porcentaje, int, must, obj, wrapped } from '@ramiidv/arca-common/schema';
+
+declare const input: unknown; // datos del usuario
+declare const result: unknown; // nodo de la respuesta SOAP
 
 const Item = { descripcion: nonEmptyStr({ max: 4000 }), precio: importe(), iva: porcentaje(), cantidad: int(1) };
 const body = encodeRequest(input, { items: wrapped('item', obj(Item)) }, 'autorizar'); // ArcaValidationError con todos los errores

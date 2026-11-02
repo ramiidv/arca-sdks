@@ -250,22 +250,24 @@ subtotalesIVA: [{ codigo: 5, importe: 18.9 }],
 `autorizar`, `autorizarAjusteIVA`, `solicitarCAEA`, `informarComprobanteCAEA`, `informarAjusteIVACAEA`, `informarCAEANoUtilizado` e `informarCAEANoUtilizadoPtoVta` se envían una sola vez (nunca se reintentan). Si fallan con `ArcaSoapError` y `uncertain === true` (timeout, conexión cortada, HTTP 5xx, SOAP Fault `Server`, respuesta ilegible), ARCA pudo haber procesado el request. Los Fault `Client` (ej. "Token vencido", errores de estructura) no son inciertos: el request se rechazó antes de procesarse. **No reintentes a ciegas**: si el comprobante ya fue autorizado, un reenvío con el mismo número es rechazado por correlatividad (102) y uno con el número siguiente duplica la factura.
 
 ```typescript
-import { ArcaSoapError } from '@ramiidv/arca-mtxca';
+import { type ArcaMtxca, type AutorizarRequest, ArcaSoapError, CbteTipo } from '@ramiidv/arca-mtxca';
 
-const numero = (await mtxca.ultimoComprobante(4000, CbteTipo.FACTURA_A)) + 1;
-try {
-  return await mtxca.autorizar({ ...comprobante, numeroComprobante: numero });
-} catch (e) {
-  if (e instanceof ArcaSoapError && e.uncertain) {
-    // ¿Llegó a autorizarse?
-    const ultimo = await mtxca.ultimoComprobante(4000, CbteTipo.FACTURA_A);
-    if (ultimo >= numero) {
-      const { comprobante } = await mtxca.consultarComprobante(CbteTipo.FACTURA_A, 4000, numero);
-      return comprobante; // codigoAutorizacion = CAE
+async function autorizarSeguro(mtxca: ArcaMtxca, comprobante: AutorizarRequest) {
+  const numero = (await mtxca.ultimoComprobante(4000, CbteTipo.FACTURA_A)) + 1;
+  try {
+    return await mtxca.autorizar({ ...comprobante, numeroComprobante: numero });
+  } catch (e) {
+    if (e instanceof ArcaSoapError && e.uncertain) {
+      // ¿Llegó a autorizarse?
+      const ultimo = await mtxca.ultimoComprobante(4000, CbteTipo.FACTURA_A);
+      if (ultimo >= numero) {
+        const { comprobante } = await mtxca.consultarComprobante(CbteTipo.FACTURA_A, 4000, numero);
+        return comprobante; // codigoAutorizacion = CAE
+      }
+      // No se autorizó: se puede reenviar con el mismo número.
     }
-    // No se autorizó: se puede reenviar con el mismo número.
+    throw e;
   }
-  throw e;
 }
 ```
 

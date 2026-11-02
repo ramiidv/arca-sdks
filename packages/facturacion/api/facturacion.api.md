@@ -8,6 +8,7 @@ import { AccessTicket } from '@ramiidv/arca-common';
 import { ArcaAuthError } from '@ramiidv/arca-common';
 import { ArcaError } from '@ramiidv/arca-common';
 import { ArcaEvent } from '@ramiidv/arca-common';
+import { ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { ArcaSdkConfig } from '@ramiidv/arca-common';
 import { ArcaServiceError } from '@ramiidv/arca-common';
@@ -18,8 +19,12 @@ import { CallOptions } from '@ramiidv/arca-common';
 import { CondicionIva } from '@ramiidv/arca-common';
 import { DocTipo } from '@ramiidv/arca-common';
 import { FileTicketStorage } from '@ramiidv/arca-common';
+import { generarUrlQR } from '@ramiidv/arca-common';
 import { LegacyTlsMode } from '@ramiidv/arca-common';
 import { MemoryTicketStorage } from '@ramiidv/arca-common';
+import { QR_URL } from '@ramiidv/arca-common';
+import { QRInput } from '@ramiidv/arca-common';
+import { QROptions } from '@ramiidv/arca-common';
 import type { ServerStatus } from '@ramiidv/arca-common';
 import type { ServiceStatus } from '@ramiidv/arca-common';
 import { SoapServiceClient } from '@ramiidv/arca-common';
@@ -56,6 +61,16 @@ export interface ArcaConfig extends ArcaSdkConfig {
         wsfex?: string;
     };
     paramCacheTTLMs?: number;
+}
+
+// @public
+export class ArcaConflictoExpo extends ArcaError {
+    constructor(request: WsfexInvoice, respuesta: WsfexAuthResult, detalle: string);
+    // (undocumented)
+    static readonly code: string;
+    readonly id: number;
+    readonly request: WsfexInvoice;
+    readonly respuesta: WsfexAuthResult;
 }
 
 export { ArcaError }
@@ -132,6 +147,8 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     ultimoIdExpo(call?: CallOptions): Promise<number>;
     urlQR(factura: FacturaResult, datos?: Omit<DatosQR, 'cuit'>, options?: QROptions): string;
 }
+
+export { ArcaResponseError }
 
 // @public
 export class ArcaResultadoIncierto extends ArcaError {
@@ -362,7 +379,6 @@ export function coincideConIntento(consulta: FECompConsultarResult, intento: Int
 export interface Comprador {
     // (undocumented)
     docNro: number;
-    // (undocumented)
     docTipo: number;
     porcentaje: number;
 }
@@ -454,6 +470,7 @@ export interface ExpoLineItem {
     codigo: string;
     descripcion: string;
     precioUnitario: number;
+    total?: number;
     unidad: number;
 }
 
@@ -511,14 +528,14 @@ export interface FacturarExpoOpts {
     cbteTipo: number;
     cliente: {
         nombre: string;
-        cuitPais: number;
+        cuitPais?: number;
         domicilio: string;
-        idImpositivo: string;
+        idImpositivo?: string;
     };
     cotizacion: number;
     fecha?: Date | string;
     fechaPago?: Date | string;
-    formaPago: string;
+    formaPago?: string;
     id?: number;
     idioma?: number;
     incoterms?: string;
@@ -542,6 +559,7 @@ export interface FacturarOpts {
     cbteNro?: number;
     cbtesAsoc?: ComprobanteRef[];
     cbteTipo: number;
+    compradores?: Comprador[];
     concepto?: number;
     condicionIva?: number;
     cotizacion?: number;
@@ -560,9 +578,10 @@ export interface FacturarOpts {
     servicio?: {
         desde: Date | string;
         hasta: Date | string;
-        vtoPago: Date | string;
+        vtoPago?: Date | string;
     };
     tributos?: Tributo[];
+    vtoPago?: Date | string;
 }
 
 // @public (undocumented)
@@ -574,12 +593,11 @@ export interface FeCabResp {
     // (undocumented)
     cuit: number;
     // (undocumented)
-    fchProceso: string;
+    fchProceso?: string;
     // (undocumented)
     ptoVta: number;
     // (undocumented)
-    reproceso: string;
-    // (undocumented)
+    reproceso?: string;
     resultado: 'A' | 'R' | 'P';
 }
 
@@ -592,7 +610,7 @@ export interface FECAEDetResponse {
     // (undocumented)
     cbteDesde: number;
     // (undocumented)
-    cbteFch: string;
+    cbteFch?: string;
     // (undocumented)
     cbteHasta: number;
     // (undocumented)
@@ -626,23 +644,23 @@ export interface FECompConsultarResult {
         docNro: number;
         cbteDesde: number;
         cbteHasta: number;
-        cbteFch: string;
+        cbteFch?: string;
         impTotal: number;
         impTotConc: number;
         impNeto: number;
         impOpEx: number;
         impTrib: number;
         impIva: number;
-        fchServDesde: string;
-        fchServHasta: string;
-        fchVtoPago: string;
-        monId: string;
-        monCotiz: number;
-        resultado: 'A' | 'R';
-        codAutorizacion: string;
-        emisionTipo: string;
-        fchVto: string;
-        fchProceso: string;
+        fchServDesde?: string;
+        fchServHasta?: string;
+        fchVtoPago?: string;
+        monId?: string;
+        monCotiz?: number;
+        resultado?: 'A' | 'R';
+        codAutorizacion?: string;
+        emisionTipo?: string;
+        fchVto?: string;
+        fchProceso?: string;
         ptoVta: number;
         cbteTipo: number;
         condicionIvaReceptorId?: number;
@@ -676,8 +694,7 @@ export { FileTicketStorage }
 // @public
 export function formatFechaHora(value: Date | string, field?: string): string;
 
-// @public
-export function generarUrlQR(input: QRInput, options?: QROptions): string;
+export { generarUrlQR }
 
 // @public (undocumented)
 export interface Importes {
@@ -813,10 +830,10 @@ export interface MensajeArca {
     msg: string;
 }
 
-// @public (undocumented)
+// @public
 export enum Moneda {
     // (undocumented)
-    BOLIVIANOS = "029",
+    BOLIVIANOS = "031",
     // (undocumented)
     DOLARES = "DOL",
     // (undocumented)
@@ -826,7 +843,7 @@ export enum Moneda {
     // (undocumented)
     FRANCOS_SUIZOS = "009",
     // (undocumented)
-    GUARANIES = "031",
+    GUARANIES = "029",
     // (undocumented)
     LIBRAS_ESTERLINAS = "021",
     // (undocumented)
@@ -913,38 +930,20 @@ export interface PeriodoAsociado {
 // @public (undocumented)
 export interface PtoVentaItem {
     // (undocumented)
-    bloqueado: string;
+    bloqueado?: string;
     // (undocumented)
-    emisionTipo: string;
+    emisionTipo?: string;
     // (undocumented)
-    fchBaja: string;
+    fchBaja?: string;
     // (undocumented)
     nro: number;
 }
 
-// @public
-export const QR_URL = "https://www.arca.gob.ar/fe/qr/";
+export { QR_URL }
 
-// @public (undocumented)
-export interface QRInput {
-    codAut: number | string;
-    ctz: number;
-    cuit: number | string;
-    fecha: string | Date;
-    importe: number;
-    moneda: string;
-    nroCmp: number;
-    nroDocRec?: number | string;
-    ptoVta: number;
-    tipoCmp: number;
-    tipoCodAut?: 'E' | 'A';
-    tipoDocRec?: number;
-}
+export { QRInput }
 
-// @public
-export interface QROptions {
-    baseUrl?: string;
-}
+export { QROptions }
 
 // @public
 export function requiereRecuperacion(resultadoOError: FacturaResult | unknown): boolean;
@@ -985,7 +984,7 @@ export enum TipoExpo {
 export interface Tributo {
     alic: number;
     baseImp: number;
-    desc: string;
+    desc?: string;
     id: number;
     importe: number;
 }
@@ -1010,6 +1009,7 @@ export enum TributoTipo {
     PERCEP_IIBB = 7,
     // (undocumented)
     PERCEP_IVA = 6,
+    PERCEP_IVA_NO_CATEGORIZADO = 13,
     // (undocumented)
     PERCEP_MUNICIPALES = 8
 }
@@ -1036,6 +1036,12 @@ export interface WsClientOptions {
     retryDelayMs?: number;
     timeoutMs?: number;
 }
+
+// @public
+export const WSFE_CAEA_NUMERO_NO_CORRESPONDE = 703;
+
+// @public
+export const WSFE_ERRORES_AUTH: readonly number[];
 
 // @public
 export const WSFE_ERRORES_INTERNOS: readonly number[];
@@ -1095,6 +1101,9 @@ export class WsfeClient extends SoapServiceClient {
     // (undocumented)
     ultimoComprobante(auth: WsfeAuth, ptoVta: number, cbteTipo: number, opts?: CallOptions): Promise<number>;
 }
+
+// @public
+export const WSFEX_ERRORES_AUTH: readonly number[];
 
 // @public
 export const WSFEX_ERRORES_INTERNOS: readonly number[];
@@ -1228,14 +1237,14 @@ export interface WsfexInvoice {
     cbteTipo: number;
     cliente: string;
     cmpsAsoc?: WsfexCmpAsoc[];
-    cuitPaisCliente: number;
+    cuitPaisCliente?: number;
     domicilioCliente: string;
     dstCmp: number;
     fechaCbte: string;
     fechaPago?: string;
-    formaPago: string;
+    formaPago?: string;
     id: number;
-    idImpositivo: string;
+    idImpositivo?: string;
     idiomaCbte: number;
     impTotal: number;
     incoterms?: string;

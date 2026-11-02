@@ -31,6 +31,7 @@ export class ArcaEmpleados {
 
 // @public
 export interface ArcaEmpleadosConfig {
+    fechaReferencia?: FechaInput;
     serializacion?: OpcionesSerializacion;
     strict?: boolean;
 }
@@ -179,6 +180,11 @@ export interface OpcionesSerializacion {
 }
 
 // @public
+export interface OpcionesValidacion {
+    fechaReferencia?: FechaInput;
+}
+
+// @public
 export const PREFIJOS_CUIL_PERSONA_FISICA: readonly string[];
 
 // @public
@@ -218,11 +224,11 @@ export type TipoCampo = 'N' | 'A' | 'F';
 export function validateCuilTrabajador(cuil: string | number, field?: string): string;
 
 // @public
-export function validateRegistro(registro: RegistroRelacionLaboral, opciones?: OpcionesSerializacion): void;
+export function validateRegistro(registro: RegistroRelacionLaboral, opciones?: OpcionesSerializacion, validacion?: OpcionesValidacion): void;
 
 export { ValidationErrorDetail }
 
-// @public
+// @public @deprecated
 export const VALORES_MARCA_COVID_CCG: readonly number[];
 
 // @public
