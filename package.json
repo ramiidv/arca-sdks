@@ -14,8 +14,8 @@
     "build": "npm run build --workspaces",
     "clean": "npm run clean --workspaces",
     "typecheck": "npm run typecheck --workspaces",
-    "test": "vitest run",
-    "test:integration": "vitest run integration",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "lint:pkg": "npm run lint:pkg --workspaces",
@@ -27,7 +27,9 @@
     "api:check": "node scripts/api-report.mjs",
     "api:update": "node scripts/api-report.mjs --write",
     "wsdl:update": "node scripts/wsdl.mjs --write",
-    "typecheck:examples": "for p in packages/*/examples; do tsc -p $p || exit 1; done"
+    "typecheck:examples": "for p in packages/*/examples; do tsc -p $p || exit 1; done",
+    "test:coverage": "vitest run --project unit --coverage",
+    "check:snippets": "node scripts/check-snippets.mjs"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
@@ -35,6 +37,7 @@
     "@changesets/cli": "^3.0.3",
     "@microsoft/api-extractor": "^7.60.1",
     "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^4.1.12",
     "publint": "^0.3.25",
     "typescript": "^7.0.2",
     "vitest": "^4.1.12"

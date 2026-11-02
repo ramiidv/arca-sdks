@@ -26,7 +26,9 @@ export {
   ArcaValidationError,
   ArcaResultadoIncierto,
   ArcaResultadoInciertoExpo,
+  ArcaConflictoExpo,
 } from './errors.js';
+export { ArcaResponseError } from '@ramiidv/arca-common';
 export type { OperacionEmision } from './errors.js';
 
 // Persistencia de tickets (desde arca-common)
@@ -112,6 +114,9 @@ export {
   WSFE_ERRORES_INTERNOS,
   WSFEX_ERRORES_INTERNOS,
   WSFE_NUMERO_NO_CORRESPONDE,
+  WSFE_CAEA_NUMERO_NO_CORRESPONDE,
+  WSFE_ERRORES_AUTH,
+  WSFEX_ERRORES_AUTH,
   QR_URL,
   TipoExpo,
   CbteTipo,

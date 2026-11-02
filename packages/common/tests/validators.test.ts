@@ -240,13 +240,19 @@ describe('validateFechaRango', () => {
     expect(() => validateFechaRango(new Date(), undefined)).not.toThrow();
   });
 
-  it('throws when fin <= inicio', () => {
+  it('throws when fin < inicio', () => {
     expect(() => validateFechaRango(new Date('2026-06-01'), new Date('2026-01-01'))).toThrow(ArcaValidationError);
+    expect(() => validateFechaRango('20260602', '20260601')).toThrow(/no puede ser anterior/);
   });
 
-  it('throws when fin equals inicio', () => {
-    const d = new Date('2026-06-01');
-    expect(() => validateFechaRango(d, d)).toThrow(ArcaValidationError);
+  it('acepta fechas iguales (WSFE acepta FchServDesde == FchServHasta)', () => {
+    const d = new Date('2026-06-01T15:00:00Z');
+    expect(() => validateFechaRango(d, d)).not.toThrow();
+    expect(() => validateFechaRango('20260601', '2026-06-01')).not.toThrow();
+    // Mismo día calendario en Argentina, aunque la hora de fin sea anterior.
+    expect(() =>
+      validateFechaRango(new Date('2026-06-01T20:00:00-03:00'), new Date('2026-06-01T08:00:00-03:00')),
+    ).not.toThrow();
   });
 });
 
@@ -373,5 +379,26 @@ describe('collectErrors', () => {
     expect(() => collectErrors(bug, errors)).toThrow(TypeError);
     expect(() => collectErrorsWithPrefix(bug, errors, 'p')).toThrow(TypeError);
     expect(errors).toHaveLength(0);
+  });
+});
+
+describe('auditoría: CUIT y CBU', () => {
+  it('acepta los prefijos de CUIT país / exterior (50, 51, 55)', () => {
+    for (const c of ['50100000005', '51100000001', '55100000007']) {
+      expect(validateCuit(c)).toBe(c);
+    }
+    expect(() => validateCuit('52100000004')).toThrow(/Prefijo 52/);
+  });
+
+  it('normalizeCuit quita guiones, puntos y espacios', () => {
+    expect(normalizeCuit(' 20.12345678.6 ')).toBe('20123456786');
+    expect(normalizeCuit('20 12345678 6')).toBe('20123456786');
+    expect(validateCuit('20.123.456.78-6')).toBe('20123456786');
+  });
+
+  it('validateCBU acepta espacios y guiones y devuelve solo dígitos', () => {
+    expect(validateCBU(' 0110599-5 00000041817221 ')).toBe('0110599500000041817221');
+    expect(validateCBU('01105995-00000041817221')).toBe('0110599500000041817221');
+    expect(() => validateCBU(1105995 as unknown as string)).toThrow(ArcaValidationError);
   });
 });

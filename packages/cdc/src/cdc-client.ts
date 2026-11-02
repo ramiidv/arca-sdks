@@ -1,4 +1,10 @@
-import { ArcaSoapError, checkServiceErrors, parseServerStatus, SoapServiceClient } from '@ramiidv/arca-common';
+import {
+  ArcaResponseError,
+  checkServiceErrors,
+  parseServerStatus,
+  SoapServiceClient,
+  validateCuit,
+} from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus, ServiceTransport } from '@ramiidv/arca-common';
 import { decodeResponse, obj, wrapped, xml } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
@@ -12,6 +18,7 @@ import type {
   ConstatarInput,
   ConstatarResult,
   DocTipoItem,
+  ListaCdc,
   ModalidadItem,
   OpcionalTipoItem,
   TipoCbteItem,
@@ -25,8 +32,6 @@ export interface CdcClientConfig extends ServiceTransport {
   endpoint: string;
 }
 
-const responseError = (message: string) => new ArcaSoapError(`WSCDC ${message}`);
-
 function isRecord(value: unknown): value is Raw {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -34,6 +39,8 @@ function isRecord(value: unknown): value is Raw {
 /**
  * Quita los elementos vacíos (`<FchHasta/>`, ítems `nillable` como `<Obs/>`):
  * ARCA los omite o los manda vacíos indistintamente, y vacío equivale a ausente.
+ * El DSL no lo hace solo: decodifica `<FchHasta/>` como `''` y un ítem vacío
+ * como un objeto sin datos (`emptyLists: 'omit'` solo omite las listas ausentes).
  */
 function dropEmpty(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(dropEmpty).filter((v) => v !== '');
@@ -46,20 +53,36 @@ function dropEmpty(value: unknown): unknown {
   return out;
 }
 
+/** Decodifica una respuesta (todas son consultas: un error es `ArcaResponseError` sin `uncertain`). */
 function decode<T>(node: unknown, schema: Schema, path: string): T {
-  return decodeResponse<T>(dropEmpty(node), schema, path, { error: responseError });
+  return decodeResponse<T>(dropEmpty(node), schema, path, { kind: 'consulta' });
 }
 
 type MensajeRaw = { code: number; msg?: string };
 const mensajes = (list: MensajeRaw[]): CdcMensaje[] => list.map((m) => ({ code: m.code, msg: m.msg ?? '' }));
 
-/** Bloque `Auth` con los nombres del XML. */
-const authXml = (auth: CdcAuth) => ({ Token: auth.token, Sign: auth.sign, Cuit: auth.cuit });
+/**
+ * Bloque `Auth` con los nombres del XML. La CUIT se valida (dígito verificador) y
+ * se envía normalizada a 11 dígitos.
+ * @throws ArcaValidationError si `auth.cuit` es inválida.
+ */
+const authXml = (auth: CdcAuth) => ({ Token: auth.token, Sign: auth.sign, Cuit: validateCuit(auth.cuit, 'cuit') });
 
 function parseCmpResp(raw: Raw, method: string): ComprobanteConstatado {
   const { opcionales, ...cmp } = decode<ComprobanteConstatado>(raw, S.CMP_RESP, `${method}.CmpResp`);
   if (!opcionales?.length) return cmp;
   return { ...cmp, opcionales: opcionales.map((o) => ({ id: o.id, valor: o.valor ?? '' })) };
+}
+
+/**
+ * Agrega los `Events` de ARCA a una lista como propiedad no enumerable
+ * `eventos` (no aparece al iterar, serializar ni copiar el array).
+ */
+function conEventos<T>(items: T[], eventos: CdcMensaje[]): ListaCdc<T> {
+  if (eventos.length > 0) {
+    Object.defineProperty(items, 'eventos', { value: eventos, enumerable: false, writable: true, configurable: true });
+  }
+  return items;
 }
 
 /**
@@ -84,29 +107,50 @@ export class CdcClient extends SoapServiceClient {
     });
   }
 
-  /** Llama a un método de tabla (`ResultGet/<child>`), verifica `Errors` y decodifica los ítems. */
-  private async consultarTabla<T>(
+  /**
+   * Llama a un método de tabla (`ResultGet/<child>`), verifica `Errors` y
+   * decodifica los ítems (`Desc` ausente queda como `''`) y los `Events`.
+   */
+  private async consultarTabla<T extends { desc: string }>(
     method: string,
     child: string,
     item: Schema,
     auth: CdcAuth,
     opts?: CallOptions,
-  ): Promise<T[]> {
+  ): Promise<ListaCdc<T>> {
     const result = await this.call(method, { Auth: authXml(auth) }, opts);
     checkServiceErrors(result, `WSCDC ${method}`);
-    return decode<{ resultGet: T[] }>(result, { resultGet: xml('ResultGet', wrapped(child, obj(item), 0)) }, method)
-      .resultGet;
+    const r = decode<{ resultGet: T[]; events: MensajeRaw[] }>(
+      result,
+      { resultGet: xml('ResultGet', wrapped(child, obj(item), 0)), events: S.EVENTS },
+      method,
+    );
+    return conEventos(
+      r.resultGet.map((i) => ({ ...i, desc: i.desc ?? '' })),
+      mensajes(r.events),
+    );
   }
 
   /**
    * `ComprobanteConstatar`: constata un comprobante (CAE, CAI o CAEA).
    *
    * - Errores de formato, autenticación o infraestructura (`Errors`) → `ArcaServiceError`.
-   * - Rechazo funcional → `resultado: 'R'` con el detalle en `observaciones`.
+   * - Rechazo funcional → `resultado: 'R'` con el detalle en `observaciones`. Si en
+   *   un rechazo `CmpResp` viene incompleto, se devuelve sin `cmpResp`.
+   * @throws ArcaValidationError si el input o `auth.cuit` son inválidos (antes de llamar a ARCA).
+   * @throws ArcaResponseError si la respuesta no tiene la forma esperada.
    */
   async constatar(auth: CdcAuth, input: ConstatarInput, opts?: CallOptions): Promise<ConstatarResult> {
+    return this.constatarCmpReq(auth, buildCmpReq(input), opts);
+  }
+
+  /**
+   * `ComprobanteConstatar` con el `CmpReq` ya validado y normalizado por
+   * `buildCmpReq` (lo usa `ArcaCdc`, que valida antes de autenticarse).
+   * @internal
+   */
+  async constatarCmpReq(auth: CdcAuth, cmpReq: Record<string, unknown>, opts?: CallOptions): Promise<ConstatarResult> {
     const method = 'ComprobanteConstatar';
-    const cmpReq = buildCmpReq(input);
     const result = await this.call(method, { Auth: authXml(auth), CmpReq: cmpReq }, opts);
 
     checkServiceErrors(result, `WSCDC ${method}`);
@@ -117,7 +161,7 @@ export class CdcClient extends SoapServiceClient {
       method,
     );
     if (r.resultado !== 'A' && r.resultado !== 'R') {
-      throw responseError(`Respuesta inválida: ${method}.Resultado desconocido "${r.resultado}"`);
+      throw new ArcaResponseError(`Respuesta inválida: ${method}.Resultado desconocido "${r.resultado}"`);
     }
     const out: ConstatarResult = {
       resultado: r.resultado,
@@ -125,7 +169,15 @@ export class CdcClient extends SoapServiceClient {
       observaciones: mensajes(r.observaciones),
       events: mensajes(r.events),
     };
-    if (isRecord(result['CmpResp'])) out.cmpResp = parseCmpResp(result['CmpResp'], method);
+    if (isRecord(result['CmpResp'])) {
+      try {
+        out.cmpResp = parseCmpResp(result['CmpResp'], method);
+      } catch (err) {
+        // En un rechazo, ARCA puede devolver `CmpResp` incompleto (todos sus campos son
+        // minOccurs=0): lo que importa es `resultado` + `observaciones`.
+        if (!(err instanceof ArcaResponseError) || r.resultado !== 'R') throw err;
+      }
+    }
     return out;
   }
 
@@ -136,22 +188,22 @@ export class CdcClient extends SoapServiceClient {
   }
 
   /** `ComprobantesModalidadConsultar`: modalidades de autorización (CAE, CAI, CAEA). */
-  async getModalidades(auth: CdcAuth, opts?: CallOptions): Promise<ModalidadItem[]> {
+  async getModalidades(auth: CdcAuth, opts?: CallOptions): Promise<ListaCdc<ModalidadItem>> {
     return this.consultarTabla('ComprobantesModalidadConsultar', 'FacModTipo', S.FAC_MOD_TIPO, auth, opts);
   }
 
   /** `ComprobantesTipoConsultar`: tipos de comprobante habilitados. */
-  async getTiposCbte(auth: CdcAuth, opts?: CallOptions): Promise<TipoCbteItem[]> {
+  async getTiposCbte(auth: CdcAuth, opts?: CallOptions): Promise<ListaCdc<TipoCbteItem>> {
     return this.consultarTabla('ComprobantesTipoConsultar', 'CbteTipo', S.CBTE_TIPO, auth, opts);
   }
 
   /** `DocumentosTipoConsultar`: tipos de documento habilitados. */
-  async getDocTipos(auth: CdcAuth, opts?: CallOptions): Promise<DocTipoItem[]> {
+  async getDocTipos(auth: CdcAuth, opts?: CallOptions): Promise<ListaCdc<DocTipoItem>> {
     return this.consultarTabla('DocumentosTipoConsultar', 'DocTipo', S.ID_DESC, auth, opts);
   }
 
   /** `OpcionalesTipoConsultar`: identificadores válidos para `Opcionales`. */
-  async getTiposOpcionales(auth: CdcAuth, opts?: CallOptions): Promise<OpcionalTipoItem[]> {
+  async getTiposOpcionales(auth: CdcAuth, opts?: CallOptions): Promise<ListaCdc<OpcionalTipoItem>> {
     return this.consultarTabla('OpcionalesTipoConsultar', 'OpcionalTipo', S.ID_DESC, auth, opts);
   }
 }

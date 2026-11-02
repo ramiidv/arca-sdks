@@ -16,6 +16,8 @@ import { ArcaSoapError } from '@ramiidv/arca-common';
 import { ArcaTicketVigenteError } from '@ramiidv/arca-common';
 import { ArcaValidationError } from '@ramiidv/arca-common';
 import { CallOptions } from '@ramiidv/arca-common';
+import { FileTicketStorage } from '@ramiidv/arca-common';
+import { MemoryTicketStorage } from '@ramiidv/arca-common';
 import { ServerStatus } from '@ramiidv/arca-common';
 import { ServiceErrorDetail } from '@ramiidv/arca-common';
 import type { ServiceStatus } from '@ramiidv/arca-common';
@@ -23,11 +25,21 @@ import type { ServiceTransport } from '@ramiidv/arca-common';
 import { SoapServiceClient } from '@ramiidv/arca-common';
 import { TicketStorage } from '@ramiidv/arca-common';
 import { ValidationErrorDetail } from '@ramiidv/arca-common';
+import { WsaaClient } from '@ramiidv/arca-common';
 
 export { AccessTicket }
 
 // @public
 export type AgroServiceStatus = ServiceStatus;
+
+// @public
+export interface AjusteConsultaResultado extends ConAdvertencias {
+    // (undocumented)
+    ajusteUnificado: AjusteUnificadoLpg;
+    // (undocumented)
+    eventos: CodigoDescripcion[];
+    pdf?: string;
+}
 
 // @public
 export interface AjusteCreditoDebitoLpg {
@@ -172,7 +184,7 @@ export interface AjusteUnificadoParams {
 }
 
 // @public
-export interface AjusteUnificadoResultado {
+export interface AjusteUnificadoResultado extends ConAdvertencias {
     // (undocumented)
     ajusteUnificado: AjusteUnificadoLpg;
     // (undocumented)
@@ -180,8 +192,8 @@ export interface AjusteUnificadoResultado {
 }
 
 // @public
-export interface AnulacionCertificacionResultado {
-    estadoCertificado: string;
+export interface AnulacionCertificacionResultado extends ConAdvertencias {
+    estadoCertificado?: string;
     // (undocumented)
     eventos: CodigoDescripcion[];
     // (undocumented)
@@ -189,15 +201,14 @@ export interface AnulacionCertificacionResultado {
 }
 
 // @public
-export interface AnulacionLiquidacionResultado {
+export interface AnulacionLiquidacionResultado extends ConAdvertencias {
     // (undocumented)
     coe?: string;
     // (undocumented)
     eventos: CodigoDescripcion[];
     // (undocumented)
     pdf?: string;
-    // (undocumented)
-    resultado: string;
+    resultado?: 'A' | 'R' | (string & {});
 }
 
 // @public
@@ -238,7 +249,7 @@ export class ArcaAgroResponseError extends ArcaResponseError {
 
 // @public
 export class ArcaAgroServiceError extends ArcaServiceError {
-    constructor(message: string, errors: ServiceErrorDetail[], service: 'WSCPE' | 'WSLPG', method: string, response: Record<string, unknown>);
+    constructor(message: string, errors: ServiceErrorDetail[], service: 'WSCPE' | 'WSLPG', method: string, response: Record<string, unknown>, uncertain?: boolean);
     // (undocumented)
     static readonly code: string;
     // (undocumented)
@@ -247,6 +258,8 @@ export class ArcaAgroServiceError extends ArcaServiceError {
     readonly response: Record<string, unknown>;
     // (undocumented)
     readonly service: 'WSCPE' | 'WSLPG';
+    // (undocumented)
+    readonly uncertain: boolean;
 }
 
 export { ArcaAuthError }
@@ -441,11 +454,132 @@ export interface CertificacionAutorizadaLpg {
 }
 
 // @public
-export interface CertificacionResultado {
+export interface CertificacionConsultaResultado extends ConAdvertencias {
+    // (undocumented)
+    alicuotaIVA?: number;
+    // (undocumented)
+    autorizacion: CertificacionAutorizadaLpg;
+    // (undocumented)
+    cabecera?: {
+        tipoCertificado?: string;
+        ptoEmision?: number;
+        nroOrden?: number;
+        nroIngBrutoDepositario?: number;
+        titularGrano?: string;
+        cuitDepositante?: number;
+        nroIngBrutoDepositante?: number;
+        codGrano?: number;
+        campania?: number;
+        cuitCorredor?: number;
+        datosAdicionales?: string;
+    };
+    // (undocumented)
+    codLocalidad?: number;
+    // (undocumented)
+    codProvincia?: number;
+    // (undocumented)
+    cuitDepositario?: number;
+    // (undocumented)
+    cuitRemitenteComercial?: number;
+    // (undocumented)
+    eventos: CodigoDescripcion[];
+    // (undocumented)
+    kilosDisponible?: number;
+    // (undocumented)
+    nroPlanta?: number;
+    pdf?: string;
+    // (undocumented)
+    preexistente?: {
+        nroPlanta?: number;
+        tipoCertificadoDepositoPreexistente?: number;
+        nroCertificadoDepositoPreexistente?: number;
+        cacCertificadoDepositoPreexistente?: number;
+        fechaEmisionCertificadoDepositoPreexistente?: string;
+        pesoNeto?: number;
+    };
+    // (undocumented)
+    primaria?: {
+        nroActDepositario?: number;
+        ctg: Array<{
+            nroCTG?: string;
+            nroCartaDePorte?: string;
+            pesoNetoConfirmadoDefinitivo?: number;
+        } & MermasCgRespuesta>;
+        cartaPorteFerroviaria: Array<{
+            nroCartaPorte?: number;
+            pesoNetoConfirmadoDefinitivo?: number;
+        } & MermasCgRespuesta>;
+        descripcionTipoGrano?: string;
+        montoAlmacenaje?: number;
+        montoAcarreo?: number;
+        montoGastosGenerales?: number;
+        montoZarandeo?: number;
+        porcentajeSecadoDe?: number;
+        porcentajeSecadoA?: number;
+        montoSecado?: number;
+        montoPorCadaPuntoExceso?: number;
+        montoOtros?: number;
+        calidad?: {
+            analisisMuestra?: number;
+            nroBoletin?: number;
+            codGrado?: string;
+            valorGrado?: number;
+            valorContProteico?: number;
+            valorFactor?: number;
+            detalleMuestraAnalisis: Array<{
+                descripcionRubro?: string;
+                tipoRubro?: string;
+                porcentaje?: number;
+                valor?: number;
+            }>;
+        };
+        pesoNetoMermaVolatil?: number;
+        serviciosFormaDePago?: string;
+        serviciosOtros?: number;
+        serviciosConceptosNoGravados?: number;
+        serviciosPercepcionesIVA?: number;
+        serviciosOtrasPercepciones?: number;
+    };
+    // (undocumented)
+    retiroTransferencia?: {
+        certificadoDeposito?: {
+            coeCertificadoDeposito?: string;
+            pesoNeto?: number;
+        };
+        nroActDepositario?: number;
+        cuitReceptor?: number;
+        nroCartaPorteAUtilizar?: string;
+        nroCTG?: string;
+        descripcionCausaJudicial?: string;
+    };
+}
+
+// @public
+export interface CertificacionResultado extends ConAdvertencias {
     // (undocumented)
     autorizacion: CertificacionAutorizadaLpg;
     // (undocumented)
     eventos: CodigoDescripcion[];
+}
+
+// @public
+export interface CertificadoConSaldoLpg {
+    // (undocumented)
+    campania?: number;
+    // (undocumented)
+    codGrano?: number;
+    // (undocumented)
+    coe?: string;
+    // (undocumented)
+    cuitDepositante?: number;
+    // (undocumented)
+    cuitDepositario?: number;
+    // (undocumented)
+    kilosDisponibles?: number;
+    // (undocumented)
+    nroPlanta?: number;
+    // (undocumented)
+    tipoCertificado?: string;
 }
 
 // @public
@@ -558,11 +692,55 @@ export interface CgAutorizarParams {
 }
 
 // @public
+export interface CgBuscarCertConSaldoDisponibleParams {
+    // (undocumented)
+    campania: number;
+    // (undocumented)
+    codGrano: number;
+    // (undocumented)
+    coe?: string | number;
+    // (undocumented)
+    cuitDepositante: CuitInput;
+    // (undocumented)
+    fechaEmisionDes?: FechaInput;
+    // (undocumented)
+    fechaEmisionHas?: FechaInput;
+}
+
+// @public
+export interface CgBuscarCtgParams {
+    // (undocumented)
+    campania: number;
+    // (undocumented)
+    codGrano: number;
+    // (undocumented)
+    cuitDepositante: CuitInput;
+    // (undocumented)
+    fechaConfirmacionCtgDes?: FechaInput;
+    // (undocumented)
+    fechaConfirmacionCtgHas?: FechaInput;
+    // (undocumented)
+    nroCartaPorte?: string;
+    // (undocumented)
+    nroCtg?: string | number;
+    // (undocumented)
+    nroPlanta?: number;
+    tipoCertificado: 'P' | 'R' | 'T' | 'E';
+    // (undocumented)
+    tipoCtg?: 'CTG' | 'FC' | 'CPE';
+}
+
+// @public
 export interface CodigoDescripcion {
     // (undocumented)
     codigo: string;
     // (undocumented)
     descripcion: string;
+}
+
+// @public
+export interface ConAdvertencias {
+    advertencias?: ServiceErrorDetail[];
 }
 
 // @public
@@ -677,7 +855,7 @@ export const CPE_ENDPOINTS: {
 export const CPE_NAMESPACE = "https://serviciosjava.afip.gob.ar/wscpe/";
 
 // @public
-export interface CPEAutomotorDetalle {
+export interface CPEAutomotorDetalle extends ConAdvertencias {
     // (undocumented)
     cabecera: CabeceraCPE & {
         nroCTG: string;
@@ -777,12 +955,16 @@ export class CpeClient extends SoapServiceClient {
     consultarCPEFerroviaria(params: ConsultarCPEParams, opts?: CallOptions): Promise<CPEFerroviariaDetalle>;
     consultarCPEPorDestino(params: ConsultarCPEPorDestinoParams, opts?: CallOptions): Promise<CPEResumen[]>;
     consultarCPEPPendientesDeResolucion(params: ConsultarCPEPendientesParams, opts?: CallOptions): Promise<CPEResumen[]>;
+    consultarDomiciliosPorCUIT(cuit: CuitInput, opts?: CallOptions): Promise<DomicilioCPE[]>;
     consultarLocalidadesPorProvincia(codProvincia: number, opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarLocalidadesProductor(cuit: CuitInput, opts?: CallOptions): Promise<LocalidadProductorCPE[]>;
     consultarPlantas(cuit: CuitInput, opts?: CallOptions): Promise<PlantaCPE[]>;
     consultarProvincias(opts?: CallOptions): Promise<CodigoDescripcion[]>;
+    consultarRenspa(cuit: CuitInput, codProvincia: number, opts?: CallOptions): Promise<RenspaCPE[]>;
+    consultarTiposEmbalaje(opts?: CallOptions): Promise<TipoEmbalajeCPE[]>;
     consultarTiposGrano(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarUltNroOrden(sucursal: number, tipoCPE: number, opts?: CallOptions): Promise<number>;
+    consultarUnidadesMedida(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarVariedadesSemillas(codGrano?: number, opts?: CallOptions): Promise<VariedadSemillaCPE[]>;
     descargadoDestinoCPE(params: SolicitanteCartaPorteParams, opts?: CallOptions): Promise<CPEResultado>;
     desvioCPEAutomotor(params: DesvioCPEAutomotorParams, opts?: CallOptions): Promise<CPEResultado>;
@@ -802,7 +984,23 @@ export class CpeClient extends SoapServiceClient {
 }
 
 // @public
-export interface CPEFerroviariaDetalle {
+export interface CpeFaultException {
+    businessErrorId?: string;
+    // (undocumented)
+    exceptionDetails?: string;
+    // (undocumented)
+    serverName?: string;
+    // (undocumented)
+    timestamp?: string;
+    // (undocumented)
+    uuid?: string;
+}
+
+// @public
+export function cpeFaultException(error: unknown): CpeFaultException | undefined;
+
+// @public
+export interface CPEFerroviariaDetalle extends ConAdvertencias {
     // (undocumented)
     cabecera: CabeceraCPE & {
         nroCTG: string;
@@ -887,7 +1085,7 @@ export interface CPEFerroviariaDetalle {
 }
 
 // @public
-export interface CPEResultado {
+export interface CPEResultado extends ConAdvertencias {
     // (undocumented)
     cabecera?: CabeceraCPE;
     // (undocumented)
@@ -907,6 +1105,32 @@ export interface CPEResumen {
     nroCTG?: string;
     // (undocumented)
     tipoCartaPorte?: number;
+}
+
+// @public
+export interface CtgCertificableLpg {
+    // (undocumented)
+    campania?: number;
+    // (undocumented)
+    codGrano?: number;
+    // (undocumented)
+    cuitCertifica?: number;
+    // (undocumented)
+    cuitLiquida?: number;
+    // (undocumented)
+    cuitRemitenteComercial?: number;
+    // (undocumented)
+    fechaConfirmacionCtg?: string;
+    // (undocumented)
+    kilosConfirmados?: number;
+    // (undocumented)
+    nroCartaPorte?: string;
+    // (undocumented)
+    nroCtg?: string;
+    // (undocumented)
+    nroPlanta?: number;
+    // (undocumented)
+    tipoCtg?: string;
 }
 
 // @public
@@ -1019,6 +1243,16 @@ export interface DesvioCPEFerroviariaParams {
 }
 
 // @public
+export interface DomicilioCPE {
+    // (undocumented)
+    descripcion?: string;
+    // (undocumented)
+    orden?: number;
+    // (undocumented)
+    tipo?: number;
+}
+
+// @public
 export interface EditarCPEAutomotorParams {
     // (undocumented)
     codGrano: number;
@@ -1120,6 +1354,8 @@ export type FechaHoraInput = Date | string;
 
 // @public
 export type FechaInput = Date | string;
+
+export { FileTicketStorage }
 
 // @public
 export interface GradoEntregadoLpg {
@@ -1320,7 +1556,7 @@ export interface LiquidacionConsultadaLpg {
 }
 
 // @public
-export interface LiquidacionConsultaResultado {
+export interface LiquidacionConsultaResultado extends ConAdvertencias {
     // (undocumented)
     autorizacion: LiquidacionAutorizadaLpg;
     // (undocumented)
@@ -1401,7 +1637,21 @@ export interface LiquidacionLpg {
 }
 
 // @public
-export interface LiquidacionResultado {
+export interface LiquidacionPorContratoParams {
+    // (undocumented)
+    codGrano: number;
+    // (undocumented)
+    cuitComprador: CuitInput;
+    // (undocumented)
+    cuitCorredor?: CuitInput;
+    // (undocumented)
+    cuitVendedor: CuitInput;
+    // (undocumented)
+    nroContrato: number;
+}
+
+// @public
+export interface LiquidacionResultado extends ConAdvertencias {
     // (undocumented)
     autorizacion: LiquidacionAutorizadaLpg;
     eventos: CodigoDescripcion[];
@@ -1434,13 +1684,24 @@ export const LPG_NAMESPACE = "http://serviciosjava.afip.gob.ar/wslpg/";
 export class LpgClient extends SoapServiceClient {
     // @internal
     constructor(ctx: ServiceContext);
+    ajustePorContratoConsultar(nroContrato: number, opts?: CallOptions): Promise<AjusteConsultaResultado>;
+    ajusteXCoeConsultar(coe: string | number, params?: {
+        pdf?: boolean;
+    }, opts?: CallOptions): Promise<AjusteConsultaResultado>;
+    ajusteXNroOrdenConsultar(ptoEmision: number, nroOrden: number, opts?: CallOptions): Promise<AjusteConsultaResultado>;
     // (undocumented)
     campaniasConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     cgAutorizar(params: CgAutorizarParams, opts?: CallOptions): Promise<CertificacionResultado>;
+    cgBuscarCertConSaldoDisponible(params: CgBuscarCertConSaldoDisponibleParams, opts?: CallOptions): Promise<CertificadoConSaldoLpg[]>;
+    cgBuscarCtg(params: CgBuscarCtgParams, opts?: CallOptions): Promise<CtgCertificableLpg[]>;
     cgConfirmarAnulacion(coe: string | number, params?: {
         pdf?: boolean;
     }, opts?: CallOptions): Promise<AnulacionCertificacionResultado>;
     cgConsultarUltimoNroOrden(ptoEmision: number, opts?: CallOptions): Promise<number>;
+    cgConsultarXCoe(coe: string | number, params?: {
+        pdf?: boolean;
+    }, opts?: CallOptions): Promise<CertificacionConsultaResultado>;
+    cgConsultarXNroOrden(ptoEmision: number, nroOrden: number, opts?: CallOptions): Promise<CertificacionConsultaResultado>;
     cgSolicitarAnulacion(coe: string | number, params?: {
         pdf?: boolean;
     }, opts?: CallOptions): Promise<AnulacionCertificacionResultado>;
@@ -1451,6 +1712,7 @@ export class LpgClient extends SoapServiceClient {
     liquidacionAjustarUnificado(params: AjusteUnificadoParams, opts?: CallOptions): Promise<AjusteUnificadoResultado>;
     liquidacionAnular(coe: string | number, opts?: CallOptions): Promise<AnulacionLiquidacionResultado>;
     liquidacionAutorizar(params: LiquidacionAutorizarParams, opts?: CallOptions): Promise<LiquidacionResultado>;
+    liquidacionPorContratoConsultar(params: LiquidacionPorContratoParams, opts?: CallOptions): Promise<string[]>;
     liquidacionUltimoNroOrdenConsultar(ptoEmision: number, opts?: CallOptions): Promise<number>;
     liquidacionXCoeConsultar(coe: string | number, params?: {
         pdf?: boolean;
@@ -1476,6 +1738,8 @@ export class LpgClient extends SoapServiceClient {
     tipoRetencionConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]>;
 }
 
+export { MemoryTicketStorage }
+
 // @public
 export interface MermasCg {
     // (undocumented)
@@ -1492,6 +1756,24 @@ export interface MermasCg {
     tarifaSecado: number;
     // (undocumented)
     tarifaZarandeo: number;
+}
+
+// @public
+export interface MermasCgRespuesta {
+    // (undocumented)
+    importeSecado?: number;
+    // (undocumented)
+    importeZarandeo?: number;
+    // (undocumented)
+    pesoNetoMermaSecado?: number;
+    // (undocumented)
+    pesoNetoMermaZarandeo?: number;
+    // (undocumented)
+    porcentajeSecadoHumedad?: number;
+    // (undocumented)
+    tarifaSecado?: number;
+    // (undocumented)
+    tarifaZarandeo?: number;
 }
 
 // @public
@@ -1527,7 +1809,7 @@ export interface NuevoDestinoDestinatarioCPEFerroviariaParams {
 }
 
 // @public
-export interface OperativoFerroviarioCPE {
+export interface OperativoFerroviarioCPE extends ConAdvertencias {
     // (undocumented)
     cartaPorte: Array<{
         nroCTG?: string;
@@ -1629,6 +1911,14 @@ export interface RegresoOrigenCPEFerroviariaParams {
 }
 
 // @public
+export interface RenspaCPE {
+    // (undocumented)
+    descripcion?: string;
+    // (undocumented)
+    nroRenspa?: string;
+}
+
+// @public
 export interface RetencionLiquidadaLpg {
     // (undocumented)
     importeRetencion?: number;
@@ -1702,6 +1992,11 @@ export const TIPO_CPE: {
 };
 
 // @public
+export interface TipoEmbalajeCPE extends CodigoDescripcion {
+    unidadMedida: CodigoDescripcion[];
+}
+
+// @public
 export interface TransporteAutomotorModificaCPE {
     // (undocumented)
     codigoTurno?: string;
@@ -1730,6 +2025,24 @@ export function validateAutorizarCPEAutomotor(params: AutorizarCPEAutomotorParam
 export function validateAutorizarCPEFerroviaria(params: AutorizarCPEFerroviariaParams): void;
 
 // @public
+export function validateCgAutorizar(params: CgAutorizarParams): void;
+
+// @public
+export function validateConfirmacionDefinitivaCPEAutomotor(params: ConfirmacionDefinitivaCPEAutomotorParams): void;
+
+// @public
+export function validateConfirmacionDefinitivaCPEFerroviaria(params: ConfirmacionDefinitivaCPEFerroviariaParams): void;
+
+// @public
+export function validateEditarCPEAutomotor(params: EditarCPEAutomotorParams): void;
+
+// @public
+export function validateEditarCPEConfirmada(params: EditarCPEConfirmadaParams): void;
+
+// @public
+export function validateEditarCPEFerroviaria(params: EditarCPEFerroviariaParams): void;
+
+// @public
 export function validateLiquidacion(params: LiquidacionAutorizarParams): void;
 
 export { ValidationErrorDetail }
@@ -1745,6 +2058,8 @@ export const WSAA_SERVICES: {
     readonly cpe: 'wscpe';
     readonly lpg: 'wslpg';
 };
+
+export { WsaaClient }
 
 // (No @packageDocumentation comment for this package)
 

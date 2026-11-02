@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaServiceError, ArcaSoapError, ArcaValidationError, CdcClient, WSCDC_ENDPOINTS } from '../src/index.js';
 import type { ConstatarInput } from '../src/index.js';
+import * as validation from '../src/validation.js';
 import { asmxResponse, childOrder, CUIT, makeCdc, mockFetch, NS, requestBody } from './helpers.js';
 
 const input: ConstatarInput = {
@@ -185,9 +187,13 @@ describe('ComprobanteConstatar', () => {
     expect(err.errors.map((e) => e.code)).toEqual([2, 10]);
   });
 
-  it('sin Resultado ni Errors lanza (no inventa un resultado)', async () => {
+  it('sin Resultado ni Errors lanza ArcaResponseError (no inventa un resultado)', async () => {
     const fetch = mockFetch(asmxResponse('ComprobanteConstatar', '<FchProceso>20261101</FchProceso>'));
-    await expect(makeCdc(fetch).constatar(input)).rejects.toBeInstanceOf(ArcaSoapError);
+    const err = await makeCdc(fetch)
+      .constatar(input)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ArcaResponseError);
+    expect((err as ArcaResponseError).uncertain).toBe(false);
   });
 
   it('valida antes de llamar a ARCA', async () => {
@@ -225,7 +231,7 @@ describe('ComprobanteDummy', () => {
 
   it('lanza si falta un campo de la respuesta', async () => {
     const fetch = mockFetch(asmxResponse('ComprobanteDummy', '<AppServer>OK</AppServer>'));
-    await expect(new CdcClient({ endpoint: 'https://x/', fetch }).dummy()).rejects.toBeInstanceOf(ArcaSoapError);
+    await expect(new CdcClient({ endpoint: 'https://x/', fetch }).dummy()).rejects.toBeInstanceOf(ArcaResponseError);
   });
 });
 
@@ -467,10 +473,10 @@ describe('Decodificación de respuestas (texto, sin perder ceros)', () => {
     });
   });
 
-  it('respuestas con forma inválida lanzan ArcaSoapError', async () => {
+  it('respuestas con forma inválida lanzan ArcaResponseError (no incierto: son consultas)', async () => {
     const fetch = mockFetch(
       asmxResponse('ComprobantesTipoConsultar', '<ResultGet><CbteTipo><Id>X</Id><Desc>A</Desc></CbteTipo></ResultGet>'),
-      asmxResponse('DocumentosTipoConsultar', '<ResultGet><DocTipo><Id>80</Id><Desc /></DocTipo></ResultGet>'),
+      asmxResponse('DocumentosTipoConsultar', '<ResultGet><DocTipo><Desc>CUIT</Desc></DocTipo></ResultGet>'),
       asmxResponse('ComprobanteConstatar', '<Resultado>X</Resultado><FchProceso>20261101120000</FchProceso>'),
       asmxResponse(
         'ComprobanteConstatar',
@@ -480,14 +486,164 @@ describe('Decodificación de respuestas (texto, sin perder ceros)', () => {
     const cdc = makeCdc(fetch);
     const cases: [() => Promise<unknown>, RegExp][] = [
       [() => cdc.getTiposCbte(), /ComprobantesTipoConsultar\.resultGet\[0\]\.id no es numérico/],
-      [() => cdc.getDocTipos(), /falta DocumentosTipoConsultar\.resultGet\[0\]\.desc/],
+      [() => cdc.getDocTipos(), /falta DocumentosTipoConsultar\.resultGet\[0\]\.id/],
       [() => cdc.constatar(input), /Resultado desconocido "X"/],
       [() => cdc.constatar(input), /falta ComprobanteConstatar\.CmpResp\.cuitEmisor/],
     ];
     for (const [call, message] of cases) {
       const err = await call().catch((e: unknown) => e);
-      expect(err).toBeInstanceOf(ArcaSoapError);
+      expect(err).toBeInstanceOf(ArcaResponseError);
+      expect(err).not.toBeInstanceOf(ArcaSoapError);
+      expect((err as ArcaResponseError).uncertain).toBe(false);
       expect((err as Error).message).toMatch(message);
     }
+  });
+});
+
+describe('Casos borde de las respuestas', () => {
+  it('R con CmpResp incompleto devuelve resultado y observaciones sin cmpResp', async () => {
+    const fetch = mockFetch(
+      asmxResponse(
+        'ComprobanteConstatar',
+        '<CmpResp><CuitEmisor>30712345671</CuitEmisor><PtoVta>1</PtoVta><CbteTipo>1</CbteTipo><CbteNro>150</CbteNro>' +
+          '<ImpTotal>0</ImpTotal></CmpResp><Resultado>R</Resultado>' +
+          '<Observaciones><Obs><Code>100</Code><Msg>El codigo de autorizacion no existe</Msg></Obs></Observaciones>' +
+          '<FchProceso>20261101120000</FchProceso>',
+      ),
+    );
+    const r = await makeCdc(fetch).constatar(input);
+    expect(r).toEqual({
+      resultado: 'R',
+      fchProceso: '20261101120000',
+      observaciones: [{ code: 100, msg: 'El codigo de autorizacion no existe' }],
+      events: [],
+    });
+  });
+
+  it('A con CmpResp incompleto sigue lanzando ArcaResponseError', async () => {
+    const fetch = mockFetch(
+      asmxResponse(
+        'ComprobanteConstatar',
+        '<CmpResp><CuitEmisor>30712345671</CuitEmisor></CmpResp><Resultado>A</Resultado><FchProceso>1</FchProceso>',
+      ),
+    );
+    await expect(makeCdc(fetch).constatar(input)).rejects.toBeInstanceOf(ArcaResponseError);
+  });
+
+  it('tablas: Desc ausente o vacío queda como ""', async () => {
+    const fetch = mockFetch(
+      asmxResponse(
+        'DocumentosTipoConsultar',
+        '<ResultGet><DocTipo><Id>80</Id><Desc /></DocTipo><DocTipo><Id>96</Id></DocTipo></ResultGet>',
+      ),
+      asmxResponse('ComprobantesModalidadConsultar', '<ResultGet><FacModTipo><Cod>CAE</Cod></FacModTipo></ResultGet>'),
+    );
+    const cdc = makeCdc(fetch);
+    expect(await cdc.getDocTipos()).toEqual([
+      { id: '80', desc: '' },
+      { id: '96', desc: '' },
+    ]);
+    expect(await cdc.getModalidades()).toEqual([{ cod: 'CAE', desc: '' }]);
+  });
+
+  it('tablas: los Events quedan en lista.eventos (no enumerable)', async () => {
+    const fetch = mockFetch(
+      asmxResponse(
+        'ComprobantesTipoConsultar',
+        '<ResultGet><CbteTipo><Id>1</Id><Desc>Factura A</Desc></CbteTipo></ResultGet>' +
+          '<Events><Evt><Code>10</Code><Msg>Mantenimiento programado</Msg></Evt></Events>',
+      ),
+      asmxResponse(
+        'ComprobantesTipoConsultar',
+        '<ResultGet><CbteTipo><Id>1</Id><Desc>Factura A</Desc></CbteTipo></ResultGet>',
+      ),
+    );
+    const cdc = makeCdc(fetch);
+    const tipos = await cdc.getTiposCbte();
+    expect(tipos).toEqual([{ id: 1, desc: 'Factura A' }]);
+    expect(tipos.eventos).toEqual([{ code: 10, msg: 'Mantenimiento programado' }]);
+    expect(Object.keys(tipos)).toEqual(['0']);
+    expect(JSON.stringify(tipos)).not.toContain('eventos');
+    const sinEventos = await cdc.getTiposCbte();
+    expect(sinEventos.eventos).toBeUndefined();
+  });
+
+  it('Errors con todos los códigos en 0 no lanza', async () => {
+    const fetch = mockFetch(
+      asmxResponse(
+        'ComprobanteConstatar',
+        `${CMP_RESP}<Resultado>A</Resultado><FchProceso>20261101120000</FchProceso>` +
+          '<Errors><Err><Code>0</Code><Msg>OK</Msg></Err></Errors>',
+      ),
+      asmxResponse(
+        'DocumentosTipoConsultar',
+        '<ResultGet><DocTipo><Id>80</Id><Desc>CUIT</Desc></DocTipo></ResultGet><Errors><Err><Code>0</Code></Err></Errors>',
+      ),
+    );
+    const cdc = makeCdc(fetch);
+    expect((await cdc.constatar(input)).resultado).toBe('A');
+    expect(await cdc.getDocTipos()).toEqual([{ id: '80', desc: 'CUIT' }]);
+  });
+
+  it('error 503 ("No existen datos en nuestros registros") lanza ArcaServiceError', async () => {
+    const fetch = mockFetch(
+      asmxResponse(
+        'ComprobanteConstatar',
+        '<Resultado>R</Resultado><Errors><Err><Code>503</Code><Msg>No existen datos en nuestros registros.</Msg></Err></Errors>',
+      ),
+    );
+    await expect(makeCdc(fetch).constatar(input)).rejects.toMatchObject({
+      name: 'ArcaServiceError',
+      errors: [{ code: 503, msg: 'No existen datos en nuestros registros.' }],
+    });
+  });
+});
+
+describe('Validación del input y de Auth', () => {
+  it('docTipoReceptor distinto de 80 acepta un docNro que no es CUIT', async () => {
+    const fetch = mockFetch(
+      asmxResponse('ComprobanteConstatar', '<Resultado>A</Resultado><FchProceso>20261101120000</FchProceso>'),
+    );
+    await makeCdc(fetch).constatar({ ...input, cbteTipo: 6, docTipoReceptor: 96, docNroReceptor: '12345678' });
+    const op = requestBody(fetch.calls[0].body)['ComprobanteConstatar'] as Record<string, Record<string, unknown>>;
+    expect(op.CmpReq.DocTipoReceptor).toBe(96);
+    expect(String(op.CmpReq.DocNroReceptor)).toBe('12345678');
+  });
+
+  it('docTipoReceptor 80 valida el dígito verificador del docNro', async () => {
+    const fetch = mockFetch();
+    await expect(makeCdc(fetch).constatar({ ...input, docNroReceptor: '20123456789' })).rejects.toBeInstanceOf(
+      ArcaValidationError,
+    );
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  it('CdcClient valida la CUIT de Auth y la envía normalizada', async () => {
+    const fetch = mockFetch(
+      asmxResponse('DocumentosTipoConsultar', '<ResultGet><DocTipo><Id>80</Id><Desc>CUIT</Desc></DocTipo></ResultGet>'),
+    );
+    const client = new CdcClient({ endpoint: 'https://x/', fetch });
+    await expect(client.getDocTipos({ token: 'T', sign: 'S', cuit: '20123456789' })).rejects.toBeInstanceOf(
+      ArcaValidationError,
+    );
+    await expect(client.constatar({ token: 'T', sign: 'S', cuit: 'abc' }, input)).rejects.toBeInstanceOf(
+      ArcaValidationError,
+    );
+    expect(fetch.calls).toHaveLength(0);
+
+    await client.getDocTipos({ token: 'T', sign: 'S', cuit: '20-12345678-6' });
+    const op = requestBody(fetch.calls[0].body)['DocumentosTipoConsultar'] as Record<string, Record<string, unknown>>;
+    expect(op.Auth.Cuit).toBe(CUIT);
+  });
+
+  it('ArcaCdc valida una sola vez y antes de autenticarse', async () => {
+    const fetch = mockFetch(
+      asmxResponse('ComprobanteConstatar', '<Resultado>A</Resultado><FchProceso>20261101120000</FchProceso>'),
+    );
+    const cdc = makeCdc(fetch);
+    const validar = vi.spyOn(validation, 'buildCmpReq');
+    await cdc.constatar(input);
+    expect(validar).toHaveBeenCalledTimes(1);
+    validar.mockRestore();
   });
 });

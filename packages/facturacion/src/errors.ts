@@ -7,8 +7,8 @@ export {
   ArcaValidationError,
   ArcaTicketVigenteError,
 } from '@ramiidv/arca-common';
-import { ArcaError, ArcaServiceError } from '@ramiidv/arca-common';
-import type { IntentoComprobante, IntentoExpo, WsfexInvoice } from './types.js';
+import { ArcaAuthError, ArcaError, ArcaServiceError } from '@ramiidv/arca-common';
+import type { IntentoComprobante, IntentoExpo, WsfexAuthResult, WsfexInvoice } from './types.js';
 
 /**
  * Error de WSFE/WSFEX con códigos de error de ARCA. Extiende `ArcaServiceError`
@@ -17,7 +17,8 @@ import type { IntentoComprobante, IntentoExpo, WsfexInvoice } from './types.js';
  * En una emisión, este error significa que ARCA **rechazó** el request: no se
  * emitió. Los errores internos de ARCA (WSFEv1: 500, 501, 502; WSFEX: 500,
  * 501, 502, 505) no llegan como este error sino como resultado incierto,
- * porque no garantizan nada.
+ * porque no garantizan nada; los de autenticación (WSFEv1: 600, 601;
+ * WSFEX: 1000, 1001), como `ArcaAuthError`.
  *
  * Los rechazos de un comprobante puntual (como 10016, "el número no se
  * corresponde con el próximo a autorizar") llegan como `aprobada: false` con
@@ -40,6 +41,60 @@ export class ArcaWSFEError extends ArcaServiceError {
   /** `true` si ARCA devolvió el código de error indicado. */
   tieneCodigo(code: number): boolean {
     return this.errors.some((e) => Number(e.code) === code);
+  }
+}
+
+/**
+ * `ArcaAuthError` para un error de autenticación que ARCA devolvió en el
+ * bloque de errores (WSFEv1 600/601, WSFEX 1000/1001): el Ticket de
+ * Acceso no sirve para esta CUIT o este servicio. No es reintentable
+ * (`retryable: false`, `faultCode` = código de ARCA) y el error original
+ * queda en `cause`.
+ *
+ * El SDK no borra el ticket: WSAA no emite otro mientras el actual siga
+ * vigente (`coe.alreadyAuthenticated`), y el 600 también se usa cuando la
+ * CUIT no está en las relaciones del certificado (el ticket sigue sirviendo
+ * para otras CUITs). Si el ticket está dañado, `arca.clearAuthCache()`.
+ */
+export function authErrorDe(error: ArcaWSFEError): ArcaAuthError {
+  const e = error.errors[0];
+  return new ArcaAuthError(
+    `${error.message}. Revisar el certificado, la relación con el servicio en ARCA y la CUIT representada.`,
+    { cause: error, faultCode: String(e?.code ?? ''), retryable: false },
+  );
+}
+
+/**
+ * WSFEX devolvió la respuesta de **otro** comprobante para este `Id`: el `Id`
+ * es único por CUIT (manual WSFEX, "Manejo transaccional"), y si ya se usó,
+ * WSFEX responde con la solicitud original (`Reproceso = "S"`) en lugar de
+ * autorizar la nueva. Pasa cuando dos emisiones usan el mismo `Id` (ej:
+ * `facturarExpo` concurrentes sin `id`, o un `Id` reutilizado).
+ *
+ * El comprobante del request **no** se autorizó con este `Id`. La respuesta
+ * está en `respuesta` (es de la solicitud que ya usaba el `Id`). Volver a
+ * emitir con otro `Id` (`ultimoIdExpo() + 1`), serializando por CUIT.
+ */
+export class ArcaConflictoExpo extends ArcaError {
+  static override readonly code: string = 'ARCA_CONFLICTO_EXPO';
+  /** `Id` repetido. */
+  public readonly id: number;
+  /** `Cmp` que se envió. */
+  public readonly request: WsfexInvoice;
+  /** Respuesta de WSFEX (de la solicitud que ya usaba el `Id`). */
+  public readonly respuesta: WsfexAuthResult;
+
+  constructor(request: WsfexInvoice, respuesta: WsfexAuthResult, detalle: string) {
+    const r = respuesta.fexResultAuth;
+    super(
+      `FEXAuthorize: el Id ${request.id} ya fue usado (${detalle}). WSFEX devolvió el comprobante ` +
+        `${r?.cbteTipo}-${r?.puntoVta}-${r?.cbteNro}; el ${request.cbteTipo}-${request.puntoVta}-${request.cbteNro} ` +
+        'no se autorizó. Reintentar con otro Id (ultimoIdExpo() + 1) y serializar las emisiones por CUIT.',
+    );
+    this.name = 'ArcaConflictoExpo';
+    this.id = request.id;
+    this.request = request;
+    this.respuesta = respuesta;
   }
 }
 

@@ -15,6 +15,7 @@ export type {
   FechaInput,
   FechaHoraInput,
   CodigoDescripcion,
+  ConAdvertencias,
   AccessTicket,
   ArcaEvent,
   CallOptions,
@@ -70,6 +71,9 @@ export type {
   CoordenadaCPE,
   LocalidadProductorCPE,
   VariedadSemillaCPE,
+  RenspaCPE,
+  DomicilioCPE,
+  TipoEmbalajeCPE,
 } from './cpe-types.js';
 
 export type {
@@ -85,6 +89,9 @@ export type {
   AjusteUnificadoParams,
   MermasCg,
   CgAutorizarParams,
+  LiquidacionPorContratoParams,
+  CgBuscarCtgParams,
+  CgBuscarCertConSaldoDisponibleParams,
   // Respuestas
   DeduccionLiquidadaLpg,
   RetencionLiquidadaLpg,
@@ -100,6 +107,11 @@ export type {
   CertificacionAutorizadaLpg,
   CertificacionResultado,
   AnulacionCertificacionResultado,
+  AjusteConsultaResultado,
+  MermasCgRespuesta,
+  CertificacionConsultaResultado,
+  CtgCertificableLpg,
+  CertificadoConSaldoLpg,
 } from './lpg-types.js';
 
 // ---------------------------------------------------------------------------
@@ -108,8 +120,14 @@ export type {
 export {
   validateAutorizarCPEAutomotor,
   validateAutorizarCPEFerroviaria,
+  validateEditarCPEAutomotor,
+  validateEditarCPEFerroviaria,
+  validateEditarCPEConfirmada,
+  validateConfirmacionDefinitivaCPEAutomotor,
+  validateConfirmacionDefinitivaCPEFerroviaria,
   validateLiquidacion,
   validateAjusteUnificado,
+  validateCgAutorizar,
 } from './validation.js';
 
 // ---------------------------------------------------------------------------
@@ -128,7 +146,8 @@ export {
 // ---------------------------------------------------------------------------
 // Errores
 // ---------------------------------------------------------------------------
-export { ArcaAgroServiceError, ArcaAgroResponseError } from './errors.js';
+export { ArcaAgroServiceError, ArcaAgroResponseError, cpeFaultException } from './errors.js';
+export type { CpeFaultException } from './errors.js';
 export {
   ArcaError,
   ArcaAuthError,
@@ -136,5 +155,8 @@ export {
   ArcaServiceError,
   ArcaValidationError,
   ArcaTicketVigenteError,
+  WsaaClient,
+  MemoryTicketStorage,
+  FileTicketStorage,
 } from '@ramiidv/arca-common';
 export type { ServiceErrorDetail, ValidationErrorDetail } from '@ramiidv/arca-common';

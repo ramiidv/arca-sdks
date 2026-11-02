@@ -140,3 +140,14 @@ describe('urlQRDesdeFactura', () => {
     expect(decode(urlQRDesdeFactura(f, { cuit: 20123456786, ctz: 1000.5 })).ctz).toBe(1000.5);
   });
 });
+
+describe('generarUrlQR: validaciones de la especificación (arca-common)', () => {
+  it('punto de venta de más de 5 dígitos o número de más de 8 → ArcaValidationError', () => {
+    expect(() => generarUrlQR({ ...base, ptoVta: 100000 })).toThrow(ArcaValidationError);
+    expect(() => generarUrlQR({ ...base, nroCmp: 100000000 })).toThrow(ArcaValidationError);
+  });
+
+  it('ctz se redondea a 6 decimales', () => {
+    expect(decode(generarUrlQR({ ...base, moneda: 'DOL', ctz: 1015.12345678 })).ctz).toBe(1015.123457);
+  });
+});

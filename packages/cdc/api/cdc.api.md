@@ -8,6 +8,7 @@ import { AccessTicket } from '@ramiidv/arca-common';
 import { ArcaAuthError } from '@ramiidv/arca-common';
 import { ArcaError } from '@ramiidv/arca-common';
 import { ArcaEvent } from '@ramiidv/arca-common';
+import { ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { ArcaSdkConfig } from '@ramiidv/arca-common';
 import { ArcaServiceError } from '@ramiidv/arca-common';
@@ -35,10 +36,10 @@ export class ArcaCdc extends ArcaSdkBase<'wscdc'> {
     constructor(config: ArcaCdcConfig);
     readonly client: CdcClient;
     constatar(input: ConstatarInput, opts?: CallOptions): Promise<ConstatarResult>;
-    getDocTipos(opts?: CallOptions): Promise<DocTipoItem[]>;
-    getModalidades(opts?: CallOptions): Promise<ModalidadItem[]>;
-    getTiposCbte(opts?: CallOptions): Promise<TipoCbteItem[]>;
-    getTiposOpcionales(opts?: CallOptions): Promise<OpcionalTipoItem[]>;
+    getDocTipos(opts?: CallOptions): Promise<ListaCdc<DocTipoItem>>;
+    getModalidades(opts?: CallOptions): Promise<ListaCdc<ModalidadItem>>;
+    getTiposCbte(opts?: CallOptions): Promise<ListaCdc<TipoCbteItem>>;
+    getTiposOpcionales(opts?: CallOptions): Promise<ListaCdc<OpcionalTipoItem>>;
     status(opts?: CallOptions): Promise<ServerStatus>;
 }
 
@@ -53,6 +54,8 @@ export interface ArcaCdcConfig extends ArcaSdkConfig {
 export { ArcaError }
 
 export { ArcaEvent }
+
+export { ArcaResponseError }
 
 export { ArcaServiceError }
 
@@ -83,11 +86,13 @@ export interface CdcAuth {
 export class CdcClient extends SoapServiceClient {
     constructor(input: CdcClientConfig);
     constatar(auth: CdcAuth, input: ConstatarInput, opts?: CallOptions): Promise<ConstatarResult>;
+    // @internal
+    constatarCmpReq(auth: CdcAuth, cmpReq: Record<string, unknown>, opts?: CallOptions): Promise<ConstatarResult>;
     dummy(opts?: CallOptions): Promise<ServerStatus>;
-    getDocTipos(auth: CdcAuth, opts?: CallOptions): Promise<DocTipoItem[]>;
-    getModalidades(auth: CdcAuth, opts?: CallOptions): Promise<ModalidadItem[]>;
-    getTiposCbte(auth: CdcAuth, opts?: CallOptions): Promise<TipoCbteItem[]>;
-    getTiposOpcionales(auth: CdcAuth, opts?: CallOptions): Promise<OpcionalTipoItem[]>;
+    getDocTipos(auth: CdcAuth, opts?: CallOptions): Promise<ListaCdc<DocTipoItem>>;
+    getModalidades(auth: CdcAuth, opts?: CallOptions): Promise<ListaCdc<ModalidadItem>>;
+    getTiposCbte(auth: CdcAuth, opts?: CallOptions): Promise<ListaCdc<TipoCbteItem>>;
+    getTiposOpcionales(auth: CdcAuth, opts?: CallOptions): Promise<ListaCdc<OpcionalTipoItem>>;
 }
 
 // @public
@@ -165,12 +170,16 @@ export { FileTicketStorage }
 
 export { LegacyTlsMode }
 
+// @public
+export type ListaCdc<T> = T[] & {
+    eventos?: CdcMensaje[];
+};
+
 export { MemoryTicketStorage }
 
 // @public
 export interface ModalidadItem {
     cod: string;
-    // (undocumented)
     desc: string;
     // (undocumented)
     fchDesde?: string;

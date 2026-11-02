@@ -623,3 +623,292 @@ describe('WSLPG: paramétricas', () => {
     expect(calls[0].soapAction).toBe(`"${LPG_NS}dummy"`);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Anulación: resultado R / ausente; estadoCertificado ausente
+// ---------------------------------------------------------------------------
+
+describe('WSLPG: resultado de las anulaciones', () => {
+  it('liquidacionAnular con resultado R → ArcaAgroServiceError (no uncertain)', async () => {
+    const { agro } = setup(() =>
+      lpgResp('anulacionResp', 'anulacionReturn', '<coe>330100012345</coe><resultado>R</resultado>'),
+    );
+    const e: any = await agro.lpg.liquidacionAnular('330100012345').catch((x: any) => x);
+    expect(e).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e.uncertain).toBe(false);
+    expect(e.method).toBe('liquidacionAnular');
+    expect(e.response.resultado).toBe('R');
+  });
+
+  it('liquidacionAnular con R y errores → lanza con los errores', async () => {
+    const { agro } = setup(() =>
+      lpgResp('anulacionResp', 'anulacionReturn', `<coe>330100012345</coe><resultado>R</resultado>${ERROR_1}`),
+    );
+    const e: any = await agro.lpg.liquidacionAnular('330100012345').catch((x: any) => x);
+    expect(e).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e.errors).toEqual([{ code: 1105, msg: 'El número de orden ya fue utilizado.' }]);
+    expect(e.uncertain).toBe(false);
+  });
+
+  it('liquidacionAnular con A y errores → uncertain', async () => {
+    const { agro } = setup(() =>
+      lpgResp('anulacionResp', 'anulacionReturn', `<coe>330100012345</coe><resultado>A</resultado>${ERROR_1}`),
+    );
+    const e: any = await agro.lpg.liquidacionAnular('330100012345').catch((x: any) => x);
+    expect(e).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e.uncertain).toBe(true);
+  });
+
+  it('liquidacionAnular sin resultado → devuelve (resultado opcional en el XSD)', async () => {
+    const { agro } = setup(() => lpgResp('anulacionResp', 'anulacionReturn', '<coe>330100012345</coe>'));
+    expect(await agro.lpg.liquidacionAnular('330100012345')).toEqual({ coe: '330100012345', eventos: [] });
+  });
+
+  it('cgSolicitarAnulacion sin estadoCertificado → devuelve, no es un error incierto', async () => {
+    const { agro } = setup(() => lpgResp('cgSolicitarAnulacionResp', 'oReturn', EVENTO));
+    expect(await agro.lpg.cgSolicitarAnulacion('330200000099')).toEqual({
+      eventos: [{ codigo: '1', descripcion: 'Liquidación registrada' }],
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Errores admitidos (1021), errores sin código, uncertain con COE
+// ---------------------------------------------------------------------------
+
+const ERROR_1021 =
+  '<errores><error><codigo>1021</codigo><descripcion>Error al generar el archivo pdf.</descripcion></error></errores>';
+
+describe('WSLPG: errores admitidos y uncertain', () => {
+  it('liquidacionXCoeConsultar con pdf y 1021 → resultado sin pdf, con advertencias', async () => {
+    const { agro } = setup(() => lpgResp('liqConsXCoeResp', 'liqConsReturn', AUTORIZACION + ERROR_1021));
+    const r = await agro.lpg.liquidacionXCoeConsultar('330100012345', { pdf: true });
+    expect(r.autorizacion.coe).toBe('330100012345');
+    expect(r.pdf).toBeUndefined();
+    expect(r.advertencias).toEqual([{ code: 1021, msg: 'Error al generar el archivo pdf.' }]);
+  });
+
+  it('cgConfirmarAnulacion con 1021 → advertencias', async () => {
+    const { agro } = setup(() =>
+      lpgResp('cgConfirmarAnulacionResp', 'oReturn', `<estadoCertificado>AN</estadoCertificado>${ERROR_1021}`),
+    );
+    const r = await agro.lpg.cgConfirmarAnulacion('330200000099', { pdf: true });
+    expect(r.estadoCertificado).toBe('AN');
+    expect(r.advertencias).toHaveLength(1);
+  });
+
+  it('liquidacionAutorizar con errores y autorizacion.coe → uncertain; sin coe → no', async () => {
+    const con = setup(() => lpgResp('liquidacionResp', 'liqReturn', AUTORIZACION + ERROR_1));
+    const e1: any = await con.agro.lpg.liquidacionAutorizar(liquidacion()).catch((x: any) => x);
+    expect(e1).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e1.uncertain).toBe(true);
+    const sin = setup(() => lpgResp('liquidacionResp', 'liqReturn', ERROR_1));
+    const e2: any = await sin.agro.lpg.liquidacionAutorizar(liquidacion()).catch((x: any) => x);
+    expect(e2.uncertain).toBe(false);
+  });
+
+  it('<error> sin codigo en erroresFormato cuenta como error', async () => {
+    const { agro } = setup(() =>
+      lpgResp(
+        'liqUltNroOrdenResp',
+        'liqUltNroOrdenReturn',
+        '<erroresFormato><error><descripcion>mal</descripcion></error></erroresFormato>',
+      ),
+    );
+    const e: any = await agro.lpg.liquidacionUltimoNroOrdenConsultar(1).catch((x: any) => x);
+    expect(e).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e.errors).toEqual([{ code: 0, msg: 'mal' }]);
+  });
+
+  it('emisión: un evento sin codigo (must) se descarta, no vuelve incierta la operación', async () => {
+    const eventos =
+      '<eventos><evento><descripcion>sin código</descripcion></evento>' +
+      '<evento><codigo>2</codigo><descripcion>ok</descripcion></evento></eventos>';
+    const { agro } = setup(() => lpgResp('liquidacionResp', 'liqReturn', AUTORIZACION + eventos));
+    const r = await agro.lpg.liquidacionAutorizar(liquidacion());
+    expect(r.autorizacion.coe).toBe('330100012345');
+    expect(r.eventos).toEqual([{ codigo: '2', descripcion: 'ok' }]);
+  });
+
+  it('emisión: un campo secundario inválido se omite (no uncertain)', async () => {
+    const malo = AUTORIZACION.replace('<totalPesoNeto>30000</totalPesoNeto>', '<totalPesoNeto>n/a</totalPesoNeto>');
+    const { agro } = setup(() => lpgResp('liquidacionResp', 'liqReturn', malo + EVENTO));
+    const r = await agro.lpg.liquidacionAutorizar(liquidacion());
+    expect(r.autorizacion.coe).toBe('330100012345');
+    expect(r.autorizacion.totalPesoNeto).toBeUndefined();
+    expect(r.autorizacion.subTotal).toBe(7500003.69);
+    expect(r.autorizacion.deducciones).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Consultas de recuperación y otras consultas
+// ---------------------------------------------------------------------------
+
+const CG_CONSULTA =
+  '<autorizacion><ptoEmision>1</ptoEmision><nroOrden>3</nroOrden><coe>330200000099</coe><estado>AC</estado>' +
+  '<fechaCertificacion>2026-11-01</fechaCertificacion></autorizacion>' +
+  '<cabecera><tipoCertificado>R</tipoCertificado><ptoEmision>1</ptoEmision><nroOrden>3</nroOrden>' +
+  `<cuitDepositante>${CUIT3}</cuitDepositante><codGrano>23</codGrano><campania>2526</campania><cuitCorredor>0</cuitCorredor></cabecera>` +
+  '<retiroTransferencia><certificadoDeposito><coeCertificadoDeposito>330200000001</coeCertificadoDeposito>' +
+  '<pesoNeto>10000</pesoNeto></certificadoDeposito><nroActDepositario>40</nroActDepositario></retiroTransferencia>' +
+  '<kilosDisponible>5000.50</kilosDisponible>';
+
+const AJUSTE_CONS =
+  '<ajusteUnificado><ptoEmision>1</ptoEmision><nroOrden>13</nroOrden><coeAjustado>330100012345</coeAjustado>' +
+  '<codTipoOperacion>1</codTipoOperacion><coe>330100012346</coe><estado>AC</estado></ajusteUnificado>';
+
+describe('WSLPG: consultas de certificación y ajuste', () => {
+  it('cgConsultarXNroOrden: CgConsultarXNroOrdenReq (mayúscula) y oReturn', async () => {
+    const { agro, calls } = setup(() => lpgResp('CgConsultarXNroOrdenResp', 'oReturn', CG_CONSULTA));
+    const r = await agro.lpg.cgConsultarXNroOrden(1, 3);
+    expect(calls[0].element).toBe('ser:CgConsultarXNroOrdenReq');
+    expect(calls[0].soapAction).toBe(`"${LPG_NS}cgConsultarXNroOrden"`);
+    expect(keys(calls[0].req)).toEqual(['auth', 'ptoEmision', 'nroOrden']);
+    expect(r.autorizacion.coe).toBe('330200000099');
+    expect(r.cabecera?.cuitCorredor).toBe(0);
+    expect(r.retiroTransferencia?.certificadoDeposito).toEqual({
+      coeCertificadoDeposito: '330200000001',
+      pesoNeto: 10000,
+    });
+    expect(r.kilosDisponible).toBe(5000.5);
+  });
+
+  it('cgConsultarXCoe con pdf', async () => {
+    const { agro, calls } = setup(() => lpgResp('cgConsultarXCoeResp', 'oReturn', `${CG_CONSULTA}<pdf>JVBE</pdf>`));
+    const r = await agro.lpg.cgConsultarXCoe('330200000099', { pdf: true });
+    expect(calls[0].element).toBe('ser:cgConsultarXCoeReq');
+    expect(keys(calls[0].req)).toEqual(['auth', 'coe', 'pdf']);
+    expect(r.pdf).toBe('JVBE');
+  });
+
+  it('cgConsultarXNroOrden sin autorizacion.coe → ArcaAgroResponseError (no uncertain)', async () => {
+    const { agro } = setup(() => lpgResp('CgConsultarXNroOrdenResp', 'oReturn', EVENTO));
+    const e: any = await agro.lpg.cgConsultarXNroOrden(1, 3).catch((x: any) => x);
+    expect(e).toBeInstanceOf(ArcaAgroResponseError);
+    expect(e.uncertain).toBe(false);
+  });
+
+  it('ajusteXNroOrdenConsultar', async () => {
+    const { agro, calls } = setup(() => lpgResp('ajusteXNroOrdenConsResp', 'ajusteXNroOrdenConsReturn', AJUSTE_CONS));
+    const r = await agro.lpg.ajusteXNroOrdenConsultar(1, 13);
+    expect(calls[0].element).toBe('ser:ajusteXNroOrdenConsReq');
+    expect(calls[0].soapAction).toBe(`"${LPG_NS}ajusteXNroOrdenConsultar"`);
+    expect(keys(calls[0].req)).toEqual(['auth', 'ptoEmision', 'nroOrden']);
+    expect(r.ajusteUnificado.coe).toBe('330100012346');
+    expect(r.eventos).toEqual([]);
+  });
+
+  it('ajusteXCoeConsultar: respuesta ajusteXcoeConsResp', async () => {
+    const { agro, calls } = setup(() =>
+      lpgResp('ajusteXcoeConsResp', 'ajusteConsReturn', `${AJUSTE_CONS}<pdf>JVBE</pdf>`),
+    );
+    const r = await agro.lpg.ajusteXCoeConsultar('330100012346', { pdf: true });
+    expect(calls[0].element).toBe('ser:ajusteXCoeConsReq');
+    expect(r.ajusteUnificado.coeAjustado).toBe('330100012345');
+    expect(r.pdf).toBe('JVBE');
+  });
+
+  it('ajustePorContratoConsultar', async () => {
+    const { agro, calls } = setup(() => lpgResp('ajustePorContratoConsultarResp', 'ajusteContratoReturn', AJUSTE_CONS));
+    const r = await agro.lpg.ajustePorContratoConsultar(123456);
+    expect(calls[0].element).toBe('ser:ajustePorContratoConsultarReq');
+    expect(keys(calls[0].req)).toEqual(['auth', 'nroContrato']);
+    expect(r.ajusteUnificado.coe).toBe('330100012346');
+  });
+
+  it('liquidacionPorContratoConsultar → COEs (vacío → [])', async () => {
+    const params = { nroContrato: 123456, cuitComprador: CUIT, cuitVendedor: CUIT2, codGrano: 23 };
+    const { agro, calls } = setup(() =>
+      lpgResp(
+        'liquidacionPorContratoConsultarResp',
+        'liqPorContratoCons',
+        '<coeRelacionados><coe>330100000001</coe><coe>330100000002</coe></coeRelacionados>',
+      ),
+    );
+    expect(await agro.lpg.liquidacionPorContratoConsultar(params)).toEqual(['330100000001', '330100000002']);
+    expect(calls[0].element).toBe('ser:liquidacionPorContratoConsultarReq');
+    expect(keys(calls[0].req)).toEqual(['auth', 'nroContrato', 'cuitComprador', 'cuitVendedor', 'codGrano']);
+    const vacia = setup(() => lpgResp('liquidacionPorContratoConsultarResp', 'liqPorContratoCons', EVENTO));
+    expect(await vacia.agro.lpg.liquidacionPorContratoConsultar(params)).toEqual([]);
+  });
+
+  it('cgBuscarCtg', async () => {
+    const { agro, calls } = setup(() =>
+      lpgResp(
+        'cgBuscarCtgResp',
+        'oReturn',
+        '<ctg><campania>2526</campania><nroPlanta>1938</nroPlanta><nroCtg>010100012345</nroCtg><tipoCtg>CPE</tipoCtg>' +
+          `<nroCartaPorte>74-1-15</nroCartaPorte><kilosConfirmados>30000</kilosConfirmados><fechaConfirmacionCtg>2026-11-02</fechaConfirmacionCtg>` +
+          `<codGrano>23</codGrano><cuitLiquida>${CUIT}</cuitLiquida><cuitCertifica>${CUIT2}</cuitCertifica></ctg>`,
+      ),
+    );
+    const r = await agro.lpg.cgBuscarCtg({
+      fechaConfirmacionCtgDes: '2026-11-01',
+      campania: 2526,
+      codGrano: 23,
+      cuitDepositante: CUIT3,
+      tipoCertificado: 'P',
+    });
+    expect(calls[0].element).toBe('ser:cgBuscarCtgReq');
+    expect(keys(calls[0].req)).toEqual([
+      'auth',
+      'tipoCertificado',
+      'cuitDepositante',
+      'codGrano',
+      'campania',
+      'fechaConfirmacionCtgDes',
+    ]);
+    expect(r).toEqual([
+      {
+        campania: 2526,
+        nroPlanta: 1938,
+        nroCtg: '010100012345',
+        tipoCtg: 'CPE',
+        nroCartaPorte: '74-1-15',
+        kilosConfirmados: 30000,
+        fechaConfirmacionCtg: '2026-11-02',
+        codGrano: 23,
+        cuitLiquida: Number(CUIT),
+        cuitCertifica: Number(CUIT2),
+      },
+    ]);
+  });
+
+  it('cgBuscarCertConSaldoDisponible', async () => {
+    const { agro, calls } = setup(() =>
+      lpgResp(
+        'cgBuscarCertConSaldoDisponibleResp',
+        'oReturn',
+        '<certificado><coe>330200000001</coe><tipoCertificado>P</tipoCertificado><kilosDisponibles>1000</kilosDisponibles></certificado>',
+      ),
+    );
+    const r = await agro.lpg.cgBuscarCertConSaldoDisponible({ cuitDepositante: CUIT3, codGrano: 23, campania: 2526 });
+    expect(calls[0].element).toBe('ser:cgBuscarCertConSaldoDisponibleReq');
+    expect(keys(calls[0].req)).toEqual(['auth', 'cuitDepositante', 'codGrano', 'campania']);
+    expect(r).toEqual([{ coe: '330200000001', tipoCertificado: 'P', kilosDisponibles: 1000 }]);
+  });
+});
+
+describe('WSLPG: cgAutorizar cuitCorredor (LpgCuit0Type)', () => {
+  const resp = () => lpgResp('cgAutorizarResp', 'oReturn', '<autorizacion><coe>1</coe></autorizacion>');
+
+  it('acepta 0 (sin corredor) y lo envía como 0', async () => {
+    const { agro, calls } = setup(resp);
+    const p = cg();
+    p.cabecera.cuitCorredor = 0;
+    await agro.lpg.cgAutorizar(p);
+    expect(String(calls[0].req.cabecera.cuitCorredor)).toBe('0');
+  });
+
+  it('una CUIT real se valida y normaliza', async () => {
+    const { agro, calls, fetchMock } = setup(resp);
+    const p = cg();
+    p.cabecera.cuitCorredor = '30-71234567-1';
+    await agro.lpg.cgAutorizar(p);
+    expect(String(calls[0].req.cabecera.cuitCorredor)).toBe(CUIT2);
+    p.cabecera.cuitCorredor = '30-71234567-2';
+    await expect(agro.lpg.cgAutorizar(p)).rejects.toBeInstanceOf(ArcaValidationError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

@@ -5,114 +5,63 @@ o se agregue algo.
 
 ## Estado actual
 
-Primera versión publicada desde el monorepo (con trusted publishing y provenance):
+Versiones publicadas (release del 2026-11-01, con trusted publishing y provenance):
 
 | Paquete | Versión | Notas |
 |---|---|---|
-| `@ramiidv/arca-common` | 0.5.0 | `ArcaSdkBase`, `SoapServiceClient`, `/schema` (DSL del XSD), `/testing` (mocks y contratos contra el WSDL) |
-| `@ramiidv/arca-facturacion` | 5.0.0 | ESM-only. WSFE/WSFEX sobre el DSL en `main` (sin publicar) |
-| `@ramiidv/arca-padron` | 0.5.0 | DSL + contratos |
-| `@ramiidv/arca-agro` | 0.4.0 | DSL + contratos (WSCPE, WSLPG) |
-| `@ramiidv/arca-cdc` | 0.4.0 | DSL + contratos |
-| `@ramiidv/arca-fecred` | 0.4.0 | DSL + contratos |
-| `@ramiidv/arca-mtxca` | 0.4.0 | DSL + contratos |
-| `@ramiidv/arca-sire` | 0.4.0 | DSL + contratos |
-| `@ramiidv/arca-empleados` | 0.4.0 | Genera un TXT, no usa SOAP |
+| `@ramiidv/arca-common` | 0.6.0 | `ArcaSdkBase`, `SoapServiceClient`, `/schema` (DSL del XSD), `/testing` (mocks y contratos contra el WSDL) |
+| `@ramiidv/arca-facturacion` | 6.0.0 | ESM-only, camelCase, WSFE/WSFEX sobre el DSL |
+| `@ramiidv/arca-padron` | 0.6.0 | DSL + contratos, `WsAuth` en camelCase |
+| `@ramiidv/arca-agro` | 0.5.0 | DSL + contratos (WSCPE, WSLPG) |
+| `@ramiidv/arca-cdc` | 0.5.0 | DSL + contratos, camelCase |
+| `@ramiidv/arca-fecred` | 0.5.0 | DSL + contratos, `choice()` de common |
+| `@ramiidv/arca-mtxca` | 0.5.0 | DSL + contratos |
+| `@ramiidv/arca-sire` | 0.4.1 | DSL + contratos |
+| `@ramiidv/arca-empleados` | 0.4.1 | Genera un TXT, no usa SOAP |
 
 Todos los SDKs con web service extienden `ArcaSdkBase`, así que comparten
 configuración, `wsaa`, `cuit`, `production`, `on`/`off`, `config.wsaa`,
 `config.signal` y `clearAuthCache()`.
 
+Rama `fix/auditoria` (sin publicar): auditoría de todos los paquetes contra los
+manuales de ARCA. Bugs (monedas 029/031 invertidas, error 550 de WSCPE, FCE en
+WSFE y WSMTXCA, reproceso de WSFEX), manejo de errores de WSAA según la
+especificación, helpers compartidos en common, documentación y CI. Ver los
+changesets `*-auditoria.md`.
+
 ## Pendientes operativos
 
-- [x] Desplegar arca-sdk.dev (`../arca-sdk-web/landing`), 2026-11-01. Los
-      cambios de la landing siguen sin commitear en `ramiidv/arca-sdk-web`.
-- [x] Mergear en arca-server la branch `chore/sdks-nuevas-versiones` (PR #1).
-- [ ] Redesplegar arca-server con los SDKs nuevos.
-- [x] Archivar los 9 repos anteriores (`ramiidv/arca-common`,
-      `ramiidv/arca-facturacion`...) con un aviso en su README que apunta acá.
-- [x] `npm deprecate` de las versiones anteriores al monorepo (`<0.4.0`,
-      `<0.5.0` en common y padron, `<5.0.0` en facturacion).
+- [ ] Redesplegar arca-server con los SDKs nuevos. Para subir a facturacion 6 /
+      padron 0.6: `src/routes/afip.ts` (`padron.status()` devuelve
+      `ServiceStatus`) y `tests/arca-sdk.test.ts` (`Arca` → `ArcaFacturacion`).
+- [ ] Commitear los cambios de la landing en `ramiidv/arca-sdk-web`.
+- [ ] Cargar en el repo los secrets `ARCA_TEST_CERT`, `ARCA_TEST_KEY` y
+      `ARCA_TEST_CUIT`, y la variable `ARCA_TEST_SERVICES`.
 
 ## Próximos pasos técnicos
 
-En orden de prioridad.
+### 1. Próxima major: API uniforme entre paquetes
 
-### 1. ~~facturacion: WSFE y WSFEX sobre el DSL~~ (hecho, pendiente de release)
+- Clientes de bajo nivel con la misma configuración (`SoapServiceClientConfig`:
+  `{ endpoint, transport? }`): hoy cdc, sire, mtxca, fecred, padron y
+  facturacion usan formas distintas.
+- Rechazos uniformes: mtxca devuelve `resultado: 'R'`, fecred lanza.
+- Respuesta inválida: facturacion, cdc, padron y agro ya lanzan
+  `ArcaResponseError` (vía `decodeResponse({ kind })`); mtxca, fecred y sire
+  siguen con `ArcaSoapError` (`uncertain` en emisiones) para no romper los
+  `catch` existentes. Unificar en la major.
+- cdc `constatar()` devuelve `events`; las tablas, `eventos`.
+- Constantes de endpoints con la misma forma en todos los paquetes.
+- Quitar los alias deprecados (`afipSoapCall`, `parseAfipDate`, re-exports de
+  padron).
 
-Changeset `wsfe-wsfex-dsl` (minor). `src/schemas.ts` describe requests y
-respuestas, `src/decode.ts` decodifica respetando la forma `X | X[]` de los
-tipos públicos y `tests/contract.test.ts` compara contra los dos WSDL.
+### 2. Mantenimiento
 
-Queda para facturacion 6.0: las respuestas crudas pueden pasar a usar arrays
-siempre (`wrapped()`), sin el `restoreSingles` de `decode.ts`. También
-`validation.ts` podría apoyarse en los schemas en vez de validar a mano.
-
-### 2. ~~Próximas majors: quitar lo deprecado~~ (hecho, pendiente de release)
-
-Rama `feat/majors-sin-deprecados` (sobre `feat/wsfe-wsfex-dsl`), con changesets:
-facturacion 6.0, agro 0.5, fecred 0.5, mtxca 0.5 y padron 0.6. Además de lo
-planeado, facturacion 6.0 quita `extractCAE`, `formatDate`/`calcularTotales`
-estáticos y `toDateString`; las respuestas crudas usan arrays siempre; y
-padron 0.6 quita `TipoDocumento`, `IVA_NO_INSCRIPTO`, `checkServiceErrors` y
-`ArcaPadronEvent`.
-
-Para subir arca-server a estas versiones: `src/routes/afip.ts` (`padron.status()`
-devuelve `ServiceStatus`, no `PromiseSettledResult`) y `tests/arca-sdk.test.ts`
-(`Arca` → `ArcaFacturacion`). El resto compila y pasa sus tests contra las
-versiones nuevas.
-
-Convención de nombres (decidida): todo en camelCase. Los campos de ARCA se
-pasan a camelCase con las siglas como palabras (`CAEFchVto` → `caeFchVto`,
-`Fecha_cbte` → `fechaCbte`) y las listas son arrays sin el contenedor del XML.
-Con el DSL, cada schema usa `xml('NombreArca', …)` para el nombre del XML. Se
-aplicó en facturacion 6.0, cdc 0.5 y `WsAuth` de padron 0.6; el resto de los
-SDKs ya era camelCase.
-
-### 3. ~~Mejoras al DSL y al comparador de contratos (common)~~ (hecho, pendiente de release)
-
-Rama `feat/dsl-choice` (desde `main`): `choice()` nativo en common (fecred lo
-usa en lugar del suyo), `str({ patternMessage })` (mtxca y sire lo usan para
-"no puede estar vacío"), errores de `extraCheck` intercalados y, en el
-comparador, `xsd:all` sin orden y `xsd:choice` ↔ `choice()`.
-
-### 4. Tests de integración contra homologación (en curso)
-
-Rama `feat/integracion-homologacion`: cada paquete tiene `tests/integration`
-(dummy sin autenticación y una consulta autenticada si `ARCA_TEST_SERVICES`
-incluye el servicio), `npm run test:integration` y el workflow
-`integracion.yml` (nightly y manual, con los tickets de WSAA en `actions/cache`).
-Los dummy de los 7 servicios se probaron contra homologación el 2026-11-01.
-
-- [ ] Cargar en el repo los secrets `ARCA_TEST_CERT`, `ARCA_TEST_KEY` y
-      `ARCA_TEST_CUIT`, y la variable `ARCA_TEST_SERVICES` con los servicios
-      autorizados para ese certificado.
-- [ ] Grabar respuestas reales, sin token, sign ni CUIT reales, como fixtures
-      para los tests unitarios (requiere el certificado).
-
-### 5. ~~Detección de cambios incompatibles~~ (hecho)
-
-Rama `chore/api-extractor`: `scripts/api-report.mjs` corre api-extractor por
-cada entry point de `exports` y deja el reporte en `packages/*/api/*.api.md`.
-CI corre `npm run api:check` (falla si la API cambió sin actualizar el
-reporte); `npm run api:update` lo regenera. Las ramas que cambian la API
-(`feat/majors-sin-deprecados`, `feat/dsl-choice`) tienen que correr
-`api:update` después de rebasear sobre esta.
-
-### 6. Mantenimiento
-
-- ~~Evaluar TypeScript 7 y vitest 5~~. Rama `chore/ts7-vitest5`: TypeScript
-  7.0.2 (build, typecheck y tests iguales; los `.js` emitidos no cambian y
-  en los `.d.ts` solo cambian las comillas) y vitest 4.1.12, que arregla las
-  3 vulnerabilidades de vitest 3 (`npm audit` limpio) y sigue soportando
-  Node 20. Vitest 5 exige Node >= 22.12: subirlo junto con el cambio de
-  `engines`.
-- ~~Quitar los `any` que quedan~~: common en `chore/ts7-vitest5`, facturacion
-  en `feat/majors-sin-deprecados` (`padron.ts` y `Contribuyente` se quitan
-  con la major). Con todo mergeado, biome no marca ninguno: se puede pasar
-  `noExplicitAny` de warning a error.
 - Cuando Node 20 deje de usarse en la práctica, subir `engines` a `>=22.12`,
   sacar 20.19 de la matriz de CI y pasar a vitest 5.
+- `@ramiidv/arca-common` sigue como `dependency` (no `peerDependency`): con
+  rangos `^0.x`, un peer obliga a changesets a publicar una major de cada SDK
+  en cada minor de common. Revisar cuando common llegue a 1.0.
 
 ## Cómo publicar
 

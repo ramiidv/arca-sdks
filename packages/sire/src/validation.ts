@@ -1,4 +1,4 @@
-import { ArcaValidationError, formatDate } from '@ramiidv/arca-common';
+import { ArcaValidationError, formatDate, formatDateTimeAR } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
 import { encodeRequest } from '@ramiidv/arca-common/schema';
 import {
@@ -21,15 +21,26 @@ import { CERTIFICADO, CERTIFICADO_ANULACION } from './schemas.js';
 // para el desarrollador v1.0.3: en los schemas de `schemas.ts`. Acá quedan las
 // fechas (formato propio de SIRE) y las reglas del manual que combinan campos.
 
-/** Argentina no tiene horario de verano desde 2009: siempre UTC-03:00. */
-const AR_OFFSET_MS = -3 * 60 * 60 * 1000;
-const AR_OFFSET = '-03:00';
-
 const DATE_ONLY_RE = /^(?:\d{8}|\d{4}-\d{2}-\d{2})$/;
 const DATETIME_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:\d{2})?$/;
 
 /** Formato `99999-99999999` de la tabla TIPO_COMPROBANTE. */
 const NUMERO_PV_RE = /^\d{5}-\d{8}$/;
+/**
+ * `X(n)` de la tabla TIPO_COMPROBANTE: "caracteres alfanuméricos". Se aceptan
+ * también los separadores habituales (`-`, `/`, `.`) para no rechazar localmente
+ * numeraciones que ARCA podría aceptar; espacios y caracteres no ASCII no.
+ */
+const ALFANUMERICO_RE = /^[A-Za-z0-9][A-Za-z0-9./-]*$/;
+
+/** Fecha de retención mínima: "a partir del 01-Diciembre-2019" (manual, 3.2.2). */
+const FECHA_RETENCION_MINIMA = '2019-12-01';
+
+/** Tipos de comprobante con valor negativo (tabla TIPO_COMPROBANTE): admiten `importeComprobante` < 0. */
+const TIPOS_CON_VALOR_NEGATIVO: readonly number[] = [
+  TipoComprobante.LIQUIDACION_SERVICIOS_PUBLICOS_A_NEGATIVA,
+  TipoComprobante.LIQUIDACION_SERVICIOS_PUBLICOS_B_NEGATIVA,
+];
 
 /** Largo máximo de `numeroComprobante` por tipo (tabla TIPO_COMPROBANTE, manual 5.3). `0` = formato `99999-99999999`. */
 const NUMERO_COMPROBANTE_FORMATO: Record<number, number> = {
@@ -47,10 +58,6 @@ const NUMERO_COMPROBANTE_FORMATO: Record<number, number> = {
   [TipoComprobante.LIQUIDACION_SERVICIOS_PUBLICOS_B_NEGATIVA]: 0,
 };
 
-function pad(n: number, width: number): string {
-  return String(n).padStart(width, '0');
-}
-
 /** Detalle de error con el formato de `encodeRequest` (`message` empieza con el campo). */
 function detail(field: string, message: string, value: unknown): ValidationErrorDetail {
   return { field, message: `${field}: ${message}`, value };
@@ -60,13 +67,9 @@ function invalid(field: string, message: string, value: unknown): ArcaValidation
   return new ArcaValidationError(`Campo "${field}" inválido: ${message}`, [detail(field, message, value)], field);
 }
 
+/** Instante en hora de Argentina, `AAAA-MM-DDThh:mm:ss.SSS-03:00`. */
 function formatInstant(ms: number): string {
-  const d = new Date(ms + AR_OFFSET_MS);
-  return (
-    `${pad(d.getUTCFullYear(), 4)}-${pad(d.getUTCMonth() + 1, 2)}-${pad(d.getUTCDate(), 2)}` +
-    `T${pad(d.getUTCHours(), 2)}:${pad(d.getUTCMinutes(), 2)}:${pad(d.getUTCSeconds(), 2)}` +
-    `.${pad(d.getUTCMilliseconds(), 3)}${AR_OFFSET}`
-  );
+  return formatDateTimeAR(new Date(ms), { millis: true });
 }
 
 /** Valida una fecha calendario `YYYYMMDD`/`YYYY-MM-DD` con common y la devuelve como `YYYY-MM-DD`. */
@@ -94,7 +97,7 @@ export function formatSireDateTime(value: FechaHora, field = 'fecha'): string {
   if (typeof value !== 'string') throw invalid(field, 'se esperaba un Date o un string', value);
 
   const s = value.trim();
-  if (DATE_ONLY_RE.test(s)) return `${calendarDate(s, field)}T00:00:00.000${AR_OFFSET}`;
+  if (DATE_ONLY_RE.test(s)) return `${calendarDate(s, field)}T00:00:00.000-03:00`;
 
   const m = DATETIME_RE.exec(s);
   if (!m) {
@@ -105,15 +108,17 @@ export function formatSireDateTime(value: FechaHora, field = 'fecha'): string {
   if (Number(hh) > 23 || Number(mi) > 59 || Number(ss) > 59) throw invalid(field, 'la hora no es válida', value);
   const millis = frac.padEnd(3, '0').slice(0, 3);
 
-  if (zone === undefined) return `${date}T${hh}:${mi}:${ss}.${millis}${AR_OFFSET}`;
+  // Argentina no tiene horario de verano desde 2009: siempre UTC-03:00.
+  if (zone === undefined) return `${date}T${hh}:${mi}:${ss}.${millis}-03:00`;
   const instant = Date.parse(`${date}T${hh}:${mi}:${ss}.${millis}${zone === 'Z' ? 'Z' : zone}`);
   if (Number.isNaN(instant)) throw invalid(field, 'la fecha no es válida', value);
   return formatInstant(instant);
 }
 
 /**
- * Valida un importe `xs:double` de SIRE (11 enteros + 2 decimales, sin signo)
- * y lo devuelve redondeado a 2 decimales (`"2100.00"`).
+ * Valida un importe `xs:double` de SIRE (11 enteros + 2 decimales) y lo devuelve
+ * redondeado a 2 decimales (`"2100.00"`). Valida como `importeRetencion`: no
+ * negativo (el manual no lo dice; es criterio del SDK).
  *
  * @throws ArcaValidationError si no es un número finito, es negativo o excede 11 enteros.
  */
@@ -135,8 +140,20 @@ const DATOS_CERTIFICADO_ORIGINAL = [
   'importeCertificadoOriginal',
 ] as const satisfies readonly (keyof EmitirCertificadoParams)[];
 
-/** Reglas del manual que dependen de más de un campo o de las tablas del anexo. */
-function reglasCertificado(p: Partial<EmitirCertificadoParams>, errors: ValidationErrorDetail[]): void {
+/** Fecha calendario de Argentina (`AAAA-MM-DD`) de un `xs:dateTime` ya serializado; `undefined` si no hay. */
+function fechaAR(serializada: unknown): string | undefined {
+  return typeof serializada === 'string' && serializada !== '' ? serializada.slice(0, 10) : undefined;
+}
+
+/**
+ * Reglas del manual que dependen de más de un campo o de las tablas del anexo.
+ * `fechas` tiene las fechas ya serializadas (`''` si eran inválidas).
+ */
+function reglasCertificado(
+  p: Partial<EmitirCertificadoParams>,
+  fechas: Record<string, unknown>,
+  errors: ValidationErrorDetail[],
+): void {
   const required = (field: keyof EmitirCertificadoParams, when: string) => {
     if (p[field] === undefined) errors.push(detail(field, `es obligatorio ${when}`, undefined));
   };
@@ -155,6 +172,11 @@ function reglasCertificado(p: Partial<EmitirCertificadoParams>, errors: Validati
   if (p.regimenExclusion === true) {
     required('porcentajeExclusion', 'cuando regimenExclusion es true');
     required('fechaPublicacion', 'cuando regimenExclusion es true');
+  }
+
+  const retencion = fechaAR(fechas.fechaRetencion);
+  if (retencion !== undefined && retencion < FECHA_RETENCION_MINIMA) {
+    errors.push(detail('fechaRetencion', 'debe ser a partir del 2019-12-01', p.fechaRetencion));
   }
 
   const tipo = p.tipoComprobante;
@@ -176,6 +198,34 @@ function reglasCertificado(p: Partial<EmitirCertificadoParams>, errors: Validati
       errors.push(detail('numeroComprobante', 'debe ser un texto no vacío', numero));
     } else if (numero.length > maxLength) {
       errors.push(detail('numeroComprobante', `admite hasta ${maxLength} caracteres ${when}`, numero));
+    } else if (!ALFANUMERICO_RE.test(numero)) {
+      errors.push(detail('numeroComprobante', `admite solo letras, dígitos y los separadores - / . ${when}`, numero));
+    }
+  }
+
+  if (
+    typeof p.importeComprobante === 'number' &&
+    p.importeComprobante < 0 &&
+    !TIPOS_CON_VALOR_NEGATIVO.includes(tipo)
+  ) {
+    errors.push(
+      detail('importeComprobante', `no puede ser negativo ${when} (solo los tipos 19 y 20)`, p.importeComprobante),
+    );
+  }
+
+  // Fechas (manual, 3.2.2), comparadas como fechas calendario de Argentina.
+  const comprobante = fechaAR(fechas.fechaComprobante);
+  if (retencion !== undefined && comprobante !== undefined) {
+    if (TIPOS_CON_CERTIFICADO_ORIGINAL.includes(tipo)) {
+      if (comprobante !== retencion) {
+        errors.push(
+          detail('fechaComprobante', `debe ser igual a fechaRetencion (${retencion}) ${when}`, p.fechaComprobante),
+        );
+      }
+    } else if (comprobante > retencion) {
+      errors.push(
+        detail('fechaComprobante', `debe ser menor o igual a fechaRetencion (${retencion})`, p.fechaComprobante),
+      );
     }
   }
 
@@ -217,7 +267,7 @@ export function buildCertificadoRequest(params: EmitirCertificadoParams): Certif
 
   const out = encodeRequest(input, CERTIFICADO, 'certificado', (_, errors) => {
     errors.push(...fechaErrors);
-    reglasCertificado(p, errors);
+    reglasCertificado(p, input, errors);
     if (Object.hasOwn(p, 'motivoAnulacion')) {
       errors.push(detail('motivoAnulacion', 'no se debe enviar en emitir (usar anularCertificado)', motivoAnulacion));
     }

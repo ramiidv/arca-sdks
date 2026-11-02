@@ -1,5 +1,5 @@
 import { parseXml } from '@ramiidv/arca-common';
-import { fakeTicketStorage, soapEnvelope } from '@ramiidv/arca-common/testing';
+import { fakeTicketStorage, soapEnvelope, testCert } from '@ramiidv/arca-common/testing';
 import { ArcaCdc } from '../src/index.js';
 import type { ArcaCdcConfig } from '../src/index.js';
 
@@ -19,8 +19,7 @@ export function asmxResponse(method: string, inner: string): string {
 
 export function makeCdc(fetchFn: typeof fetch, extra: Partial<ArcaCdcConfig> = {}): ArcaCdc {
   return new ArcaCdc({
-    cert: '-----BEGIN CERTIFICATE-----\nMIIBtest\n-----END CERTIFICATE-----',
-    key: 'key',
+    ...testCert(),
     cuit: CUIT,
     fetch: fetchFn,
     ticketStorage: fakeTicketStorage(),

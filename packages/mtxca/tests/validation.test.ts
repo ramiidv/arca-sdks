@@ -61,9 +61,15 @@ function facturaB(): MtxcaComprobanteBase {
 }
 
 describe('redondeo', () => {
-  it('importes a 2 decimales, mitad hacia afuera, sin errores binarios', () => {
-    expect(roundImporte(1.005)).toBe(1.01);
-    expect(roundImporte(-1.005)).toBe(-1.01);
+  it('importes a 2 decimales, mitad al par (Round Half Even), sin errores binarios', () => {
+    expect(roundImporte(1.005)).toBe(1);
+    expect(roundImporte(-1.005)).toBe(-1);
+    expect(roundImporte(1.015)).toBe(1.02);
+    expect(roundImporte(8.565)).toBe(8.56);
+    expect(roundImporte(8.575)).toBe(8.58);
+    expect(roundImporte(2.675)).toBe(2.68);
+    expect(roundImporte(-8.575)).toBe(-8.58);
+    expect(roundImporte(1.0051)).toBe(1.01);
     expect(roundImporte(0.1 + 0.2)).toBe(0.3);
     expect(roundImporte(121.004999)).toBe(121);
     expect(roundImporte(1e-7)).toBe(0);
@@ -72,7 +78,8 @@ describe('redondeo', () => {
 
   it('cantidad y precio a 6 decimales', () => {
     expect(roundDecimal(1.23456789)).toBe(1.234568);
-    expect(roundDecimal(0.0000005)).toBe(0.000001);
+    expect(roundDecimal(0.0000005)).toBe(0);
+    expect(roundDecimal(0.0000015)).toBe(0.000002);
   });
 });
 
@@ -266,11 +273,209 @@ describe('validateComprobanteCAE', () => {
 });
 
 describe('validateComprobanteCAEA', () => {
+  it('exige fechaHoraGen (754)', () => {
+    expect(messages(() => validateComprobanteCAEA(facturaA()))).toEqual([expect.stringMatching(/\(754\)$/)]);
+  });
+
   it('aplica las reglas de presencia de ítems, no las de importes', () => {
-    expect(fields(() => validateComprobanteCAEA(facturaA({ importeTotal: 1 })))).toEqual([]);
+    expect(fields(() => validateComprobanteCAEA(caea(facturaA({ importeTotal: 1 }))))).toEqual([]);
     const a = facturaA();
-    expect(fields(() => validateComprobanteCAEA({ ...a, items: [{ ...a.items[0], codigoMtx: undefined }] }))).toContain(
-      'items[0].codigoMtx',
+    expect(
+      fields(() => validateComprobanteCAEA({ ...caea(a), items: [{ ...a.items[0], codigoMtx: undefined }] })),
+    ).toContain('items[0].codigoMtx');
+  });
+});
+
+/** Mensajes de error (`campo: mensaje`) de una validación. */
+function messages(fn: () => void): string[] {
+  try {
+    fn();
+  } catch (e) {
+    expect(e).toBeInstanceOf(ArcaValidationError);
+    return (e as ArcaValidationError).details.map((d) => `${d.field}: ${d.message}`);
+  }
+  return [];
+}
+
+const servicios = { fechaServicioDesde: '2026-11-01', fechaServicioHasta: '2026-11-30' };
+const caea = (c: MtxcaComprobanteBase) => ({
+  ...c,
+  numeroComprobante: 1,
+  caea: '36434058476543',
+  fechaHoraGen: '2026-11-01T10:30:00',
+});
+
+describe('FCE MiPyME: fechaVencimientoPago (148, 149 / 764, 765)', () => {
+  const fce = (tipo: number, overrides: Partial<MtxcaComprobanteBase> = {}) =>
+    facturaA({ codigoTipoComprobante: tipo, ...overrides });
+
+  for (const tipo of [201, 206]) {
+    it(`${tipo}: obligatoria aunque el concepto sea 1`, () => {
+      expect(fields(() => validateComprobanteCAE(fce(tipo, { fechaVencimientoPago: '2026-11-30' })))).toEqual([]);
+      expect(messages(() => validateComprobanteCAE(fce(tipo)))).toEqual([
+        expect.stringMatching(/^fechaVencimientoPago: .*\(148\)$/),
+      ]);
+      expect(
+        fields(() =>
+          validateComprobanteCAE(fce(tipo, { codigoConcepto: 2, ...servicios, fechaVencimientoPago: '2026-11-30' })),
+        ),
+      ).toEqual([]);
+      expect(messages(() => validateComprobanteCAE(fce(tipo, { codigoConcepto: 2, ...servicios })))).toEqual([
+        expect.stringMatching(/\(148\)$/),
+      ]);
+      expect(messages(() => validateComprobanteCAEA(caea(fce(tipo))))).toEqual([expect.stringMatching(/\(764\)$/)]);
+      expect(fields(() => validateComprobanteCAEA(caea(fce(tipo, { fechaVencimientoPago: '2026-11-30' }))))).toEqual(
+        [],
+      );
+    });
+  }
+
+  for (const tipo of [202, 203, 207, 208]) {
+    it(`${tipo}: no corresponde, cualquiera sea el concepto`, () => {
+      expect(fields(() => validateComprobanteCAE(fce(tipo)))).toEqual([]);
+      expect(fields(() => validateComprobanteCAE(fce(tipo, { codigoConcepto: 2, ...servicios })))).toEqual([]);
+      expect(messages(() => validateComprobanteCAE(fce(tipo, { fechaVencimientoPago: '2026-11-30' })))).toEqual([
+        expect.stringMatching(/^fechaVencimientoPago: .*\(149\)$/),
+      ]);
+      expect(
+        messages(() =>
+          validateComprobanteCAE(fce(tipo, { codigoConcepto: 3, ...servicios, fechaVencimientoPago: '2026-11-30' })),
+        ),
+      ).toEqual([expect.stringMatching(/\(149\)$/)]);
+      expect(messages(() => validateComprobanteCAEA(caea(fce(tipo, { fechaVencimientoPago: '2026-11-30' }))))).toEqual([
+        expect.stringMatching(/\(765\)$/),
+      ]);
+      expect(fields(() => validateComprobanteCAEA(caea(fce(tipo))))).toEqual([]);
+    });
+  }
+
+  it('fuera de FCE sigue la regla por concepto (124)', () => {
+    expect(messages(() => validateComprobanteCAE(facturaA({ fechaVencimientoPago: '2026-11-30' })))).toEqual([
+      expect.stringMatching(/^fechaVencimientoPago: .*\(122-124\)$/),
+    ]);
+  });
+
+  it('FCE: descripción de tributo obligatoria (302) y un solo comprador (433)', () => {
+    const tributo = { codigo: 1, baseImponible: 100, importe: 1 };
+    expect(messages(() => validateComprobanteCAE(fce(202, { otrosTributos: [tributo] })))).toEqual([
+      expect.stringMatching(/^otrosTributos\[0\]\.descripcion: .*\(302\)$/),
+    ]);
+    expect(fields(() => validateComprobanteCAE(facturaA({ otrosTributos: [tributo] })))).toEqual([]);
+    const comprador = { codigoTipoDocumento: 80, numeroDocumento: '30000000007', porcentaje: 50 };
+    expect(messages(() => validateComprobanteCAE(fce(202, { compradores: [comprador, comprador] })))).toEqual([
+      expect.stringMatching(/^compradores: .*\(433\)$/),
+    ]);
+    expect(fields(() => validateComprobanteCAE(facturaA({ compradores: [comprador, comprador] })))).toEqual([]);
+  });
+});
+
+describe('reglas del manual (190, 118, 160, 161, 432, 516)', () => {
+  it('condicionIVAReceptor es obligatoria (190 en CAE, 390 en CAEA)', () => {
+    expect(messages(() => validateComprobanteCAE(facturaA({ condicionIVAReceptor: undefined })))).toEqual([
+      expect.stringMatching(/^condicionIVAReceptor: es obligatoria .*\(190\)$/),
+    ]);
+    expect(messages(() => validateComprobanteCAEA(caea(facturaA({ condicionIVAReceptor: undefined }))))).toEqual([
+      expect.stringMatching(/\(390\)$/),
+    ]);
+  });
+
+  it('cancelaEnMismaMonedaExtranjera "S" solo en 1, 6, 51, 201 y 206 (118)', () => {
+    const dolares = { codigoMoneda: 'DOL', cotizacionMoneda: undefined, cancelaEnMismaMonedaExtranjera: 'S' as const };
+    expect(fields(() => validateComprobanteCAE(facturaA(dolares)))).toEqual([]);
+    const nd = facturaA({
+      ...dolares,
+      codigoTipoComprobante: 2,
+      comprobantesAsociados: [{ codigoTipoComprobante: 1, numeroPuntoVenta: 4000, numeroComprobante: 1 }],
+    });
+    expect(messages(() => validateComprobanteCAE(nd))).toEqual([
+      expect.stringMatching(/^cancelaEnMismaMonedaExtranjera: .*\(118\)$/),
+    ]);
+    expect(
+      fields(() => validateComprobanteCAE({ ...nd, cancelaEnMismaMonedaExtranjera: 'N', cotizacionMoneda: 1000 })),
+    ).toEqual([]);
+  });
+
+  it('ND/NC: comprobantes asociados o período, no ambos (160, 161 / 778, 779)', () => {
+    const asociado = { codigoTipoComprobante: 1, numeroPuntoVenta: 4000, numeroComprobante: 1 };
+    const periodo = { fechaDesde: '2026-10-01', fechaHasta: '2026-10-31' };
+    for (const tipo of [2, 3, 52, 53]) {
+      expect(messages(() => validateComprobanteCAE(facturaA({ codigoTipoComprobante: tipo })))).toEqual([
+        expect.stringMatching(/^comprobantesAsociados: .*\(160\)$/),
+      ]);
+      expect(
+        fields(() =>
+          validateComprobanteCAE(facturaA({ codigoTipoComprobante: tipo, comprobantesAsociados: [asociado] })),
+        ),
+      ).toEqual([]);
+      expect(
+        fields(() =>
+          validateComprobanteCAE(facturaA({ codigoTipoComprobante: tipo, periodoComprobantesAsociados: periodo })),
+        ),
+      ).toEqual([]);
+      expect(
+        messages(() =>
+          validateComprobanteCAE(
+            facturaA({
+              codigoTipoComprobante: tipo,
+              comprobantesAsociados: [asociado],
+              periodoComprobantesAsociados: periodo,
+            }),
+          ),
+        ),
+      ).toEqual([expect.stringMatching(/^periodoComprobantesAsociados: .*\(161\)$/)]);
+    }
+    expect(messages(() => validateComprobanteCAEA(caea(facturaA({ codigoTipoComprobante: 3 }))))).toEqual([
+      expect.stringMatching(/\(778\)$/),
+    ]);
+    expect(
+      messages(() =>
+        validateComprobanteCAEA(
+          caea(
+            facturaA({
+              codigoTipoComprobante: 3,
+              comprobantesAsociados: [asociado],
+              periodoComprobantesAsociados: periodo,
+            }),
+          ),
+        ),
+      ),
+    ).toEqual([expect.stringMatching(/\(779\)$/)]);
+  });
+
+  it('compradores solo con concepto 1 (432); en CAEA no se admiten (753)', () => {
+    const compradores = [{ codigoTipoDocumento: 80, numeroDocumento: '30000000007', porcentaje: 100 }];
+    expect(fields(() => validateComprobanteCAE(facturaA({ compradores })))).toEqual([]);
+    expect(
+      messages(() =>
+        validateComprobanteCAE(
+          facturaA({ compradores, codigoConcepto: 2, ...servicios, fechaVencimientoPago: '2026-11-30' }),
+        ),
+      ),
+    ).toEqual([expect.stringMatching(/^compradores: .*\(432\)$/)]);
+    expect(messages(() => validateComprobanteCAEA(caea(facturaA({ compradores }))))).toEqual([
+      expect.stringMatching(/^compradores: .*\(753\)$/),
+    ]);
+  });
+
+  it('el IVA de las bonificaciones no puede superar el IVA de su alícuota (516)', () => {
+    const base = facturaA({ importeOtrosTributos: undefined, otrosTributos: undefined });
+    const bonif: MtxcaItem = {
+      descripcion: 'Bonificación',
+      codigoUnidadMedida: 99,
+      codigoCondicionIVA: 5,
+      importeIVA: -25.2,
+      importeItem: -145.2,
+    };
+    const c = {
+      ...base,
+      items: [...base.items, bonif],
+      importeGravado: -20,
+      importeSubtotal: -20,
+      importeTotal: 0,
+      subtotalesIVA: [{ codigo: 5, importe: -4.2 }],
+    };
+    expect(messages(() => validateComprobanteCAE(c))).toContainEqual(
+      expect.stringMatching(/^items\[1\]\.importeIVA: .*\(25\.20\).*21\.00 \(516\)$/),
     );
   });
 });

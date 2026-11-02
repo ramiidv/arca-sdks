@@ -1,3 +1,4 @@
+import { testCert } from '@ramiidv/arca-common/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ArcaSoapError, MemoryTicketStorage, CondicionIva } from '@ramiidv/arca-common';
 import { ArcaPadron } from '../src/arca-padron.js';
@@ -217,8 +218,7 @@ describe('A4, A10, A13 y A100 con respuestas reales (personaReturn)', () => {
     const controller = new AbortController();
     const storage = new MemoryTicketStorage();
     const client = new ArcaPadron({
-      cert: 'C',
-      key: 'K',
+      ...testCert(),
       cuit: '20123456786',
       ticketStorage: storage,
       signal: controller.signal,

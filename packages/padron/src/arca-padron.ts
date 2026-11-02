@@ -8,6 +8,7 @@ import { PadronA13Client } from './padron-a13.js';
 import { PadronA100Client } from './padron-a100.js';
 import type {
   ArcaPadronConfig,
+  ListaPadron,
   PadronServicio,
   PadronStatus,
   ParameterRecord,
@@ -19,11 +20,11 @@ import type {
 } from './types.js';
 
 /**
- * Main orchestrator class for ARCA Padrón web services.
+ * Cliente de alto nivel de los web services de Padrón de ARCA.
  *
- * Provides high-level methods that handle WSAA authentication automatically
- * and expose results from the Constancia de Inscripción (ex A5), A4 (full),
- * A10 (basic), A13 (basic) and A100 (parameters) web services.
+ * Maneja la autenticación WSAA automáticamente y expone la Constancia de
+ * Inscripción (ex A5), A4 (datos completos), A10 y A13 (datos básicos) y A100
+ * (tablas de parámetros).
  *
  * @example
  * ```ts
@@ -43,15 +44,15 @@ import type {
  * ```
  */
 export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
-  /** Low-level Constancia de Inscripción (ex Padrón A5) client */
+  /** Cliente de bajo nivel de la Constancia de Inscripción (ex Padrón A5). */
   public readonly a5: PadronA5Client;
-  /** Low-level Padrón A4 client for direct access */
+  /** Cliente de bajo nivel de Padrón A4. */
   public readonly a4: PadronA4Client;
-  /** Low-level Padrón A10 client for direct access */
+  /** Cliente de bajo nivel de Padrón A10. */
   public readonly a10: PadronA10Client;
-  /** Low-level Padrón A13 client for direct access */
+  /** Cliente de bajo nivel de Padrón A13. */
   public readonly a13: PadronA13Client;
-  /** Low-level Padrón A100 client for direct access */
+  /** Cliente de bajo nivel de Padrón A100. */
   public readonly a100: PadronA100Client;
 
   /** @throws ArcaValidationError si la CUIT representada es inválida. */
@@ -83,9 +84,14 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
    * Constancia de inscripción (ws_sr_constancia_inscripcion, ex Padrón A5,
    * `getPersona_v2`): datos generales, domicilio fiscal, impuestos del régimen
    * general y monotributo. Combinar con `condicionIvaDesdePadron` para facturar.
+   *
+   * Si ARCA no puede emitir la constancia (o una parte), la persona vuelve con
+   * `errorConstancia` / `errorRegimenGeneral` / `errorMonotributo` (no se lanza).
    * @param cuit - CUIT a consultar (con o sin guiones)
    * @throws ArcaValidationError si la CUIT es inválida (dígito verificador)
-   * @throws ArcaPadronServiceError si ARCA informa la CUIT inexistente, inactiva, etc.
+   * @throws ArcaPadronServiceError si la CUIT no existe (`reason: 'inexistente'`, sea por
+   *   Fault o por `errorConstancia` "No existe persona con ese Id"), o ante otros errores
+   *   de negocio (clave inactiva, token no autorizado...).
    */
   async getConstanciaInscripcion(cuit: string | number, call?: CallOptions): Promise<PersonaA5> {
     const opts = this.callOptions(call);
@@ -95,10 +101,12 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
 
   /**
    * Constancias de inscripción de hasta 250 CUITs en una llamada
-   * (`getPersonaList_v2`). Las CUITs inexistentes vuelven con `errorConstancia`
-   * ("No existe persona con ese Id") en lugar de hacer fallar la consulta.
+   * (`getPersonaList_v2`), en el orden de `cuits`. Los problemas de una CUIT no
+   * hacen fallar la consulta: vuelven en su `errorConstancia` (inexistente: "No
+   * existe persona con ese Id"; CUIT inválida: no se envía a ARCA).
+   * @throws ArcaValidationError si `cuits` no tiene entre 1 y 250 elementos.
    */
-  async getConstanciasInscripcion(cuits: Array<string | number>, call?: CallOptions): Promise<PersonaA5[]> {
+  async getConstanciasInscripcion(cuits: Array<string | number>, call?: CallOptions): Promise<ListaPadron<PersonaA5>> {
     const opts = this.callOptions(call);
     const auth = await this.getAuth('a5', call);
     return this.a5.getPersonaList(auth, cuits, opts);
@@ -149,7 +157,7 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
    * CUITs/CUILs asociados a un número de documento (Padrón A13).
    * @param documento - Número de documento (DNI); se aceptan puntos y espacios
    */
-  async getIdPersonaListByDocumento(documento: string | number, call?: CallOptions): Promise<string[]> {
+  async getIdPersonaListByDocumento(documento: string | number, call?: CallOptions): Promise<ListaPadron<string>> {
     const opts = this.callOptions(call);
     const auth = await this.getAuth('a13', call);
     return this.a13.getIdPersonaListByDocumento(auth, documento, opts);
@@ -159,7 +167,7 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
    * Tabla de parámetros (Padrón A100) por nombre de colección.
    * @param collection - Nombre de la colección (ej: CollectionName.PROVINCIA)
    */
-  async getParametros(collection: string, call?: CallOptions): Promise<ParameterRecord[]> {
+  async getParametros(collection: string, call?: CallOptions): Promise<ListaPadron<ParameterRecord>> {
     const opts = this.callOptions(call);
     const auth = await this.getAuth('a100', call);
     return this.a100.getParameterCollectionByName(auth, collection, opts);
@@ -168,13 +176,16 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
   /**
    * Estado de los servicios de Padrón (`dummy`, sin autenticación). Consulta
    * todos en paralelo y devuelve el resultado de cada uno por separado: un
-   * servicio caído no oculta el estado de los demás.
+   * servicio caído no oculta el estado de los demás. `ok` es `true` solo si el
+   * servicio respondió y sus tres servidores (`appserver`, `dbserver`,
+   * `authserver`) están en `OK`; si respondió con alguno en otro estado, `ok`
+   * es `false` y `status` tiene lo que informó ARCA.
    *
    * @example
    * ```ts
    * const s = await padron.status();
-   * if (s.a4.ok) console.log(s.a4.status.appserver);
-   * else console.error(s.a4.error);
+   * if (s.a4.ok) console.log('A4 disponible');
+   * else console.error(s.a4.error, s.a4.status);
    * ```
    */
   status(call?: CallOptions): Promise<PadronStatus> {

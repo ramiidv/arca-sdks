@@ -7,9 +7,10 @@ import {
   ArcaValidationError,
   CPE_ENDPOINTS,
   TIPO_CPE,
+  cpeFaultException,
 } from '../src/index.js';
 import type { ArcaAgro, AutorizarCPEAutomotorParams, AutorizarCPEFerroviariaParams } from '../src/index.js';
-import { CPE_NS, CUIT, CUIT2, CUIT3, CUIT4, CUIT5, cpeResp, hang, http503, keys, setup } from './helpers.js';
+import { CPE_NS, CUIT, CUIT2, CUIT3, CUIT4, CUIT5, cpeResp, envelope, hang, http503, keys, setup } from './helpers.js';
 
 const cartaPorte = { tipoCPE: TIPO_CPE.AUTOMOTOR, sucursal: 1, nroOrden: 15 };
 
@@ -467,11 +468,26 @@ describe('WSCPE: emisiones sin reintento', () => {
     expect(e.uncertain).toBe(true);
   });
 
-  it('autorizar con errores lanza aunque venga cabecera, y conserva la respuesta', async () => {
+  it('autorizar con errores y cabecera → ArcaAgroServiceError uncertain, conserva la respuesta', async () => {
     const { agro } = setup(() => cpeResp('AutorizarCPEAutomotorResp', CABECERA() + ERROR_1));
     const e = await agro.cpe.autorizarCPEAutomotor(autorizarAutomotor()).catch((err: any) => err);
     expect(e).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e.uncertain).toBe(true);
     expect(e.response.cabecera.nroCTG).toBe('010100012345');
+  });
+
+  it('autorizar con errores sin cabecera → rechazo cierto (uncertain false)', async () => {
+    const { agro } = setup(() => cpeResp('AutorizarCPEAutomotorResp', ERROR_1 + METADATA));
+    const e = await agro.cpe.autorizarCPEAutomotor(autorizarAutomotor()).catch((err: any) => err);
+    expect(e).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e.uncertain).toBe(false);
+  });
+
+  it('un error de consulta con cabecera no es uncertain', async () => {
+    const { agro } = setup(() => cpeResp('ConsultarCPEAutomotorResp', CABECERA() + ERROR_1));
+    const e = await agro.cpe.consultarCPEAutomotor({ nroCTG: '010100012345' }).catch((err: any) => err);
+    expect(e).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e.uncertain).toBe(false);
   });
 });
 
@@ -733,5 +749,201 @@ describe('WSCPE: validación local (no llama a ARCA)', () => {
   it('origen sin operador ni productor', async () => {
     const e = await invalid((p) => (p.origen = {}));
     expect(e.details.map((d) => d.field)).toContain('origen');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Errores admitidos (550), errores sin código y decodificación tolerante
+// ---------------------------------------------------------------------------
+
+const ERROR_550 =
+  '<errores><error><codigo>550</codigo><descripcion>Error al generar el archivo pdf.</descripcion></error></errores>';
+const ADVERTENCIA_550 = [{ code: 550, msg: 'Error al generar el archivo pdf.' }];
+
+describe('WSCPE: error 550 (operación aceptada sin PDF)', () => {
+  it('autorizarCPEAutomotor: cabecera + 550 sin pdf → devuelve la CPE con advertencias', async () => {
+    const sinPdf = DETALLE_AUTOMOTOR.replace('<pdf>JVBERi0xLjQ=</pdf>', '');
+    const { agro } = setup(() => cpeResp('AutorizarCPEAutomotorResp', sinPdf + ERROR_550));
+    const r = await agro.cpe.autorizarCPEAutomotor(autorizarAutomotor());
+    expect(r.cabecera.nroCTG).toBe('010100012345');
+    expect(r.pdf).toBeUndefined();
+    expect(r.advertencias).toEqual(ADVERTENCIA_550);
+  });
+
+  it('autorizarCPEFerroviaria y consultarCPEFerroviaria con 550 → advertencias', async () => {
+    const aut = setup(() => cpeResp('AutorizarCPEFerroviariaResp', CABECERA('020200012345') + ERROR_550));
+    expect((await aut.agro.cpe.autorizarCPEFerroviaria(autorizarFerroviaria())).advertencias).toEqual(ADVERTENCIA_550);
+    const cons = setup(() => cpeResp('ConsultarCPEFerroviariaResp', CABECERA('020200012345') + ERROR_550));
+    expect((await cons.agro.cpe.consultarCPEFerroviaria({ nroCTG: '020200012345' })).advertencias).toEqual(
+      ADVERTENCIA_550,
+    );
+  });
+
+  it('consultarCPEAutomotor con 550 → devuelve la CPE con advertencias', async () => {
+    const { agro } = setup(() => cpeResp('ConsultarCPEAutomotorResp', CABECERA() + ERROR_550 + METADATA));
+    const r = await agro.cpe.consultarCPEAutomotor({ nroCTG: '010100012345' });
+    expect(r.cabecera.nroCTG).toBe('010100012345');
+    expect(r.advertencias).toEqual(ADVERTENCIA_550);
+  });
+
+  it.each(OPERACIONES)('$method con 550 → resultado con advertencias', async ({ method, run }) => {
+    const { agro } = setup(() => cpeResp(`${capital(method)}Resp`, CABECERA() + ERROR_550));
+    const r = (await run(agro)) as { cabecera?: { nroCTG?: string }; advertencias?: unknown };
+    expect(r.cabecera?.nroCTG).toBe('010100012345');
+    expect(r.advertencias).toEqual(ADVERTENCIA_550);
+  });
+
+  it('sin errores no agrega advertencias', async () => {
+    const { agro } = setup(() => cpeResp('AutorizarCPEAutomotorResp', DETALLE_AUTOMOTOR));
+    const r = await agro.cpe.autorizarCPEAutomotor(autorizarAutomotor());
+    expect(r).not.toHaveProperty('advertencias');
+  });
+
+  it('550 junto con otro error → lanza con los dos (uncertain si vino la cabecera)', async () => {
+    const both =
+      '<errores><error><codigo>550</codigo><descripcion>pdf</descripcion></error>' +
+      '<error><codigo>1501</codigo><descripcion>orden</descripcion></error></errores>';
+    const { agro } = setup(() => cpeResp('AutorizarCPEAutomotorResp', CABECERA() + both));
+    const e: any = await agro.cpe.autorizarCPEAutomotor(autorizarAutomotor()).catch((err: any) => err);
+    expect(e).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e.errors.map((x: { code: number }) => x.code)).toEqual([550, 1501]);
+    expect(e.uncertain).toBe(true);
+  });
+});
+
+describe('WSCPE: errores sin código', () => {
+  it('<error> sin codigo (o vacío) cuenta como error', async () => {
+    for (const err of [
+      '<errores><error><descripcion>Falla sin código</descripcion></error></errores>',
+      '<errores><error><codigo/><descripcion>Falla sin código</descripcion></error></errores>',
+    ]) {
+      const { agro } = setup(() => cpeResp('ConsultarProvinciasResp', err));
+      const e: any = await agro.cpe.consultarProvincias().catch((x: any) => x);
+      expect(e).toBeInstanceOf(ArcaAgroServiceError);
+      expect(e.errors).toEqual([{ code: 0, msg: 'Falla sin código' }]);
+    }
+  });
+
+  it('<error> con código explícito 0 se ignora', async () => {
+    const { agro } = setup(() =>
+      cpeResp(
+        'ConsultarProvinciasResp',
+        '<errores><error><codigo>0</codigo><descripcion>OK</descripcion></error></errores>',
+      ),
+    );
+    expect(await agro.cpe.consultarProvincias()).toEqual([]);
+  });
+});
+
+describe('WSCPE: decodificación de emisiones', () => {
+  it('un campo secundario inválido se omite y no vuelve incierta la emisión', async () => {
+    const malo = DETALLE_AUTOMOTOR.replace('<kmRecorrer>250</kmRecorrer>', '<kmRecorrer>abc</kmRecorrer>').replace(
+      '<sucursal>1</sucursal>',
+      '<sucursal>x</sucursal>',
+    );
+    const { agro } = setup(() => cpeResp('AutorizarCPEAutomotorResp', malo));
+    const r = await agro.cpe.autorizarCPEAutomotor(autorizarAutomotor());
+    expect(r.cabecera.nroCTG).toBe('010100012345');
+    expect(r.cabecera.sucursal).toBeUndefined();
+    expect(r.cabecera.estado).toBe('AC');
+    expect(r.transporte?.kmRecorrer).toBeUndefined();
+    expect(r.transporte?.dominio).toEqual(['AB123CD']);
+    expect(r.transporte?.cuitChofer).toBe(Number(CUIT5));
+  });
+
+  it('en #operar también (cabecera con fecha inválida)', async () => {
+    const { agro } = setup(() =>
+      cpeResp('AnularCPEResp', CABECERA().replace('<nroOrden>15</nroOrden>', '<nroOrden>1.5</nroOrden>')),
+    );
+    const r = await agro.cpe.anularCPE({ cartaPorte });
+    expect(r.cabecera?.nroCTG).toBe('010100012345');
+    expect(r.cabecera?.nroOrden).toBeUndefined();
+  });
+
+  it('en una consulta el mismo campo inválido lanza (no uncertain)', async () => {
+    const malo = DETALLE_AUTOMOTOR.replace('<kmRecorrer>250</kmRecorrer>', '<kmRecorrer>abc</kmRecorrer>');
+    const { agro } = setup(() => cpeResp('ConsultarCPEAutomotorResp', malo));
+    const e: any = await agro.cpe.consultarCPEAutomotor({ nroCTG: '010100012345' }).catch((x: any) => x);
+    expect(e).toBeInstanceOf(ArcaAgroResponseError);
+    expect(e.uncertain).toBe(false);
+  });
+});
+
+describe('WSCPE: consultas fuera de DG', () => {
+  it('consultarRenspa: cuit y codProvincia bajo el Req; respuesta ConsultarRenspaRes', async () => {
+    const { agro, calls } = setup(() =>
+      envelope(
+        'ConsultarRenspaRes',
+        CPE_NS,
+        '<respuesta><renspa><nroRenspa>01.001.0.00001/00</nroRenspa><descripcion>Campo</descripcion></renspa></respuesta>',
+      ),
+    );
+    const r = await agro.cpe.consultarRenspa('20-12345678-6', 1);
+    expect(calls[0].element).toBe('ser:ConsultarRenspaReq');
+    expect(calls[0].soapAction).toBe(`"${CPE_NS}consultarRenspa"`);
+    expect(keys(calls[0].req)).toEqual(['auth', 'cuit', 'codProvincia']);
+    expect(String(calls[0].req.cuit)).toBe(CUIT);
+    expect(r).toEqual([{ nroRenspa: '01.001.0.00001/00', descripcion: 'Campo' }]);
+  });
+
+  it('consultarDomiciliosPorCUIT', async () => {
+    const { agro, calls } = setup(() =>
+      cpeResp(
+        'ConsultarDomiciliosPorCUITResp',
+        '<domicilio><tipo>1</tipo><orden>2</orden><descripcion>Ruta 9 km 300</descripcion></domicilio>',
+      ),
+    );
+    const r = await agro.cpe.consultarDomiciliosPorCUIT(CUIT2);
+    expect(calls[0].element).toBe('ser:ConsultarDomiciliosPorCUITReq');
+    expect(keys(calls[0].req)).toEqual(['auth', 'cuit']);
+    expect(r).toEqual([{ tipo: 1, orden: 2, descripcion: 'Ruta 9 km 300' }]);
+  });
+
+  it('consultarTiposEmbalaje (con unidades de medida) y consultarUnidadesMedida', async () => {
+    const emb = setup(() =>
+      cpeResp(
+        'ConsultarTiposEmbalajeResp',
+        '<tipoEmbalaje><codigo>1</codigo><descripcion>Granel</descripcion>' +
+          '<unidadMedida><codigo>1</codigo><descripcion>Kg</descripcion></unidadMedida></tipoEmbalaje>' +
+          '<tipoEmbalaje><codigo>2</codigo><descripcion>Bolsa</descripcion></tipoEmbalaje>',
+      ),
+    );
+    expect(await emb.agro.cpe.consultarTiposEmbalaje()).toEqual([
+      { codigo: '1', descripcion: 'Granel', unidadMedida: [{ codigo: '1', descripcion: 'Kg' }] },
+      { codigo: '2', descripcion: 'Bolsa', unidadMedida: [] },
+    ]);
+    expect(emb.calls[0].element).toBe('ser:ConsultarTiposEmbalajeReq');
+    expect(keys(emb.calls[0].req)).toEqual(['auth']);
+
+    const um = setup(() =>
+      cpeResp(
+        'ConsultarUnidadesMedidaResp',
+        '<unidadMedida><codigo>2</codigo><descripcion>Litros</descripcion></unidadMedida>',
+      ),
+    );
+    expect(await um.agro.cpe.consultarUnidadesMedida()).toEqual([{ codigo: '2', descripcion: 'Litros' }]);
+    expect(um.calls[0].element).toBe('ser:ConsultarUnidadesMedidaReq');
+  });
+});
+
+describe('WSCPE: SOAP Fault Exception', () => {
+  it('cpeFaultException lee businessErrorId de ArcaSoapError.faultDetail', async () => {
+    const fault =
+      `<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body><S:Fault>` +
+      `<faultcode>S:Server</faultcode><faultstring>Error de negocio</faultstring><detail>` +
+      `<ns2:Exception xmlns:ns2="${CPE_NS}"><uuid>abc-123</uuid><timestamp>2026-11-01T08:00:00-03:00</timestamp>` +
+      `<businessErrorId>CPE-0042</businessErrorId><exceptionDetails>detalle</exceptionDetails><serverName>cpea-1</serverName>` +
+      `</ns2:Exception></detail></S:Fault></S:Body></S:Envelope>`;
+    const { agro } = setup(() => new Response(fault, { status: 500, headers: { 'content-type': 'text/xml' } }));
+    const e = await agro.cpe.consultarProvincias().catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(ArcaSoapError);
+    expect(cpeFaultException(e)).toEqual({
+      uuid: 'abc-123',
+      timestamp: '2026-11-01T08:00:00-03:00',
+      businessErrorId: 'CPE-0042',
+      exceptionDetails: 'detalle',
+      serverName: 'cpea-1',
+    });
+    expect(cpeFaultException(new Error('x'))).toBeUndefined();
   });
 });

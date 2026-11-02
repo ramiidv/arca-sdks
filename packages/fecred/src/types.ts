@@ -17,6 +17,12 @@ import type {
 // - Fechas (`xsd:date`/`xsd:dateTime`) se devuelven como el string que envía ARCA.
 // - Importes (`xsd:decimal`) se devuelven como number.
 // - `SiNoSimpleType` (`S`/`N`) se convierte a boolean.
+// - Las enumeraciones (estados, `opcionTransferencia`, `tipoAcep`, `tipoCodAuto`) se
+//   tipan con los valores conocidos del XSD pero aceptan cualquier string: un valor
+//   nuevo de ARCA se devuelve tal cual en lugar de romper la consulta.
+
+/** Valores conocidos de una enumeración del XSD o un valor nuevo que agregue ARCA. */
+export type ValorAbierto<T extends string> = T | (string & {});
 
 // ---------------------------------------------------------------------------
 // Configuración
@@ -88,23 +94,27 @@ export interface FiltroFecha {
   hasta: Date | string;
 }
 
-/** Datos informativos comunes a las respuestas (`evento`, `arrayObservaciones`). */
-export interface InfoRespuesta {
-  /** `evento`: aviso informativo de ARCA, si lo hay. */
-  evento?: CodigoDescripcion;
+/** Observaciones de las respuestas (`arrayObservaciones` / `arrayObservacion`). */
+export interface ObservacionesRespuesta {
   /** `arrayObservaciones` / `arrayObservacion`. Vacío si no hay. */
   observaciones: CodigoDescripcion[];
 }
 
+/** Datos informativos comunes a las respuestas (`evento`, `arrayObservaciones`). */
+export interface InfoRespuesta extends ObservacionesRespuesta {
+  /** `evento`: aviso informativo de ARCA, si lo hay. */
+  evento?: CodigoDescripcion;
+}
+
 /** `EstadoCtaCteType`. */
 export interface EstadoCtaCteInfo {
-  estado: EstadoCtaCte;
+  estado: ValorAbierto<EstadoCtaCte>;
   fechaHoraEstado: string;
 }
 
 /** `EstadoCmpType`. */
 export interface EstadoComprobanteInfo {
-  estado: EstadoComprobante;
+  estado: ValorAbierto<EstadoComprobante>;
   fechaHoraEstado: string;
 }
 
@@ -119,18 +129,18 @@ export interface ConsultarMontoObligadoRecepcionParams {
   fechaEmision: Date | string;
 }
 
-/** `consultarMontoObligadoRecepcionReturn`. */
-export interface MontoObligadoRecepcionResult extends InfoRespuesta {
-  /** `obligado` (S/N). */
-  obligado: boolean;
+/** `consultarMontoObligadoRecepcionReturn` (sin `evento`: usa `arrayObservacion`). */
+export interface MontoObligadoRecepcionResult extends ObservacionesRespuesta {
+  /** `obligado` (S/N). `undefined` si ARCA no lo informa (ver `observaciones`). */
+  obligado?: boolean;
   /** `montoDesde`: monto a partir del cual es obligatoria la FCE, si ARCA lo informa. */
   montoDesde?: number;
 }
 
-/** `consultarObligadoRecepcionReturn`. */
-export interface ObligadoRecepcionResult extends InfoRespuesta {
-  /** `respuesta` (S/N). */
-  obligado: boolean;
+/** `consultarObligadoRecepcionReturn` (sin `evento`: usa `arrayObservacion`). */
+export interface ObligadoRecepcionResult extends ObservacionesRespuesta {
+  /** `respuesta` (S/N). `undefined` si ARCA no lo informa (ver `observaciones`). */
+  obligado?: boolean;
   /** `desde`: fecha desde la cual está obligada, si ARCA la informa. */
   desde?: string;
 }
@@ -159,7 +169,7 @@ export interface InfoCtaCte {
   saldo: number;
   saldoAceptado?: number;
   codMoneda: string;
-  opcionTransferencia: OpcionTransferencia;
+  opcionTransferencia: ValorAbierto<OpcionTransferencia>;
 }
 
 /** Resultado paginado de `consultarCtasCtes`. */
@@ -327,7 +337,7 @@ export interface Comprobante {
   nroCmp: number;
   cuitReceptor: string;
   razonSocialRecep: string;
-  tipoCodAuto: TipoCodAutorizacion;
+  tipoCodAuto: ValorAbierto<TipoCodAutorizacion>;
   /** CAE / CAEA. */
   codAutorizacion: string;
   fechaEmision: string;
@@ -351,10 +361,10 @@ export interface Comprobante {
   leyendaComercial?: string;
   codCtaCte: string;
   estado: EstadoComprobanteInfo;
-  tipoAcep?: TipoAceptacion;
+  tipoAcep?: ValorAbierto<TipoAceptacion>;
   fechaHoraAcep?: string;
   motivosRechazo: MotivoRechazo[];
-  opcionTransferencia?: OpcionTransferencia;
+  opcionTransferencia?: ValorAbierto<OpcionTransferencia>;
   infoTransferencia?: InfoTransferencia;
 }
 
@@ -490,7 +500,8 @@ export interface ConsultarFacturasAgtDptoCltvResult extends InfoRespuesta {
   facturas: FacturaInformadaAgtDptoCltv[];
 }
 
-export interface ConsultarCuentasEnAgtDptoCltvResult extends InfoRespuesta {
+/** Sin `evento`: usa `arrayObservacion`. */
+export interface ConsultarCuentasEnAgtDptoCltvResult extends ObservacionesRespuesta {
   cuentas: CuentaEnAgente[];
 }
 

@@ -13,8 +13,17 @@ permissions:
   id-token: write
 
 jobs:
+  # Mismos checks que un PR (tests en Node 20.19/22/24, lint, publint, api:check):
+  # no se publica con CI en rojo.
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   release:
+    needs: ci
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,9 +34,7 @@ jobs:
       # Trusted publishing requiere npm >= 11.5.1.
       - run: npm install -g npm@^11.5.1
       - run: npm ci
-      - run: npm run build
-      - run: npm test
-      # Con changesets pendientes abre/actualiza el PR "Version Packages";
+      # Con changesets pendientes abre/actualiza el PR "chore: version packages";
       # si no hay, publica los paquetes cuya versión no está en npm.
       - uses: changesets/action@v2
         with:

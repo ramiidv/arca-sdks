@@ -27,9 +27,17 @@ export interface DatosRelacionLaboral {
   trabajadorAgropecuario?: string;
   /** [17-19] Código de modalidad de contrato (numérico, 3). */
   modalidadContrato?: CodigoNumerico;
-  /** [20-29] Fecha de inicio de la relación laboral (AAAA/MM/DD). */
+  /**
+   * [20-29] Fecha de inicio de la relación laboral (AAAA/MM/DD). Obligatoria para todos
+   * los movimientos (nota de la pantalla de ingreso masivo, manual pág. 23). En un alta,
+   * puede ser como máximo 90 días posterior a la fecha de la novedad (manual pág. 18).
+   */
   fechaInicio?: FechaInput;
-  /** [30-39] Fecha de fin de la relación laboral (AAAA/MM/DD). */
+  /**
+   * [30-39] Fecha de fin de la relación laboral (AAAA/MM/DD). En un alta, obligatoria si
+   * el contrato es a plazo fijo; ARCA la rechaza en contratos por tiempo indeterminado
+   * (manual pág. 18; el SDK no lo verifica porque no conoce la tabla de modalidades).
+   */
   fechaFin?: FechaInput;
   /** [40-45] Código de obra social (RNOS, numérico, 6). */
   obraSocial?: CodigoNumerico;
@@ -39,7 +47,9 @@ export interface DatosRelacionLaboral {
   fechaTelegramaRenuncia?: FechaInput;
   /**
    * [58-72] Retribución pactada en pesos (numérico, 15). Se escribe con 2 decimales
-   * implícitos (ver README). Debe ser finita, ≥ 0 y tener como máximo 2 decimales.
+   * implícitos: el manual dice "con indicación de centavos" pero no publica el formato,
+   * así que **no está verificado con ARCA** (ver README). Debe ser finita, ≥ 0 y tener
+   * como máximo 2 decimales.
    */
   retribucion?: number;
   /** [73] Código de modalidad de liquidación (numérico, 1). */
@@ -77,7 +87,7 @@ export interface RegistroRelacionLaboral extends DatosRelacionLaboral {
 
 /** Datos para un alta (`AT`). */
 export type AltaRelacionLaboral = DatosRelacionLaboral;
-/** Datos para una baja (`BT`). */
+/** Datos para una baja (`BT`): requiere `fechaInicio` y `fechaFin` (fecha de baja). */
 export type BajaRelacionLaboral = DatosRelacionLaboral;
 /** Datos para una modificación (`MR`). */
 export type ModificacionRelacionLaboral = DatosRelacionLaboral;
@@ -106,6 +116,7 @@ export interface OpcionesSerializacion {
    * Cómo se escribe un campo numérico no informado: `'ceros'` (default) o `'espacios'`.
    * No aplica a `rectificacion` ni a la marca de la posición 130, que tienen
    * default `0` según el manual.
+   * En modificaciones (`MR`) y bajas (`BT`) conviene informar todos los campos vigentes.
    */
   numericoVacio?: 'ceros' | 'espacios';
 }
@@ -115,12 +126,28 @@ export interface ArcaEmpleadosConfig {
   /**
    * `true` (default): al agregar cada registro se valida el formato y las reglas de
    * negocio (CUIL con dígito verificador, campos obligatorios por movimiento, rangos
-   * de fechas). `false`: solo se valida el formato (que el registro se pueda escribir
-   * en las 130 posiciones); los errores siguen siendo explícitos.
+   * de fechas, alta hasta 90 días antes del inicio). `false`: solo se valida el formato
+   * (que el registro se pueda escribir en las 130 posiciones); los errores siguen
+   * siendo explícitos. Las propiedades desconocidas se rechazan en ambos modos.
    */
   strict?: boolean;
   /** Opciones de serialización (fin de línea, codificación, etc.). */
   serializacion?: OpcionesSerializacion;
+  /**
+   * Fecha de referencia ("hoy") para las reglas que dependen de la fecha actual, como
+   * el límite de 90 días de anticipación del alta. Default: la fecha del momento en que
+   * se agrega cada registro, en Argentina. Útil si el archivo se va a presentar otro día.
+   */
+  fechaReferencia?: FechaInput;
+}
+
+/** Opciones de {@link validateRegistro} además de las de serialización. */
+export interface OpcionesValidacion {
+  /**
+   * Fecha de referencia ("hoy") para el límite de 90 días de anticipación del alta.
+   * Default: la fecha actual en Argentina.
+   */
+  fechaReferencia?: FechaInput;
 }
 
 /** Cantidad de registros por código de movimiento. */

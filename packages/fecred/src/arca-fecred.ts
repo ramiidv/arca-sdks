@@ -1,4 +1,4 @@
-import { ArcaSdkBase, validateCuit } from '@ramiidv/arca-common';
+import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
 import { ENDPOINTS } from './constants.js';
 import { FecredClient } from './fecred-client.js';
@@ -46,7 +46,7 @@ import type {
  * });
  *
  * const { obligado, montoDesde } = await fecred.consultarMontoObligadoRecepcion({
- *   cuitConsultada: '30712345674',
+ *   cuitConsultada: '30712345671',
  *   fechaEmision: '2026-11-01',
  * });
  *
@@ -61,8 +61,8 @@ export class ArcaFecred extends ArcaSdkBase<'wsfecred'> {
   public readonly client: FecredClient;
 
   constructor(config: ArcaFecredConfig) {
-    // CUIT con dígito verificador (error con `field: 'cuit'`), enviado como 11 dígitos.
-    super({ ...config, cuit: validateCuit(config.cuit) }, { wsfecred: ENDPOINTS.wsfecred.serviceId });
+    // `ArcaSdkBase` valida la CUIT (dígito verificador) y la normaliza a 11 dígitos (`this.cuit`).
+    super(config, { wsfecred: ENDPOINTS.wsfecred.serviceId });
     this.client = new FecredClient({
       endpoint: this.endpoint(ENDPOINTS.wsfecred, config.endpoints?.wsfecred),
       namespace: ENDPOINTS.wsfecred.namespace,

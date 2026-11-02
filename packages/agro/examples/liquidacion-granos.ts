@@ -6,8 +6,7 @@
  * 3. Consulta por COE (con PDF) y anulación
  */
 import fs from 'node:fs';
-import { FileTicketStorage } from '@ramiidv/arca-common';
-import { ArcaAgro } from '@ramiidv/arca-agro';
+import { ArcaAgro, FileTicketStorage } from '@ramiidv/arca-agro';
 
 const CUIT = '20123456786';
 

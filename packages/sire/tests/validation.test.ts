@@ -46,6 +46,28 @@ describe('formatSireDateTime', () => {
     expect(formatSireDateTime(new Date('2026-10-30T14:16:00.123Z'))).toBe('2026-10-30T11:16:00.123-03:00');
   });
 
+  it('misma salida que la implementación anterior (offset fijo -03:00) para Date', () => {
+    const anterior = (ms: number): string => {
+      const pad = (n: number, w: number) => String(n).padStart(w, '0');
+      const d = new Date(ms - 3 * 3_600_000);
+      return (
+        `${pad(d.getUTCFullYear(), 4)}-${pad(d.getUTCMonth() + 1, 2)}-${pad(d.getUTCDate(), 2)}` +
+        `T${pad(d.getUTCHours(), 2)}:${pad(d.getUTCMinutes(), 2)}:${pad(d.getUTCSeconds(), 2)}` +
+        `.${pad(d.getUTCMilliseconds(), 3)}-03:00`
+      );
+    };
+    const desde = Date.UTC(2019, 11, 1);
+    const paso = 7_919_999_999 / 500; // ~0,5 años en 500 pasos, ms variados
+    for (let i = 0; i < 2000; i++) {
+      const ms = Math.round(desde + i * paso + (i % 1000));
+      expect(formatSireDateTime(new Date(ms))).toBe(anterior(ms));
+    }
+    for (const iso of ['2026-12-31T23:59:59.999Z', '2027-01-01T02:59:59.999Z', '2026-01-01T03:00:00.000Z']) {
+      expect(formatSireDateTime(new Date(iso))).toBe(anterior(Date.parse(iso)));
+      expect(formatSireDateTime(iso)).toBe(anterior(Date.parse(iso)));
+    }
+  });
+
   it('rechaza fechas inexistentes o mal formadas', () => {
     for (const v of ['2026-02-30', '2026-13-01', '30/10/2026', '2026-10-30T25:00', '', 'hoy']) {
       expect(() => formatSireDateTime(v, 'fechaRetencion')).toThrow(ArcaValidationError);
@@ -163,18 +185,31 @@ describe('buildCertificadoRequest', () => {
       buildCertificadoRequest({
         ...BASE,
         tipoComprobante: TipoComprobante.ORDEN_DE_PAGO,
-        numeroComprobante: 'OP-123456789',
+        numeroComprobante: 'OP0123456789',
       }).numeroComprobante,
-    ).toBe('OP-123456789');
+    ).toBe('OP0123456789');
     expect(
       fieldsOf(() =>
         buildCertificadoRequest({
           ...BASE,
           tipoComprobante: TipoComprobante.ORDEN_DE_PAGO,
-          numeroComprobante: 'OP-1234567890',
+          numeroComprobante: 'OP01234567890',
         }),
       ),
     ).toEqual(['numeroComprobante']);
+    // X(n): "caracteres alfanuméricos" (manual 5.3), más separadores - / .
+    for (const tipo of [5, 6, 9, 11]) {
+      for (const numero of ['A 1', 'Ñ1', '-A1', 'A_1']) {
+        expect(
+          fieldsOf(() => buildCertificadoRequest({ ...BASE, tipoComprobante: tipo, numeroComprobante: numero })),
+        ).toEqual(['numeroComprobante']);
+      }
+      for (const numero of ['Ab12', 'OP-1234', 'A/1', 'A.1']) {
+        expect(
+          buildCertificadoRequest({ ...BASE, tipoComprobante: tipo, numeroComprobante: numero }).numeroComprobante,
+        ).toBe(numero);
+      }
+    }
     expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, tipoComprobante: 7 }))).toEqual(['tipoComprobante']);
   });
 
@@ -235,6 +270,108 @@ describe('buildCertificadoRequest', () => {
     expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, motivoAnulacion: 1 } as EmitirCertificadoParams))).toEqual(
       ['motivoAnulacion'],
     );
+  });
+});
+
+describe('reglas de fechas (manual 3.2.2)', () => {
+  const NC = {
+    ...BASE,
+    tipoComprobante: TipoComprobante.NOTA_CREDITO,
+    motivoEmisionNotaCredito: 'Devolución',
+    numeroCertificadoOriginal: '0000000000012345',
+    fechaRetencionCertificadoOriginal: '2026-10-01',
+    importeCertificadoOriginal: 100,
+  };
+
+  it('fechaRetencion a partir del 2019-12-01 (fecha de Argentina)', () => {
+    expect(
+      fieldsOf(() =>
+        buildCertificadoRequest({ ...BASE, fechaRetencion: '2019-11-30', fechaComprobante: '2019-11-30' }),
+      ),
+    ).toEqual(['fechaRetencion']);
+    expect(() =>
+      buildCertificadoRequest({ ...BASE, fechaRetencion: '2019-12-01', fechaComprobante: '2019-12-01' }),
+    ).not.toThrow();
+    // 2019-12-01T02:00Z es el 30/11 a las 23:00 en Argentina.
+    expect(
+      fieldsOf(() =>
+        buildCertificadoRequest({
+          ...BASE,
+          fechaRetencion: '2019-12-01T02:00:00Z',
+          fechaComprobante: '2019-11-30',
+        }),
+      ),
+    ).toEqual(['fechaRetencion']);
+  });
+
+  it('fechaComprobante <= fechaRetencion (compara fechas calendario, no la hora)', () => {
+    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, fechaComprobante: '2026-10-31' }))).toEqual([
+      'fechaComprobante',
+    ]);
+    expect(() =>
+      buildCertificadoRequest({ ...BASE, fechaRetencion: '2026-10-30T08:00', fechaComprobante: '2026-10-30T20:00' }),
+    ).not.toThrow();
+    expect(() => buildCertificadoRequest({ ...BASE, fechaComprobante: '2026-10-01' })).not.toThrow();
+    // Date: se toma la fecha de Argentina (2026-10-31T01:00Z = 30/10 22:00 en AR).
+    expect(() =>
+      buildCertificadoRequest({ ...BASE, fechaComprobante: new Date('2026-10-31T01:00:00Z') }),
+    ).not.toThrow();
+  });
+
+  it('tipos 3, 19 y 20: fechaComprobante igual a fechaRetencion', () => {
+    expect(() => buildCertificadoRequest(NC)).not.toThrow();
+    for (const tipoComprobante of [3, 19, 20]) {
+      const extra = tipoComprobante === 3 ? {} : { motivoEmisionNotaCredito: undefined };
+      expect(
+        fieldsOf(() => buildCertificadoRequest({ ...NC, ...extra, tipoComprobante, fechaComprobante: '2026-10-29' })),
+      ).toEqual(['fechaComprobante']);
+    }
+  });
+
+  it('una fecha inválida no genera errores de comparación', () => {
+    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, fechaComprobante: '2026-02-30' }))).toEqual([
+      'fechaComprobante',
+    ]);
+  });
+});
+
+describe('importes negativos', () => {
+  const LIQ = {
+    ...BASE,
+    numeroCertificadoOriginal: '0000000000012345',
+    fechaRetencionCertificadoOriginal: '2026-10-01',
+    importeCertificadoOriginal: 100,
+  };
+
+  it('importeComprobante negativo solo para los tipos 19 y 20 ("con valor negativo")', () => {
+    for (const tipoComprobante of [19, 20]) {
+      expect(buildCertificadoRequest({ ...LIQ, tipoComprobante, importeComprobante: -1234.5 }).importeComprobante).toBe(
+        '-1234.50',
+      );
+    }
+    for (const tipoComprobante of [1, 17, 18]) {
+      const extra = tipoComprobante === 1 ? BASE : LIQ;
+      const fields = fieldsOf(() =>
+        buildCertificadoRequest({ ...BASE, ...extra, tipoComprobante, importeComprobante: -1 }),
+      );
+      expect(fields).toContain('importeComprobante');
+    }
+    expect(
+      fieldsOf(() => buildCertificadoRequest({ ...LIQ, tipoComprobante: 19, importeComprobante: -100_000_000_000 })),
+    ).toEqual(['importeComprobante']);
+  });
+
+  it('los demás importes siguen siendo no negativos', () => {
+    expect(fieldsOf(() => buildCertificadoRequest({ ...LIQ, tipoComprobante: 19, importeRetencion: -1 }))).toEqual([
+      'importeRetencion',
+    ]);
+  });
+});
+
+describe('textos opcionales (coe, coeOriginal, cae)', () => {
+  it('sin valor se omiten; con espacios se rechazan (manual 5.1, punto 5)', () => {
+    expect(Object.keys(buildCertificadoRequest(BASE))).not.toContain('coe');
+    expect(fieldsOf(() => buildCertificadoRequest({ ...BASE, coe: ' '.repeat(12) }))).toEqual(['coe']);
   });
 });
 

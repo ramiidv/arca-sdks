@@ -54,7 +54,12 @@ export const CMP_REQ: Schema = {
 /** `Obs` / `Evt` (`Code` es `minOccurs=1`). */
 const MENSAJE: Schema = { code: xml('Code', must(int())), msg: xml('Msg', opt(str())) };
 
-/** `CmpDatos` tal como lo devuelve ARCA en `CmpResp`. */
+/**
+ * `CmpDatos` tal como lo devuelve ARCA en `CmpResp`. En el WSDL todos son
+ * `minOccurs=0`; el SDK exige los que identifican el comprobante (ARCA los
+ * devuelve siempre en un `A`). En un `R`, si falta alguno, el resultado se
+ * devuelve sin `cmpResp`.
+ */
 export const CMP_RESP: Schema = {
   cbteModo: xml('CbteModo', must(str())),
   cuitEmisor: xml('CuitEmisor', must(cuit({ decodeAs: 'string' }))),
@@ -72,21 +77,28 @@ export const CMP_RESP: Schema = {
   ),
 };
 
+/** `Events` de las respuestas (lista de `Evt`). */
+export const EVENTS = xml('Events', wrapped('Evt', obj(MENSAJE), 0));
+
 /** `CmpResponse` (en orden del WSDL) sin `CmpResp` (que se decodifica aparte) ni `Errors` (`checkServiceErrors`). */
 export const CONSTATAR_RESP: Schema = {
   resultado: xml('Resultado', must(str())),
   observaciones: xml('Observaciones', wrapped('Obs', obj(MENSAJE), 0)),
   fchProceso: xml('FchProceso', must(str())),
-  events: xml('Events', wrapped('Evt', obj(MENSAJE), 0)),
+  events: EVENTS,
 };
 
-/** Ítems de `ResultGet` de las tablas de parámetros. */
+/**
+ * Ítems de `ResultGet` de las tablas de parámetros. Todos los campos son
+ * `minOccurs=0`: el SDK exige el código (`Cod`/`Id`, sin él el ítem no sirve);
+ * `Desc` ausente queda como `''`.
+ */
 export const FAC_MOD_TIPO: Schema = {
   cod: xml('Cod', must(str())),
-  desc: xml('Desc', must(str())),
+  desc: xml('Desc', opt(str())),
   fchDesde: xml('FchDesde', opt(str())),
   fchHasta: xml('FchHasta', opt(str())),
 };
-export const CBTE_TIPO: Schema = { id: xml('Id', must(int())), desc: xml('Desc', must(str())) };
+export const CBTE_TIPO: Schema = { id: xml('Id', must(int())), desc: xml('Desc', opt(str())) };
 /** `DocTipo` y `OpcionalTipo` (`Id` es `s:string`: se preservan ceros a la izquierda). */
-export const ID_DESC: Schema = { id: xml('Id', must(str())), desc: xml('Desc', must(str())) };
+export const ID_DESC: Schema = { id: xml('Id', must(str())), desc: xml('Desc', opt(str())) };

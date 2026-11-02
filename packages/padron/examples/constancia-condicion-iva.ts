@@ -44,7 +44,7 @@ async function main() {
   //   await arca.facturar({ ptoVta, cbteTipo, docTipo: DocTipo.CUIT, docNro, condicionIva, items });
 }
 
-/** Hasta 250 CUITs en una llamada: las inexistentes vuelven con errorConstancia. */
+/** Hasta 250 CUITs en una llamada: las inexistentes y las inválidas vuelven con errorConstancia. */
 async function lote() {
   const constancias = await padron.getConstanciasInscripcion(['20224107030', '27015942210']);
   for (const c of constancias) {

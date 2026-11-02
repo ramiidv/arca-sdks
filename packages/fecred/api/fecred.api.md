@@ -178,7 +178,7 @@ export interface Comprobante {
     // (undocumented)
     nroCmp: number;
     // (undocumented)
-    opcionTransferencia?: OpcionTransferencia;
+    opcionTransferencia?: ValorAbierto<OpcionTransferencia>;
     // (undocumented)
     otrosTributos: OtroTributo[];
     // (undocumented)
@@ -192,9 +192,9 @@ export interface Comprobante {
     // (undocumented)
     subtotalesIVA: SubtotalIva[];
     // (undocumented)
-    tipoAcep?: TipoAceptacion;
+    tipoAcep?: ValorAbierto<TipoAceptacion>;
     // (undocumented)
-    tipoCodAuto: TipoCodAutorizacion;
+    tipoCodAuto: ValorAbierto<TipoCodAutorizacion>;
 }
 
 // @public
@@ -262,8 +262,8 @@ export interface ConsultarCtasCtesResult extends InfoRespuesta {
     nroPagina?: number;
 }
 
-// @public (undocumented)
-export interface ConsultarCuentasEnAgtDptoCltvResult extends InfoRespuesta {
+// @public
+export interface ConsultarCuentasEnAgtDptoCltvResult extends ObservacionesRespuesta {
     // (undocumented)
     cuentas: CuentaEnAgente[];
 }
@@ -370,7 +370,7 @@ export type EstadoComprobante = (typeof EstadoComprobante)[keyof typeof EstadoCo
 // @public
 export interface EstadoComprobanteInfo {
     // (undocumented)
-    estado: EstadoComprobante;
+    estado: ValorAbierto<EstadoComprobante>;
     // (undocumented)
     fechaHoraEstado: string;
 }
@@ -390,7 +390,7 @@ export type EstadoCtaCte = (typeof EstadoCtaCte)[keyof typeof EstadoCtaCte];
 // @public
 export interface EstadoCtaCteInfo {
     // (undocumented)
-    estado: EstadoCtaCte;
+    estado: ValorAbierto<EstadoCtaCte>;
     // (undocumented)
     fechaHoraEstado: string;
 }
@@ -542,7 +542,7 @@ export interface InfoCtaCte {
     // (undocumented)
     importeTotalFC: number;
     // (undocumented)
-    opcionTransferencia: OpcionTransferencia;
+    opcionTransferencia: ValorAbierto<OpcionTransferencia>;
     // (undocumented)
     saldo: number;
     // (undocumented)
@@ -550,9 +550,8 @@ export interface InfoCtaCte {
 }
 
 // @public
-export interface InfoRespuesta {
+export interface InfoRespuesta extends ObservacionesRespuesta {
     evento?: CodigoDescripcion;
-    observaciones: CodigoDescripcion[];
 }
 
 // @public
@@ -635,9 +634,9 @@ export interface ModificarOpcionTransferenciaParams {
 }
 
 // @public
-export interface MontoObligadoRecepcionResult extends InfoRespuesta {
+export interface MontoObligadoRecepcionResult extends ObservacionesRespuesta {
     montoDesde?: number;
-    obligado: boolean;
+    obligado?: boolean;
 }
 
 // @public
@@ -648,9 +647,14 @@ export interface MotivoRechazo {
 }
 
 // @public
-export interface ObligadoRecepcionResult extends InfoRespuesta {
+export interface ObligadoRecepcionResult extends ObservacionesRespuesta {
     desde?: string;
-    obligado: boolean;
+    obligado?: boolean;
+}
+
+// @public
+export interface ObservacionesRespuesta {
+    observaciones: CodigoDescripcion[];
 }
 
 // @public
@@ -805,6 +809,9 @@ export interface TipoRetencion {
 }
 
 export { ValidationErrorDetail }
+
+// @public
+export type ValorAbierto<T extends string> = T | (string & {});
 
 export { WsaaClient }
 

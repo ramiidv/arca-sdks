@@ -1,4 +1,4 @@
-import { ArcaResponseError, ArcaServiceError, extractServiceErrors } from '@ramiidv/arca-common';
+import { ArcaResponseError, ArcaServiceError, ArcaSoapError } from '@ramiidv/arca-common';
 import type { ServiceErrorDetail } from '@ramiidv/arca-common';
 
 /**
@@ -8,6 +8,13 @@ import type { ServiceErrorDetail } from '@ramiidv/arca-common';
  * `response` tiene el nodo de respuesta completo tal cual lo devolvió ARCA
  * (`respuesta` en WSCPE, `*Return` en WSLPG), por si trae datos además de los
  * errores.
+ *
+ * Los errores admitidos (WSCPE 550, WSLPG 1021: no se pudo generar el PDF) no
+ * lanzan: van a `advertencias` del resultado.
+ *
+ * `uncertain: true` en una emisión cuya respuesta trae errores **y** el
+ * resultado (ej: `cabecera.nroCTG`, `autorizacion.coe`): no se puede saber si
+ * la operación quedó hecha. Consultá el estado antes de reintentar.
  */
 export class ArcaAgroServiceError extends ArcaServiceError {
   static override readonly code: string = 'ARCA_AGRO_SERVICE_ERROR';
@@ -17,6 +24,7 @@ export class ArcaAgroServiceError extends ArcaServiceError {
     public readonly service: 'WSCPE' | 'WSLPG',
     public readonly method: string,
     public readonly response: Record<string, unknown>,
+    public readonly uncertain = false,
   ) {
     super(message, errors);
     this.name = 'ArcaAgroServiceError';
@@ -35,22 +43,42 @@ export class ArcaAgroResponseError extends ArcaResponseError {
   }
 }
 
+/** `ExceptionType`: detalle del SOAP Fault `Exception` de WSCPE. */
+export interface CpeFaultException {
+  uuid?: string;
+  timestamp?: string;
+  /** Identificador del error de negocio que informó ARCA. */
+  businessErrorId?: string;
+  exceptionDetails?: string;
+  serverName?: string;
+}
+
+const EXCEPTION_FIELDS = ['uuid', 'timestamp', 'businessErrorId', 'exceptionDetails', 'serverName'] as const;
+
 /**
- * Lanza `ArcaAgroServiceError` si el nodo tiene errores de negocio (con código
- * distinto de 0 o no numérico). `extractServiceErrors` de common reconoce
- * `errores.error[]` (WSCPE, WSLPG) y `erroresFormato.error[]` (WSLPG).
- * @internal
+ * Datos del `<Exception>` de un SOAP Fault de WSCPE (`ArcaSoapError.faultDetail`).
+ * Devuelve `undefined` si el error no es un `ArcaSoapError` o el fault no trae
+ * ese detalle.
+ *
+ * @example
+ * ```ts
+ * catch (e) {
+ *   const ex = cpeFaultException(e);
+ *   if (ex) console.error(ex.businessErrorId, ex.exceptionDetails, ex.uuid);
+ * }
+ * ```
  */
-export function throwOnServiceErrors(node: Record<string, unknown>, service: 'WSCPE' | 'WSLPG', method: string): void {
-  const errors = extractServiceErrors(node);
-  const relevant = errors.filter((e) => e.code !== 0 || e.rawCode !== undefined);
-  if (relevant.length > 0) {
-    throw new ArcaAgroServiceError(
-      `${service} ${method}: ${relevant.map((e) => `[${e.rawCode ?? e.code}] ${e.msg}`).join(', ')}`,
-      relevant,
-      service,
-      method,
-      node,
-    );
+export function cpeFaultException(error: unknown): CpeFaultException | undefined {
+  if (!(error instanceof ArcaSoapError)) return undefined;
+  const detail = error.faultDetail;
+  if (detail === null || typeof detail !== 'object') return undefined;
+  const key = Object.keys(detail).find((k) => k === 'Exception' || k.endsWith(':Exception'));
+  const node = key === undefined ? undefined : (detail as Record<string, unknown>)[key];
+  if (node === null || typeof node !== 'object' || Array.isArray(node)) return undefined;
+  const out: CpeFaultException = {};
+  for (const f of EXCEPTION_FIELDS) {
+    const v = (node as Record<string, unknown>)[f];
+    if (v !== undefined && v !== null && typeof v !== 'object') out[f] = String(v);
   }
+  return out;
 }

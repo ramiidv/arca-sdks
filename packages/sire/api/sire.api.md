@@ -43,7 +43,7 @@ export class ArcaSire extends ArcaSdkBase<'sire'> {
     anularCertificado(params: AnularCertificadoParams, opts?: CallOptions): Promise<CertificadoResult>;
     readonly client: SireClient;
     emitirCertificado(params: EmitirCertificadoParams, opts?: CallOptions): Promise<CertificadoResult>;
-    status(opts?: CallOptions): Promise<ServerStatus>;
+    status(opts?: CallOptions): Promise<SireServerStatus>;
 }
 
 // @public
@@ -244,7 +244,7 @@ export const SIRE_VERSION = 100;
 export class SireClient extends SoapServiceClient {
     constructor(config: SireClientConfig);
     anular(auth: WsAuth, cuitAgente: number, certificadoAnulacion: CertificadoAnulacionRequest, opts?: CallOptions): Promise<CertificadoResult>;
-    dummy(opts?: CallOptions): Promise<ServerStatus>;
+    dummy(opts?: CallOptions): Promise<SireServerStatus>;
     emitir(auth: WsAuth, cuitAgente: number, certificado: CertificadoRequest, opts?: CallOptions): Promise<CertificadoResult>;
 }
 
@@ -261,6 +261,20 @@ export interface SireClientConfig {
     retryDelayMs?: number;
     timeout?: number;
     transport?: ServiceTransport;
+}
+
+// @public
+export interface SireHeaderInfo {
+    ambiente?: string;
+    fecha?: string;
+    v2005?: string;
+    vCore?: string;
+}
+
+// @public
+export interface SireServerStatus extends ServerStatus {
+    // (undocumented)
+    headerInfo?: SireHeaderInfo;
 }
 
 export { TicketStorage }

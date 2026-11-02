@@ -69,7 +69,7 @@ export class MemoryTicketStorage implements TicketStorage {
  *
  * @example
  * ```ts
- * const arca = new Arca({ ..., ticketStorage: new FileTicketStorage("./.arca-tickets") });
+ * const arca = new ArcaFacturacion({ ..., ticketStorage: new FileTicketStorage("./.arca-tickets") });
  * ```
  */
 export class FileTicketStorage implements TicketStorage {

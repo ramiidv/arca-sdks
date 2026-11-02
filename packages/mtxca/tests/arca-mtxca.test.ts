@@ -1,3 +1,4 @@
+import { testCert } from '@ramiidv/arca-common/testing';
 import { describe, it, expect, vi } from 'vitest';
 import { ArcaSoapError, ArcaValidationError, ArcaServiceError } from '@ramiidv/arca-common';
 import { ArcaMtxca } from '../src/arca-mtxca.js';
@@ -7,8 +8,7 @@ import { facturaA, hangingFetch, mockFetch, soapResponse } from './helpers.js';
 
 function mtxca(fetchImpl: typeof fetch, extra: Partial<ArcaMtxcaConfig> = {}): ArcaMtxca {
   const m = new ArcaMtxca({
-    cert: 'CERT',
-    key: 'KEY',
+    ...testCert(),
     cuit: '20-12345678-6',
     fetch: fetchImpl,
     retryDelayMs: 1,
@@ -43,7 +43,7 @@ function sinNumero() {
 
 describe('ArcaMtxca', () => {
   it('normaliza y valida el CUIT y usa el endpoint de homologación por defecto', async () => {
-    expect(() => new ArcaMtxca({ cert: 'C', key: 'K', cuit: '20123456780' })).toThrow(ArcaValidationError);
+    expect(() => new ArcaMtxca({ ...testCert(), cuit: '20123456780' })).toThrow(ArcaValidationError);
     const m = mockFetch(ultimo(1));
     const a = mtxca(m.fetch);
     expect(a.cuit).toBe('20123456786');
@@ -57,8 +57,7 @@ describe('ArcaMtxca', () => {
     await mtxca(m.fetch, { endpoints: { mtxca: 'https://proxy.local/mtxca' } }).ultimoComprobante(4000, 1);
     expect(m.calls[0].url).toBe('https://proxy.local/mtxca');
     const a = new ArcaMtxca({
-      cert: 'C',
-      key: 'K',
+      ...testCert(),
       cuit: '20123456786',
       endpoints: { wsaa: 'https://proxy.local/wsaa' },
     });
@@ -167,6 +166,65 @@ describe('ArcaMtxca', () => {
     });
     await a.clearAuthCache();
     expect(done).toBe(true);
+  });
+});
+
+describe('ArcaMtxca: CAEA, QR y eventos', () => {
+  const CAEA = '36434058476543';
+
+  it('informarComprobanteCAEA exige condicionIVAReceptor (390) antes de enviar', async () => {
+    const m = mockFetch();
+    const err = await mtxca(m.fetch)
+      .informarComprobanteCAEA({
+        ...facturaA({ condicionIVAReceptor: undefined }),
+        caea: CAEA,
+        fechaHoraGen: '2026-11-01T10:30:00',
+      })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    expect((err as ArcaValidationError).details.map((d) => d.message)).toEqual([
+      expect.stringMatching(/^condicionIVAReceptor: .*\(390\)$/),
+    ]);
+    expect(m.fn).not.toHaveBeenCalled();
+  });
+
+  it('informarAjusteIVACAEA usa el ticket y el wrapper propio; solo valida el XSD', async () => {
+    const m = mockFetch(
+      soapResponse(
+        'informarAjusteIVACAEAResponse',
+        `<resultado>A</resultado><fechaProceso>2026-11-02</fechaProceso><comprobanteCAEAResponse><CAEA>${CAEA}</CAEA>` +
+          '<codigoTipoComprobante>2</codigoTipoComprobante><numeroPuntoVenta>4000</numeroPuntoVenta><numeroComprobante>1</numeroComprobante></comprobanteCAEAResponse>',
+      ),
+    );
+    const res = await mtxca(m.fetch).informarAjusteIVACAEA({
+      ...facturaA({ codigoTipoComprobante: 2, condicionIVAReceptor: undefined }),
+      caea: CAEA,
+    });
+    expect(res).toMatchObject({ resultado: 'A', comprobante: { caea: CAEA, codigoTipoComprobante: 2 } });
+    expect(m.calls[0].body).toContain('<ser:informarAjusteIVACAEARequest');
+    expect(m.calls[0].body).toContain('<token>T</token>');
+  });
+
+  it('urlQR usa la CUIT de la instancia', async () => {
+    const m = mockFetch(aprobado(7));
+    const a = mtxca(m.fetch);
+    const req = facturaA({ numeroComprobante: 7 });
+    const res = await a.autorizar(req);
+    const url = a.urlQR(req, res);
+    const p = JSON.parse(Buffer.from(url.split('?p=')[1], 'base64').toString());
+    expect(p).toMatchObject({ cuit: 20123456786, nroCmp: 7, codAut: 76443051234567, tipoCodAut: 'E' });
+  });
+
+  it('onEvento de la config recibe los eventos de ARCA', async () => {
+    const m = mockFetch(
+      soapResponse(
+        'consultarPuntosVentaCAEAResponse',
+        '<arrayPuntosVenta/><evento><codigo>3</codigo><descripcion>Aviso</descripcion></evento>',
+      ),
+    );
+    const onEvento = vi.fn();
+    expect(await mtxca(m.fetch, { onEvento }).getPuntosVentaCAEA()).toEqual([]);
+    expect(onEvento).toHaveBeenCalledWith({ codigo: 3, descripcion: 'Aviso' }, 'consultarPuntosVentaCAEA');
   });
 });
 

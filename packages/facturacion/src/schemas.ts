@@ -9,12 +9,15 @@
  * en lugar de `Observaciones/Obs`).
  *
  * Los requests no agregan restricciones de los manuales (las valida
- * `validation.ts` sobre la API de alto nivel): acá solo se fija el orden del
- * XSD, los obligatorios y el tipo de cada campo.
+ * `validation.ts`): acá solo se fija el orden del XSD, los obligatorios y el
+ * tipo de cada campo. Los importes se redondean a los decimales del manual
+ * (`dec`): WSFEv1 Double (13+2) y MonCotiz (4+6); WSFEX Imp_total y
+ * Pro_total_item 2 decimales, Moneda_ctz, Pro_qty, Pro_precio_uni y
+ * Pro_bonificacion 6.
  *
  * @internal No se exporta desde `index.ts`.
  */
-import { custom, date8, double, int, must, obj, opt, str, wrapped, xml } from '@ramiidv/arca-common/schema';
+import { custom, date8, dec, double, int, must, obj, opt, str, wrapped, xml } from '@ramiidv/arca-common/schema';
 import type { Field, Schema } from '@ramiidv/arca-common/schema';
 
 /**
@@ -43,24 +46,27 @@ export const CBTE_ASOC_REQ: Schema = {
   cbteFch: xml('CbteFch', opt(date8())),
 };
 
+/** Importe de WSFEv1: Double (13+2), se redondea a 2 decimales. */
+const imp = (): Field => dec(2);
+
 export const TRIBUTO_REQ: Schema = {
   id: xml('Id', int()),
   desc: xml('Desc', opt(str())),
-  baseImp: xml('BaseImp', double()),
-  alic: xml('Alic', double()),
-  importe: xml('Importe', double()),
+  baseImp: xml('BaseImp', imp()),
+  alic: xml('Alic', dec(2)),
+  importe: xml('Importe', imp()),
 };
 
 export const ALIC_IVA_REQ: Schema = {
   id: xml('Id', int()),
-  baseImp: xml('BaseImp', double()),
-  importe: xml('Importe', double()),
+  baseImp: xml('BaseImp', imp()),
+  importe: xml('Importe', imp()),
 };
 export const OPCIONAL_REQ: Schema = { id: xml('Id', str()), valor: xml('Valor', str()) };
 export const COMPRADOR_REQ: Schema = {
   docTipo: xml('DocTipo', int()),
   docNro: xml('DocNro', long()),
-  porcentaje: xml('Porcentaje', double()),
+  porcentaje: xml('Porcentaje', dec(2)),
 };
 export const ACTIVIDAD_REQ: Schema = { id: xml('Id', long()) };
 
@@ -72,17 +78,17 @@ export const FE_DET_REQ: Schema = {
   cbteDesde: xml('CbteDesde', long()),
   cbteHasta: xml('CbteHasta', long()),
   cbteFch: xml('CbteFch', date8()),
-  impTotal: xml('ImpTotal', double()),
-  impTotConc: xml('ImpTotConc', double()),
-  impNeto: xml('ImpNeto', double()),
-  impOpEx: xml('ImpOpEx', double()),
-  impTrib: xml('ImpTrib', double()),
-  impIva: xml('ImpIVA', double()),
+  impTotal: xml('ImpTotal', imp()),
+  impTotConc: xml('ImpTotConc', imp()),
+  impNeto: xml('ImpNeto', imp()),
+  impOpEx: xml('ImpOpEx', imp()),
+  impTrib: xml('ImpTrib', imp()),
+  impIva: xml('ImpIVA', imp()),
   fchServDesde: xml('FchServDesde', opt(date8())),
   fchServHasta: xml('FchServHasta', opt(date8())),
   fchVtoPago: xml('FchVtoPago', opt(date8())),
   monId: xml('MonId', str()),
-  monCotiz: xml('MonCotiz', opt(double())),
+  monCotiz: xml('MonCotiz', opt(dec(6))),
   canMisMonExt: xml('CanMisMonExt', opt(str())),
   condicionIvaReceptorId: xml('CondicionIVAReceptorId', opt(int())),
   cbtesAsoc: xml('CbtesAsoc', items('CbteAsoc', CBTE_ASOC_REQ)),
@@ -374,11 +380,11 @@ export const CMP_ASOC_REQ: Schema = {
 export const ITEM_REQ: Schema = {
   proCodigo: xml('Pro_codigo', opt(str())),
   proDs: xml('Pro_ds', str()),
-  proQty: xml('Pro_qty', double()),
+  proQty: xml('Pro_qty', dec(6)),
   proUmed: xml('Pro_umed', int()),
-  proPrecioUni: xml('Pro_precio_uni', double()),
-  proBonificacion: xml('Pro_bonificacion', double()),
-  proTotalItem: xml('Pro_total_item', double()),
+  proPrecioUni: xml('Pro_precio_uni', dec(6)),
+  proBonificacion: xml('Pro_bonificacion', dec(6)),
+  proTotalItem: xml('Pro_total_item', dec(2)),
 };
 
 /** `ClsFEXRequest` (el `Cmp` de FEXAuthorize), en orden del WSDL. */
@@ -398,10 +404,10 @@ export const FEX_CMP_REQ: Schema = {
   domicilioCliente: xml('Domicilio_cliente', str()),
   idImpositivo: xml('Id_impositivo', opt(str())),
   monedaId: xml('Moneda_Id', str()),
-  monedaCtz: xml('Moneda_ctz', double()),
+  monedaCtz: xml('Moneda_ctz', dec(6)),
   canMisMonExt: xml('CanMisMonExt', opt(str())),
   obsComerciales: xml('Obs_comerciales', opt(str())),
-  impTotal: xml('Imp_total', double()),
+  impTotal: xml('Imp_total', dec(2)),
   obs: xml('Obs', opt(str())),
   cmpsAsoc: xml('Cmps_asoc', items('Cmp_asoc', CMP_ASOC_REQ)),
   formaPago: xml('Forma_pago', opt(str())),

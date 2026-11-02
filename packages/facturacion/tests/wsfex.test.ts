@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
-import { ArcaResultadoInciertoExpo, ArcaWSFEError } from '../src/errors.js';
+import { ArcaAuthError, ArcaResponseError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import { ArcaConflictoExpo, ArcaResultadoInciertoExpo, ArcaWSFEError } from '../src/errors.js';
 import { CbteTipo, TipoExpo } from '../src/constants.js';
 import type { FacturarExpoOpts } from '../src/types.js';
 import { arcaDePrueba, colgado, mockArcaFetch, networkError, orden, wsfeResponse, wsfexResponse } from './helpers.js';
@@ -23,6 +23,7 @@ const autorizado = (o: {
   id: number;
   nro: number;
   tipo?: number;
+  ptoVta?: number;
   reproceso?: string;
   resultado?: string;
   obs?: string;
@@ -30,7 +31,7 @@ const autorizado = (o: {
 }) =>
   wsfexResponse(
     'FEXAuthorize',
-    `<FEXResultAuth><Id>${o.id}</Id><Cuit>20123456786</Cuit><Cbte_tipo>${o.tipo ?? 19}</Cbte_tipo><Punto_vta>3</Punto_vta>` +
+    `<FEXResultAuth><Id>${o.id}</Id><Cuit>20123456786</Cuit><Cbte_tipo>${o.tipo ?? 19}</Cbte_tipo><Punto_vta>${o.ptoVta ?? 3}</Punto_vta>` +
       `<Cbte_nro>${o.nro}</Cbte_nro>` +
       ((o.resultado ?? 'A') === 'A' ? '<Cae>76123456789099</Cae><Fch_venc_Cae>20261109</Fch_venc_Cae>' : '') +
       `<Fch_cbte>20261030</Fch_cbte><Resultado>${o.resultado ?? 'A'}</Resultado><Reproceso>${o.reproceso ?? 'N'}</Reproceso>` +
@@ -328,17 +329,151 @@ describe('facturarExpo: respuesta y errores', () => {
   });
 });
 
+describe('facturarExpo: Id repetido (único por CUIT)', () => {
+  it('Id calculado y WSFEX devuelve otro comprobante → ArcaConflictoExpo, no aprobada', async () => {
+    const arca = await arcaDePrueba();
+    // Otra emisión (ptoVta 4) usó el Id 42 mientras tanto.
+    mockArcaFetch({
+      FEXGetLast_ID: lastId(41),
+      FEXGetLast_CMP: lastCmp(9),
+      FEXAuthorize: autorizado({ id: 42, nro: 77, ptoVta: 4, reproceso: 'S' }),
+    });
+    const err = await arca.facturarExpo(BIENES).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaConflictoExpo);
+    expect(err.code).toBe('ARCA_CONFLICTO_EXPO');
+    expect(err.id).toBe(42);
+    expect(err.request.cbteNro).toBe(10);
+    expect(err.respuesta.fexResultAuth.cbteNro).toBe(77);
+  });
+
+  it('Id calculado con Reproceso "S" para el mismo número → ArcaConflictoExpo', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FEXGetLast_ID: lastId(41),
+      FEXGetLast_CMP: lastCmp(9),
+      FEXAuthorize: autorizado({ id: 42, nro: 10, reproceso: 'S' }),
+    });
+    await expect(arca.facturarExpo(BIENES)).rejects.toBeInstanceOf(ArcaConflictoExpo);
+  });
+
+  it('Id explícito (reenvío) con Reproceso "S" del mismo comprobante → resultado original', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({ FEXAuthorize: autorizado({ id: 42, nro: 10, reproceso: 'S' }) });
+    const res = await arca.facturarExpo({ ...BIENES, id: 42, cbteNro: 10 });
+    expect(res).toMatchObject({ aprobada: true, reproceso: true, cbteNro: 10 });
+  });
+
+  it('API raw: respuesta de otro comprobante → ArcaConflictoExpo', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FEXGetLast_ID: lastId(41),
+      FEXGetLast_CMP: lastCmp(9),
+      FEXAuthorize: [autorizado({ id: 42, nro: 10 }), autorizado({ id: 42, nro: 11, reproceso: 'S' })],
+    });
+    await arca.facturarExpo(BIENES);
+    const err = await arca.facturarExpo({ ...BIENES, id: 42, cbteNro: 12 }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaConflictoExpo);
+  });
+});
+
+describe('facturarExpo: cliente e items especiales', () => {
+  it('solo Id_impositivo: Cuit_pais_cliente va en 0 (1580)', async () => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({ FEXAuthorize: autorizado({ id: 42, nro: 10 }) });
+    await arca.facturarExpo({
+      ...BIENES,
+      id: 42,
+      cbteNro: 10,
+      cliente: { nombre: 'ACME LTDA', domicilio: 'Rua 1', idImpositivo: 'PJ54482221-l' },
+    });
+    const cmp = mock.last('FEXAuthorize').params.Cmp;
+    expect(cmp.Cuit_pais_cliente).toBe(0);
+    expect(cmp.Id_impositivo).toBe('PJ54482221-l');
+  });
+
+  it('sin cuitPais ni idImpositivo → ArcaValidationError (1580)', async () => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({});
+    const err = await arca.facturarExpo({ ...BIENES, cliente: { nombre: 'ACME', domicilio: 'Rua 1' } }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    expect(err.message).toContain('1580');
+    expect(mock.fn).not.toHaveBeenCalled();
+  });
+
+  it('items con unidad 97 (seña) y 99 (bonificación): cantidad y precio 0, total explícito', async () => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({ FEXAuthorize: autorizado({ id: 42, nro: 10 }) });
+    await arca.facturarExpo({
+      ...BIENES,
+      id: 42,
+      cbteNro: 10,
+      items: [
+        { codigo: 'A1', descripcion: 'Vino', cantidad: 10, unidad: 7, precioUnitario: 10 },
+        { codigo: 'S', descripcion: 'Seña recibida', cantidad: 0, unidad: 97, precioUnitario: 0, total: -20 },
+        { codigo: 'B', descripcion: 'Bonificación', cantidad: 0, unidad: 99, precioUnitario: 0, total: -5.5 },
+      ],
+    });
+    const cmp = mock.last('FEXAuthorize').params.Cmp;
+    expect(cmp.Items.Item[1]).toMatchObject({ Pro_umed: 97, Pro_qty: 0, Pro_precio_uni: 0, Pro_total_item: -20 });
+    expect(cmp.Items.Item[2]).toMatchObject({ Pro_umed: 99, Pro_total_item: -5.5 });
+    expect(cmp.Imp_total).toBe(74.5);
+  });
+
+  it.each([
+    ['99 con total >= 0', { unidad: 99, cantidad: 0, precioUnitario: 0, total: 5 }],
+    ['97 sin total', { unidad: 97, cantidad: 0, precioUnitario: 0 }],
+    ['97 con cantidad', { unidad: 97, cantidad: 1, precioUnitario: 0, total: 5 }],
+    ['total en una unidad común', { unidad: 7, cantidad: 1, precioUnitario: 5, total: 5 }],
+  ])('rechaza item %s', async (_, item) => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({});
+    const err = await arca
+      .facturarExpo({ ...BIENES, items: [{ codigo: 'X', descripcion: 'X', ...item }] })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    expect(mock.fn).not.toHaveBeenCalled();
+  });
+
+  it('formaPago es obligatoria solo en Factura E (1620)', async () => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({ FEXAuthorize: autorizado({ id: 42, nro: 10, tipo: 21 }) });
+    await expect(arca.facturarExpo({ ...BIENES, formaPago: undefined })).rejects.toThrow('1620');
+    await arca.facturarExpo({
+      ...BIENES,
+      cbteTipo: CbteTipo.NOTA_CREDITO_E,
+      formaPago: undefined,
+      id: 42,
+      cbteNro: 10,
+      cbtesAsoc: [{ cbteTipo: 19, cbtePuntoVta: 3, cbteNro: 9, cbteCuit: 20123456786 }],
+    });
+    expect(mock.last('FEXAuthorize').params.Cmp).not.toHaveProperty('Forma_pago');
+  });
+});
+
 describe('WSFEX: consultas', () => {
   it('getLastCmp con FEXErr → ArcaWSFEError; sin resultado → error', async () => {
     const arca = await arcaDePrueba();
     mockArcaFetch({
       FEXGetLast_CMP: [
-        fexErr('FEXGetLast_CMP', 1000, 'Usuario no autorizado'),
+        fexErr('FEXGetLast_CMP', 1520, 'Punto de venta invalido'),
         wsfexResponse('FEXGetLast_CMP', OK_ERR),
       ],
     });
     await expect(arca.ultimoComprobanteExpo(3, 19)).rejects.toBeInstanceOf(ArcaWSFEError);
-    await expect(arca.ultimoComprobanteExpo(3, 19)).rejects.toBeInstanceOf(ArcaSoapError);
+    await expect(arca.ultimoComprobanteExpo(3, 19)).rejects.toBeInstanceOf(ArcaResponseError);
+  });
+
+  it.each([
+    [1000, 'Usuario no autorizado a realizar esta operacion'],
+    [1001, 'Cuit solicitante no se encuentra entre sus relaciones'],
+  ])('FEXErr de autenticación %i → ArcaAuthError no reintentable', async (code, msg) => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({ FEXGetLast_CMP: fexErr('FEXGetLast_CMP', code, msg) });
+    const err = await arca.ultimoComprobanteExpo(3, 19).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaAuthError);
+    expect(err.faultCode).toBe(String(code));
+    expect(err.retryable).toBe(false);
+    expect(err.cause).toBeInstanceOf(ArcaWSFEError);
   });
 
   it('siguienteComprobanteExpo acepta CallOptions', async () => {

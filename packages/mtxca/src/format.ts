@@ -1,23 +1,14 @@
-/**
- * Redondea a `decimals` decimales (mitad hacia afuera del cero), sin los
- * errores de `toFixed` con binarios (ej. `1.005` → `1.01`).
- */
-export function roundTo(value: number, decimals: number): number {
-  const abs = Math.abs(value);
-  const text = String(abs);
-  const rounded = text.includes('e')
-    ? Math.round(abs * 10 ** decimals) / 10 ** decimals
-    : Number(`${Math.round(Number(`${text}e${decimals}`))}e-${decimals}`);
-  const result = value < 0 ? -rounded : rounded;
-  return result === 0 ? 0 : result; // sin -0
-}
+import { roundHalfEven } from '@ramiidv/arca-common';
 
-/** Redondea un importe a 2 decimales (`ImporteSubtotalSimpleType` / `ImporteTotalSimpleType`). */
+// El manual de WSMTXCA ("Aclaraciones y Definiciones", nota 4) indica Round
+// Half Even para todos los valores decimales.
+
+/** Redondea un importe a 2 decimales, mitad al par (`8.565` → `8.56`, `8.575` → `8.58`). */
 export function roundImporte(value: number): number {
-  return roundTo(value, 2);
+  return roundHalfEven(value, 2);
 }
 
-/** Redondea cantidad, precio unitario o bonificación a 6 decimales (`DecimalSimpleType`). */
+/** Redondea cantidad, precio unitario, bonificación o cotización a 6 decimales, mitad al par. */
 export function roundDecimal(value: number): number {
-  return roundTo(value, 6);
+  return roundHalfEven(value, 6);
 }

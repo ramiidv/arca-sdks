@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ArcaResultadoIncierto, ArcaWSFEError } from '../src/errors.js';
-import { ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import { ArcaAuthError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
 import { CbteTipo, CondicionIva, DocTipo, IvaTipo } from '../src/constants.js';
 import { requiereRecuperacion } from '../src/facturacion.js';
 import {
@@ -100,14 +100,36 @@ describe('emisiones: nunca se reintentan', () => {
   it('Errors de ARCA → ArcaWSFEError (no se emitió)', async () => {
     const arca = await arcaDePrueba();
     mockArcaFetch({
-      FECAESolicitar: wsfeErrores('FECAESolicitar', [
-        { code: 600, msg: 'ValidacionDeToken: No aparecio CUIT en lista de relaciones' },
-      ]),
+      FECAESolicitar: wsfeErrores('FECAESolicitar', [{ code: 10015, msg: 'DocTipo invalido' }]),
     });
     const err = await arca.facturar({ ...B, cbteNro: 151 }).catch((e) => e);
     expect(err).toBeInstanceOf(ArcaWSFEError);
-    expect(err.tieneCodigo(600)).toBe(true);
+    expect(err.tieneCodigo(10015)).toBe(true);
     expect(requiereRecuperacion(err)).toBe(false);
+  });
+
+  it.each([
+    [600, 'ValidacionDeToken: No aparecio CUIT en lista de relaciones'],
+    [601, 'CUIT representada no incluida en token'],
+  ])('error de autenticación %i → ArcaAuthError no reintentable, sin borrar el ticket', async (code, msg) => {
+    const arca = await arcaDePrueba();
+    const clear = vi.spyOn(arca.wsaa, 'clearTicket');
+    mockArcaFetch({ FECAESolicitar: wsfeErrores('FECAESolicitar', [{ code, msg }]) });
+    const err = await arca.facturar({ ...B, cbteNro: 151 }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaAuthError);
+    expect(err).not.toBeInstanceOf(ArcaResultadoIncierto);
+    expect(err.faultCode).toBe(String(code));
+    expect(err.retryable).toBe(false);
+    expect(err.cause).toBeInstanceOf(ArcaWSFEError);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  it('602 (no existen datos) no es de autenticación: ArcaWSFEError', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({ FECompConsultar: wsfeErrores('FECompConsultar', [{ code: 602, msg: 'No existen datos' }]) });
+    const err = await arca.consultarComprobante(6, 1, 999).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaWSFEError);
+    expect(err).not.toBeInstanceOf(ArcaAuthError);
   });
 
   it('error interno de ARCA (501) → incierto, no rechazo', async () => {
@@ -255,5 +277,78 @@ describe('CAEA', () => {
       ArcaValidationError,
     );
     expect(mock.fn).not.toHaveBeenCalled();
+  });
+});
+
+describe('FCE MiPyME con concepto 1 (productos)', () => {
+  it('envía FchVtoPago sin FchServDesde/FchServHasta (validación 10163)', async () => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({
+      FECAESolicitar: caeAprobado({ ptoVta: 1, cbteTipo: 201, cbteNro: 5, docTipo: 80, docNro: '30712345671' }),
+    });
+    const res = await arca.facturar({
+      ptoVta: 1,
+      cbteTipo: CbteTipo.FCE_FACTURA_A,
+      cbteNro: 5,
+      fecha: '20261030',
+      docTipo: DocTipo.CUIT,
+      docNro: 30712345671,
+      condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
+      vtoPago: '2026-11-29',
+      items: [{ neto: 1000, iva: IvaTipo.IVA_21 }],
+      opcionales: [{ id: '2101', valor: '0110599500000041817221' }],
+    });
+    const det = mock.last('FECAESolicitar').params.FeCAEReq.FeDetReq.FECAEDetRequest;
+    expect(det.Concepto).toBe(1);
+    expect(String(det.FchVtoPago)).toBe('20261129');
+    expect(det).not.toHaveProperty('FchServDesde');
+    expect(det).not.toHaveProperty('FchServHasta');
+    expect(res.aprobada).toBe(true);
+  });
+});
+
+describe('lote con resultado parcial ("P")', () => {
+  it('crearFactura devuelve el detalle de cada comprobante; los rechazados con sus observaciones', async () => {
+    const arca = await arcaDePrueba();
+    const det = (nro: number, resultado: 'A' | 'R') =>
+      '<FECAEDetResponse><Concepto>1</Concepto><DocTipo>99</DocTipo><DocNro>0</DocNro>' +
+      `<CbteDesde>${nro}</CbteDesde><CbteHasta>${nro}</CbteHasta><CbteFch>20261030</CbteFch><Resultado>${resultado}</Resultado>` +
+      (resultado === 'A'
+        ? '<CAE>76123456789012</CAE><CAEFchVto>20261109</CAEFchVto>'
+        : '<Observaciones><Obs><Code>10016</Code><Msg>El numero o fecha del comprobante no se corresponde con el proximo a autorizar</Msg></Obs></Observaciones>') +
+      '</FECAEDetResponse>';
+    mockArcaFetch({
+      FECAESolicitar: wsfeResponse(
+        'FECAESolicitar',
+        '<FeCabResp><Cuit>20123456786</Cuit><PtoVta>1</PtoVta><CbteTipo>6</CbteTipo><FchProceso>20261030120000</FchProceso>' +
+          '<CantReg>2</CantReg><Resultado>P</Resultado><Reproceso>N</Reproceso></FeCabResp>' +
+          `<FeDetResp>${det(151, 'A')}${det(152, 'R')}</FeDetResp>`,
+      ),
+    });
+    const inv = (nro: number) => ({
+      concepto: 1,
+      docTipo: 99,
+      docNro: 0,
+      cbteDesde: nro,
+      cbteHasta: nro,
+      cbteFch: '20261030',
+      impTotal: 121,
+      impTotConc: 0,
+      impNeto: 100,
+      impOpEx: 0,
+      impTrib: 0,
+      impIva: 21,
+      monId: 'PES',
+      monCotiz: 1,
+      condicionIvaReceptorId: 5,
+      iva: [{ id: 5, baseImp: 100, importe: 21 }],
+    });
+    const res = await arca.crearFactura({ ptoVta: 1, cbteTipo: 6, invoices: [inv(151), inv(152)] });
+    expect(res.feCabResp.resultado).toBe('P');
+    expect(res.feDetResp.map((d) => [d.cbteDesde, d.resultado, d.cae])).toEqual([
+      [151, 'A', '76123456789012'],
+      [152, 'R', undefined],
+    ]);
+    expect(res.feDetResp[1].observaciones?.[0].code).toBe(10016);
   });
 });

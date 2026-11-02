@@ -70,6 +70,29 @@ export const DISENO_REGISTRO: readonly CampoDiseno[] = Object.freeze([
   campo('marcaCovidTipoContratoCCG', 'Marca de trabajador licenciado por COVID / Tipo de contrato CCG', 130, 130, 'N'),
 ]);
 
+/** Propiedades admitidas en un {@link RegistroRelacionLaboral} (todas las del diseño salvo `tipoRegistro`, que es fijo). */
+const PROPIEDADES_REGISTRO: ReadonlySet<string> = new Set(
+  DISENO_REGISTRO.map((c) => c.campo).filter((c) => c !== 'tipoRegistro'),
+);
+
+/**
+ * Propiedades propias del registro que no forman parte del diseño (ej. `retribucon`).
+ * Se rechazan para que un nombre mal escrito no deje el campo vacío en silencio.
+ * @internal
+ */
+export function propiedadesDesconocidas(registro: object): string[] {
+  return Object.keys(registro).filter((k) => !PROPIEDADES_REGISTRO.has(k));
+}
+
+/** @internal Detalle de error para una propiedad desconocida. */
+export function errorPropiedadDesconocida(registro: object, k: string): ValidationErrorDetail {
+  return {
+    field: k,
+    message: `Propiedad desconocida "${k}": no es un campo del diseño de registro (¿nombre mal escrito?)`,
+    value: (registro as Record<string, unknown>)[k],
+  };
+}
+
 /** Campos numéricos con default `0` según el manual (en lugar de "vacío"). */
 const DEFAULT_CERO: ReadonlySet<string> = new Set(['rectificacion', 'marcaCovidTipoContratoCCG']);
 
@@ -303,11 +326,17 @@ function assertObjeto(registro: unknown): asserts registro is RegistroRelacionLa
 
 /**
  * Serializa un registro `01` a una línea de exactamente 130 caracteres (sin fin de línea).
- * @throws ArcaSerializationError si algún campo no se puede escribir (nunca trunca).
+ * @throws ArcaSerializationError si algún campo no se puede escribir (nunca trunca) o si el
+ * registro trae una propiedad que no es del diseño (ej. `retribucon`).
  */
 export function serializarRegistro(registro: RegistroRelacionLaboral, opciones?: OpcionesSerializacion): string {
   const o = resolverOpciones(opciones);
   assertObjeto(registro);
+  const desconocida = propiedadesDesconocidas(registro)[0];
+  if (desconocida !== undefined) {
+    const d = errorPropiedadDesconocida(registro, desconocida);
+    throw new ArcaSerializationError(`${d.message}.`, { field: desconocida, value: d.value });
+  }
   const linea = DISENO_REGISTRO.map((c) => formatearCampo(c, registro, o)).join('');
   if (linea.length !== LONGITUD_REGISTRO) {
     // Invariante: cada formateador devuelve exactamente `longitud` caracteres.
@@ -327,7 +356,9 @@ export function erroresDeFormato(registro: unknown, opciones?: OpcionesSerializa
   } catch (e) {
     return [{ field: 'registro', message: (e as Error).message, value: registro }];
   }
-  const errores: ValidationErrorDetail[] = [];
+  const errores: ValidationErrorDetail[] = propiedadesDesconocidas(registro).map((k) =>
+    errorPropiedadDesconocida(registro, k),
+  );
   for (const c of DISENO_REGISTRO) {
     try {
       formatearCampo(c, registro, o);

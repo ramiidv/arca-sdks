@@ -1,9 +1,10 @@
 import { SoapServiceClient, parseServerStatus } from '@ramiidv/arca-common';
-import type { CallOptions, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
+import type { CallOptions, ServerStatus, ServiceErrorDetail, SoapOperationKind } from '@ramiidv/arca-common';
 import { CPE_NAMESPACE } from './constants.js';
 import type { ServiceContext } from './context.js';
-import { ArcaAgroResponseError, throwOnServiceErrors } from './errors.js';
-import { decodeResponse, encodeRequest, int, list, must, obj } from './schema.js';
+import { ArcaAgroResponseError } from './errors.js';
+import { at, checkErrors, decodeResult, requireValue, ticketAuth, withAdvertencias } from './internal.js';
+import { encodeRequest, list, obj } from './schema.js';
 import type { Schema } from './schema.js';
 import * as S from './cpe-schemas.js';
 import type { CodigoDescripcion } from './types.js';
@@ -22,6 +23,7 @@ import type {
   CPEResultado,
   CPEResumen,
   DesvioCPEAutomotorParams,
+  DomicilioCPE,
   DesvioCPEFerroviariaParams,
   EditarCPEAutomotorParams,
   EditarCPEConfirmadaParams,
@@ -35,7 +37,9 @@ import type {
   RechazoCPEParams,
   RegresoOrigenCPEAutomotorParams,
   RegresoOrigenCPEFerroviariaParams,
+  RenspaCPE,
   SolicitanteCartaPorteParams,
+  TipoEmbalajeCPE,
   VariedadSemillaCPE,
 } from './cpe-types.js';
 import type { CuitInput } from './types.js';
@@ -44,6 +48,10 @@ import { requireCartaPorteOCtg, requireOrigen } from './validation.js';
 const SERVICE = 'WSCPE';
 
 const listOf = (name: string, item: Schema): Schema => ({ [name]: list(obj(item), 0) });
+
+/** La respuesta trae la CPE (`cabecera.nroCTG` o `cabecera.estado`). */
+const conCabecera = (node: Record<string, unknown>): boolean =>
+  Boolean(at(node, 'cabecera.nroCTG') || at(node, 'cabecera.estado'));
 
 /**
  * Cliente de WSCPE (Carta de Porte Electrónica). Se accede como `agro.cpe`.
@@ -54,6 +62,9 @@ const listOf = (name: string, item: Schema): Schema => ({ [name]: list(obj(item)
  * Las operaciones que crean o modifican una CPE son emisiones: nunca se
  * reintentan y, si la respuesta se pierde, el `ArcaSoapError` tiene
  * `uncertain: true` (ver README, "Recuperar una emisión incierta").
+ *
+ * El error 550 (no se pudo generar el PDF) no cancela la operación: el
+ * resultado viene sin `pdf` y con el error en `advertencias`.
  */
 export class CpeClient extends SoapServiceClient {
   readonly #ctx: ServiceContext;
@@ -68,29 +79,29 @@ export class CpeClient extends SoapServiceClient {
   // Internos
   // ============================================================
 
-  async #auth(opts?: CallOptions) {
-    const ticket = await this.#ctx.getTicket(opts);
-    return { token: ticket.token, sign: ticket.sign, cuitRepresentada: this.#ctx.cuit };
-  }
-
   /**
    * Llama a una operación de WSCPE. Los elementos de request/response son
-   * `<Operacion>Req` / `<Operacion>Resp` y el SOAPAction es `namespace + operacion`.
-   * Devuelve el nodo `respuesta`, después de verificar `errores`.
+   * `<Operacion>Req` / `<Operacion>Resp` (salvo `responseElement`) y el
+   * SOAPAction es `namespace + operacion`. Devuelve el nodo `respuesta` y los
+   * errores admitidos, después de verificar `errores`.
    */
   async #call(
     method: string,
     body: Record<string, unknown> | null,
     kind: SoapOperationKind,
     opts?: CallOptions,
-  ): Promise<Record<string, unknown>> {
+    responseElement?: string,
+  ): Promise<{ node: Record<string, unknown>; advertencias: ServiceErrorDetail[] }> {
     const element = method.charAt(0).toUpperCase() + method.slice(1);
-    const params = body === null ? {} : { auth: await this.#auth(opts), ...body };
+    const params =
+      body === null
+        ? {}
+        : { auth: { ...(await ticketAuth(this.#ctx.getTicket, opts)), cuitRepresentada: this.#ctx.cuit }, ...body };
     const result = await this.soapCall(method, params, {
       kind,
       signal: this.#ctx.callOptions(opts).signal,
       requestElement: body === null ? null : `${element}Req`,
-      responseElement: `${element}Resp`,
+      responseElement: responseElement ?? `${element}Resp`,
       soapActionFromMethod: true,
       parseNumbers: false,
     });
@@ -100,41 +111,30 @@ export class CpeClient extends SoapServiceClient {
       throw new ArcaAgroResponseError(`${SERVICE} ${method}: la respuesta no tiene <respuesta>`, kind === 'emision');
     }
     const node = respuesta as Record<string, unknown>;
-    throwOnServiceErrors(node, SERVICE, method);
-    return node;
-  }
-
-  #decode<T>(node: unknown, schema: Schema, method: string, kind: SoapOperationKind): T {
-    try {
-      return decodeResponse<T>(node, schema, `${method}.respuesta`);
-    } catch (e) {
-      if (e instanceof ArcaAgroResponseError && kind === 'emision') throw new ArcaAgroResponseError(e.message, true);
-      throw e;
-    }
+    const advertencias = checkErrors(node, SERVICE, method, kind, conCabecera);
+    return { node, advertencias };
   }
 
   /** Operación sobre una CPE que responde `CartaPorteRespuesta`. */
   async #operar(method: string, schema: Schema, params: unknown, opts?: CallOptions): Promise<CPEResultado> {
     const solicitud = encodeRequest(params, schema, method);
-    const r = await this.#call(method, { solicitud }, 'emision', opts);
-    return this.#decode<CPEResultado>(r, S.R_CARTA_PORTE, method, 'emision');
+    const { node, advertencias } = await this.#call(method, { solicitud }, 'emision', opts);
+    const r = decodeResult<CPEResultado>(node, S.R_CARTA_PORTE, `${method}.respuesta`, 'emision');
+    return withAdvertencias(r, advertencias);
   }
 
   /** Respuesta de detalle (autorizar/consultar): exige `cabecera.nroCTG`. */
-  #detalle<T extends { cabecera?: { nroCTG?: string } }>(
-    node: Record<string, unknown>,
-    schema: Schema,
+  async #detalle<T extends { cabecera?: { nroCTG?: string } }>(
     method: string,
+    solicitud: unknown,
+    schema: Schema,
     kind: SoapOperationKind,
-  ): T {
-    const detalle = this.#decode<T>(node, schema, method, kind);
-    if (!detalle.cabecera?.nroCTG) {
-      throw new ArcaAgroResponseError(
-        `${SERVICE} ${method}: la respuesta no tiene cabecera.nroCTG`,
-        kind === 'emision',
-      );
-    }
-    return detalle;
+    opts?: CallOptions,
+  ): Promise<T> {
+    const { node, advertencias } = await this.#call(method, { solicitud }, kind, opts);
+    const detalle = decodeResult<T>(node, schema, `${method}.respuesta`, kind);
+    requireValue(detalle.cabecera?.nroCTG, 'cabecera.nroCTG', SERVICE, method, kind);
+    return withAdvertencias(detalle, advertencias);
   }
 
   async #lista<T>(
@@ -143,9 +143,10 @@ export class CpeClient extends SoapServiceClient {
     item: string,
     schema: Schema,
     opts?: CallOptions,
+    responseElement?: string,
   ): Promise<T[]> {
-    const r = await this.#call(method, body, 'consulta', opts);
-    return this.#decode<Record<string, T[]>>(r, listOf(item, schema), method, 'consulta')[item];
+    const { node } = await this.#call(method, body, 'consulta', opts, responseElement);
+    return decodeResult<Record<string, T[]>>(node, listOf(item, schema), `${method}.respuesta`, 'consulta')[item];
   }
 
   // ============================================================
@@ -155,19 +156,30 @@ export class CpeClient extends SoapServiceClient {
   /**
    * Autoriza una CPE automotor (tipo 74) o automotor flete corto (274).
    * Emisión: no se reintenta. Si falla con `uncertain`, consultá
-   * `consultarUltNroOrden` + `consultarCPEAutomotor` antes de reintentar.
+   * `consultarUltNroOrden` + `consultarCPEAutomotor` (y comprobá que sea la
+   * tuya) antes de reintentar. Un error 550 va a `advertencias`.
    */
   async autorizarCPEAutomotor(params: AutorizarCPEAutomotorParams, opts?: CallOptions): Promise<CPEAutomotorDetalle> {
     const solicitud = encodeRequest(params, S.AUTORIZAR_AUTOMOTOR, 'autorizarCPEAutomotor', requireOrigen);
-    const r = await this.#call('autorizarCPEAutomotor', { solicitud }, 'emision', opts);
-    return this.#detalle<CPEAutomotorDetalle>(r, S.R_DETALLE_AUTOMOTOR, 'autorizarCPEAutomotor', 'emision');
+    return this.#detalle<CPEAutomotorDetalle>(
+      'autorizarCPEAutomotor',
+      solicitud,
+      S.R_DETALLE_AUTOMOTOR,
+      'emision',
+      opts,
+    );
   }
 
   /** Consulta una CPE automotor por `cartaPorte` (tipo/sucursal/nroOrden) o por `nroCTG`. */
   async consultarCPEAutomotor(params: ConsultarCPEParams, opts?: CallOptions): Promise<CPEAutomotorDetalle> {
     const solicitud = encodeRequest(params, S.CONSULTAR_CPE, 'consultarCPEAutomotor', requireCartaPorteOCtg);
-    const r = await this.#call('consultarCPEAutomotor', { solicitud }, 'consulta', opts);
-    return this.#detalle<CPEAutomotorDetalle>(r, S.R_DETALLE_AUTOMOTOR, 'consultarCPEAutomotor', 'consulta');
+    return this.#detalle<CPEAutomotorDetalle>(
+      'consultarCPEAutomotor',
+      solicitud,
+      S.R_DETALLE_AUTOMOTOR,
+      'consulta',
+      opts,
+    );
   }
 
   /** Edita una CPE automotor activa. Emisión. */
@@ -249,15 +261,25 @@ export class CpeClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<CPEFerroviariaDetalle> {
     const solicitud = encodeRequest(params, S.AUTORIZAR_FERROVIARIA, 'autorizarCPEFerroviaria');
-    const r = await this.#call('autorizarCPEFerroviaria', { solicitud }, 'emision', opts);
-    return this.#detalle<CPEFerroviariaDetalle>(r, S.R_DETALLE_FERROVIARIA, 'autorizarCPEFerroviaria', 'emision');
+    return this.#detalle<CPEFerroviariaDetalle>(
+      'autorizarCPEFerroviaria',
+      solicitud,
+      S.R_DETALLE_FERROVIARIA,
+      'emision',
+      opts,
+    );
   }
 
   /** Consulta una CPE ferroviaria por `cartaPorte` o `nroCTG`. */
   async consultarCPEFerroviaria(params: ConsultarCPEParams, opts?: CallOptions): Promise<CPEFerroviariaDetalle> {
     const solicitud = encodeRequest(params, S.CONSULTAR_CPE, 'consultarCPEFerroviaria', requireCartaPorteOCtg);
-    const r = await this.#call('consultarCPEFerroviaria', { solicitud }, 'consulta', opts);
-    return this.#detalle<CPEFerroviariaDetalle>(r, S.R_DETALLE_FERROVIARIA, 'consultarCPEFerroviaria', 'consulta');
+    return this.#detalle<CPEFerroviariaDetalle>(
+      'consultarCPEFerroviaria',
+      solicitud,
+      S.R_DETALLE_FERROVIARIA,
+      'consulta',
+      opts,
+    );
   }
 
   /** Edita una CPE ferroviaria activa. Emisión. */
@@ -306,8 +328,9 @@ export class CpeClient extends SoapServiceClient {
   ): Promise<OperativoFerroviarioCPE> {
     const method = 'consultaCPEFerroviariaPorNroOperativo';
     const solicitud = encodeRequest({ nroOperativo }, S.CONSULTAR_POR_NRO_OPERATIVO, method);
-    const r = await this.#call(method, { solicitud }, 'consulta', opts);
-    return this.#decode<OperativoFerroviarioCPE>(r, S.R_OPERATIVO_FERROVIARIO, method, 'consulta');
+    const { node, advertencias } = await this.#call(method, { solicitud }, 'consulta', opts);
+    const r = decodeResult<OperativoFerroviarioCPE>(node, S.R_OPERATIVO_FERROVIARIO, `${method}.respuesta`, 'consulta');
+    return withAdvertencias(r, advertencias);
   }
 
   // ============================================================
@@ -335,8 +358,8 @@ export class CpeClient extends SoapServiceClient {
    */
   async consultarUltNroOrden(sucursal: number, tipoCPE: number, opts?: CallOptions): Promise<number> {
     const solicitud = encodeRequest({ sucursal, tipoCPE }, S.CONSULTAR_ULT_NRO_ORDEN, 'consultarUltNroOrden');
-    const r = await this.#call('consultarUltNroOrden', { solicitud }, 'consulta', opts);
-    return this.#decode<{ nroOrden: number }>(r, { nroOrden: must(int()) }, 'consultarUltNroOrden', 'consulta')
+    const { node } = await this.#call('consultarUltNroOrden', { solicitud }, 'consulta', opts);
+    return decodeResult<{ nroOrden: number }>(node, S.R_ULT_NRO_ORDEN, 'consultarUltNroOrden.respuesta', 'consulta')
       .nroOrden;
   }
 
@@ -395,8 +418,31 @@ export class CpeClient extends SoapServiceClient {
     return this.#lista('consultarVariedadesSemillas', body, 'variedad', S.R_VARIEDAD_SEMILLA, opts);
   }
 
+  /** RENSPA de un productor en una provincia. */
+  async consultarRenspa(cuit: CuitInput, codProvincia: number, opts?: CallOptions): Promise<RenspaCPE[]> {
+    const body = encodeRequest({ cuit, codProvincia }, S.CONSULTAR_RENSPA, 'consultarRenspa');
+    // El elemento de respuesta es `ConsultarRenspaRes` (no `...Resp`).
+    return this.#lista('consultarRenspa', body, 'renspa', S.R_RENSPA, opts, 'ConsultarRenspaRes');
+  }
+
+  /** Domicilios (PUC) de un CUIT, para los circuitos que piden `DomicilioPUC`. */
+  async consultarDomiciliosPorCUIT(cuit: CuitInput, opts?: CallOptions): Promise<DomicilioCPE[]> {
+    const body = encodeRequest({ cuit }, S.CONSULTAR_DOMICILIOS, 'consultarDomiciliosPorCUIT');
+    return this.#lista('consultarDomiciliosPorCUIT', body, 'domicilio', S.R_DOMICILIO, opts);
+  }
+
+  /** Tipos de embalaje, con sus unidades de medida. */
+  async consultarTiposEmbalaje(opts?: CallOptions): Promise<TipoEmbalajeCPE[]> {
+    return this.#lista('consultarTiposEmbalaje', {}, 'tipoEmbalaje', S.R_TIPO_EMBALAJE, opts);
+  }
+
+  /** Unidades de medida. */
+  async consultarUnidadesMedida(opts?: CallOptions): Promise<CodigoDescripcion[]> {
+    return this.#lista('consultarUnidadesMedida', {}, 'unidadMedida', S.R_CODIGO_DESCRIPCION, opts);
+  }
+
   /** Estado de los servidores de WSCPE (no requiere autenticación). */
   async dummy(opts?: CallOptions): Promise<ServerStatus> {
-    return parseServerStatus(await this.#call('dummy', null, 'consulta', opts));
+    return parseServerStatus((await this.#call('dummy', null, 'consulta', opts)).node);
   }
 }

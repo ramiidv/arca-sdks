@@ -2,11 +2,13 @@
  * Ejemplo: Factura B con detalle de ítems (WSMTXCA, homologación).
  *
  * En clase B el precio unitario incluye IVA y los ítems no llevan importeIVA;
- * el SDK valida que gravado, subtotales de IVA y total sean coherentes.
+ * el SDK valida que gravado, subtotales de IVA y total sean coherentes. Con
+ * el CAE se arma la URL del código QR (RG 4892).
  */
 
 import fs from 'node:fs';
 import { ArcaMtxca, ArcaSoapError, CbteTipo, CodigoCondicionIVA, Concepto, Moneda } from '@ramiidv/arca-mtxca';
+import type { AutorizarRequest } from '@ramiidv/arca-mtxca';
 
 async function main() {
   const mtxca = new ArcaMtxca({
@@ -22,47 +24,49 @@ async function main() {
   // Número explícito: si la respuesta se pierde, sabemos qué número verificar.
   const numero = await mtxca.siguienteComprobante(ptoVta, tipo);
 
+  const req: AutorizarRequest = {
+    codigoTipoComprobante: tipo,
+    numeroPuntoVenta: ptoVta,
+    numeroComprobante: numero,
+    fechaEmision: new Date(),
+    condicionIVAReceptor: 5, // Consumidor Final (ver getCondicionesIVAReceptor(6))
+    importeGravado: 100,
+    importeNoGravado: 0,
+    importeExento: 100,
+    importeSubtotal: 200,
+    importeTotal: 221,
+    codigoMoneda: Moneda.PESOS,
+    cotizacionMoneda: 1,
+    codigoConcepto: Concepto.PRODUCTOS,
+    items: [
+      {
+        unidadesMtx: 1,
+        codigoMtx: '7790001000012',
+        codigo: 'P0001',
+        descripcion: 'Producto gravado 21%',
+        cantidad: 1,
+        codigoUnidadMedida: 7,
+        precioUnitario: 121, // con IVA
+        codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
+        importeItem: 121,
+      },
+      {
+        unidadesMtx: 1,
+        codigoMtx: '7790001000029',
+        codigo: 'P0002',
+        descripcion: 'Producto exento',
+        cantidad: 2,
+        codigoUnidadMedida: 7,
+        precioUnitario: 50,
+        codigoCondicionIVA: CodigoCondicionIVA.EXENTO,
+        importeItem: 100,
+      },
+    ],
+    subtotalesIVA: [{ codigo: CodigoCondicionIVA.IVA_21, importe: 21 }],
+  };
+
   try {
-    const res = await mtxca.autorizar({
-      codigoTipoComprobante: tipo,
-      numeroPuntoVenta: ptoVta,
-      numeroComprobante: numero,
-      fechaEmision: new Date(),
-      condicionIVAReceptor: 5, // Consumidor Final (ver getCondicionesIVAReceptor(6))
-      importeGravado: 100,
-      importeNoGravado: 0,
-      importeExento: 100,
-      importeSubtotal: 200,
-      importeTotal: 221,
-      codigoMoneda: Moneda.PESOS,
-      cotizacionMoneda: 1,
-      codigoConcepto: Concepto.PRODUCTOS,
-      items: [
-        {
-          unidadesMtx: 1,
-          codigoMtx: '7790001000012',
-          codigo: 'P0001',
-          descripcion: 'Producto gravado 21%',
-          cantidad: 1,
-          codigoUnidadMedida: 7,
-          precioUnitario: 121, // con IVA
-          codigoCondicionIVA: CodigoCondicionIVA.IVA_21,
-          importeItem: 121,
-        },
-        {
-          unidadesMtx: 1,
-          codigoMtx: '7790001000029',
-          codigo: 'P0002',
-          descripcion: 'Producto exento',
-          cantidad: 2,
-          codigoUnidadMedida: 7,
-          precioUnitario: 50,
-          codigoCondicionIVA: CodigoCondicionIVA.EXENTO,
-          importeItem: 100,
-        },
-      ],
-      subtotalesIVA: [{ codigo: CodigoCondicionIVA.IVA_21, importe: 21 }],
-    });
+    const res = await mtxca.autorizar(req);
 
     if (res.resultado === 'R') {
       console.error('Rechazado:', res.errores);
@@ -70,6 +74,7 @@ async function main() {
     }
     console.log(`Resultado ${res.resultado}: CAE ${res.comprobante.cae}, vence ${res.comprobante.fechaVencimientoCAE}`);
     for (const o of res.observaciones) console.warn(`Observación ${o.codigo}: ${o.descripcion}`);
+    console.log('QR:', mtxca.urlQR(req, res));
   } catch (e) {
     if (e instanceof ArcaSoapError && e.uncertain) {
       // No reintentar a ciegas: verificar si quedó autorizado.

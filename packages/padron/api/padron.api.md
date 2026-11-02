@@ -14,14 +14,14 @@ import { ArcaServiceError } from '@ramiidv/arca-common';
 import { ArcaSoapError } from '@ramiidv/arca-common';
 import { ArcaTicketVigenteError } from '@ramiidv/arca-common';
 import { ArcaValidationError } from '@ramiidv/arca-common';
-import { buildXml } from '@ramiidv/arca-common';
+import { buildXml as buildXml_2 } from '@ramiidv/arca-common';
 import { CallOptions } from '@ramiidv/arca-common';
 import { CondicionIva } from '@ramiidv/arca-common';
 import { DocTipo } from '@ramiidv/arca-common';
-import { ensureArray } from '@ramiidv/arca-common';
+import { ensureArray as ensureArray_2 } from '@ramiidv/arca-common';
 import { FileTicketStorage } from '@ramiidv/arca-common';
 import { MemoryTicketStorage } from '@ramiidv/arca-common';
-import { parseXml } from '@ramiidv/arca-common';
+import { parseXml as parseXml_2 } from '@ramiidv/arca-common';
 import { Provincia } from '@ramiidv/arca-common';
 import { ServerStatus } from '@ramiidv/arca-common';
 import type { ServiceErrorDetail } from '@ramiidv/arca-common';
@@ -77,9 +77,9 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
     readonly a4: PadronA4Client;
     readonly a5: PadronA5Client;
     getConstanciaInscripcion(cuit: string | number, call?: CallOptions): Promise<PersonaA5>;
-    getConstanciasInscripcion(cuits: Array<string | number>, call?: CallOptions): Promise<PersonaA5[]>;
-    getIdPersonaListByDocumento(documento: string | number, call?: CallOptions): Promise<string[]>;
-    getParametros(collection: string, call?: CallOptions): Promise<ParameterRecord[]>;
+    getConstanciasInscripcion(cuits: Array<string | number>, call?: CallOptions): Promise<ListaPadron<PersonaA5>>;
+    getIdPersonaListByDocumento(documento: string | number, call?: CallOptions): Promise<ListaPadron<string>>;
+    getParametros(collection: string, call?: CallOptions): Promise<ListaPadron<ParameterRecord>>;
     getPersona(cuit: string | number, call?: CallOptions): Promise<PersonaA4>;
     getPersonaA13(cuit: string | number, call?: CallOptions): Promise<PersonaA13>;
     getPersonaA13V2(cuit: string | number, call?: CallOptions): Promise<PersonaA13>;
@@ -127,13 +127,14 @@ export abstract class BasePadronClient extends SoapServiceClient {
     protected authParams(auth: WsAuth): Record<string, unknown>;
     protected call(method: string, params: Record<string, unknown>, opts?: CallOptions): Promise<Record<string, unknown>>;
     dummy(opts?: CallOptions): Promise<ServerStatus>;
-    // (undocumented)
+    // @deprecated (undocumented)
     protected readonly onEvent?: (event: ArcaEvent) => void;
-    // (undocumented)
+    // @deprecated (undocumented)
     protected readonly soapOptions?: PadronSoapOptions;
 }
 
-export { buildXml }
+// @public @deprecated (undocumented)
+export const buildXml: typeof buildXml_2;
 
 export { CallOptions }
 
@@ -230,9 +231,7 @@ export enum CollectionName {
 export interface ComponenteSociedadA5 {
     // (undocumented)
     apellidoPersonaAsociada?: string;
-    // (undocumented)
     ffRelacion?: string;
-    // (undocumented)
     ffVencimiento?: string;
     // (undocumented)
     idPersonaAsociada?: string;
@@ -378,7 +377,7 @@ export interface EmailA4 {
     tipoEmail?: string;
 }
 
-// @public (undocumented)
+// @public
 export const ENDPOINTS: {
     readonly wsaa: {
         readonly testing: 'https://wsaahomo.afip.gov.ar/ws/services/LoginCms';
@@ -416,7 +415,8 @@ export const ENDPOINTS: {
     };
 };
 
-export { ensureArray }
+// @public @deprecated (undocumented)
+export const ensureArray: typeof ensureArray_2;
 
 // @public (undocumented)
 export interface ErrorConstanciaA5 {
@@ -456,7 +456,6 @@ export interface ImpuestoA4 {
     // (undocumented)
     diaPeriodo?: number;
     estado?: string;
-    // (undocumented)
     ffInscripcion?: string;
     // (undocumented)
     idImpuesto: number;
@@ -487,9 +486,15 @@ export enum ImpuestoId {
     IVA_EXENTO = 32,
     IVA_NO_ALCANZADO = 34,
     IVA_RESPONSABLE_INSCRIPTO = 30,
+    IVA_RESPONSABLE_NO_INSCRIPTO = 33,
     MONOTRIBUTO = 20,
     MONOTRIBUTO_AUTONOMO = 21
 }
+
+// @public
+export type ListaPadron<T> = T[] & {
+    metadata?: PadronMetadata;
+};
 
 // @public
 export const MAX_PERSONA_LIST = 250;
@@ -511,7 +516,7 @@ export interface MonotributoA5 {
 
 // @public
 export class PadronA100Client extends BasePadronClient {
-    getParameterCollectionByName(auth: WsAuth, collectionName: string, opts?: CallOptions): Promise<ParameterRecord[]>;
+    getParameterCollectionByName(auth: WsAuth, collectionName: string, opts?: CallOptions): Promise<ListaPadron<ParameterRecord>>;
 }
 
 // @public (undocumented)
@@ -527,7 +532,7 @@ export type PadronA10ClientConfig = PadronClientConfig;
 
 // @public
 export class PadronA13Client extends BasePadronClient {
-    getIdPersonaListByDocumento(auth: WsAuth, documento: string | number, opts?: CallOptions): Promise<string[]>;
+    getIdPersonaListByDocumento(auth: WsAuth, documento: string | number, opts?: CallOptions): Promise<ListaPadron<string>>;
     getPersona(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA13>;
     getPersonaV2(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA13>;
 }
@@ -546,7 +551,7 @@ export type PadronA4ClientConfig = PadronClientConfig;
 // @public
 export class PadronA5Client extends BasePadronClient {
     getPersona(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA5>;
-    getPersonaList(auth: WsAuth, cuits: Array<string | number>, opts?: CallOptions): Promise<PersonaA5[]>;
+    getPersonaList(auth: WsAuth, cuits: Array<string | number>, opts?: CallOptions): Promise<ListaPadron<PersonaA5>>;
 }
 
 // @public (undocumented)
@@ -562,6 +567,12 @@ export interface PadronClientConfig {
 
 // @public
 export type PadronErrorReason = 'inexistente' | 'inactiva' | 'id_invalido' | 'no_autorizado' | 'otro';
+
+// @public
+export interface PadronMetadata {
+    fechaHora?: string;
+    servidor?: string;
+}
 
 // @public
 export type PadronServicio = 'a5' | 'a4' | 'a10' | 'a13' | 'a100';
@@ -589,7 +600,8 @@ export interface ParameterRecord {
     id: string;
 }
 
-export { parseXml }
+// @public @deprecated (undocumented)
+export const parseXml: typeof parseXml_2;
 
 // @public (undocumented)
 export interface PersonaA10 {
@@ -609,6 +621,7 @@ export interface PersonaA10 {
     idActividadPrincipal?: string;
     // (undocumented)
     idPersona: string;
+    metadata?: PadronMetadata;
     // (undocumented)
     nombre?: string;
     // (undocumented)
@@ -620,7 +633,7 @@ export interface PersonaA10 {
     // (undocumented)
     tipoDocumento?: string;
     // (undocumented)
-    tipoPersona: 'FISICA' | 'JURIDICA';
+    tipoPersona: TipoPersonaPadron;
 }
 
 // @public (undocumented)
@@ -635,11 +648,8 @@ export interface PersonaA13 {
     domicilio?: DomicilioA13[];
     // (undocumented)
     estadoClave?: string;
-    // (undocumented)
     fechaContratoSocial?: string;
-    // (undocumented)
     fechaFallecimiento?: string;
-    // (undocumented)
     fechaNacimiento?: string;
     // (undocumented)
     formaJuridica?: string;
@@ -649,6 +659,7 @@ export interface PersonaA13 {
     idPersona: string;
     // (undocumented)
     mesCierre?: number;
+    metadata?: PadronMetadata;
     // (undocumented)
     nombre?: string;
     // (undocumented)
@@ -662,7 +673,7 @@ export interface PersonaA13 {
     // (undocumented)
     tipoDocumento?: string;
     // (undocumented)
-    tipoPersona: 'FISICA' | 'JURIDICA';
+    tipoPersona: TipoPersonaPadron;
 }
 
 // @public (undocumented)
@@ -685,17 +696,11 @@ export interface PersonaA4 {
     email?: EmailA4[];
     // (undocumented)
     estadoClave?: string;
-    // (undocumented)
     fechaContratoSocial?: string;
-    // (undocumented)
     fechaFallecimiento?: string;
-    // (undocumented)
     fechaInscripcion?: string;
-    // (undocumented)
     fechaJubilado?: string;
-    // (undocumented)
     fechaNacimiento?: string;
-    // (undocumented)
     fechaVencimientoMigracion?: string;
     // (undocumented)
     formaJuridica?: string;
@@ -709,6 +714,7 @@ export interface PersonaA4 {
     localidadInscripcion?: string;
     // (undocumented)
     mesCierre?: number;
+    metadata?: PadronMetadata;
     // (undocumented)
     nombre?: string;
     // (undocumented)
@@ -740,7 +746,7 @@ export interface PersonaA4 {
     // (undocumented)
     tipoOrganismoOriginante?: string;
     // (undocumented)
-    tipoPersona: 'FISICA' | 'JURIDICA';
+    tipoPersona: TipoPersonaPadron;
     // (undocumented)
     tipoResidencia?: string;
 }
@@ -765,15 +771,14 @@ export interface PersonaA5 {
     esSucesion?: string;
     // (undocumented)
     estadoClave?: string;
-    // (undocumented)
     fechaContratoSocial?: string;
-    // (undocumented)
     fechaFallecimiento?: string;
     // (undocumented)
     idPersona: string;
     impuestos: ImpuestoA5[];
     // (undocumented)
     mesCierre?: number;
+    metadata?: PadronMetadata;
     monotributo?: MonotributoA5;
     // (undocumented)
     nombre?: string;
@@ -783,7 +788,7 @@ export interface PersonaA5 {
     // (undocumented)
     tipoClave?: string;
     // (undocumented)
-    tipoPersona?: 'FISICA' | 'JURIDICA';
+    tipoPersona?: TipoPersonaPadron;
 }
 
 export { Provincia }
@@ -834,9 +839,7 @@ export interface RegimenGeneralA5 {
 
 // @public (undocumented)
 export interface RelacionA4 {
-    // (undocumented)
     ffRelacion?: string;
-    // (undocumented)
     ffVencimiento?: string;
     // (undocumented)
     idPersona: string;
@@ -881,6 +884,9 @@ export enum TipoPersona {
     // (undocumented)
     JURIDICA = "JURIDICA"
 }
+
+// @public
+export type TipoPersonaPadron = 'FISICA' | 'JURIDICA' | (string & {});
 
 export { WsaaClient }
 

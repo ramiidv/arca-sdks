@@ -15,7 +15,21 @@
  *
  * @internal No se exporta desde `index.ts`.
  */
-import { cuit, date, datetime, dec, id, int, must, obj, opt, str, wrapped, xml } from '@ramiidv/arca-common/schema';
+import {
+  cuit,
+  date,
+  datetime,
+  dec,
+  id,
+  int,
+  must,
+  nonEmptyStr,
+  obj,
+  opt,
+  str,
+  wrapped,
+  xml,
+} from '@ramiidv/arca-common/schema';
 import type { Field, Schema } from '@ramiidv/arca-common/schema';
 
 // ---------------------------------------------------------------------------
@@ -40,8 +54,6 @@ const IMPORTE_TOTAL = dec(2, 0, IMPORTE_MAX);
 const DECIMAL = dec(6, 0, DECIMAL_MAX);
 /** `PorcentajeSimpleType`. */
 const PORCENTAJE = dec(2, 0, 100);
-/** `xsd:string` no vacío (con largo máximo del manual). */
-const texto = (maxLen?: number) => str({ maxLen, pattern: /\S/, patternMessage: 'no puede estar vacío' });
 /** `xsd:long` de un número de documento (la API acepta number o string; ver `serialize.ts`). */
 const DOCUMENTO = str({ pattern: /^\d{1,18}$/ });
 /** CAE/CAEA (`xsd:long` de 14 dígitos). */
@@ -53,9 +65,9 @@ export const CAEA = str({ pattern: /^\d{14}$/ });
 
 const ITEM: Schema = {
   unidadesMtx: opt(int(1, 999999)),
-  codigoMtx: opt(texto()),
-  codigo: opt(texto(50)),
-  descripcion: must(texto(4000)),
+  codigoMtx: opt(nonEmptyStr()),
+  codigo: opt(nonEmptyStr({ max: 50 })),
+  descripcion: must(nonEmptyStr({ max: 4000 })),
   cantidad: opt(DECIMAL),
   codigoUnidadMedida: must(CODIGO),
   precioUnitario: opt(DECIMAL),
@@ -75,19 +87,19 @@ const COMPROBANTE_ASOCIADO: Schema = {
 
 const OTRO_TRIBUTO: Schema = {
   codigo: must(CODIGO),
-  descripcion: opt(texto()),
+  descripcion: opt(nonEmptyStr()),
   baseImponible: must(IMPORTE_TOTAL),
   importe: must(IMPORTE_TOTAL),
 };
 
 const DATO_ADICIONAL: Schema = {
   t: must(CODIGO),
-  c1: opt(texto()),
-  c2: opt(texto()),
-  c3: opt(texto()),
-  c4: opt(texto()),
-  c5: opt(texto()),
-  c6: opt(texto()),
+  c1: opt(nonEmptyStr()),
+  c2: opt(nonEmptyStr()),
+  c3: opt(nonEmptyStr()),
+  c4: opt(nonEmptyStr()),
+  c5: opt(nonEmptyStr()),
+  c6: opt(nonEmptyStr()),
 };
 
 const COMPRADOR: Schema = {
@@ -116,10 +128,10 @@ const CUERPO: Schema = {
   importeSubtotal: must(IMPORTE_SUBTOTAL),
   importeOtrosTributos: opt(IMPORTE_TOTAL),
   importeTotal: must(IMPORTE_TOTAL),
-  codigoMoneda: must(texto(3)),
+  codigoMoneda: must(nonEmptyStr({ max: 3 })),
   cotizacionMoneda: opt(dec(6, 0, 9999.999999, true)),
   cancelaEnMismaMonedaExtranjera: opt(str({ values: ['S', 'N'] })),
-  observaciones: opt(texto(2000)),
+  observaciones: opt(nonEmptyStr({ max: 2000 })),
   codigoConcepto: must(CODIGO),
   fechaServicioDesde: opt(date()),
   fechaServicioHasta: opt(date()),
@@ -197,7 +209,7 @@ export const CONSULTA_COMPROBANTE: Schema = { ...CONSULTA_ULTIMO, numeroComproba
 export const CONSULTA_CONDICIONES_IVA: Schema = { codigoTipoComprobante: must(CODIGO) };
 
 /** Cuerpo de `consultarCotizacionMoneda`. */
-export const COTIZACION: Schema = { codigoMoneda: must(texto(3)), fechaCotizacion: must(date()) };
+export const COTIZACION: Schema = { codigoMoneda: must(nonEmptyStr({ max: 3 })), fechaCotizacion: must(date()) };
 
 /** Cuerpo de `consultarCAEAEntreFechas`. */
 export const ENTRE_FECHAS: Schema = { fechaDesde: must(date()), fechaHasta: must(date()) };
@@ -314,7 +326,7 @@ export const CONSULTA_COMPROBANTE_RESPONSE: Schema = {
 export const CONDICIONES_IVA_RECEPTOR_RESPONSE: Schema = { arrayCondicionesIVAReceptor: CODIGOS };
 
 /** `ConsultarCotizacionMonedaResponseType`. */
-export const COTIZACION_RESPONSE: Schema = { cotizacionMoneda: opt(dec(6)) };
+export const COTIZACION_RESPONSE: Schema = { cotizacionMoneda: opt(dec(6)), evento: EVENTO };
 
 /** `ConsultarPuntosVenta*ResponseType` y `ConsultarPtosVtaCAEANoInformadosResponseType`. */
 export const PUNTOS_VENTA_RESPONSE: Schema = { arrayPuntosVenta: wrapped('puntoVenta', PUNTO_VENTA, 0) };

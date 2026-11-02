@@ -350,11 +350,14 @@ describe('extractMethodResult', () => {
     } catch (e) {
       expect(e).toMatchObject({ faultCode: 'soap:Client', faultString: 'Mal request', uncertain: false });
     }
-    try {
-      extractMethodResult(parsed, 'dummy', { kind: 'emision' });
-    } catch (e) {
-      expect(e).toMatchObject({ uncertain: true });
-    }
+    // Un Fault Client en una emisión es un rechazo antes de procesar: no es incierto.
+    expect(() => extractMethodResult(parsed, 'dummy', { kind: 'emision' })).toThrow(
+      expect.objectContaining({ uncertain: false }),
+    );
+    const server = parseXml(soapFault('soap:Server', 'Error interno'));
+    expect(() => extractMethodResult(server, 'dummy', { kind: 'emision' })).toThrow(
+      expect.objectContaining({ uncertain: true }),
+    );
   });
 
   it('devuelve la misma forma con o sin prefijos', () => {

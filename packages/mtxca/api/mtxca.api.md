@@ -18,6 +18,8 @@ import { CallOptions } from '@ramiidv/arca-common';
 import { FileTicketStorage } from '@ramiidv/arca-common';
 import { LegacyTlsMode } from '@ramiidv/arca-common';
 import { MemoryTicketStorage } from '@ramiidv/arca-common';
+import { QR_URL } from '@ramiidv/arca-common';
+import { QROptions } from '@ramiidv/arca-common';
 import { ServerStatus } from '@ramiidv/arca-common';
 import { ServiceErrorDetail } from '@ramiidv/arca-common';
 import { SoapServiceClient } from '@ramiidv/arca-common';
@@ -90,6 +92,7 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
     solicitarCAEA(periodo: number, orden: number, opts?: CallOptions): Promise<MtxcaCAEA>;
     status(opts?: CallOptions): Promise<ServerStatus>;
     ultimoComprobante(ptoVta: number, cbteTipo: number, opts?: CallOptions): Promise<number>;
+    urlQR(comprobante: ComprobanteQR, resultado?: MtxcaAutorizarResult | MtxcaInformarCAEAResult, options?: QROptions): string;
 }
 
 // @public (undocumented)
@@ -98,6 +101,7 @@ export interface ArcaMtxcaConfig extends ArcaSdkConfig {
         mtxca?: string;
         wsaa?: string;
     };
+    onEvento?: (evento: CodigoDescripcion, method: string) => void;
 }
 
 export { ArcaServiceError }
@@ -182,6 +186,9 @@ export interface CodigoDescripcionString {
     descripcion: string;
 }
 
+// @public
+export type ComprobanteQR = Pick<MtxcaComprobanteBase, 'codigoTipoComprobante' | 'numeroPuntoVenta' | 'fechaEmision' | 'codigoTipoDocumento' | 'numeroDocumento' | 'importeTotal' | 'codigoMoneda' | 'cotizacionMoneda'> & Partial<Pick<MtxcaComprobanteConsultado, 'numeroComprobante' | 'codigoTipoAutorizacion' | 'codigoAutorizacion'>>;
+
 // @public (undocumented)
 export enum Concepto {
     // (undocumented)
@@ -197,6 +204,7 @@ export interface CotizacionResult {
     // (undocumented)
     codigoMoneda: string;
     cotizacion: number | null;
+    evento?: CodigoDescripcion;
     fechaCotizacion: string;
 }
 
@@ -252,6 +260,7 @@ export type MtxcaAutorizarResult = (ResultadoBase & {
 // @public
 export interface MtxcaCAEA {
     caea: string;
+    evento?: CodigoDescripcion;
     // (undocumented)
     fechaDesde: string;
     // (undocumented)
@@ -334,6 +343,7 @@ export interface MtxcaClientConfig {
     legacyTls?: LegacyTlsMode;
     // (undocumented)
     onEvent?: (event: ArcaEvent) => void;
+    onEvento?: (evento: CodigoDescripcion, method: string) => void;
     retries?: number;
     retryDelayMs?: number;
     timeout?: number;
@@ -365,7 +375,6 @@ export interface MtxcaComprobanteAsociado {
 // @public
 export interface MtxcaComprobanteBase {
     actividades?: number[];
-    // (undocumented)
     cancelaEnMismaMonedaExtranjera?: 'S' | 'N';
     // (undocumented)
     codigoConcepto: number;
@@ -374,9 +383,7 @@ export interface MtxcaComprobanteBase {
     codigoTipoComprobante: number;
     // (undocumented)
     codigoTipoDocumento?: number;
-    // (undocumented)
     compradores?: MtxcaComprador[];
-    // (undocumented)
     comprobantesAsociados?: MtxcaComprobanteAsociado[];
     condicionIVAReceptor?: number;
     cotizacionMoneda?: number;
@@ -405,7 +412,6 @@ export interface MtxcaComprobanteBase {
     numeroPuntoVenta: number;
     // (undocumented)
     observaciones?: string;
-    // (undocumented)
     otrosTributos?: MtxcaOtroTributo[];
     // (undocumented)
     periodoComprobantesAsociados?: MtxcaPeriodo;
@@ -662,6 +668,10 @@ export interface PuntoVenta {
     numeroPuntoVenta: number;
 }
 
+export { QR_URL }
+
+export { QROptions }
+
 // @public
 export function roundDecimal(value: number): number;
 
@@ -680,6 +690,9 @@ export enum UnidadMedidaEspecial {
     BONIFICACION = 99,
     SENA = 97
 }
+
+// @public
+export function urlQR(cuit: number | string, comprobante: ComprobanteQR, resultado?: MtxcaAutorizarResult | MtxcaInformarCAEAResult, options?: QROptions): string;
 
 // @public
 export function validateComprobanteCAE(c: MtxcaComprobanteBase): void;

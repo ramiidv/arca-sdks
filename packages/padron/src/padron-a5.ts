@@ -1,7 +1,21 @@
-import { ArcaValidationError, validateCuit } from '@ramiidv/arca-common';
+import { ArcaValidationError, ensureArray, validateCuit } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
-import { ArcaPadronError } from './errors.js';
-import { Domicilio, decode, id, int, list, must, obj, str, type Schema } from './mapping.js';
+import { ArcaPadronError, ArcaPadronServiceError, padronErrorReason } from './errors.js';
+import {
+  Actividad,
+  Categoria,
+  Domicilio,
+  Metadata,
+  conMetadata,
+  decode,
+  id,
+  int,
+  list,
+  must,
+  obj,
+  str,
+  type Schema,
+} from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
 import type {
   ActividadA5,
@@ -12,6 +26,8 @@ import type {
   DomicilioA5,
   ErrorRegimenA5,
   ImpuestoA5,
+  ListaPadron,
+  PadronMetadata,
   PersonaA5,
   RegimenA5,
   WsAuth,
@@ -23,8 +39,8 @@ export type PadronA5ClientConfig = PadronClientConfig;
 export const MAX_PERSONA_LIST = 250;
 
 /**
- * Client for ws_sr_constancia_inscripcion (ex ws_sr_padron_a5, deprecado por
- * ARCA) - Constancia de inscripción: datos generales, domicilio fiscal,
+ * Cliente de ws_sr_constancia_inscripcion (ex ws_sr_padron_a5, deprecado por
+ * ARCA): constancia de inscripción con datos generales, domicilio fiscal,
  * impuestos del régimen general y monotributo.
  *
  * Usa `getPersona_v2` y `getPersonaList_v2`, los métodos vigentes según el
@@ -34,28 +50,57 @@ export class PadronA5Client extends BasePadronClient {
   /**
    * Constancia de inscripción de un contribuyente (`getPersona_v2`).
    *
-   * Si ARCA no puede emitir la constancia, devuelve la persona con
+   * Si ARCA no puede emitir la constancia (o una parte), devuelve la persona con
    * `errorConstancia` / `errorRegimenGeneral` / `errorMonotributo`.
    * @param cuit - CUIT a consultar (con o sin guiones; se valida el dígito verificador)
-   * @throws ArcaPadronServiceError si ARCA responde con un Fault de negocio (ej: CUIT inexistente)
+   * @throws ArcaPadronServiceError (`reason: 'inexistente'`) si la CUIT no existe, tanto si ARCA
+   *   lo informa como Fault como si lo informa en `errorConstancia` ("No existe persona con ese Id").
+   *   También ante otros Faults de negocio (clave inactiva, token no autorizado...).
    */
   async getPersona(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA5> {
+    const method = 'getPersona_v2';
     const idPersona = validateCuit(cuit);
-    const result = await this.call('getPersona_v2', { ...this.authParams(auth), idPersona }, opts);
-    return mapPersonaA5(decode<PersonaReturn>(result, PersonaReturnSchema, 'getPersona_v2.personaReturn'));
+    const result = await this.call(method, { ...this.authParams(auth), idPersona }, opts);
+    const { metadata, ...raw } = decode<PersonaReturn & { metadata?: PadronMetadata }>(
+      result,
+      PersonaReturnSchema,
+      `${method}.personaReturn`,
+    );
+    const persona = conMetadata(mapPersonaA5(raw), metadata);
+    const inexistente = persona.errorConstancia?.error.find((e) => padronErrorReason(e) === 'inexistente');
+    if (inexistente !== undefined && !raw.datosGenerales) {
+      throw new ArcaPadronServiceError(`${method}: ${inexistente}`, [{ code: 0, msg: inexistente }], {
+        reason: 'inexistente',
+      });
+    }
+    return persona;
   }
 
   /**
    * Constancias de hasta 250 contribuyentes en una llamada (`getPersonaList_v2`).
    *
-   * Devuelve una persona por cada clave que informa ARCA. Las claves
-   * inexistentes vuelven con `errorConstancia` (ej: "No existe persona con ese
-   * Id") en lugar de hacer fallar toda la consulta.
+   * Los problemas de una CUIT no hacen fallar la consulta: se informan en el
+   * `errorConstancia` de su persona.
+   * - Las claves inexistentes vuelven como ARCA las informa ("No existe persona con ese Id").
+   * - Las CUITs inválidas (dígito verificador, formato) no se envían a ARCA: vuelven
+   *   con `idPersona` igual al valor recibido y el motivo en `errorConstancia.error`
+   *   (`'CUIT inválido: "...". ... No se consultó a ARCA.'`).
+   * - Una persona que ARCA devuelve con datos inválidos vuelve con el detalle en
+   *   `errorConstancia` (si se la puede identificar; si no trae ninguna CUIT, se omite).
+   *
+   * El resultado sigue el orden de `cuits`. El `metadata` de la respuesta, si vino,
+   * queda en la propiedad `metadata` del array.
+   * @throws ArcaValidationError si `cuits` no tiene entre 1 y 250 elementos.
    */
-  async getPersonaList(auth: WsAuth, cuits: Array<string | number>, opts?: CallOptions): Promise<PersonaA5[]> {
+  async getPersonaList(
+    auth: WsAuth,
+    cuits: Array<string | number>,
+    opts?: CallOptions,
+  ): Promise<ListaPadron<PersonaA5>> {
+    const method = 'getPersonaList_v2';
     if (!Array.isArray(cuits) || cuits.length === 0 || cuits.length > MAX_PERSONA_LIST) {
       throw new ArcaValidationError(
-        `getPersonaList_v2 acepta entre 1 y ${MAX_PERSONA_LIST} CUITs (recibió ${Array.isArray(cuits) ? cuits.length : 0})`,
+        `${method} acepta entre 1 y ${MAX_PERSONA_LIST} CUITs (recibió ${Array.isArray(cuits) ? cuits.length : 0})`,
         [
           {
             field: 'cuits',
@@ -66,36 +111,73 @@ export class PadronA5Client extends BasePadronClient {
         'cuits',
       );
     }
-    const idPersona = cuits.map((c) => validateCuit(c));
-    const result = await this.call('getPersonaList_v2', { ...this.authParams(auth), idPersona }, opts);
-    const { persona } = decode<{ persona?: PersonaReturn[] }>(
-      result,
-      PersonaListReturnSchema,
-      'getPersonaList_v2.personaListReturn',
-    );
-    return (persona ?? []).map(mapPersonaA5);
+
+    // Cada CUIT: normalizada (se consulta) o la persona con el error de validación (no se consulta).
+    const claves = cuits.map((c): string | PersonaA5 => {
+      try {
+        return validateCuit(c);
+      } catch (err) {
+        if (!(err instanceof ArcaValidationError)) throw err;
+        return personaConError(String(c ?? ''), `${err.message} No se consultó a ARCA.`);
+      }
+    });
+    const idPersona = claves.filter((c): c is string => typeof c === 'string');
+    if (idPersona.length === 0) return claves as PersonaA5[];
+
+    const result = await this.call(method, { ...this.authParams(auth), idPersona }, opts);
+    const path = `${method}.personaListReturn`;
+    const { metadata } = decode<{ metadata?: PadronMetadata }>(result, { metadata: obj(Metadata) }, path);
+    const deArca = ensureArray(result['persona'])
+      .map((raw, i) => personaDeLista(raw, `${path}.persona[${i}]`))
+      .filter((p): p is PersonaA5 => p !== undefined);
+
+    // Orden de `cuits`; lo que ARCA devuelva de más (no debería) va al final.
+    const porId = new Map<string, PersonaA5[]>();
+    for (const p of deArca) porId.set(p.idPersona, [...(porId.get(p.idPersona) ?? []), p]);
+    const out: PersonaA5[] = [];
+    for (const c of claves) {
+      const p = typeof c === 'string' ? porId.get(c)?.shift() : c;
+      if (p) out.push(p);
+    }
+    for (const resto of porId.values()) out.push(...resto);
+    return conMetadata(out, metadata);
   }
+}
+
+/** Persona sin datos, con un error en `errorConstancia` (para `getPersonaList_v2`). */
+function personaConError(idPersona: string, error: string): PersonaA5 {
+  return { idPersona, impuestos: [], errorConstancia: { error: [error], idPersona } };
+}
+
+/**
+ * Decodifica un `persona` de `getPersonaList_v2`. Si es inválido, devuelve la
+ * persona con el error (si trae alguna CUIT) o `undefined` (ej: un `persona` nil).
+ */
+function personaDeLista(raw: unknown, path: string): PersonaA5 | undefined {
+  try {
+    return mapPersonaA5(decode<PersonaReturn>(raw, PersonaSchema, path));
+  } catch (err) {
+    if (!(err instanceof ArcaPadronError)) throw err;
+    const id = idPersonaCrudo(raw);
+    return id === undefined ? undefined : personaConError(id, err.message);
+  }
+}
+
+/** `idPersona` de un `persona` sin decodificar (de `datosGenerales` o de `errorConstancia`). */
+function idPersonaCrudo(raw: unknown): string | undefined {
+  const campo = (node: unknown, key: string): unknown =>
+    node !== null && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined;
+  for (const bloque of ['datosGenerales', 'errorConstancia']) {
+    const v = campo(campo(raw, bloque), 'idPersona');
+    if ((typeof v === 'string' || typeof v === 'number') && String(v).trim() !== '') return String(v).trim();
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
 // Schemas de la respuesta (WSDL personaServiceA5, orden del WSDL). Todos los
 // elementos son `minOccurs="0"`; los `must()` son los que el SDK exige.
 // ---------------------------------------------------------------------------
-
-const Actividad: Schema = {
-  descripcionActividad: str(),
-  idActividad: must(id()),
-  nomenclador: int(),
-  orden: int(),
-  periodo: int(),
-};
-
-const Categoria: Schema = {
-  descripcionCategoria: str(),
-  idCategoria: must(int()),
-  idImpuesto: int(),
-  periodo: int(),
-};
 
 const Impuesto: Schema = {
   descripcionImpuesto: str(),
@@ -110,8 +192,8 @@ const ErrorRegimen: Schema = {
   mensaje: str(),
 };
 
-/** @internal `personaReturn` (y `persona` de `personaListReturn`); exportado para los tests de contrato. */
-export const PersonaReturnSchema: Schema = {
+/** @internal `persona` de `personaListReturn` (contenido de `personaReturn` sin `metadata`). */
+export const PersonaSchema: Schema = {
   datosGenerales: obj({
     apellido: str(),
     caracterizacion: list(
@@ -184,8 +266,14 @@ export const PersonaReturnSchema: Schema = {
   errorRegimenGeneral: obj(ErrorRegimen),
 };
 
-/** @internal `personaListReturn` de `getPersonaList_v2`. */
-export const PersonaListReturnSchema: Schema = { persona: list(obj(PersonaReturnSchema)) };
+/** @internal `personaReturn` de `getPersona_v2`; exportado para los tests de contrato. */
+export const PersonaReturnSchema: Schema = { ...PersonaSchema, metadata: obj(Metadata) };
+
+/**
+ * @internal `personaListReturn` de `getPersonaList_v2` (tests de contrato). El
+ * cliente decodifica cada `persona` por separado: una inválida no hace fallar al resto.
+ */
+export const PersonaListReturnSchema: Schema = { metadata: obj(Metadata), persona: list(obj(PersonaSchema)) };
 
 /** `personaReturn` decodificado (las listas ausentes no aparecen). */
 interface PersonaReturn {

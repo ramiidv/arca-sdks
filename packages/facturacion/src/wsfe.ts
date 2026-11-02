@@ -1,4 +1,10 @@
-import { SoapServiceClient, extractServiceErrors, parseServerStatus } from '@ramiidv/arca-common';
+import {
+  ArcaResponseError,
+  SoapServiceClient,
+  extractServiceErrors,
+  parseServerStatus,
+  transportOptions,
+} from '@ramiidv/arca-common';
 import type {
   ArcaEvent,
   CallOptions,
@@ -7,11 +13,11 @@ import type {
   ServiceTransport,
   SoapOperationKind,
 } from '@ramiidv/arca-common';
-import { ENDPOINTS, WSFE_ERRORES_INTERNOS, WSFE_NAMESPACE } from './constants.js';
+import { ENDPOINTS, WSFE_ERRORES_AUTH, WSFE_ERRORES_INTERNOS, WSFE_NAMESPACE } from './constants.js';
 import { encodeRequest } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
-import { decodeArca } from './decode.js';
-import { ArcaResultadoIncierto, ArcaSoapError, ArcaWSFEError } from './errors.js';
+import { decodeArca, sinCampo } from './decode.js';
+import { ArcaResultadoIncierto, ArcaSoapError, ArcaWSFEError, authErrorDe } from './errors.js';
 import type { OperacionEmision } from './errors.js';
 import { eventosWsfe, intentoDesdeComprobante } from './facturacion.js';
 import * as S from './schemas.js';
@@ -56,10 +62,27 @@ export interface WsClientOptions {
   endpoint?: string;
 }
 
-/** Lanza `ArcaWSFEError` si la respuesta trae `Errors` (formato de WSFEv1). */
-function checkErrors(result: R): void {
+/** `Errors` de una respuesta de WSFEv1 como `ArcaWSFEError`, o `undefined`. */
+function erroresDe(result: R): ArcaWSFEError | undefined {
   const errors = extractServiceErrors(result);
-  if (errors.length > 0) throw new ArcaWSFEError(errors.map((e) => ({ code: e.code, msg: e.msg })));
+  return errors.length > 0 ? new ArcaWSFEError(errors.map((e) => ({ code: e.code, msg: e.msg }))) : undefined;
+}
+
+/**
+ * Lanza si la respuesta trae `Errors`: `ArcaAuthError` para los de
+ * autenticación (600, 601), `ArcaWSFEError` para el resto.
+ */
+function checkErrors(result: R): void {
+  const error = erroresDe(result);
+  if (!error) return;
+  if (WSFE_ERRORES_AUTH.some((c) => error.tieneCodigo(c))) throw authErrorDe(error);
+  throw error;
+}
+
+/** Error interno de ARCA (500, 501, 502): no garantiza que no se haya procesado. */
+function errorInterno(result: R): ArcaWSFEError | undefined {
+  const error = erroresDe(result);
+  return error && WSFE_ERRORES_INTERNOS.some((c) => error.tieneCodigo(c)) ? error : undefined;
 }
 
 /** Bloque `Auth` de WSFEv1/WSFEX con los nombres del XML. */
@@ -67,21 +90,9 @@ export function authXml(auth: WsfeAuth): R {
   return { Token: auth.token, Sign: auth.sign, Cuit: auth.cuit };
 }
 
-/** Falta un campo obligatorio en la respuesta de una consulta. */
-function sinCampo(method: string, campo: string): ArcaSoapError {
-  return new ArcaSoapError(`Respuesta de ${method} sin ${campo}`);
-}
-
 /** Opciones de transporte de arca-common a partir de `WsClientOptions` (`timeoutMs` → `timeout`). */
 export function transportDe(opts: WsClientOptions): ServiceTransport {
-  return {
-    timeout: opts.timeoutMs,
-    retries: opts.retries,
-    retryDelayMs: opts.retryDelayMs,
-    onEvent: opts.onEvent,
-    fetch: opts.fetch,
-    legacyTls: opts.legacyTls,
-  };
+  return transportOptions({ ...opts, timeout: opts.timeoutMs });
 }
 
 /** Cliente de bajo nivel de WSFEv1 (Factura electrónica, mercado interno). */
@@ -154,23 +165,21 @@ export class WsfeClient extends SoapServiceClient {
     }
 
     // Un error interno de ARCA no garantiza que no se haya procesado.
-    const errores = extractServiceErrors(result);
-    if (errores.some((e) => WSFE_ERRORES_INTERNOS.includes(e.code))) {
-      throw incierto(new ArcaWSFEError(errores.map((e) => ({ code: e.code, msg: e.msg }))));
-    }
+    const interno = errorInterno(result);
+    if (interno) throw incierto(interno);
 
-    // Errores de negocio: ARCA rechazó el request, no se emitió nada.
+    // Errores de negocio o de autenticación: ARCA rechazó el request, no se emitió nada.
     checkErrors(result);
 
     // Una respuesta con forma inválida tampoco garantiza que no se haya emitido.
     let decoded: R;
     try {
-      decoded = decodeArca<R>(result, response, operacion);
+      decoded = decodeArca<R>(result, response, operacion, 'emision');
     } catch (err) {
       throw incierto(err);
     }
     if (!Array.isArray(decoded.feDetResp) || !decoded.feCabResp) {
-      throw incierto(new ArcaSoapError(`Respuesta de ${operacion} sin FeCabResp/FeDetResp`));
+      throw incierto(new ArcaResponseError(`Respuesta de ${operacion} sin FeCabResp/FeDetResp`, true));
     }
     return decoded as T;
   }
@@ -412,22 +421,31 @@ export class WsfeClient extends SoapServiceClient {
 
   /**
    * Informa que un punto de venta no tuvo movimientos con un CAEA (emisión, no
-   * se reintenta). Un `ArcaSoapError` con `uncertain: true` significa que no se
-   * sabe si quedó informado: verificarlo con `consultarSinMovimientoCAEA`.
+   * se reintenta). Un error con `uncertain: true` (`ArcaSoapError` por red,
+   * timeout o error interno 500/501/502 de ARCA; `ArcaResponseError` por una
+   * respuesta inválida) significa que no se sabe si quedó informado:
+   * verificarlo con `consultarSinMovimientoCAEA`.
    */
   async sinMovimientoCAEA(auth: WsfeAuth, caea: string, ptoVta: number, opts?: CallOptions): Promise<CaeaSinMovResult> {
     const method = 'FECAEASinMovimientoInformar';
     const body = encodeRequest({ ptoVta, caea }, S.CAEA_SIN_MOV_INFORMAR_REQ, method);
     const raw = await this.call(method, { Auth: authXml(auth), ...body }, { ...opts, kind: 'emision' });
+    const interno = errorInterno(raw);
+    if (interno) {
+      throw new ArcaSoapError(`${method}: error interno de ARCA, no se sabe si quedó informado: ${interno.message}`, {
+        uncertain: true,
+        cause: interno,
+      });
+    }
     checkErrors(raw);
     let result: CaeaSinMovResult | undefined;
     try {
-      result = decodeArca<CaeaSinMovResult>(raw, S.CAEA_SIN_MOV_RESP, method);
+      result = decodeArca<CaeaSinMovResult>(raw, S.CAEA_SIN_MOV_RESP, method, 'emision');
     } catch {
       // Forma inválida: se trata como respuesta sin Resultado.
     }
     if (result?.resultado !== 'A' && result?.resultado !== 'R') {
-      throw new ArcaSoapError(`Respuesta de ${method} sin Resultado`, { uncertain: true });
+      throw new ArcaResponseError(`Respuesta de ${method} sin Resultado`, true);
     }
     return result;
   }
@@ -513,16 +531,4 @@ function detInput(inv: InvoiceDetail): R {
       : undefined,
     actividades: lista(inv.actividades)?.map((a) => ({ id: a.id })),
   };
-}
-
-/**
- * Arma un `FEDetRequest` en el orden de la secuencia del WSDL de WSFEv1
- * (Concepto … ImpIVA, FchServ*, MonId, MonCotiz, CanMisMonExt,
- * CondicionIVAReceptorId, CbtesAsoc, Tributos, Iva, Opcionales, Compradores,
- * PeriodoAsoc, Actividades). Los opcionales ausentes no se envían.
- *
- * @throws ArcaValidationError si un campo no tiene el tipo del WSDL.
- */
-export function buildDetRequest(inv: InvoiceDetail): R {
-  return encodeRequest(detInput(inv), S.FE_DET_REQ, 'FECAEDetRequest');
 }

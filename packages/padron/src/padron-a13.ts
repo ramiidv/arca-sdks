@@ -1,19 +1,19 @@
 import { ArcaValidationError, validateCuit } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
-import { decode, decodePersona, id, int, list, must, obj, str, type Schema } from './mapping.js';
+import { Metadata, conMetadata, decode, decodePersona, id, int, list, must, obj, str, type Schema } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
-import type { PersonaA13, WsAuth } from './types.js';
+import type { ListaPadron, PadronMetadata, PersonaA13, WsAuth } from './types.js';
 
 export type PadronA13ClientConfig = PadronClientConfig;
 
 /**
- * Client for ws_sr_padron_a13 - Datos básicos de un contribuyente (manual v1.4).
+ * Cliente de ws_sr_padron_a13: datos básicos de un contribuyente (manual v1.4).
  */
 export class PadronA13Client extends BasePadronClient {
   /**
    * Datos de un contribuyente por CUIT (`getPersona`). Si la clave está
    * inactiva, ARCA responde con error (`reason: 'inactiva'`): usá `getPersonaV2`.
-   * @param auth - Authentication object with Token, Sign, and CuitRepresentada
+   * @param auth - Credenciales: `token`, `sign` y `cuitRepresentada`
    * @param cuit - CUIT/CUIL a consultar (con o sin guiones)
    * @param opts - Opciones por llamada (signal)
    */
@@ -35,22 +35,26 @@ export class PadronA13Client extends BasePadronClient {
 
   /**
    * CUITs/CUILs asociados a un número de documento. Devuelve `[]` si ARCA
-   * responde sin claves.
+   * responde sin claves. El `metadata` de la respuesta, si vino, queda en la
+   * propiedad `metadata` del array.
    * @param documento - Número de documento (se aceptan puntos y espacios: "11.709.676")
    */
-  async getIdPersonaListByDocumento(auth: WsAuth, documento: string | number, opts?: CallOptions): Promise<string[]> {
+  async getIdPersonaListByDocumento(
+    auth: WsAuth,
+    documento: string | number,
+    opts?: CallOptions,
+  ): Promise<ListaPadron<string>> {
     const result = await this.call(
       'getIdPersonaListByDocumento',
       { ...this.authParams(auth), documento: normalizarDocumento(documento) },
       opts,
     );
-    return (
-      decode<{ idPersona?: string[] }>(
-        result,
-        IdPersonaListReturnSchema,
-        'getIdPersonaListByDocumento.idPersonaListReturn',
-      ).idPersona ?? []
+    const r = decode<{ idPersona?: string[]; metadata?: PadronMetadata }>(
+      result,
+      IdPersonaListReturnSchema,
+      'getIdPersonaListByDocumento.idPersonaListReturn',
     );
+    return conMetadata(r.idPersona ?? [], r.metadata);
   }
 }
 
@@ -117,4 +121,5 @@ export const PersonaA13Schema: Schema = {
 /** @internal Exportado para los tests de contrato. */
 export const IdPersonaListReturnSchema: Schema = {
   idPersona: list(id()),
+  metadata: obj(Metadata),
 };

@@ -6,15 +6,15 @@ import type { WsAuth } from './types.js';
 /** Opciones de transporte que se pasan a cada llamada SOAP. */
 export type PadronSoapOptions = Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs' | 'fetch' | 'legacyTls'>;
 
-/** Shared configuration for all Padrón service clients. */
+/** Configuración común de los clientes de Padrón. */
 export interface PadronClientConfig {
-  /** SOAP endpoint URL */
+  /** URL del endpoint SOAP. */
   endpoint: string;
-  /** SOAP namespace */
+  /** Namespace SOAP del servicio. */
   namespace: string;
   /** Opciones de transporte (timeout, reintentos, fetch, TLS legacy) */
   soapOptions?: PadronSoapOptions;
-  /** Optional event callback */
+  /** Callback de eventos (`request:*`). */
   onEvent?: (event: ArcaEvent) => void;
 }
 
@@ -36,7 +36,15 @@ export interface PadronClientConfig {
  * A100...) no pierden ceros ni decimales (`"10.50"`, `"1E3"`).
  */
 export abstract class BasePadronClient extends SoapServiceClient {
+  /**
+   * @deprecated El SDK no lo usa: el transporte lo maneja `SoapServiceClient`.
+   * Se mantiene por compatibilidad con subclases y se va a quitar en una versión mayor.
+   */
   protected readonly soapOptions?: PadronSoapOptions;
+  /**
+   * @deprecated El SDK no lo usa: los eventos los emite el transporte de `SoapServiceClient`.
+   * Se mantiene por compatibilidad con subclases y se va a quitar en una versión mayor.
+   */
   protected readonly onEvent?: (event: ArcaEvent) => void;
 
   constructor(config: PadronClientConfig) {
@@ -71,7 +79,10 @@ export abstract class BasePadronClient extends SoapServiceClient {
     };
   }
 
-  /** Health check for this service. */
+  /**
+   * Estado del servicio (`dummy`, sin autenticación). Devuelve lo que informa ARCA
+   * (`appserver`, `dbserver`, `authserver`): verificá con `serverStatusOk` que estén en `OK`.
+   */
   async dummy(opts?: CallOptions): Promise<ServerStatus> {
     return parseServerStatus(await this.call('dummy', {}, opts));
   }

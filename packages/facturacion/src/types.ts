@@ -66,8 +66,8 @@ export interface AlicuotaIva {
 export interface Tributo {
   /** ID de tipo de tributo (usar enum TributoTipo) */
   id: number;
-  /** Descripción del tributo */
-  desc: string;
+  /** Descripción del tributo (opcional en el request; ARCA puede no devolverla) */
+  desc?: string;
   /** Base imponible (>= 0, se redondea a 2 decimales) */
   baseImp: number;
   /** Alícuota del tributo (>= 0) */
@@ -76,11 +76,17 @@ export interface Tributo {
   importe: number;
 }
 
-/** Comprador de un comprobante con receptores múltiples (estructura `Compradores` de WSFEv1). */
+/**
+ * Comprador de un comprobante con receptores múltiples (estructura
+ * `Compradores` de WSFEv1, validaciones 10135-10148): al menos 2, con
+ * DocTipo 80, 86 u 87, porcentajes que suman 100 y el de mayor porcentaje
+ * igual al receptor del comprobante.
+ */
 export interface Comprador {
+  /** Tipo de documento: 80 (CUIT), 86 (CUIL) u 87 (CDI) */
   docTipo: number;
   docNro: number;
-  /** Porcentaje de titularidad */
+  /** Porcentaje de titularidad (> 0, 2 decimales) */
   porcentaje: number;
 }
 
@@ -148,7 +154,7 @@ export interface InvoiceDetail {
   fchServDesde?: string;
   /** Fecha fin del servicio (formato YYYYMMDD, requerido para servicios) */
   fchServHasta?: string;
-  /** Fecha de vencimiento de pago (formato YYYYMMDD, requerido para servicios) */
+  /** Fecha de vencimiento de pago (formato YYYYMMDD, requerido para servicios y facturas FCE) */
   fchVtoPago?: string;
   /** Array de alícuotas de IVA */
   iva?: AlicuotaIva[];
@@ -159,8 +165,9 @@ export interface InvoiceDetail {
   /** Array de datos opcionales */
   opcionales?: Opcional[];
   /**
-   * Condición de IVA del receptor (usar enum CondicionIva). Obligatorio según RG 5616:
-   * ARCA rechaza los comprobantes sin este dato desde el 01/12/2026 (manual WSFEv1 v4.8).
+   * Condición de IVA del receptor (usar enum CondicionIva). Obligatorio según
+   * la RG 5616 (validación 10246 del manual WSFEv1 v4.7), también para
+   * consumidor final (DocTipo 99).
    */
   condicionIvaReceptorId?: number;
   /**
@@ -198,10 +205,11 @@ export interface FeCabResp {
   cuit: number;
   ptoVta: number;
   cbteTipo: number;
-  fchProceso: string;
+  fchProceso?: string;
   cantReg: number;
+  /** "A" aprobado, "R" rechazado, "P" parcial (en lotes: algunos aprobados y otros rechazados) */
   resultado: 'A' | 'R' | 'P';
-  reproceso: string;
+  reproceso?: string;
 }
 
 export interface FECAEDetResponse {
@@ -210,7 +218,7 @@ export interface FECAEDetResponse {
   docNro: number;
   cbteDesde: number;
   cbteHasta: number;
-  cbteFch: string;
+  cbteFch?: string;
   resultado: 'A' | 'R';
   /** CAE otorgado (FECAESolicitar) */
   cae?: string;
@@ -248,23 +256,24 @@ export interface FECompConsultarResult {
     docNro: number;
     cbteDesde: number;
     cbteHasta: number;
-    cbteFch: string;
+    cbteFch?: string;
     impTotal: number;
     impTotConc: number;
     impNeto: number;
     impOpEx: number;
     impTrib: number;
     impIva: number;
-    fchServDesde: string;
-    fchServHasta: string;
-    fchVtoPago: string;
-    monId: string;
-    monCotiz: number;
-    resultado: 'A' | 'R';
-    codAutorizacion: string;
-    emisionTipo: string;
-    fchVto: string;
-    fchProceso: string;
+    fchServDesde?: string;
+    fchServHasta?: string;
+    fchVtoPago?: string;
+    monId?: string;
+    monCotiz?: number;
+    resultado?: 'A' | 'R';
+    codAutorizacion?: string;
+    /** "CAE" o "CAEA" */
+    emisionTipo?: string;
+    fchVto?: string;
+    fchProceso?: string;
     ptoVta: number;
     cbteTipo: number;
     condicionIvaReceptorId?: number;
@@ -306,9 +315,9 @@ export interface MonedaItem {
 
 export interface PtoVentaItem {
   nro: number;
-  emisionTipo: string;
-  bloqueado: string;
-  fchBaja: string;
+  emisionTipo?: string;
+  bloqueado?: string;
+  fchBaja?: string;
 }
 
 /** Cotización de `FEParamGetCotizacion` (`ResultGet`). */
@@ -338,38 +347,8 @@ export interface PaisItem {
 // QR
 // ============================================================
 
-export interface QRInput {
-  /** Fecha del comprobante: `YYYY-MM-DD`, `YYYYMMDD` o `Date` (se envía como `YYYY-MM-DD`). */
-  fecha: string | Date;
-  /** CUIT del emisor */
-  cuit: number | string;
-  /** Punto de venta */
-  ptoVta: number;
-  /** Tipo de comprobante */
-  tipoCmp: number;
-  /** Número de comprobante */
-  nroCmp: number;
-  /** Importe total */
-  importe: number;
-  /** Código de moneda */
-  moneda: string;
-  /** Cotización */
-  ctz: number;
-  /** Tipo de documento del receptor (de corresponder) */
-  tipoDocRec?: number;
-  /** Número de documento del receptor (de corresponder) */
-  nroDocRec?: number | string;
-  /** Tipo de código de autorización: "E" = CAE, "A" = CAEA */
-  tipoCodAut?: 'E' | 'A';
-  /** Código de autorización (CAE o CAEA, 14 dígitos). El string que devuelve ARCA se convierte a número. */
-  codAut: number | string;
-}
-
-/** Opciones de `generateQRUrl`. */
-export interface QROptions {
-  /** URL base del QR. Default: `QR_URL` (https://www.arca.gob.ar/fe/qr/). */
-  baseUrl?: string;
-}
+// Definidos en @ramiidv/arca-common (`generarUrlQR`).
+export type { QRInput, QROptions } from '@ramiidv/arca-common';
 
 // ============================================================
 // WSFEX - Factura de Exportación
@@ -435,12 +414,16 @@ export interface WsfexInvoice {
   dstCmp: number;
   /** Nombre del cliente */
   cliente: string;
-  /** CUIT del país del cliente */
-  cuitPaisCliente: number;
+  /**
+   * CUIT del país del cliente (`getCuitsPaisExpo`). No es obligatorio si se
+   * informa `idImpositivo` (validación 1580: al menos uno de los dos). El WSDL
+   * lo declara obligatorio: si falta se envía 0.
+   */
+  cuitPaisCliente?: number;
   /** Domicilio del cliente */
   domicilioCliente: string;
-  /** ID impositivo del cliente extranjero */
-  idImpositivo: string;
+  /** ID impositivo del cliente extranjero. No es obligatorio si se informa `cuitPaisCliente` (1580). */
+  idImpositivo?: string;
   /** Código de moneda */
   monedaId: string;
   /** Cotización de la moneda */
@@ -453,8 +436,8 @@ export interface WsfexInvoice {
   obs?: string;
   /** Idioma: 1=Español, 2=Inglés, 3=Portugués */
   idiomaCbte: number;
-  /** Forma de pago */
-  formaPago: string;
+  /** Forma de pago. Obligatoria en Factura E (19), opcional en NC/ND (validación 1620). */
+  formaPago?: string;
   /** Código Incoterms */
   incoterms?: string;
   /** Descripción Incoterms */
@@ -637,14 +620,21 @@ export interface ExpoLineItem {
   codigo: string;
   /** Descripción */
   descripcion: string;
-  /** Cantidad */
+  /** Cantidad (> 0; 0 con las unidades 0, 97 y 99) */
   cantidad: number;
-  /** Unidad de medida (código AFIP) */
+  /** Unidad de medida (código de `getUMedExpo`) */
   unidad: number;
-  /** Precio unitario */
+  /** Precio unitario (>= 0; 0 con las unidades 0, 97 y 99) */
   precioUnitario: number;
-  /** Bonificación / descuento. Default: 0 */
+  /** Bonificación / descuento. Default: 0 (con las unidades 0, 97 y 99 tiene que ser 0) */
   bonificacion?: number;
+  /**
+   * Total del item, solo para las unidades 0, 97 (señas/anticipos) y 99
+   * (bonificaciones), que van sin cantidad ni precio (validaciones 1775 y
+   * 1810): con 97 puede ser negativo, con 99 tiene que ser menor a 0. En el
+   * resto de las unidades el total es `cantidad * precioUnitario - bonificacion`.
+   */
+  total?: number;
 }
 
 export interface FacturarExpoOpts {
@@ -656,12 +646,15 @@ export interface FacturarExpoOpts {
   tipoExpo: number;
   /** Código de país destino (usar getPaisesExpo()) */
   pais: number;
-  /** Datos del cliente */
+  /**
+   * Datos del cliente. Hay que informar `cuitPais` (ver `getCuitsPaisExpo`),
+   * `idImpositivo` o los dos (validación 1580).
+   */
   cliente: {
     nombre: string;
-    cuitPais: number;
+    cuitPais?: number;
     domicilio: string;
-    idImpositivo: string;
+    idImpositivo?: string;
   };
   /** Código de moneda */
   moneda: string;
@@ -669,8 +662,8 @@ export interface FacturarExpoOpts {
   cotizacion: number;
   /** Items del comprobante */
   items: ExpoLineItem[];
-  /** Forma de pago */
-  formaPago: string;
+  /** Forma de pago. Obligatoria en Factura E (19), opcional en NC/ND (validación 1620). */
+  formaPago?: string;
   /** Idioma: 1=Español, 2=Inglés, 3=Portugués. Default: 1 */
   idioma?: number;
   /** Código Incoterms */
@@ -710,8 +703,9 @@ export interface FacturarExpoOpts {
   /** Actividades (ver `getActividadesExpo`) */
   actividades?: number[];
   /**
-   * `Id` del request. Default: último Id + 1. Indicarlo solo para reenviar un
-   * resultado incierto (`ArcaResultadoInciertoExpo.intento`).
+   * `Id` del request. Default: último Id + 1. Es único por CUIT (no por punto
+   * de venta ni tipo): indicarlo solo para reenviar un resultado incierto
+   * (`ArcaResultadoInciertoExpo.intento`).
    */
   id?: number;
   /** Número de comprobante. Default: último autorizado + 1. */
@@ -822,12 +816,24 @@ export interface FacturarOpts {
   docNro?: number;
   /** Fecha del comprobante (Date o string YYYYMMDD / YYYY-MM-DD). Default: hoy (timezone Argentina) */
   fecha?: Date | string;
-  /** Para servicios (concepto 2 o 3): fechas del período y vencimiento de pago */
+  /**
+   * Para servicios (concepto 2 o 3): fechas del período y vencimiento de pago
+   * (`vtoPago` aquí o en `FacturarOpts.vtoPago`, obligatorio para servicios:
+   * validación 10049).
+   */
   servicio?: {
     desde: Date | string;
     hasta: Date | string;
-    vtoPago: Date | string;
+    vtoPago?: Date | string;
   };
+  /**
+   * Fecha de vencimiento del pago (`FchVtoPago`), independiente del concepto.
+   * Obligatoria en las facturas FCE MiPyME (201, 206, 211), también con
+   * concepto 1 (validación 10163). En notas de crédito/débito FCE con concepto
+   * 1 solo se admite si son de anulación (opcional 22 = "S", validación
+   * 10175). Para servicios puede ir acá o en `servicio.vtoPago`.
+   */
+  vtoPago?: Date | string;
   /** Código de moneda (usar enum Moneda). Default: PES */
   moneda?: string;
   /**
@@ -860,6 +866,12 @@ export interface FacturarOpts {
   periodoAsoc?: { desde: Date | string; hasta: Date | string };
   /** Actividades del emisor asociadas al comprobante (ver `getActividades`). */
   actividades?: number[];
+  /**
+   * Compradores, para comprobantes con varios receptores (validaciones
+   * 10135-10148): al menos 2, porcentajes que suman 100, y el receptor del
+   * comprobante tiene que ser el de mayor porcentaje.
+   */
+  compradores?: Comprador[];
 }
 
 /** Opciones de `registrarFacturaCAEA`: las de `facturar` más la fecha y hora de generación. */

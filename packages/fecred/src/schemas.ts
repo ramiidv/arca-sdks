@@ -19,23 +19,25 @@ import {
   decodeResponse,
   encodeRequest,
   id,
+  importe as importeNoNegativo,
   int,
   must,
   obj,
   opt,
+  porcentaje,
   siNo,
   str,
   wrapped,
   xml,
 } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
+import type { SoapOperationKind } from '@ramiidv/arca-common';
 import {
   EstadoComprobante,
   EstadoCtaCte,
   OpcionTransferencia,
   Resultado,
   RolCtaCte,
-  TipoAceptacion,
   TipoCancelacion,
   TipoFechaFiltro,
 } from './constants.js';
@@ -52,8 +54,6 @@ type Obj = Record<string, unknown>;
 const as = xml;
 
 const isObj = (v: unknown): v is Obj => v !== null && typeof v === 'object' && !Array.isArray(v);
-
-const responseError = (message: string) => new ArcaSoapError(`${SERVICE}: ${message}`, { uncertain: true });
 
 /**
  * Reglas que el DSL no expresa: rango de `fecha` y dígitos verificadores del CBU.
@@ -91,10 +91,13 @@ export function encode(input: unknown, schema: Schema, method: string): Obj {
 
 /**
  * Decodifica una respuesta (pedida con `parseNumbers: false`). Una respuesta
- * que no cumple el schema lanza `ArcaSoapError` (`uncertain`).
+ * que no cumple el schema lanza `ArcaSoapError`, con `uncertain` solo en las
+ * emisiones (la operación pudo haberse registrado aunque no se pueda leer).
  */
-export function decode<T>(node: unknown, schema: Schema, path: string): T {
-  return decodeResponse<T>(node, schema, path, { error: responseError });
+export function decode<T>(node: unknown, schema: Schema, path: string, kind: SoapOperationKind): T {
+  return decodeResponse<T>(node, schema, path, {
+    error: (message) => new ArcaSoapError(`${SERVICE}: ${message}`, { uncertain: kind === 'emision' }),
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -103,15 +106,20 @@ export function decode<T>(node: unknown, schema: Schema, path: string): T {
 
 const IMPORTE_MAX = 9999999999999.99;
 const enumOf = (values: Record<string, string>) => str({ values: Object.values(values) });
+/**
+ * Enumeración en una respuesta: se acepta cualquier valor, para que un valor
+ * nuevo de ARCA (como pasó con `InformadaAgDpto`) no rompa las consultas.
+ */
+const enumResp = () => str();
 
 /** Código `xsd:short` (el SDK no acepta negativos). */
 export const short = () => int(0, 32767);
-/** `ImporteSimpleType`. */
+/** `ImporteSimpleType` (con signo). */
 export const importe = () => dec(2, -IMPORTE_MAX, IMPORTE_MAX);
 /** `ImporteSimpleType` no negativo (regla del SDK para los importes de los requests, salvo ajustes). */
-export const importePositivo = () => dec(2, 0, IMPORTE_MAX);
-/** `PorcentajeSimpleType` (0 a 100), con 2 decimales. */
-export const porcentaje = () => dec(2, 0, 100);
+export const importePositivo = () => importeNoNegativo(IMPORTE_MAX);
+// `PorcentajeSimpleType` (0 a 100, 2 decimales): `porcentaje()` de common.
+export { porcentaje };
 /** Cotización (`xsd:decimal`): positiva, con hasta 6 decimales. */
 export const cotizacion = () => dec(6, 0, undefined, true);
 /** `Texto250SimpleType`. */
@@ -234,13 +242,14 @@ export const REQ = {
 } satisfies Record<string, Schema>;
 
 // ---------------------------------------------------------------------------
-// Respuestas (sin `must()` = minOccurs 0)
+// Respuestas (sin `must()` = minOccurs 0). Las enumeraciones se decodifican
+// con `enumResp()` (cualquier string).
 // ---------------------------------------------------------------------------
 
 /** `EstadoCtaCteType`. */
-const ESTADO_CTA_CTE: Schema = { estado: must(enumOf(EstadoCtaCte)), fechaHoraEstado: must(datetime()) };
+const ESTADO_CTA_CTE: Schema = { estado: must(enumResp()), fechaHoraEstado: must(datetime()) };
 /** `EstadoCmpType`. */
-const ESTADO_CMP: Schema = { estado: must(enumOf(EstadoComprobante)), fechaHoraEstado: must(datetime()) };
+const ESTADO_CMP: Schema = { estado: must(enumResp()), fechaHoraEstado: must(datetime()) };
 
 /** `InfoCtaCteType`. */
 const INFO_CTA_CTE: Schema = {
@@ -251,7 +260,7 @@ const INFO_CTA_CTE: Schema = {
   saldo: must(importe()),
   saldoAceptado: importe(),
   codMoneda: must(str()),
-  opcionTransferencia: must(enumOf(OpcionTransferencia)),
+  opcionTransferencia: must(enumResp()),
 };
 
 /** `InfoAgtDptoCltvType`. */
@@ -302,7 +311,7 @@ const COMPROBANTE: Schema = {
   nroCmp: must(int()),
   cuitReceptor: must(cuitStr()),
   razonSocialRecep: must(str()),
-  tipoCodAuto: must(str({ values: ['A', 'E'] })),
+  tipoCodAuto: must(enumResp()),
   codAutorizacion: must(id()),
   fechaEmision: must(date()),
   fechaPuestaDispo: date(),
@@ -334,10 +343,10 @@ const COMPROBANTE: Schema = {
   leyendaComercial: str(),
   codCtaCte: must(id()),
   estado: must(obj(ESTADO_CMP)),
-  tipoAcep: enumOf(TipoAceptacion),
+  tipoAcep: enumResp(),
   fechaHoraAcep: datetime(),
   motivosRechazo: motivosRechazo(),
-  opcionTransferencia: enumOf(OpcionTransferencia),
+  opcionTransferencia: enumResp(),
   infoTransferencia: choice({ infoAgtDptoCltv: obj(INFO_AGT_DPTO_CLTV), infoSCA: obj(INFO_SCA) }),
 };
 
@@ -370,8 +379,8 @@ const INFO: Schema = {
 const INFO_OBSERVACION: Schema = { observaciones: as('arrayObservacion', codigosDescripciones()) };
 
 export const RESP = {
-  consultarMontoObligadoRecepcion: { obligado: must(siNo()), montoDesde: importe(), ...INFO_OBSERVACION },
-  consultarObligadoRecepcion: { obligado: as('respuesta', must(siNo())), desde: date(), ...INFO_OBSERVACION },
+  consultarMontoObligadoRecepcion: { obligado: siNo(), montoDesde: importe(), ...INFO_OBSERVACION },
+  consultarObligadoRecepcion: { obligado: as('respuesta', siNo()), desde: date(), ...INFO_OBSERVACION },
   consultarCtasCtes: {
     ctasCtes: as('arrayInfosCtaCte', wrapped('infoCtaCte', obj(INFO_CTA_CTE))),
     nroPagina: int(),
@@ -397,7 +406,7 @@ export const RESP = {
   /** `OperacionFECredReturnType`. */
   operacion: { resultado: must(enumOf(Resultado)), idCtaCte: must(choice(ID_CTA_CTE)), ...INFO },
   rechazarNotaDC: { idComprobante: must(obj(ID_COMPROBANTE)), resultado: must(enumOf(Resultado)), ...INFO },
-  /** Solo las observaciones (para el detalle de un resultado `R`). */
+  /** Solo `evento` y observaciones de `OperacionFECredReturnType`/`RechazarNotaDCReturnType`. */
   info: INFO,
   consultarCuentasEnAgtDptoCltv: {
     cuentas: as('arrayCuentasEnAgente', wrapped('cuentaEnAgente', obj(CUENTA_EN_AGENTE))),
@@ -429,3 +438,12 @@ export const RESP = {
   /** `ConsultarCodigoDescripcionReturnType`. */
   codigosDescripciones: { codigos: as('arrayCodigoDescripcion', codigosDescripciones()) },
 } satisfies Record<string, Schema>;
+
+/**
+ * Las observaciones con cualquiera de los dos nombres del XSD, para el detalle
+ * de un `ArcaServiceError` (errores de negocio o resultado `R`).
+ */
+export const OBSERVACIONES: Schema = {
+  observaciones: INFO['observaciones']!,
+  observacion: INFO_OBSERVACION['observaciones']!,
+};

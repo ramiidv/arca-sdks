@@ -1,7 +1,9 @@
 import { ArcaSdkBase, ArcaServiceError, formatDate } from '@ramiidv/arca-common';
-import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
+import type { CallOptions, QROptions, ServerStatus } from '@ramiidv/arca-common';
 import { MTXCA_ENDPOINTS, MTXCA_SERVICE_ID } from './constants.js';
 import { MtxcaClient } from './mtxca-client.js';
+import { urlQR } from './qr.js';
+import type { ComprobanteQR } from './qr.js';
 import { buildComprobante } from './serialize.js';
 import { reglasComprobanteCAE, reglasComprobanteCAEA } from './validation.js';
 import type {
@@ -48,6 +50,7 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
     this.client = new MtxcaClient({
       endpoint: this.endpoint(MTXCA_ENDPOINTS, config.endpoints?.mtxca),
       ...this.transport,
+      onEvento: config.onEvento,
     });
   }
 
@@ -142,6 +145,26 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
     return this.client.consultarComprobante(auth, cbteTipo, ptoVta, cbteNro, this.callOptions(opts));
   }
 
+  /**
+   * URL del código QR (RG 4892) de un comprobante autorizado con CAE o
+   * informado con CAEA, con la CUIT de la instancia como emisor.
+   *
+   * @example
+   * ```ts
+   * const res = await mtxca.autorizar(req);
+   * if (res.resultado !== 'R') console.log(mtxca.urlQR(req, res));
+   * // Más tarde: mtxca.urlQR((await mtxca.consultarComprobante(1, 4000, 25)).comprobante)
+   * ```
+   * @throws ArcaValidationError si el comprobante fue rechazado o falta algún dato (ver `urlQR`).
+   */
+  urlQR(
+    comprobante: ComprobanteQR,
+    resultado?: MtxcaAutorizarResult | MtxcaInformarCAEAResult,
+    options?: QROptions,
+  ): string {
+    return urlQR(this.cuit, comprobante, resultado, options);
+  }
+
   // =========================================================================
   // CAEA
   // =========================================================================
@@ -174,7 +197,8 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
 
   /**
    * Informa un comprobante emitido con CAEA (`informarComprobanteCAEA`). Valida
-   * el XSD y las reglas excluyentes de ítems. Un rechazo devuelve
+   * el XSD y las reglas excluyentes del manual (ítems, condición de IVA del
+   * receptor, FCE, comprobantes asociados, compradores). Un rechazo devuelve
    * `resultado: 'R'`. Ante `uncertain`, verificá con `consultarComprobante()`.
    */
   async informarComprobanteCAEA(

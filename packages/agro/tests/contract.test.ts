@@ -4,7 +4,7 @@ import { checkSchemaAgainstXsd, loadXsdTypes } from '@ramiidv/arca-common/testin
 import { describe, expect, it } from 'vitest';
 import * as C from '../src/cpe-schemas.js';
 import * as L from '../src/lpg-schemas.js';
-import { int, list, must, obj, str, wrapped } from '../src/schema.js';
+import { list, obj, str, wrapped } from '../src/schema.js';
 
 const wsdl = (file: string) => readFileSync(new URL(`../wsdl/${file}`, import.meta.url), 'utf8');
 
@@ -103,6 +103,18 @@ const cpeCases: Case[] = [
     'ConsultarVariedadesSemillasReq',
     'request',
   ],
+  // Sin `solicitud`: los campos van directo bajo el Req.
+  ['consultarRenspa', { auth: obj(CPE_AUTH), ...C.CONSULTAR_RENSPA }, 'ConsultarRenspaReq', 'request'],
+  [
+    'consultarDomiciliosPorCUIT',
+    { auth: obj(CPE_AUTH), ...C.CONSULTAR_DOMICILIOS },
+    'ConsultarDomiciliosPorCUITReq',
+    'request',
+  ],
+  ['consultarTiposEmbalaje', cpeReq(), 'ConsultarTiposEmbalajeReq', 'request'],
+  ['consultarUnidadesMedida', cpeReq(), 'ConsultarUnidadesMedidaReq', 'request'],
+  // El elemento de respuesta de consultarRenspa es `...Res`, no `...Resp`.
+  ['consultarRenspa (respuesta)', cpeLista('renspa', C.R_RENSPA), 'ConsultarRenspaRes', 'response'],
 
   // Respuestas
   ...(
@@ -112,7 +124,7 @@ const cpeCases: Case[] = [
       ['autorizarCPEFerroviaria', C.R_DETALLE_FERROVIARIA],
       ['consultarCPEFerroviaria', C.R_DETALLE_FERROVIARIA],
       ['consultaCPEFerroviariaPorNroOperativo', C.R_OPERATIVO_FERROVIARIO],
-      ['consultarUltNroOrden', { nroOrden: must(int()) }],
+      ['consultarUltNroOrden', C.R_ULT_NRO_ORDEN],
       // Operaciones que responden CartaPorteRespuesta (`#operar`).
       ...[
         'editarCPEAutomotor',
@@ -147,6 +159,9 @@ const cpeCases: Case[] = [
       ['consultarLocalidadesProductor', 'localidad', C.R_LOCALIDAD_PRODUCTOR],
       ['consultarCategoriasSemillas', 'categoria', C.R_CODIGO_DESCRIPCION],
       ['consultarVariedadesSemillas', 'variedad', C.R_VARIEDAD_SEMILLA],
+      ['consultarDomiciliosPorCUIT', 'domicilio', C.R_DOMICILIO],
+      ['consultarTiposEmbalaje', 'tipoEmbalaje', C.R_TIPO_EMBALAJE],
+      ['consultarUnidadesMedida', 'unidadMedida', C.R_CODIGO_DESCRIPCION],
     ] as [string, string, Schema][]
   ).map(
     ([m, item, s]): Case => [
@@ -209,6 +224,14 @@ const lpgCases: Case[] = [
   ['cgSolicitarAnulacionReq', lpgReq(L.CONSULTA_X_COE), 'cgSolicitarAnulacionReq', 'request'],
   ['cgConfirmarAnulacionReq', lpgReq(L.CONSULTA_X_COE), 'cgConfirmarAnulacionReq', 'request'],
   ['cgConsultarUltimoNroOrdenReq', lpgReq(L.ULT_NRO_ORDEN), 'cgConsultarUltimoNroOrdenReq', 'request'],
+  ['cgConsultarXCoeReq', lpgReq(L.CONSULTA_X_COE), 'cgConsultarXCoeReq', 'request'],
+  ['CgConsultarXNroOrdenReq', lpgReq(L.CONSULTA_X_NRO_ORDEN), 'CgConsultarXNroOrdenReq', 'request'],
+  ['ajusteXCoeConsReq', lpgReq(L.CONSULTA_X_COE), 'ajusteXCoeConsReq', 'request'],
+  ['ajusteXNroOrdenConsReq', lpgReq(L.CONSULTA_X_NRO_ORDEN), 'ajusteXNroOrdenConsReq', 'request'],
+  ['ajustePorContratoConsultarReq', lpgReq(L.AJUSTE_POR_CONTRATO), 'ajustePorContratoConsultarReq', 'request'],
+  ['liquidacionPorContratoConsultarReq', lpgReq(L.LIQ_POR_CONTRATO), 'liquidacionPorContratoConsultarReq', 'request'],
+  ['cgBuscarCtgReq', lpgReq(L.CG_BUSCAR_CTG), 'cgBuscarCtgReq', 'request'],
+  ['cgBuscarCertConSaldoDisponibleReq', lpgReq(L.CG_BUSCAR_CERT_SALDO), 'cgBuscarCertConSaldoDisponibleReq', 'request'],
   ['localidadReq', lpgReq(L.LOCALIDADES), 'localidadReq', 'request'],
   ['tipoOperacionReq', lpgReq(L.TIPO_OPERACION), 'tipoOperacionReq', 'request'],
   ['gradoEntregadoReq', lpgReq(L.GRADO_ENTREGADO), 'gradoEntregadoReq', 'request'],
@@ -236,6 +259,14 @@ const lpgCases: Case[] = [
   lpgResp('cgSolicitarAnulacionResp', L.R_CG_ANULACION_RETURN),
   lpgResp('cgConfirmarAnulacionResp', L.R_CG_ANULACION_RETURN),
   lpgResp('cgConsultarUltimoNroOrdenResp', L.R_ULT_NRO_ORDEN),
+  lpgResp('cgConsultarXCoeResp', L.R_CG_CONSULTAR_RETURN),
+  lpgResp('CgConsultarXNroOrdenResp', L.R_CG_CONSULTAR_RETURN),
+  lpgResp('ajusteXcoeConsResp', L.R_AJUSTE_CONS_RETURN),
+  lpgResp('ajusteXNroOrdenConsResp', L.R_AJUSTE_CONS_RETURN),
+  lpgResp('ajustePorContratoConsultarResp', L.R_AJUSTE_CONS_RETURN),
+  lpgResp('liquidacionPorContratoConsultarResp', L.R_LIQ_POR_CONTRATO_RETURN),
+  lpgResp('cgBuscarCtgResp', L.R_CG_BUSCAR_CTG_RETURN),
+  lpgResp('cgBuscarCertConSaldoDisponibleResp', L.R_CG_BUSCAR_CERT_SALDO_RETURN),
   lpgParametrica('provinciasResp', 'provincias'),
   lpgParametrica('localidadResp', 'localidades'),
   lpgParametrica('tipoOperacionResp', 'tiposOperacion'),

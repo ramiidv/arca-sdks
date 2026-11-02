@@ -29,6 +29,8 @@ const sdk = () =>
 
 describe.skipIf(!habilitado)('integración SIRE (homologación)', { timeout: 120_000 }, () => {
   it('status (dummy)', async () => {
-    expect(await sdk().status()).toEqual({ appserver: 'OK', dbserver: 'OK', authserver: 'OK' });
+    const status = await sdk().status();
+    expect(status).toMatchObject({ appserver: 'OK', dbserver: 'OK', authserver: 'OK' });
+    expect(status.headerInfo?.ambiente).toMatch(/homolog/i);
   });
 });

@@ -8,10 +8,26 @@
  */
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
 import { encodeRequest } from './schema.js';
-import { AUTORIZAR_AUTOMOTOR, AUTORIZAR_FERROVIARIA } from './cpe-schemas.js';
-import { AJUSTE_UNIFICADO, LIQUIDACION_AUTORIZAR } from './lpg-schemas.js';
-import type { AutorizarCPEAutomotorParams, AutorizarCPEFerroviariaParams } from './cpe-types.js';
-import type { AjusteUnificadoParams, LiquidacionAutorizarParams } from './lpg-types.js';
+import {
+  AUTORIZAR_AUTOMOTOR,
+  AUTORIZAR_FERROVIARIA,
+  CONFIRMACION_AUTOMOTOR,
+  CONFIRMACION_FERROVIARIA,
+  EDITAR_AUTOMOTOR,
+  EDITAR_CONFIRMADA,
+  EDITAR_FERROVIARIA,
+} from './cpe-schemas.js';
+import { AJUSTE_UNIFICADO, CG_AUTORIZAR, LIQUIDACION_AUTORIZAR } from './lpg-schemas.js';
+import type {
+  AutorizarCPEAutomotorParams,
+  AutorizarCPEFerroviariaParams,
+  ConfirmacionDefinitivaCPEAutomotorParams,
+  ConfirmacionDefinitivaCPEFerroviariaParams,
+  EditarCPEAutomotorParams,
+  EditarCPEConfirmadaParams,
+  EditarCPEFerroviariaParams,
+} from './cpe-types.js';
+import type { AjusteUnificadoParams, CgAutorizarParams, LiquidacionAutorizarParams } from './lpg-types.js';
 
 /** @internal `origen` debe tener `operador` o `productor`. */
 export function requireOrigen(input: Record<string, unknown>, errors: ValidationErrorDetail[]): void {
@@ -48,6 +64,34 @@ export function validateAutorizarCPEFerroviaria(params: AutorizarCPEFerroviariaP
   encodeRequest(params, AUTORIZAR_FERROVIARIA, 'autorizarCPEFerroviaria');
 }
 
+/** Valida una solicitud de `editarCPEAutomotor`. @throws ArcaValidationError */
+export function validateEditarCPEAutomotor(params: EditarCPEAutomotorParams): void {
+  encodeRequest(params, EDITAR_AUTOMOTOR, 'editarCPEAutomotor');
+}
+
+/** Valida una solicitud de `editarCPEFerroviaria`. @throws ArcaValidationError */
+export function validateEditarCPEFerroviaria(params: EditarCPEFerroviariaParams): void {
+  encodeRequest(params, EDITAR_FERROVIARIA, 'editarCPEFerroviaria');
+}
+
+/**
+ * Valida una solicitud de `editarCPEConfirmadaAutomotor` o
+ * `editarCPEConfirmadaFerroviaria` (mismo tipo). @throws ArcaValidationError
+ */
+export function validateEditarCPEConfirmada(params: EditarCPEConfirmadaParams): void {
+  encodeRequest(params, EDITAR_CONFIRMADA, 'editarCPEConfirmada');
+}
+
+/** Valida una solicitud de `confirmacionDefinitivaCPEAutomotor`. @throws ArcaValidationError */
+export function validateConfirmacionDefinitivaCPEAutomotor(params: ConfirmacionDefinitivaCPEAutomotorParams): void {
+  encodeRequest(params, CONFIRMACION_AUTOMOTOR, 'confirmacionDefinitivaCPEAutomotor');
+}
+
+/** Valida una solicitud de `confirmacionDefinitivaCPEFerroviaria`. @throws ArcaValidationError */
+export function validateConfirmacionDefinitivaCPEFerroviaria(params: ConfirmacionDefinitivaCPEFerroviariaParams): void {
+  encodeRequest(params, CONFIRMACION_FERROVIARIA, 'confirmacionDefinitivaCPEFerroviaria');
+}
+
 /** Valida una solicitud de `liquidacionAutorizar`. @throws ArcaValidationError */
 export function validateLiquidacion(params: LiquidacionAutorizarParams): void {
   encodeRequest(params, LIQUIDACION_AUTORIZAR, 'liquidacionAutorizar');
@@ -56,4 +100,9 @@ export function validateLiquidacion(params: LiquidacionAutorizarParams): void {
 /** Valida una solicitud de `liquidacionAjustarUnificado`. @throws ArcaValidationError */
 export function validateAjusteUnificado(params: AjusteUnificadoParams): void {
   encodeRequest(params, AJUSTE_UNIFICADO, 'liquidacionAjustarUnificado', requireAjuste);
+}
+
+/** Valida una solicitud de `cgAutorizar`. @throws ArcaValidationError */
+export function validateCgAutorizar(params: CgAutorizarParams): void {
+  encodeRequest(params, CG_AUTORIZAR, 'cgAutorizar');
 }

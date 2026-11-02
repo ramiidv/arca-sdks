@@ -4,7 +4,7 @@
  * - ArcaValidationError: datos inválidos (no se llamó a ARCA).
  * - ArcaSireServiceError: ARCA rechazó el certificado (no se emitió).
  * - ArcaSoapError con uncertain=true: no se sabe si se emitió. No reintentar a ciegas.
- * - ArcaAuthError: falla de WSAA.
+ * - ArcaAuthError: falla de WSAA o SIRE rechazó el token/sign (el SDK descarta el ticket cacheado).
  */
 import { readFileSync } from 'node:fs';
 import {
@@ -57,7 +57,7 @@ async function main() {
         err.message,
       );
     } else if (err instanceof ArcaAuthError) {
-      console.error('Error de autenticación WSAA:', err.message);
+      console.error('Error de autenticación (WSAA o token/sign rechazado por SIRE):', err.message);
     } else {
       throw err;
     }

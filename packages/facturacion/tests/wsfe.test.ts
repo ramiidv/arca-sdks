@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import { ArcaResponseError, ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
 import { ArcaResultadoIncierto, ArcaWSFEError } from '../src/errors.js';
 import { CbteTipo, CondicionIva, DocTipo, IvaTipo, Moneda, TributoTipo } from '../src/constants.js';
 import { requiereRecuperacion } from '../src/facturacion.js';
@@ -375,13 +375,13 @@ describe('parámetros', () => {
   it('getCotizacion sin ResultGet → error, no undefined', async () => {
     const arca = await arcaDePrueba();
     mockArcaFetch({ FEParamGetCotizacion: wsfeResponse('FEParamGetCotizacion', '') });
-    await expect(arca.getCotizacion('DOL')).rejects.toBeInstanceOf(ArcaSoapError);
+    await expect(arca.getCotizacion('DOL')).rejects.toBeInstanceOf(ArcaResponseError);
   });
 
   it('getCotizacion con Errors → ArcaWSFEError', async () => {
     const arca = await arcaDePrueba();
     mockArcaFetch({
-      FEParamGetCotizacion: wsfeErrores('FEParamGetCotizacion', [{ code: 600, msg: 'Moneda inexistente' }]),
+      FEParamGetCotizacion: wsfeErrores('FEParamGetCotizacion', [{ code: 10037, msg: 'Moneda inexistente' }]),
     });
     await expect(arca.getCotizacion('XXX')).rejects.toBeInstanceOf(ArcaWSFEError);
   });
@@ -391,13 +391,13 @@ describe('parámetros', () => {
     mockArcaFetch({
       FECompUltimoAutorizado: wsfeResponse('FECompUltimoAutorizado', '<PtoVta>1</PtoVta><CbteTipo>6</CbteTipo>'),
     });
-    await expect(arca.ultimoComprobante(1, 6)).rejects.toBeInstanceOf(ArcaSoapError);
+    await expect(arca.ultimoComprobante(1, 6)).rejects.toBeInstanceOf(ArcaResponseError);
   });
 
   it('FECompTotXRequest sin RegXReq → error', async () => {
     const arca = await arcaDePrueba();
     mockArcaFetch({ FECompTotXRequest: wsfeResponse('FECompTotXRequest', '') });
-    await expect(arca.getCantMaxRegistros()).rejects.toBeInstanceOf(ArcaSoapError);
+    await expect(arca.getCantMaxRegistros()).rejects.toBeInstanceOf(ArcaResponseError);
   });
 
   it('condiciones de IVA (CondicionIvaReceptor con ClaseCmp)', async () => {
@@ -463,6 +463,24 @@ describe('parámetros', () => {
     expect(monedas.map((m) => m.id)).toEqual(['060', 'DOL']);
     arca.clearParamCache();
     await arca.getTiposIva();
+    expect(mock.count('FEParamGetTiposIva')).toBe(2);
+  });
+
+  it('consultas concurrentes iguales comparten un solo request; un error no queda cacheado', async () => {
+    const arca = await arcaDePrueba({ retries: 0 });
+    const tabla = wsfeResponse(
+      'FEParamGetTiposIva',
+      '<ResultGet><IvaTipo><Id>5</Id><Desc>21%</Desc></IvaTipo></ResultGet>',
+    );
+    const mock = mockArcaFetch({
+      FEParamGetTiposIva: [new Response('', { status: 503 }), tabla],
+    });
+    await expect(Promise.all([arca.getTiposIva(), arca.getTiposIva()])).rejects.toBeInstanceOf(ArcaSoapError);
+    expect(mock.count('FEParamGetTiposIva')).toBe(1);
+    const [a, b, c] = await Promise.all([arca.getTiposIva(), arca.getTiposIva(), arca.getTiposIva()]);
+    expect(a).toEqual([{ id: 5, desc: '21%' }]);
+    expect(b).toBe(a);
+    expect(c).toBe(a);
     expect(mock.count('FEParamGetTiposIva')).toBe(2);
   });
 });
@@ -539,6 +557,6 @@ describe('status', () => {
     const r = await arca.status();
     expect(r.wsfe).toEqual({ ok: true, status: { appserver: 'OK', dbserver: 'OK', authserver: 'OK' } });
     expect(r.wsfex.ok).toBe(false);
-    expect(!r.wsfex.ok && r.wsfex.error).toBeInstanceOf(ArcaSoapError);
+    expect(!r.wsfex.ok && r.wsfex.error).toBeInstanceOf(ArcaResponseError);
   });
 });

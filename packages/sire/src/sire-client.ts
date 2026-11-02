@@ -1,18 +1,26 @@
-import { ArcaSoapError, parseServerStatus, SoapServiceClient } from '@ramiidv/arca-common';
-import type {
-  ArcaEvent,
-  CallOptions,
-  LegacyTlsMode,
-  ServerStatus,
-  ServiceTransport,
-  SoapOperationKind,
+import {
+  ArcaAuthError,
+  ArcaSoapError,
+  buildXml,
+  extractMethodResult,
+  parseServerStatus,
+  SoapServiceClient,
+  soapCall,
 } from '@ramiidv/arca-common';
+import type { ArcaEvent, CallOptions, LegacyTlsMode, ServiceTransport, SoapOperationKind } from '@ramiidv/arca-common';
 import { decodeResponse } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import { SIRE_NAMESPACE } from './constants.js';
 import { ArcaSireServiceError } from './errors.js';
 import { CERTIFICADO, CERTIFICADO_ANULACION, CERTIFICADO_RESULT } from './schemas.js';
-import type { CertificadoAnulacionRequest, CertificadoRequest, CertificadoResult, WsAuth } from './types.js';
+import type {
+  CertificadoAnulacionRequest,
+  CertificadoRequest,
+  CertificadoResult,
+  SireHeaderInfo,
+  SireServerStatus,
+  WsAuth,
+} from './types.js';
 
 /** Configuración del cliente SOAP de bajo nivel. */
 export interface SireClientConfig {
@@ -37,14 +45,16 @@ export interface SireClientConfig {
 /**
  * Faults con `faultcode` `soapenv:Server` que, según lo observado en
  * homologación, son rechazos previos a procesar el request: XML que no cumple
- * el schema, operación inexistente y token/sign faltante o inválido.
+ * el schema y operación inexistente.
  */
-const REJECTION_FAULT_PATTERNS = [
-  /^XML invalido/i,
-  /no cumple el schema/i,
-  /^Request mal formado/i,
-  /^[A-Z_]*(TOKEN|SIGN)[A-Z_]*$/,
-];
+const REJECTION_FAULT_PATTERNS = [/^XML invalido/i, /no cumple el schema/i, /^Request mal formado/i];
+
+/**
+ * Faults de token/sign faltante o inválido (ej: `MISSING_AUTHENTICATION_TOKEN`,
+ * observado en homologación; el manual no publica la lista). Se lanzan como
+ * `ArcaAuthError` y `ArcaSire` descarta el ticket cacheado.
+ */
+const AUTH_FAULT_PATTERN = /^[A-Z_]*(TOKEN|SIGN)[A-Z_]*$/;
 
 /** El servidor de SIRE escapa dos veces las entidades del faultstring (`&amp;apos;`). */
 function decodeEntities(text: string): string {
@@ -94,9 +104,24 @@ export class SireClient extends SoapServiceClient {
     });
   }
 
-  /** Estado de los servidores de SIRE (no requiere autenticación). */
-  async dummy(opts?: CallOptions): Promise<ServerStatus> {
-    return parseServerStatus(await this.call('dummy', {}, 'consulta', opts));
+  /**
+   * Estado de los servidores de SIRE (no requiere autenticación), con el
+   * `HeaderInfo` de la respuesta (ambiente y versiones) si vino.
+   */
+  async dummy(opts?: CallOptions): Promise<SireServerStatus> {
+    // soapCall directo (no `this.call`) para leer el header de la respuesta.
+    const parsed = await soapCall(this.endpoint, buildXml({ 'ser:dummy': { '@_xmlns:ser': this.namespace } }), {
+      ...this.transport,
+      kind: 'consulta',
+      soapAction: '',
+      methodName: 'dummy',
+      signal: opts?.signal,
+      parseNumbers: false,
+    });
+    const status: SireServerStatus = parseServerStatus(extractMethodResult(parsed, 'dummy', { kind: 'consulta' }));
+    const headerInfo = parseHeaderInfo(parsed);
+    if (headerInfo) status.headerInfo = headerInfo;
+    return status;
   }
 
   /**
@@ -154,7 +179,8 @@ export class SireClient extends SoapServiceClient {
 
   /**
    * Llamada SOAP. Los SOAP Faults que son rechazos (ver `toRejection`) se
-   * convierten en `ArcaSireServiceError`; el resto se propaga como `ArcaSoapError`.
+   * convierten en `ArcaSireServiceError` (o `ArcaAuthError` si es de token/sign);
+   * el resto se propaga como `ArcaSoapError`.
    */
   private async call(
     method: string,
@@ -171,20 +197,56 @@ export class SireClient extends SoapServiceClient {
   }
 }
 
+/** Texto de un nodo parseado (`#text` o el valor), o `undefined`. */
+function text(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'object') return text((value as Record<string, unknown>)['#text']);
+  const s = String(value).trim();
+  return s === '' ? undefined : s;
+}
+
+/** `Envelope.Header.HeaderInfo` de una respuesta de `soapCall` (sin prefijos). */
+function parseHeaderInfo(parsed: Record<string, unknown>): SireHeaderInfo | undefined {
+  const envelope = parsed.Envelope as Record<string, unknown> | undefined;
+  const header = envelope?.Header as Record<string, unknown> | undefined;
+  const info = header?.HeaderInfo;
+  if (info === null || typeof info !== 'object') return undefined;
+  const out: SireHeaderInfo = {};
+  for (const key of ['ambiente', 'fecha', 'vCore', 'v2005'] as const) {
+    const value = text((info as Record<string, unknown>)[key]);
+    if (value !== undefined) out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Texto del Fault: `faultstring` o, si vino vacío, `detail`. */
+function faultMessage(err: ArcaSoapError): string {
+  const message = err.faultString === undefined ? '' : decodeEntities(err.faultString).trim();
+  if (message !== '' && message !== 'SOAP Fault desconocido') return message;
+  const detail = text(err.faultDetail);
+  return detail === undefined ? message || 'SOAP Fault sin descripción' : decodeEntities(detail);
+}
+
 /**
  * Clasifica un SOAP Fault de SIRE. Según el manual (4.1), `soapenv:Client` es
  * un error de negocio provocado por los datos enviados y `soapenv:Server` un
  * error de sistema. En la práctica el servidor también usa `soapenv:Server`
  * para rechazos previos al procesamiento (`REJECTION_FAULT_PATTERNS`).
  *
- * - Rechazo → `ArcaSireServiceError` (determinístico: no se emitió/anuló nada).
+ * - Token/sign faltante o inválido → `ArcaAuthError` (no se emitió/anuló nada).
+ * - Rechazo (cualquier `soapenv:Client`, aunque no traiga `faultstring`) →
+ *   `ArcaSireServiceError` (determinístico: no se emitió/anuló nada).
  * - Otro `soapenv:Server` → `undefined`: se propaga el `ArcaSoapError`, que en
  *   `emitir`/`anular` tiene `uncertain: true` (un error interno pudo ocurrir
  *   después de registrar el certificado).
  */
-function toRejection(err: unknown, method: string): ArcaSireServiceError | undefined {
-  if (!(err instanceof ArcaSoapError) || err.faultString === undefined) return undefined;
-  const message = decodeEntities(err.faultString).trim();
+function toRejection(err: unknown, method: string): ArcaSireServiceError | ArcaAuthError | undefined {
+  if (!(err instanceof ArcaSoapError)) return undefined;
+  if (err.faultCode === undefined && err.faultString === undefined) return undefined; // no es un Fault
+  const message = faultMessage(err);
+  if (AUTH_FAULT_PATTERN.test(message)) {
+    return new ArcaAuthError(`SIRE ${method}: ${message}`, { cause: err, faultCode: err.faultCode?.trim() });
+  }
   const isClient = faultCodeName(err.faultCode) === 'Client';
   if (!isClient && !REJECTION_FAULT_PATTERNS.some((re) => re.test(message))) return undefined;
   return new ArcaSireServiceError(`SIRE ${method}: ${message}`, [{ code: 0, msg: message }], {

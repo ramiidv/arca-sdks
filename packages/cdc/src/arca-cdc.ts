@@ -2,13 +2,14 @@ import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
 import { WSCDC_ENDPOINTS, WSCDC_SERVICE_ID } from './constants.js';
 import { CdcClient } from './cdc-client.js';
-import { validateConstatarInput } from './validation.js';
+import { buildCmpReq } from './validation.js';
 import type {
   ArcaCdcConfig,
   CdcAuth,
   ConstatarInput,
   ConstatarResult,
   DocTipoItem,
+  ListaCdc,
   ModalidadItem,
   OpcionalTipoItem,
   TipoCbteItem,
@@ -22,18 +23,19 @@ import type {
  * ```ts
  * const cdc = new ArcaCdc({ cert, key, cuit: 20123456786 });
  * const r = await cdc.constatar({
- *   CbteModo: 'CAE',
- *   CuitEmisor: 30712345671,
- *   PtoVta: 1,
- *   CbteTipo: 1,
- *   CbteNro: 150,
- *   CbteFch: '20260315',
- *   ImpTotal: 12100,
- *   CodAutorizacion: '73429843294823',
- *   DocTipoReceptor: 80,
- *   DocNroReceptor: 20123456786,
+ *   cbteModo: 'CAE',
+ *   cuitEmisor: 30712345671,
+ *   ptoVta: 1,
+ *   cbteTipo: 1,
+ *   cbteNro: 150,
+ *   cbteFch: '20260315',
+ *   impTotal: 12100,
+ *   codAutorizacion: '73429843294823',
+ *   docTipoReceptor: 80,
+ *   docNroReceptor: 20123456786,
  * });
- * r.Resultado; // 'A' | 'R'
+ * r.resultado; // 'A' | 'R'
+ * r.observaciones; // [{ code, msg }]
  * ```
  */
 export class ArcaCdc extends ArcaSdkBase<'wscdc'> {
@@ -53,38 +55,46 @@ export class ArcaCdc extends ArcaSdkBase<'wscdc'> {
    * Constata un comprobante (CAE, CAI o CAEA), propio o de terceros
    * (`ComprobanteConstatar`). Es una consulta: se puede reintentar.
    *
-   * @returns `Resultado` `A` (constatado, con posibles observaciones) o `R`
-   *   (rechazo funcional; motivos en `Observaciones`).
-   * @throws ArcaValidationError si el input es inválido (antes de llamar a ARCA).
+   * @returns `resultado` `A` (constatado, con posibles observaciones) o `R`
+   *   (rechazo funcional; motivos en `observaciones`).
+   * @throws ArcaValidationError si el input es inválido (antes de autenticarse y de llamar a ARCA).
    * @throws ArcaServiceError si ARCA devuelve `Errors` (formato, autenticación 600-602, infraestructura 500-503).
+   * @throws ArcaResponseError si la respuesta no tiene la forma esperada.
    */
   async constatar(input: ConstatarInput, opts?: CallOptions): Promise<ConstatarResult> {
-    validateConstatarInput(input);
-    return this.client.constatar(await this.auth(opts), input, this.callOptions(opts));
+    const cmpReq = buildCmpReq(input);
+    return this.client.constatarCmpReq(await this.auth(opts), cmpReq, this.callOptions(opts));
   }
 
-  /** Estado del servicio (`ComprobanteDummy`). No requiere autenticación. */
+  /**
+   * Estado del servicio (`ComprobanteDummy`). No requiere autenticación. Devuelve
+   * lo que informa ARCA: verificá con `serverStatusOk` de `@ramiidv/arca-common`
+   * que los tres servidores estén en `OK`.
+   */
   async status(opts?: CallOptions): Promise<ServerStatus> {
     return this.client.dummy(this.callOptions(opts));
   }
 
-  /** Modalidades de autorización habilitadas (`ComprobantesModalidadConsultar`). */
-  async getModalidades(opts?: CallOptions): Promise<ModalidadItem[]> {
+  /**
+   * Modalidades de autorización habilitadas (`ComprobantesModalidadConsultar`).
+   * Como en todas las tablas, los `Events` de ARCA (si vinieron) quedan en `lista.eventos`.
+   */
+  async getModalidades(opts?: CallOptions): Promise<ListaCdc<ModalidadItem>> {
     return this.client.getModalidades(await this.auth(opts), this.callOptions(opts));
   }
 
   /** Tipos de comprobante habilitados (`ComprobantesTipoConsultar`). */
-  async getTiposCbte(opts?: CallOptions): Promise<TipoCbteItem[]> {
+  async getTiposCbte(opts?: CallOptions): Promise<ListaCdc<TipoCbteItem>> {
     return this.client.getTiposCbte(await this.auth(opts), this.callOptions(opts));
   }
 
   /** Tipos de documento habilitados (`DocumentosTipoConsultar`). */
-  async getDocTipos(opts?: CallOptions): Promise<DocTipoItem[]> {
+  async getDocTipos(opts?: CallOptions): Promise<ListaCdc<DocTipoItem>> {
     return this.client.getDocTipos(await this.auth(opts), this.callOptions(opts));
   }
 
   /** Identificadores válidos para `Opcionales` (`OpcionalesTipoConsultar`). */
-  async getTiposOpcionales(opts?: CallOptions): Promise<OpcionalTipoItem[]> {
+  async getTiposOpcionales(opts?: CallOptions): Promise<ListaCdc<OpcionalTipoItem>> {
     return this.client.getTiposOpcionales(await this.auth(opts), this.callOptions(opts));
   }
 

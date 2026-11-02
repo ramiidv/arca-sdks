@@ -1,5 +1,5 @@
-import { ArcaSdkBase } from '@ramiidv/arca-common';
-import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
+import { ArcaAuthError, ArcaSdkBase } from '@ramiidv/arca-common';
+import type { CallOptions } from '@ramiidv/arca-common';
 import { ENDPOINTS, SIRE_SERVICE_ID } from './constants.js';
 import { SireClient } from './sire-client.js';
 import { buildAnulacionRequest, buildCertificadoRequest } from './validation.js';
@@ -8,6 +8,7 @@ import type {
   ArcaSireConfig,
   CertificadoResult,
   EmitirCertificadoParams,
+  SireServerStatus,
   WsAuth,
 } from './types.js';
 
@@ -61,11 +62,12 @@ export class ArcaSire extends ArcaSdkBase<'sire'> {
    * rechazo de ARCA lanza `ArcaSireServiceError` (no se emitió nada). Un
    * `ArcaSoapError` con `uncertain: true` significa que el certificado pudo
    * haberse emitido: no reintentes a ciegas (ver README, "Resultado incierto").
+   * Si SIRE rechaza el token/sign lanza `ArcaAuthError` y descarta el ticket cacheado.
    */
   async emitirCertificado(params: EmitirCertificadoParams, opts?: CallOptions): Promise<CertificadoResult> {
     const certificado = buildCertificadoRequest(params);
     const auth = await this.auth(opts);
-    return this.client.emitir(auth, this.cuitAgente, certificado, this.callOptions(opts));
+    return this.withAuth(() => this.client.emitir(auth, this.cuitAgente, certificado, this.callOptions(opts)));
   }
 
   /**
@@ -76,12 +78,26 @@ export class ArcaSire extends ArcaSdkBase<'sire'> {
   async anularCertificado(params: AnularCertificadoParams, opts?: CallOptions): Promise<CertificadoResult> {
     const certificadoAnulacion = buildAnulacionRequest(params);
     const auth = await this.auth(opts);
-    return this.client.anular(auth, this.cuitAgente, certificadoAnulacion, this.callOptions(opts));
+    return this.withAuth(() => this.client.anular(auth, this.cuitAgente, certificadoAnulacion, this.callOptions(opts)));
   }
 
-  /** Estado de los servidores de SIRE (`dummy`, sin autenticación). */
-  async status(opts?: CallOptions): Promise<ServerStatus> {
+  /**
+   * Estado de los servidores de SIRE (`dummy`, sin autenticación). Incluye el
+   * `headerInfo` de la respuesta (ej: `ambiente: "homologacion - 207"`), útil para
+   * verificar que se está apuntando al entorno correcto.
+   */
+  async status(opts?: CallOptions): Promise<SireServerStatus> {
     return this.client.dummy(this.callOptions(opts));
+  }
+
+  /** Si SIRE rechaza el token/sign, descarta el ticket cacheado para que el próximo intento pida otro. */
+  private async withAuth<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (err) {
+      if (err instanceof ArcaAuthError) await this.clearAuthCache().catch(() => undefined);
+      throw err;
+    }
   }
 
   private async auth(opts?: CallOptions): Promise<WsAuth> {

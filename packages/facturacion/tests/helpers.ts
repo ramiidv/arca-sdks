@@ -5,6 +5,7 @@ import {
   mockFetchByMethod,
   soapResponse as soapResponseXml,
   xmlResponse,
+  testCert,
 } from '@ramiidv/arca-common/testing';
 import type { MockReply } from '@ramiidv/arca-common/testing';
 import { ArcaFacturacion } from '../src/arca.js';
@@ -190,8 +191,7 @@ export function comprobanteConsultado(o: {
 export async function arcaDePrueba(extra: Partial<ArcaConfig> = {}): Promise<ArcaFacturacion> {
   return new ArcaFacturacion({
     cuit: CUIT_EMISOR,
-    cert: '-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----',
-    key: 'KEY',
+    ...testCert(),
     ticketStorage: fakeTicketStorage(),
     retries: 3,
     retryDelayMs: 1,

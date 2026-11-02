@@ -121,3 +121,43 @@ describe('checkSchemaAgainstXsd', () => {
     ]);
   });
 });
+
+describe('checkSchemaAgainstXsd: ignore y ref', () => {
+  it('ignore omite obligatorios del XSD que el SDK no envía a propósito (con ruta)', () => {
+    expect(checkSchemaAgainstXsd({ token: str() }, 'Auth', types, { direction: 'request', ignore: ['sign'] })).toEqual(
+      [],
+    );
+    expect(
+      checkSchemaAgainstXsd({ auth: obj({ token: str() }), comprobante: obj(Comprobante) }, 'autorizar', types, {
+        direction: 'request',
+        ignore: ['auth.sign'],
+      }),
+    ).toEqual([]);
+  });
+
+  it('elementos con ref a un elemento global (con tipo anónimo)', () => {
+    const refTypes = loadXsdTypes(`<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:r" targetNamespace="urn:r">
+  <xs:element name="item">
+    <xs:complexType><xs:sequence><xs:element name="codigo" type="xs:string"/></xs:sequence></xs:complexType>
+  </xs:element>
+  <xs:complexType name="Pedido"><xs:sequence>
+    <xs:element name="numero" type="xs:int"/>
+    <xs:element ref="tns:item" maxOccurs="unbounded"/>
+  </xs:sequence></xs:complexType>
+</xs:schema>`);
+    expect(
+      checkSchemaAgainstXsd({ numero: int(), item: list(obj({ codigo: str() })) }, 'Pedido', refTypes, {
+        direction: 'request',
+      }),
+    ).toEqual([]);
+    expect(
+      checkSchemaAgainstXsd({ numero: int(), item: list(obj({ code: str() })) }, 'Pedido', refTypes, {
+        direction: 'request',
+      }),
+    ).toEqual([
+      expect.stringMatching(/Pedido\.item\.code: no existe en el XSD/),
+      'Pedido.item.codigo: obligatorio en el XSD (minOccurs=1) y no está en el schema',
+    ]);
+  });
+});

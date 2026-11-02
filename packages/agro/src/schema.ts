@@ -6,11 +6,13 @@
  */
 import { decodeResponse as decode } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
+import type { SoapOperationKind } from '@ramiidv/arca-common';
 import { ArcaAgroResponseError } from './errors.js';
 
 export {
   base64,
   bool,
+  custom,
   cuit,
   date,
   datetime,
@@ -23,14 +25,24 @@ export {
   must,
   obj,
   opt,
+  porcentaje,
   str,
   wrapped,
 } from '@ramiidv/arca-common/schema';
 export type { Field, Schema } from '@ramiidv/arca-common/schema';
 
-const responseError = (message: string) => new ArcaAgroResponseError(message);
-
-/** `decodeResponse` de common que lanza `ArcaAgroResponseError`. */
-export function decodeResponse<T>(node: unknown, schema: Schema, path: string): T {
-  return decode<T>(node, schema, path, { error: responseError });
+/**
+ * `decodeResponse` de common que lanza `ArcaAgroResponseError` (`uncertain` si
+ * `kind` es `'emision'`).
+ */
+export function decodeResponse<T>(
+  node: unknown,
+  schema: Schema,
+  path: string,
+  kind: SoapOperationKind = 'consulta',
+): T {
+  return decode<T>(node, schema, path, {
+    kind,
+    error: (message) => new ArcaAgroResponseError(message, kind === 'emision'),
+  });
 }

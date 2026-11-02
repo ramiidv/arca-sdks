@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  ArcaAuthError,
   ArcaSireServiceError,
   ArcaSoapError,
   ArcaServiceError,
@@ -233,9 +234,51 @@ describe('emitirCertificado', () => {
     );
   });
 
-  it('Fault MISSING_AUTHENTICATION_TOKEN → ArcaSireServiceError', async () => {
-    const sire = makeSire(mockFetch(xmlResponse(fault('soapenv:Server', 'MISSING_AUTHENTICATION_TOKEN'), 500)));
+  it('Fault de token/sign → ArcaAuthError y descarta el ticket cacheado', async () => {
+    for (const msg of ['MISSING_AUTHENTICATION_TOKEN', 'INVALID_SIGN']) {
+      const sire = makeSire(mockFetch(xmlResponse(fault('soapenv:Server', msg), 500)));
+      const clear = vi.spyOn(sire, 'clearAuthCache');
+      const err = await sire.emitirCertificado(FACTURA).catch((e) => e);
+      expect(err).toBeInstanceOf(ArcaAuthError);
+      expect(err).not.toBeInstanceOf(ArcaSireServiceError);
+      expect(err.message).toBe(`SIRE emitir: ${msg}`);
+      expect(err.faultCode).toBe('soapenv:Server');
+      expect(err.cause).toBeInstanceOf(ArcaSoapError);
+      expect(clear).toHaveBeenCalledTimes(1);
+    }
+    const sire = makeSire(mockFetch(xmlResponse(fault('soapenv:Client', 'EXPIRED_TOKEN'), 500)));
+    const clear = vi.spyOn(sire, 'clearAuthCache');
+    await expect(sire.anularCertificado({ numeroCertificado: '1', motivoAnulacion: 4 })).rejects.toBeInstanceOf(
+      ArcaAuthError,
+    );
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('un rechazo de negocio no descarta el ticket', async () => {
+    const sire = makeSire(mockFetch(xmlResponse(fault('soapenv:Client', 'No existe persona con id 1.'), 500)));
+    const clear = vi.spyOn(sire, 'clearAuthCache');
     await expect(sire.emitirCertificado(FACTURA)).rejects.toBeInstanceOf(ArcaSireServiceError);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  it('Fault soapenv:Client sin faultstring → ArcaSireServiceError (no incierto)', async () => {
+    const sinFaultstring = envelope(
+      '<soapenv:Fault><faultcode>soapenv:Client</faultcode><detail>Régimen inexistente</detail></soapenv:Fault>',
+      HEADER_INFO,
+    );
+    const err = await makeSire(mockFetch(xmlResponse(sinFaultstring, 500)))
+      .emitirCertificado(FACTURA)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSireServiceError);
+    expect(err.errors[0].msg).toBe('Régimen inexistente');
+    expect((err.cause as ArcaSoapError).uncertain).toBe(false);
+
+    const vacio = envelope('<soapenv:Fault><faultcode>soapenv:Client</faultcode><faultstring/></soapenv:Fault>');
+    const err2 = await makeSire(mockFetch(xmlResponse(vacio, 500)))
+      .emitirCertificado(FACTURA)
+      .catch((e) => e);
+    expect(err2).toBeInstanceOf(ArcaSireServiceError);
+    expect(err2.faultCode).toBe('soapenv:Client');
   });
 
   it('Fault soapenv:Server de sistema → ArcaSoapError incierto, sin reintento', async () => {
@@ -351,9 +394,38 @@ describe('status (dummy)', () => {
     );
     const m = mockFetch(body);
     const sire = makeSire(m);
-    await expect(sire.status()).resolves.toEqual({ appserver: 'OK', dbserver: 'OK', authserver: 'OK' });
+    await expect(sire.status()).resolves.toEqual({
+      appserver: 'OK',
+      dbserver: 'OK',
+      authserver: 'OK',
+      headerInfo: {
+        ambiente: 'homologacion - 207',
+        fecha: '2026-11-01T14:43:01.733-03:00',
+        vCore: '2020.4', // texto, no número
+        v2005: '2020.7',
+      },
+    });
     expect(sire.wsaa.getAccessTicket).not.toHaveBeenCalled();
     expect(sentBody(m.calls[0].body)['ser:dummy']).toBeDefined();
+  });
+
+  it('sin HeaderInfo no incluye headerInfo', async () => {
+    const body = envelope(
+      '<tns:dummyResponse><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></tns:dummyResponse>',
+    );
+    const res = await makeSire(mockFetch(body)).status();
+    expect(res).toEqual({ appserver: 'OK', dbserver: 'OK', authserver: 'OK' });
+    expect('headerInfo' in res).toBe(false);
+  });
+
+  it('dummy: envía el mismo request que antes (ser:dummy, sin SOAPAction)', async () => {
+    const body = envelope(
+      '<tns:dummyResponse><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></tns:dummyResponse>',
+    );
+    const m = mockFetch(body);
+    await makeSire(m).status();
+    const dummy = sentBody(m.calls[0].body)['ser:dummy'] as Record<string, unknown>;
+    expect(dummy['@_xmlns:ser']).toBe(NS);
   });
 
   it('dummyResponse incompleto lanza', async () => {

@@ -2,7 +2,7 @@
  * Tipos de WSCPE (Carta de Porte Electrónica), fieles al XSD del WSDL oficial.
  * Los nombres de los campos son los del XSD.
  */
-import type { CodigoDescripcion, CuitInput, FechaHoraInput, FechaInput } from './types.js';
+import type { CodigoDescripcion, ConAdvertencias, CuitInput, FechaHoraInput, FechaInput } from './types.js';
 
 // ============================================================
 // Tipos comunes de requests
@@ -393,8 +393,11 @@ export interface MetadataCPE {
   fechaHora?: string;
 }
 
-/** `CartaPorteRespuesta`: respuesta de las operaciones que modifican una CPE. */
-export interface CPEResultado {
+/**
+ * `CartaPorteRespuesta`: respuesta de las operaciones que modifican una CPE.
+ * Sin `pdf` y con `advertencias` si ARCA no pudo generar la constancia (550).
+ */
+export interface CPEResultado extends ConAdvertencias {
   cabecera?: CabeceraCPE;
   /** Constancia PDF en base64. */
   pdf?: string;
@@ -412,7 +415,7 @@ export interface DestinoCPERespuesta {
 }
 
 /** `DetalleAutomotorRespuesta`. `cabecera.nroCTG` siempre está presente. */
-export interface CPEAutomotorDetalle {
+export interface CPEAutomotorDetalle extends ConAdvertencias {
   cabecera: CabeceraCPE & { nroCTG: string };
   origen?: {
     cuit?: number;
@@ -471,7 +474,7 @@ export interface CPEAutomotorDetalle {
 }
 
 /** `DetalleFerroviariaRespuesta`. `cabecera.nroCTG` siempre está presente. */
-export interface CPEFerroviariaDetalle {
+export interface CPEFerroviariaDetalle extends ConAdvertencias {
   cabecera: CabeceraCPE & { nroCTG: string };
   origen?: {
     cuit?: number;
@@ -545,7 +548,7 @@ export interface CPEResumen {
 }
 
 /** `CartaPorteFerroviariaResumenRespuesta` (consultaCPEFerroviariaPorNroOperativo). */
-export interface OperativoFerroviarioCPE {
+export interface OperativoFerroviarioCPE extends ConAdvertencias {
   fecha?: string;
   cuitTransportista?: number;
   cuitTransportistaTramo2?: number;
@@ -590,4 +593,23 @@ export interface LocalidadProductorCPE {
 /** `CodigoDescripcionGrano` (consultarVariedadesSemillas). */
 export interface VariedadSemillaCPE extends CodigoDescripcion {
   grano: number;
+}
+
+/** `Renspa` (consultarRenspa). */
+export interface RenspaCPE {
+  nroRenspa?: string;
+  descripcion?: string;
+}
+
+/** `DomicilioPUCRespuesta` (consultarDomiciliosPorCUIT). */
+export interface DomicilioCPE {
+  tipo?: number;
+  orden?: number;
+  descripcion?: string;
+}
+
+/** `TipoEmbalajeUnidadMedida` (consultarTiposEmbalaje). */
+export interface TipoEmbalajeCPE extends CodigoDescripcion {
+  /** Unidades de medida admitidas para el embalaje. */
+  unidadMedida: CodigoDescripcion[];
 }

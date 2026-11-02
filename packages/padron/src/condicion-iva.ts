@@ -17,8 +17,9 @@ import type { CondicionIvaPadron, PersonaA4, PersonaA5 } from './types.js';
  *   "AC" figura en los manuales. Las demás abreviaturas que se reconocen son
  *   las iniciales de TipoEstado (EX, BP, BD, NA = NO APORTANTE). "NO APORTANTE"
  *   no es "IVA no alcanzado": no se mapea a ninguna condición.
- * - IVA exento (32) e IVA no alcanzado (34) no figuran en los manuales: se
- *   reconocen por id o por la descripción del impuesto.
+ * - IVA exento (32), IVA responsable no inscripto (33) e IVA no alcanzado (34)
+ *   no figuran en los manuales: el 32 y el 34 se reconocen por id o por la
+ *   descripción del impuesto; el 33, por id.
  * - Valores de CondicionIva: FEParamGetCondicionIvaReceptor (WSFEv1, RG 5616).
  */
 
@@ -89,17 +90,19 @@ function categoriaMonotributo(persona: PersonaA5 | PersonaA4): { id: number; des
   return c ? { id: c.idCategoria, descripcion: c.descripcionCategoria ?? '' } : undefined;
 }
 
-/** Errores que informó la constancia (régimen general / monotributo), para el motivo. */
-function erroresConstancia(persona: PersonaA5 | PersonaA4): string[] {
+/** Detalle de un error de la constancia: los `error`, o el `mensaje`, o "sin detalle". */
+function detalleError(e: { error: string[]; mensaje?: string }): string {
+  const errores = e.error.map((x) => x.trim()).filter((x) => x !== '');
+  if (errores.length > 0) return errores.join('; ');
+  return e.mensaje?.trim() || 'sin detalle';
+}
+
+/** Errores de régimen general / monotributo que informó la constancia, para el motivo. */
+function erroresRegimen(persona: PersonaA5 | PersonaA4): string[] {
   if (!esA5(persona)) return [];
   const out: string[] = [];
-  const add = (nombre: string, e?: { error: string[]; mensaje?: string }) => {
-    if (!e) return;
-    const detalle = e.error.length > 0 ? e.error.join('; ') : (e.mensaje ?? 'sin detalle');
-    out.push(`${nombre}: ${detalle}`);
-  };
-  add('régimen general', persona.errorRegimenGeneral);
-  add('monotributo', persona.errorMonotributo);
+  if (persona.errorRegimenGeneral) out.push(`régimen general: ${detalleError(persona.errorRegimenGeneral)}`);
+  if (persona.errorMonotributo) out.push(`monotributo: ${detalleError(persona.errorMonotributo)}`);
   return out;
 }
 
@@ -115,10 +118,16 @@ function erroresConstancia(persona: PersonaA5 | PersonaA4): string[] {
  * - IVA activo (impuesto 30, ACTIVO o ACTIVO EN TRAMITE) → RESPONSABLE_INSCRIPTO.
  * - IVA (30) en estado EXENTO / EXENTO EN TRAMITE, o impuesto 32 → EXENTO.
  * - Impuesto 34 → IVA_NO_ALCANZADO.
+ * - Impuesto 33 (IVA responsable no inscripto, categoría eliminada) → `null`
+ *   con un motivo propio: no tiene `CondicionIVAReceptorId`.
  * - Si no figura ninguno, devuelve `condicionIva: null`: el padrón no alcanza
  *   para decidir (puede ser consumidor final o sujeto no categorizado según la
- *   operación). Si ARCA informó errores de la constancia (`errorConstancia`,
- *   `errorRegimenGeneral`, `errorMonotributo`), el motivo los incluye. No adivina.
+ *   operación). No adivina.
+ *
+ * Si ARCA informó errores de la constancia (`errorConstancia`, ej: CUIT
+ * limitada por la RG 3832/16; `errorRegimenGeneral`; `errorMonotributo`) o la
+ * CUIT no está activa, el motivo lo advierte siempre, también cuando se pudo
+ * determinar la condición: revisalo antes de facturar.
  *
  * Es una función pura: no consulta ARCA.
  *
@@ -131,13 +140,16 @@ function erroresConstancia(persona: PersonaA5 | PersonaA4): string[] {
 export function condicionIvaDesdePadron(persona: PersonaA5 | PersonaA4): CondicionIvaPadron {
   const impuestos = impuestosDe(persona);
   const tiene = (pred: (i: Impuesto) => boolean) => impuestos.find((i) => i.activo && pred(i));
-  const errores = erroresConstancia(persona);
+  const errorConstancia = esA5(persona) && persona.errorConstancia ? detalleError(persona.errorConstancia) : undefined;
+  const errores = erroresRegimen(persona);
+  const notaConstancia =
+    errorConstancia !== undefined ? ` Atención: ARCA informó un error en la constancia (${errorConstancia}).` : '';
   const notaErrores = errores.length > 0 ? ` ARCA informó errores en la constancia (${errores.join(' | ')}).` : '';
   const avisoClave =
     persona.estadoClave && persona.estadoClave.toUpperCase() !== 'ACTIVO'
       ? ` Atención: la CUIT tiene estado ${persona.estadoClave}.`
       : '';
-  const advertencia = avisoClave + notaErrores;
+  const advertencia = avisoClave + notaConstancia + notaErrores;
 
   const categoria = categoriaMonotributo(persona);
   const impuesto20 = impuestos.find((i) => i.id === ImpuestoId.MONOTRIBUTO);
@@ -185,10 +197,19 @@ export function condicionIvaDesdePadron(persona: PersonaA5 | PersonaA4): Condici
     return { condicionIva: CondicionIva.IVA_NO_ALCANZADO, motivo: `IVA no alcanzado (impuesto 34).${advertencia}` };
   }
 
-  if (esA5(persona) && persona.errorConstancia && impuestos.length === 0) {
+  if (tiene((i) => i.id === ImpuestoId.IVA_RESPONSABLE_NO_INSCRIPTO)) {
     return {
       condicionIva: null,
-      motivo: `ARCA no emitió la constancia: ${persona.errorConstancia.error.join('; ')}.${advertencia}`,
+      motivo:
+        'Figura como IVA responsable no inscripto (impuesto 33): la categoría fue eliminada (Ley 25.865) y no ' +
+        `tiene condición frente al IVA equivalente para facturar; verificá la situación del contribuyente.${advertencia}`,
+    };
+  }
+
+  if (errorConstancia !== undefined && impuestos.length === 0) {
+    return {
+      condicionIva: null,
+      motivo: `ARCA no emitió la constancia: ${errorConstancia}.${avisoClave}${notaErrores}`,
     };
   }
 
@@ -197,7 +218,7 @@ export function condicionIvaDesdePadron(persona: PersonaA5 | PersonaA4): Condici
       condicionIva: null,
       motivo:
         `No se puede determinar: ARCA no informó datos de ${errores.map((e) => e.split(':')[0]).join(' ni de ')} ` +
-        `(${errores.join(' | ')}).${avisoClave}`,
+        `(${errores.join(' | ')}).${avisoClave}${notaConstancia}`,
     };
   }
 

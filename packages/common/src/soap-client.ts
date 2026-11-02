@@ -14,6 +14,8 @@ const PARSER_OPTIONS = {
   textNodeName: '#text',
   parseTagValue: true,
   trimValues: true,
+  // Referencias numéricas (`&#243;`, `&#xD;`) y entidades HTML, además de las 5 de XML.
+  htmlEntities: true,
   numberParseOptions: {
     hex: false,
     leadingZeros: false,
@@ -61,10 +63,22 @@ export function parseXml(xml: string, options?: ParseXmlOptions): Record<string,
 }
 
 /**
- * Construye XML desde un objeto JS.
+ * Construye XML desde un objeto JS. Las propiedades (y elementos de arrays)
+ * con valor `null`/`undefined` se omiten, en lugar de enviarse como `<x/>`.
  */
 export function buildXml(obj: Record<string, unknown>): string {
-  return xmlBuilder.build(obj) as string;
+  return xmlBuilder.build(withoutNullish(obj)) as string;
+}
+
+/** Copia de `value` sin propiedades ni elementos `null`/`undefined` (recursivo). */
+function withoutNullish(value: unknown): unknown {
+  if (Array.isArray(value)) return value.filter((v) => v !== null && v !== undefined).map(withoutNullish);
+  if (value === null || typeof value !== 'object' || value instanceof Date) return value;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (v !== null && v !== undefined) out[k] = withoutNullish(v);
+  }
+  return out;
 }
 
 /**
@@ -192,34 +206,64 @@ function soapBody(parsed: unknown): Record<string, unknown> | undefined {
   return body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : undefined;
 }
 
+interface SoapFault {
+  faultCode?: string;
+  faultString: string;
+  /** Contenido de `<detail>` (SOAP 1.1) / `<Detail>` (SOAP 1.2). */
+  faultDetail?: unknown;
+}
+
 /**
- * Extrae `faultcode`/`faultstring` de una respuesta SOAP ya parseada, con o
- * sin prefijos de namespace (`soapCall` o `parseXml`).
+ * Extrae `faultcode`/`faultstring`/`detail` de una respuesta SOAP ya parseada,
+ * con o sin prefijos de namespace (`soapCall` o `parseXml`).
  */
-function extractFault(parsed: Record<string, unknown>): { faultCode?: string; faultString: string } | undefined {
+function extractFault(parsed: Record<string, unknown>): SoapFault | undefined {
   return faultFromBody(soapBody(parsed));
 }
 
-function faultFromBody(
-  body: Record<string, unknown> | undefined,
-): { faultCode?: string; faultString: string } | undefined {
+function faultFromBody(body: Record<string, unknown> | undefined): SoapFault | undefined {
   const fault = localValue(body, 'Fault');
   if (fault === undefined || fault === null) return undefined;
   if (typeof fault !== 'object') return { faultString: String(fault) || 'SOAP Fault desconocido' };
-  return {
+  const out: SoapFault = {
     faultCode: textOf(localValue(fault, 'faultcode', 'Code')),
     faultString: textOf(localValue(fault, 'faultstring', 'Reason')) ?? 'SOAP Fault desconocido',
   };
+  const detail = localValue(fault, 'detail', 'Detail');
+  if (detail !== undefined && detail !== null && detail !== '') out.faultDetail = detail;
+  return out;
+}
+
+/**
+ * Fault de tipo Client (SOAP 1.1 `Client`, SOAP 1.2 `Sender`, con o sin
+ * prefijo, ej: `soap:Client`, `S:Client.Authentication`): el servidor rechazó
+ * el request sin procesarlo.
+ */
+function isClientFault(faultCode: string | undefined): boolean {
+  if (!faultCode) return false;
+  const local = faultCode.slice(faultCode.lastIndexOf(':') + 1);
+  return /^(Client|Sender)(\.|$)/.test(local);
 }
 
 /**
  * Un SOAP Fault es una respuesta del servidor: un rechazo determinístico. En
  * consultas es cierto que no cambió nada; en emisiones se mantiene `uncertain`
  * por prudencia (algunos servicios devuelven Faults ante errores internos que
- * pudieron ocurrir después de procesar el comprobante).
+ * pudieron ocurrir después de procesar el comprobante), salvo los Faults de
+ * tipo Client/Sender: el request se rechazó antes de procesarse.
  */
-function faultUncertain(kind: SoapOperationKind | undefined): boolean {
-  return kind === 'emision';
+function faultUncertain(kind: SoapOperationKind | undefined, faultCode: string | undefined): boolean {
+  return kind === 'emision' && !isClientFault(faultCode);
+}
+
+/** Largo máximo del extracto del body que se guarda en `ArcaSoapError.responseBody`. */
+const RESPONSE_EXCERPT_MAX = 500;
+
+/** Extracto de un body de respuesta para diagnóstico: espacios colapsados, hasta 500 caracteres. */
+function bodyExcerpt(text: string): string | undefined {
+  const collapsed = text.replace(/\s+/g, ' ').trim();
+  if (!collapsed) return undefined;
+  return collapsed.length > RESPONSE_EXCERPT_MAX ? `${collapsed.slice(0, RESPONSE_EXCERPT_MAX - 1)}…` : collapsed;
 }
 
 function parseResponseDate(header: string | null): Date | undefined {
@@ -258,10 +302,6 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
-
-// ---------------------------------------------------------------------------
-// soapCall
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Transporte TLS legacy
@@ -324,10 +364,24 @@ function fromFetchResponse(response: Response): TransportResponse {
  * Con `parseNumbers: false` los valores de texto de la respuesta quedan como
  * string (por cualquiera de los dos transportes).
  */
-export async function soapCall(
+export function soapCall(
   endpoint: string,
   bodyContent: string,
   opts?: SoapCallOptions,
+): Promise<Record<string, unknown>> {
+  return soapCallWith(endpoint, bodyContent, opts, isRetryable);
+}
+
+/**
+ * `soapCall` con un criterio propio de reintento (en consultas). WSAA lo usa
+ * para reintentar solo los errores sin envío (`uncertain: false`).
+ * @internal
+ */
+export async function soapCallWith(
+  endpoint: string,
+  bodyContent: string,
+  opts: SoapCallOptions | undefined,
+  retryable: (error: ArcaSoapError) => boolean,
 ): Promise<Record<string, unknown>> {
   const timeout = opts?.timeout ?? 30_000;
   const kind = opts?.kind ?? 'consulta';
@@ -380,7 +434,7 @@ export async function soapCall(
     if (!(error instanceof ArcaSoapError)) return error;
 
     lastError = error;
-    if (attempt < maxRetries && isRetryable(error)) continue;
+    if (attempt < maxRetries && retryable(error)) continue;
 
     safeEmit(onEvent, { type: 'request:error', endpoint, method: methodName, error });
     throw error;
@@ -493,18 +547,24 @@ export async function soapCall(
           statusCode: response.status,
           faultCode: fault.faultCode,
           faultString: fault.faultString,
+          faultDetail: fault.faultDetail,
           responseDate,
-          uncertain: faultUncertain(kind),
+          uncertain: faultUncertain(kind, fault.faultCode),
         });
       }
 
       if (!response.ok) {
-        return new ArcaSoapError(`HTTP ${response.status}: ${response.statusText}`, {
-          statusCode: response.status,
-          responseDate,
-          // 4xx: el servidor rechazó el request sin procesarlo.
-          uncertain: response.status >= 500,
-        });
+        const excerpt = bodyExcerpt(responseText);
+        return new ArcaSoapError(
+          `HTTP ${response.status}: ${response.statusText}${excerpt ? ` (respuesta: ${excerpt})` : ''}`,
+          {
+            statusCode: response.status,
+            responseDate,
+            // 4xx: el servidor rechazó el request sin procesarlo.
+            uncertain: response.status >= 500,
+            responseBody: excerpt,
+          },
+        );
       }
 
       if (!parsed || !soapBody(parsed)) {
@@ -563,11 +623,11 @@ export function abortedBeforeSend(methodName: string, reason: unknown): ArcaSoap
 }
 
 // ---------------------------------------------------------------------------
-// afipSoapCall
+// arcaSoapCall
 // ---------------------------------------------------------------------------
 
-/** Opciones de `afipSoapCall`: las de `soapCall` más la forma del request/respuesta. */
-export interface AfipSoapCallOptions extends SoapCallOptions {
+/** Opciones de `arcaSoapCall`: las de `soapCall` más la forma del request/respuesta. */
+export interface ArcaSoapCallOptions extends SoapCallOptions {
   /**
    * Nombre del elemento wrapper del request (default: `method`). `null` envía
    * el Body vacío (ej: `dummy` de WSFECRED).
@@ -597,22 +657,26 @@ export interface ExtractMethodResultOptions {
   responseElement?: string;
 }
 
+/** @deprecated Usar `ArcaSoapCallOptions` (mismo tipo). */
+export type AfipSoapCallOptions = ArcaSoapCallOptions;
+
 /**
- * Llamada SOAP de alto nivel para web services de AFIP/ARCA.
+ * Llamada SOAP de alto nivel para web services de ARCA.
  * Construye el body del método (ver `qualified` y `requestElement`), llama a
- * soapCall, y extrae el resultado del método de la respuesta.
+ * soapCall, y extrae el resultado del método de la respuesta. Los parámetros
+ * con valor `null`/`undefined` no se envían.
  *
  * El resultado se desenvuelve si el método responde con un único elemento
  * `{method}Result`, `{method}Return`, `return` o `*Return` (ej: `personaReturn`).
  *
  * Detecta SOAP Faults y lanza ArcaSoapError.
  */
-export async function afipSoapCall(
+export async function arcaSoapCall(
   endpoint: string,
   namespace: string,
   method: string,
   params: Record<string, unknown>,
-  opts?: AfipSoapCallOptions,
+  opts?: ArcaSoapCallOptions,
 ): Promise<Record<string, unknown>> {
   const element = opts?.requestElement === undefined ? method : opts.requestElement;
   let bodyContent = '';
@@ -641,6 +705,9 @@ export async function afipSoapCall(
   return extractMethodResult(parsed, method, { kind: opts?.kind, responseElement: opts?.responseElement });
 }
 
+/** @deprecated Usar `arcaSoapCall` (mismo comportamiento). */
+export const afipSoapCall: typeof arcaSoapCall = arcaSoapCall;
+
 /**
  * Extrae el resultado de un método de una respuesta SOAP parseada por
  * `soapCall` (sin prefijos) o por `parseXml` (con prefijos de namespace).
@@ -668,7 +735,8 @@ export function extractMethodResult(
     throw new ArcaSoapError(`SOAP Fault: ${fault.faultString}`, {
       faultCode: fault.faultCode,
       faultString: fault.faultString,
-      uncertain: faultUncertain(options?.kind),
+      faultDetail: fault.faultDetail,
+      uncertain: faultUncertain(options?.kind, fault.faultCode),
     });
   }
 

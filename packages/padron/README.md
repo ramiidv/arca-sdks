@@ -1,133 +1,170 @@
 # @ramiidv/arca-padron
 
-SDK de TypeScript para los web services de Padron de ARCA (ex AFIP): Constancia de Inscripcion
-(`ws_sr_constancia_inscripcion`, ex A5), A4 (datos completos), A10 y A13 (datos basicos) y A100
-(tablas de parametros). Incluye `condicionIvaDesdePadron` para obtener la condicion frente al IVA
-que pide la factura electronica (`CondicionIVAReceptorId`).
+[![npm](https://img.shields.io/npm/v/@ramiidv/arca-padron)](https://www.npmjs.com/package/@ramiidv/arca-padron)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node >= 20.19](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen)](https://nodejs.org)
 
-## Caracteristicas
+SDK en TypeScript para los web services de **Padrón** de **ARCA** (ex AFIP): Constancia de Inscripción
+(`ws_sr_constancia_inscripcion`, ex A5), A4 (datos completos), A10 y A13 (datos básicos) y A100
+(tablas de parámetros). Incluye `condicionIvaDesdePadron` para obtener la condición frente al IVA que
+pide la factura electrónica (`CondicionIVAReceptorId`, RG 5616).
 
-- Unica dependencia: `@ramiidv/arca-common` (WSAA, SOAP, validadores); usa `fetch` nativo (Node 18+)
-- ESM y CommonJS (funciona con `import` y con `require`, incluido TypeScript con `"module": "CommonJS"`)
-- TypeScript estricto con tipos completos
-- Cache automatico de tokens WSAA, con persistencia opcional (`ticketStorage`) y ajuste de reloj
-- Cancelacion con `AbortSignal` (global o por llamada)
-- Reintentos con backoff exponencial ante errores transitorios (nunca ante un SOAP Fault)
-- Errores de negocio tipados: `ArcaPadronServiceError` con `reason` (`inexistente`, `inactiva`, ...)
-- Validacion local de CUIT (digito verificador) antes de llamar a ARCA
-- Sistema de eventos para monitoreo
+- Única dependencia: `@ramiidv/arca-common` (WSAA, SOAP, validadores); usa `fetch` nativo.
+- Caché de tickets WSAA con persistencia opcional (`ticketStorage`) y ajuste de reloj.
+- Cancelación con `AbortSignal` (global o por llamada).
+- Reintentos con backoff exponencial ante errores transitorios (nunca ante un SOAP Fault): todas las
+  operaciones son consultas.
+- Errores de negocio tipados: `ArcaPadronServiceError` con `reason` (`inexistente`, `inactiva`...).
+- Validación local de CUIT (dígito verificador) antes de llamar a ARCA.
 
-## Instalacion
+Fuentes: WSDL oficiales (`wsdl/`), manual de
+[`ws_sr_constancia_inscripcion` v4.1](https://www.afip.gob.ar/ws/WSCI/manual_ws_sr_ws_constancia_inscripcion.pdf),
+manuales de A4 v1.3, A13 v1.4 y A100 v2.1.
+
+## Instalación
 
 ```bash
 npm install @ramiidv/arca-padron
 ```
 
-## Inicio rapido
+## Requisitos
+
+- Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
+- Certificado digital X.509 y clave privada de ARCA, con cada servicio asociado por separado:
+  `ws_sr_constancia_inscripcion`, `ws_sr_padron_a4`, `ws_sr_padron_a10`, `ws_sr_padron_a13`,
+  `ws_sr_padron_a100`.
+  - **Homologación**: [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx)
+  - **Producción**: [Administración de Certificados Digitales](https://www.afip.gob.ar/ws/documentacion/certificados.asp)
+
+## Inicio rápido
 
 ```typescript
-import { readFileSync } from 'fs';
-import { ArcaPadron, FileTicketStorage } from '@ramiidv/arca-padron';
+import { readFileSync } from 'node:fs';
+import { ArcaPadron, CollectionName, FileTicketStorage, condicionIvaDesdePadron } from '@ramiidv/arca-padron';
 
 const padron = new ArcaPadron({
   cert: readFileSync('./cert.pem', 'utf-8'),
   key: readFileSync('./key.pem', 'utf-8'),
-  cuit: '20123456786',
-  production: false, // false = homologacion
+  cuit: '20123456786', // CUIT representada (quien consulta)
+  production: false, // false = homologación
   ticketStorage: new FileTicketStorage('./.arca-tickets'), // recomendado
 });
 
-// Constancia de inscripcion (ex A5) + condicion frente al IVA para facturar
-import { condicionIvaDesdePadron } from '@ramiidv/arca-padron';
+// Constancia de inscripción (ex A5) + condición frente al IVA para facturar
 const constancia = await padron.getConstanciaInscripcion('30712345671');
 const { condicionIva, motivo } = condicionIvaDesdePadron(constancia);
 // condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO (1), motivo: "Inscripto en IVA (impuesto 30)."
+console.log(condicionIva, motivo);
 
 // Consulta completa (A4)
 const contribuyente = await padron.getPersona('20-11111111-2'); // con o sin guiones
 console.log(contribuyente.tipoPersona, contribuyente.nombre);
 
-// Consulta basica (A10)
-const contribuyenteBasico = await padron.getPersonaBasic('20111111112');
-console.log(contribuyenteBasico.domicilio?.[0]?.direccion);
+// Consulta básica (A10)
+const basico = await padron.getPersonaBasic('20111111112');
+console.log(basico.domicilio?.[0]?.direccion);
 
-// Tablas de parametros (A100)
-import { CollectionName } from '@ramiidv/arca-padron';
+// Tablas de parámetros (A100)
 const provincias = await padron.getParametros(CollectionName.PROVINCIA);
 console.log(provincias.length, 'provincias');
 ```
 
-## Configuracion
+## Configuración
 
-`ArcaPadronConfig` extiende `ArcaBaseConfig` de `@ramiidv/arca-common`:
+`ArcaPadronConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`:
 
-```typescript
-interface ArcaPadronConfig extends ArcaBaseConfig {
-  // De ArcaBaseConfig:
-  cert: string; // Certificado X.509 en formato PEM
-  key: string; // Clave privada en formato PEM
-  cuit: string | number; // CUIT representada (se valida el digito verificador)
-  production?: boolean; // default: false (homologacion)
-  timeout?: number; // ms por request (default: 30000)
-  retries?: number; // reintentos ante errores transitorios (default: 1)
-  retryDelayMs?: number; // backoff exponencial (default: 1000)
-  tokenTTLMinutes?: number; // vigencia pedida a WSAA (default: 720)
-  onEvent?: (event: ArcaEvent) => void;
-  ticketStorage?: TicketStorage; // persistencia de tickets WSAA (recomendado)
-  clockOffsetMs?: number; // relojARCA - relojLocal en ms (default: 0)
-  autoClockSkew?: boolean; // default: true
-  loginErrorCooldownMs?: number; // default: 60000
-  fetch?: typeof fetch; // fetch propio (proxy, mTLS, tests)
-  legacyTls?: 'auto' | 'never' | 'always';
-  // Propias de Padron:
-  signal?: AbortSignal; // cancela todas las llamadas de la instancia
-  wsaa?: WsaaClient; // WsaaClient compartido (ej: arca.wsaa de arca-facturacion)
-  endpoints?: { wsaa?: string; a5?: string; a4?: string; a10?: string; a13?: string; a100?: string };
-}
-```
+| Opción                                                                               | Tipo                                     | Default            | Descripción                                                                                                   |
+| ------------------------------------------------------------------------------------ | ---------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `cert`, `key`                                                                        | `string`                                 | —                  | Certificado y clave privada (PEM)                                                                             |
+| `keyPassphrase`                                                                      | `string`                                 | —                  | Contraseña de la clave, si está encriptada                                                                    |
+| `cuit`                                                                               | `number \| string`                       | —                  | CUIT representada; se valida el dígito verificador y se envía como 11 dígitos                                 |
+| `production`                                                                         | `boolean`                                | `false`            | Homologación o producción                                                                                     |
+| `timeout`                                                                            | `number`                                 | `30000`            | Timeout HTTP (ms)                                                                                             |
+| `retries` / `retryDelayMs`                                                           | `number`                                 | `1` / `1000`       | Reintentos ante errores transitorios (nunca ante un SOAP Fault)                                               |
+| `tokenTTLMinutes`                                                                    | `number`                                 | `720`              | Vigencia del TRA pedida a WSAA                                                                                |
+| `ticketStorage`                                                                      | `TicketStorage`                          | —                  | Persistencia del TA (recomendado: `FileTicketStorage` o propio)                                               |
+| `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs` |                                          |                    | Opciones de WSAA (ver `@ramiidv/arca-common`)                                                                 |
+| `fetch`                                                                              | `typeof fetch`                           | `globalThis.fetch` | `fetch` propio (proxy, tests)                                                                                 |
+| `legacyTls`                                                                          | `'auto' \| 'never' \| 'always'`          | `'auto'`           | Transporte TLS legacy                                                                                         |
+| `onEvent`                                                                            | `(e: ArcaEvent) => void`                 | —                  | Eventos `auth:*` y `request:*`                                                                                |
+| `wsaa`                                                                               | `WsaaClient`                             | —                  | `WsaaClient` compartido con otros SDKs (mismo certificado); tiene que ser del mismo entorno (`production`)    |
+| `signal`                                                                             | `AbortSignal`                            | —                  | Cancela todas las llamadas de la instancia (ej: al apagar la app); se combina con el `signal` de cada llamada |
+| `endpoints`                                                                          | `{ wsaa?, a5?, a4?, a10?, a13?, a100? }` | —                  | Sobrescribe las URLs                                                                                          |
 
-> **Persisti el Ticket de Acceso.** WSAA rechaza el login si ya hay un TA vigente para el
+> **Persistí el Ticket de Acceso.** WSAA rechaza el login si ya hay un TA vigente para el
 > certificado y servicio. Sin `ticketStorage`, un reinicio del proceso te deja sin poder consultar
 > hasta que venza (hasta 12 horas, `ArcaTicketVigenteError`). Ver `TicketStorage` en
 > [`@ramiidv/arca-common`](https://github.com/ramiidv/arca-sdks/tree/main/packages/common).
 
-Si usas tambien `@ramiidv/arca-facturacion` con el mismo certificado, comparti el cliente WSAA:
+Si usás también `@ramiidv/arca-facturacion` con el mismo certificado, compartí el cliente WSAA:
 
 ```typescript
-const arca = new Arca({ cuit, cert, key, ticketStorage });
-const padron = new ArcaPadron({ cuit, cert, key, wsaa: arca.wsaa });
+import { readFileSync } from 'node:fs';
+import { ArcaFacturacion } from '@ramiidv/arca-facturacion';
+import { ArcaPadron, FileTicketStorage } from '@ramiidv/arca-padron';
+
+const cert = readFileSync('./cert.pem', 'utf-8');
+const key = readFileSync('./key.pem', 'utf-8');
+const cuit = '20123456786';
+
+const facturacion = new ArcaFacturacion({ cuit, cert, key, ticketStorage: new FileTicketStorage('./.arca-tickets') });
+const padron = new ArcaPadron({ cuit, cert, key, wsaa: facturacion.wsaa });
 ```
 
-Todos los metodos aceptan un ultimo parametro opcional `{ signal }`. Las CUIT se aceptan con o sin
-guiones (`'20-11111111-2'`, `'20111111112'` o `20111111112`): se validan localmente (digito
-verificador) y se envian normalizadas; una CUIT invalida lanza `ArcaValidationError` sin llamar a ARCA.
-
-Todas las operaciones de Padron son consultas (no modifican nada en ARCA): se pueden reintentar sin
-riesgo.
+Todos los métodos aceptan un último parámetro opcional `{ signal }`. Las CUIT se aceptan con o sin
+guiones (`'20-11111111-2'`, `'20111111112'` o `20111111112`): se validan localmente (dígito
+verificador) y se envían normalizadas; una CUIT inválida lanza `ArcaValidationError` sin llamar a
+ARCA (salvo en `getConstanciasInscripcion`, ver abajo).
 
 ## API
 
-### Metodos de alto nivel
+| Método                                   | Servicio / operación                               | Devuelve                       |
+| ---------------------------------------- | -------------------------------------------------- | ------------------------------ |
+| `getConstanciaInscripcion(cuit)`         | `ws_sr_constancia_inscripcion` `getPersona_v2`     | `PersonaA5`                    |
+| `getConstanciasInscripcion(cuits)`       | `ws_sr_constancia_inscripcion` `getPersonaList_v2` | `ListaPadron<PersonaA5>`       |
+| `getPersona(cuit)`                       | `ws_sr_padron_a4` `getPersona`                     | `PersonaA4`                    |
+| `getPersonaBasic(cuit)`                  | `ws_sr_padron_a10` `getPersona`                    | `PersonaA10`                   |
+| `getPersonaA13(cuit)`                    | `ws_sr_padron_a13` `getPersona`                    | `PersonaA13`                   |
+| `getPersonaA13V2(cuit)`                  | `ws_sr_padron_a13` `getPersonaV2`                  | `PersonaA13`                   |
+| `getIdPersonaListByDocumento(documento)` | `ws_sr_padron_a13` `getIdPersonaListByDocumento`   | `ListaPadron<string>`          |
+| `getParametros(collection)`              | `ws_sr_padron_a100` `getParameterCollectionByName` | `ListaPadron<ParameterRecord>` |
+| `status()`                               | `dummy` de los cinco servicios (sin auth)          | `PadronStatus`                 |
+| `clearAuthCache()`                       | —                                                  | `Promise<void>`                |
 
-#### `getConstanciaInscripcion(cuit): Promise<PersonaA5>`
+### `getConstanciaInscripcion(cuit): Promise<PersonaA5>`
 
-Constancia de inscripcion via `ws_sr_constancia_inscripcion` (metodo `getPersona_v2`). Reemplaza a
-Padron A5 (`ws_sr_padron_a5`), deprecado por ARCA. Incluye datos generales, domicilio fiscal,
-caracterizaciones, regimen general (impuestos, actividades, regimenes), monotributo (categoria,
+Constancia de inscripción vía `ws_sr_constancia_inscripcion` (método `getPersona_v2`). Reemplaza a
+Padrón A5 (`ws_sr_padron_a5`), deprecado por ARCA. Incluye datos generales, domicilio fiscal,
+caracterizaciones, régimen general (impuestos, actividades, regímenes), monotributo (categoría,
 impuestos, actividad, `componenteDeSociedad`) y, si ARCA no puede emitir la constancia (o una parte),
 `errorConstancia` / `errorRegimenGeneral` / `errorMonotributo`: esos casos se devuelven, no se lanzan.
+
+La excepción es la CUIT inexistente: tanto si ARCA la informa como SOAP Fault como si la informa en
+`errorConstancia` ("No existe persona con ese Id"), se lanza `ArcaPadronServiceError` con
+`reason: 'inexistente'`.
 
 ```typescript
 const constancia = await padron.getConstanciaInscripcion('30712345671');
 constancia.domicilioFiscal; // { direccion, localidad, codPostal, idProvincia, ... }
-constancia.impuestos; // impuestos de ambos regimenes
+constancia.impuestos; // impuestos de ambos regímenes
 constancia.monotributo?.categoria; // { idCategoria, descripcionCategoria, ... }
+constancia.metadata; // { fechaHora, servidor } de la respuesta, si ARCA lo informó
 ```
 
-#### `getConstanciasInscripcion(cuits): Promise<PersonaA5[]>`
+### `getConstanciasInscripcion(cuits): Promise<ListaPadron<PersonaA5>>`
 
-Hasta 250 CUITs en una llamada (`getPersonaList_v2`). Las CUITs inexistentes no hacen fallar la
-consulta: vuelven como una persona con `errorConstancia.error = ['No existe persona con ese Id']`.
+Hasta 250 CUITs en una llamada (`getPersonaList_v2`), en el orden de `cuits`. Los problemas de una
+CUIT no hacen fallar la consulta (ARCA informa por clave, manual v4.1 §3.3.3): vuelven en el
+`errorConstancia` de su persona.
+
+- CUIT inexistente: `errorConstancia.error = ['No existe persona con ese Id']` (lo informa ARCA).
+- CUIT inválida (formato o dígito verificador): **no se envía a ARCA**; vuelve con `idPersona` igual al
+  valor recibido y el motivo en `errorConstancia.error` (`'CUIT inválido: "…". … No se consultó a ARCA.'`).
+  Si todas son inválidas, no se llama a ARCA.
+- Persona que ARCA devuelve con datos inválidos: vuelve con el detalle en `errorConstancia` (si trae
+  alguna CUIT; si no, se omite).
+
+Una lista vacía o de más de 250 elementos lanza `ArcaValidationError`.
 
 ```typescript
 const constancias = await padron.getConstanciasInscripcion(['20224107030', '27015942210']);
@@ -136,124 +173,197 @@ for (const c of constancias) {
 }
 ```
 
-#### `condicionIvaDesdePadron(persona): { condicionIva: CondicionIva | null; motivo: string }`
+### `condicionIvaDesdePadron(persona): { condicionIva: CondicionIva | null; motivo: string }`
 
-Funcion pura (no consulta ARCA). Acepta una constancia (`PersonaA5`) o una persona de A4:
+Función pura (no consulta ARCA). Acepta una constancia (`PersonaA5`) o una persona de A4:
 
-| Padron                                                                      | `condicionIva`                             |
+| Padrón                                                                      | `condicionIva`                             |
 | --------------------------------------------------------------------------- | ------------------------------------------ |
-| Monotributo activo (impuesto 20 activo; si no figura el 20, la categoria)   | `MONOTRIBUTISTA` (6)                       |
-| Monotributo social (categorias 61, 99, 100 y proyectos productivos 101-104) | `MONOTRIBUTO_SOCIAL` (13)                  |
-| Trabajador independiente promovido (por la descripcion de la categoria)     | `MONOTRIBUTO_INDEPENDIENTE_PROMOVIDO` (16) |
+| Monotributo activo (impuesto 20 activo; si no figura el 20, la categoría)   | `MONOTRIBUTISTA` (6)                       |
+| Monotributo social (categorías 61, 99, 100 y proyectos productivos 101-104) | `MONOTRIBUTO_SOCIAL` (13)                  |
+| Trabajador independiente promovido (por la descripción de la categoría)     | `MONOTRIBUTO_INDEPENDIENTE_PROMOVIDO` (16) |
 | IVA (impuesto 30) `ACTIVO` / `ACTIVO EN TRAMITE` / `AC`                     | `RESPONSABLE_INSCRIPTO` (1)                |
 | IVA (impuesto 30) `EXENTO` / `EXENTO EN TRAMITE` / `EX`, o impuesto 32      | `EXENTO` (4)                               |
 | Impuesto 34 (IVA no alcanzado)                                              | `IVA_NO_ALCANZADO` (15)                    |
-| Ninguno de los anteriores, constancia no emitida o con errores              | `null` (con el motivo)                     |
+| Impuesto 33 (IVA responsable no inscripto, categoría eliminada)             | `null` (con un motivo propio)              |
+| Ninguno de los anteriores, o constancia no emitida                          | `null` (con el motivo)                     |
 
-Los impuestos en `BAJA PROVISORIA`, `BAJA DEFINITIVA` o `NO APORTANTE` no cuentan (un impuesto 20
-en baja no se considera monotributo aunque haya categoria). Si el padron no alcanza, devuelve `null`
-en lugar de asumir consumidor final: decidilo segun la operacion. Si ARCA informo
-`errorRegimenGeneral` / `errorMonotributo`, el motivo los incluye.
+Si figuran a la vez monotributo e IVA activos, prioriza monotributo. Los impuestos en
+`BAJA PROVISORIA`, `BAJA DEFINITIVA` o `NO APORTANTE` no cuentan (un impuesto 20 en baja no se
+considera monotributo aunque haya categoría). Si el padrón no alcanza, devuelve `null` en lugar de
+asumir consumidor final: decidilo según la operación.
 
-Fuentes: manual de `ws_sr_constancia_inscripcion` v4.1 (impuestos 20 y 30, estado `AC`, categorias
-de monotributo del anexo 5.3) y manual de `ws_sr_padron_a4` v1.3 §5.3 (TipoEstado). Los impuestos 32
-y 34 no figuran en los manuales: se reconocen por id o por su descripcion. La categoria 98
-(`B ASOCIADO COOPERATIVA`) se trata como monotributo comun.
+Si ARCA informó errores (`errorConstancia`, por ejemplo una CUIT limitada en los términos de la RG
+3832/16; `errorRegimenGeneral`; `errorMonotributo`) o la CUIT no está activa, **el motivo lo advierte
+siempre**, también cuando se pudo determinar la condición: revisalo antes de facturar.
 
-#### `getPersonaA13(cuit): Promise<PersonaA13>` y `getPersonaA13V2(cuit)`
+Fuentes: manual de `ws_sr_constancia_inscripcion` v4.1 (impuestos 20 y 30, estado `AC`, categorías
+de monotributo del anexo 5.3) y manual de `ws_sr_padron_a4` v1.3 §5.3 (TipoEstado). Los impuestos 32,
+33 y 34 no figuran en los manuales: se reconocen por id (y el 32 y el 34, también por su descripción).
+La categoría 98 (`B ASOCIADO COOPERATIVA`) se trata como monotributo común.
 
-Datos basicos via `ws_sr_padron_a13`. `getPersona` falla con `reason: 'inactiva'` si la clave esta
+### `getPersonaA13(cuit)` y `getPersonaA13V2(cuit)`: `Promise<PersonaA13>`
+
+Datos básicos vía `ws_sr_padron_a13`. `getPersona` falla con `reason: 'inactiva'` si la clave está
 inactiva; `getPersonaV2` (manual A13 v1.4) devuelve los datos igual (con `estadoClave: 'INACTIVO'`).
 
-#### `getIdPersonaListByDocumento(documento): Promise<string[]>`
+### `getIdPersonaListByDocumento(documento): Promise<ListaPadron<string>>`
 
-CUIT/CUIL asociados a un numero de documento (A13). Acepta puntos y espacios (`'11.709.676'`).
-Devuelve `[]` si ARCA no informa claves.
+CUIT/CUIL asociados a un número de documento (A13). Acepta puntos, espacios y guiones
+(`'11.709.676'`); más de 11 dígitos lanza `ArcaValidationError`. Devuelve `[]` si ARCA no informa claves.
 
-#### `getPersona(cuit): Promise<PersonaA4>`
+### `getPersona(cuit): Promise<PersonaA4>` y `getPersonaBasic(cuit): Promise<PersonaA10>`
 
-Obtiene los datos completos de un contribuyente via ws_sr_padron_a4. Autentica automaticamente con WSAA.
+Datos completos (`ws_sr_padron_a4`: domicilios, impuestos, actividades, regímenes, relaciones,
+categorías, emails, teléfonos) y básicos (`ws_sr_padron_a10`: datos generales, dependencia y
+domicilios) de un contribuyente.
 
-```typescript
-const contribuyente = await padron.getPersona('20111111112');
-```
+### `getParametros(collection): Promise<ListaPadron<ParameterRecord>>`
 
-#### `getPersonaBasic(cuit): Promise<PersonaA10>`
-
-Obtiene los datos basicos de un contribuyente via ws_sr_padron_a10.
-
-```typescript
-const contribuyenteBasico = await padron.getPersonaBasic('20111111112');
-```
-
-#### `getParametros(collection: string): Promise<ParameterRecord[]>`
-
-Obtiene una tabla de parametros via ws_sr_padron_a100. `id`, `descripcion` y los `value` de los
-atributos se devuelven tal cual los envia ARCA (`"10.50"` sigue siendo `"10.50"`). Lanza
-`ArcaPadronError` si la respuesta no trae `parameterCollection`; una coleccion vacia devuelve `[]`.
+Tabla de parámetros vía `ws_sr_padron_a100`. `id`, `descripcion` y los `value` de los atributos se
+devuelven tal cual los envía ARCA (`"10.50"` sigue siendo `"10.50"`). Lanza `ArcaPadronError` si la
+respuesta no trae `parameterCollection`; una colección vacía devuelve `[]`. Un nombre vacío lanza
+`ArcaValidationError` sin llamar a ARCA.
 
 ```typescript
-import { CollectionName } from '@ramiidv/arca-padron';
-
 const provincias = await padron.getParametros(CollectionName.PROVINCIA);
 const tiposDocumento = await padron.getParametros(CollectionName.TIPO_DOCUMENTO);
-const tiposRelacion = await padron.getParametros(CollectionName.TIPO_RELACION);
 ```
 
-Colecciones disponibles (enum `CollectionName`, manual A100 v2.1 anexo 5.1): `PROVINCIA`, `TIPO_DOCUMENTO`, `TIPO_DOMICILIO`, `TIPO_CLAVE`, `TIPO_EMPRESA_JURIDICA`, `TIPO_EMPRESA_JURIDICA_SUBGRUPO`, `TIPO_RELACION`, `TIPO_SUBTIPO_RELACION`, `TIPO_COMPONENTE_SOCIEDAD`, `TIPO_RELACION_COMPONENTE_SOC`, `TIPO_EMAIL`, `TIPO_TELEFONO`, `TIPO_RESIDENCIA`, `TIPO_DATO_ADICIONAL_DOMICILIO`, `ORGANISMO_INFORMANTE`, `ORGANISMO_CONTROL`, `PROVINCIA_SOCIEDAD_ORG`, `SEXO`, `CALLE`, `LOCALIDAD`, `AUTONOMO_MONOTRIBUTO`, `REGIMEN`, `TIPO_REGIMEN`, `CARACTERIZACION`, `TIPO_ARCHIVO`, `ACTIVIDAD_RUBRO`, `RUBRO_ACTIVIDAD`, `ACTIVIDAD_OCUPACIONAL`.
-La coleccion de categorias de monotributo no se incluye porque su nombre aparece cortado en el manual.
+Colecciones disponibles (enum `CollectionName`, manual A100 v2.1 anexo 5.1): `PROVINCIA`,
+`TIPO_DOCUMENTO`, `TIPO_DOMICILIO`, `TIPO_CLAVE`, `TIPO_EMPRESA_JURIDICA`,
+`TIPO_EMPRESA_JURIDICA_SUBGRUPO`, `TIPO_RELACION`, `TIPO_SUBTIPO_RELACION`, `TIPO_COMPONENTE_SOCIEDAD`,
+`TIPO_RELACION_COMPONENTE_SOC`, `TIPO_EMAIL`, `TIPO_TELEFONO`, `TIPO_RESIDENCIA`,
+`TIPO_DATO_ADICIONAL_DOMICILIO`, `ORGANISMO_INFORMANTE`, `ORGANISMO_CONTROL`, `PROVINCIA_SOCIEDAD_ORG`,
+`SEXO`, `CALLE`, `LOCALIDAD`, `AUTONOMO_MONOTRIBUTO`, `REGIMEN`, `TIPO_REGIMEN`, `CARACTERIZACION`,
+`TIPO_ARCHIVO`, `ACTIVIDAD_RUBRO`, `RUBRO_ACTIVIDAD`, `ACTIVIDAD_OCUPACIONAL`. La colección de
+categorías de monotributo no se incluye porque su nombre aparece cortado en el manual.
 
-#### `status(): Promise<PadronStatus>`
+### `status(): Promise<PadronStatus>`
 
-Verifica el estado de los servicios (`dummy`, no requiere autenticacion). Consulta los cinco en
-paralelo: cada uno es un `ServiceStatus` de arca-common (`{ ok: true, status }` o
-`{ ok: false, error }`), asi que un servicio caido no oculta el estado de los demas.
+Estado de los cinco servicios (`dummy`, sin autenticación), en paralelo. Cada uno es un
+`ServiceStatus` de arca-common: `ok` es `true` solo si el servicio respondió y sus tres servidores
+(`appserver`, `dbserver`, `authserver`) están en `OK`. Si respondió con alguno en otro estado (ej:
+`dbserver: 'ERROR'`), `ok` es `false` y `status` tiene lo que informó ARCA; si no respondió, `ok` es
+`false` sin `status`. Un servicio caído no oculta el estado de los demás.
 
 ```typescript
 const estado = await padron.status();
-if (estado.a4.ok)
-  console.log(estado.a4.status.appserver); // "OK"
-else console.error('A4 caido:', estado.a4.error);
+if (estado.a4.ok) console.log('A4 disponible');
+else console.error('A4 no disponible:', estado.a4.error.message, estado.a4.status);
 ```
 
-### Acceso a clientes de bajo nivel
+Los `dummy()` de los clientes de bajo nivel devuelven lo que informa ARCA sin evaluarlo: usá
+`serverStatusOk(status)` de `@ramiidv/arca-common`.
 
-Para casos avanzados, se pueden usar los clientes individuales directamente:
+### `metadata` de las respuestas
+
+ARCA informa en cada respuesta la fecha/hora de proceso y el servidor (`metadata`). Las personas
+(`PersonaA4`, `PersonaA10`, `PersonaA13`, `PersonaA5`) lo traen en `persona.metadata`; las listas
+(`ListaPadron<T>`), en `lista.metadata`, una propiedad no enumerable del array (no aparece al
+iterar, serializar ni copiar el array). Si ARCA no lo informa, la propiedad no está.
+
+### Clientes de bajo nivel
+
+Para casos avanzados, se pueden usar los clientes de cada servicio directamente: `padron.wsaa`,
+`padron.a5` (constancia: `getPersona`, `getPersonaList`), `padron.a4`, `padron.a10`, `padron.a13`
+(`getPersona`, `getPersonaV2`, `getIdPersonaListByDocumento`) y `padron.a100`
+(`getParameterCollectionByName`). Reciben las credenciales (`WsAuth`) como primer argumento:
 
 ```typescript
+import { readFileSync } from 'node:fs';
+import { ArcaPadron, ENDPOINTS } from '@ramiidv/arca-padron';
+import type { WsAuth } from '@ramiidv/arca-padron';
+
 const padron = new ArcaPadron({
-  /* ... */
+  cert: readFileSync('./cert.pem', 'utf-8'),
+  key: readFileSync('./key.pem', 'utf-8'),
+  cuit: '20123456786',
 });
 
-// Obtener ticket de acceso manualmente
-const ticket = await padron.wsaa.getAccessTicket('ws_sr_padron_a4');
+const ticket = await padron.wsaa.getAccessTicket(ENDPOINTS.a4.serviceId);
+const credenciales: WsAuth = { token: ticket.token, sign: ticket.sign, cuitRepresentada: '20123456786' };
 
-const credenciales = {
-  Token: ticket.token,
-  Sign: ticket.sign,
-  CuitRepresentada: '20123456786',
-};
-
-// Llamar directamente al servicio
 const contribuyente = await padron.a4.getPersona(credenciales, '20111111112');
-// Tambien: padron.a5.getPersona / getPersonaList, padron.a13.getPersonaV2, padron.a100.getParameterCollectionByName
+console.log(contribuyente.idPersona);
 ```
 
-Clientes disponibles: `padron.wsaa`, `padron.a5` (constancia), `padron.a4`, `padron.a10`,
-`padron.a13`, `padron.a100`.
+### Tipos de respuesta
 
-## Tipos de respuesta
+Los campos `xs:string` de los WSDL (códigos postales, datos adicionales, números de inscripción,
+documentos) y los `xs:long` (CUIT, actividades, teléfonos) se devuelven siempre como `string`, aunque
+sean numéricos. Los `xs:dateTime` (`fechaContratoSocial`, `fechaNacimiento`, `ffRelacion`,
+`metadata.fechaHora`...) se devuelven como el string que envía ARCA, sin convertir a `Date`. Los
+elementos `xsi:nil` se tratan como ausentes. `tipoPersona` es `'FISICA' | 'JURIDICA'`, pero el SDK no
+rechaza otro valor: lo devuelve tal cual (`TipoPersonaPadron`).
 
-Los campos `xs:string` de los WSDL (codigos postales, datos adicionales, numeros de inscripcion,
-documentos) y los `xs:long` (CUIT, actividades, telefonos) se devuelven siempre como `string`, aunque
-sean numericos. Los elementos `xsi:nil` se tratan como ausentes.
+#### PersonaA5 (constancia de inscripción)
 
-### PersonaA4 (datos completos)
+```typescript
+interface PersonaA5 {
+  idPersona: string;
+  tipoPersona?: TipoPersonaPadron;
+  tipoClave?: string;
+  estadoClave?: string;
+  nombre?: string;
+  apellido?: string;
+  razonSocial?: string;
+  mesCierre?: number;
+  fechaContratoSocial?: string; // xs:dateTime
+  fechaFallecimiento?: string; // xs:dateTime
+  esSucesion?: string;
+  domicilioFiscal?: DomicilioA5;
+  dependencia?: DependenciaA5;
+  caracterizacion?: CaracterizacionA5[];
+  regimenGeneral?: { impuestos: ImpuestoA5[]; actividades: ActividadA5[]; regimenes: RegimenA5[]; categoriaAutonomo?: CategoriaA5 };
+  monotributo?: {
+    impuestos: ImpuestoA5[];
+    actividades: ActividadA5[];
+    actividadMonotributista?: ActividadA5;
+    categoria?: CategoriaA5;
+    componenteDeSociedad?: ComponenteSociedadA5[];
+  };
+  impuestos: ImpuestoA5[]; // de ambos regímenes, juntos
+  errorConstancia?: { error: string[]; idPersona?: string; nombre?: string; apellido?: string };
+  errorRegimenGeneral?: { error: string[]; mensaje?: string };
+  errorMonotributo?: { error: string[]; mensaje?: string };
+  metadata?: PadronMetadata;
+}
+```
+
+#### PersonaA13
+
+```typescript
+interface PersonaA13 {
+  idPersona: string;
+  tipoPersona: TipoPersonaPadron;
+  tipoClave?: string;
+  estadoClave?: string;
+  nombre?: string;
+  apellido?: string;
+  razonSocial?: string;
+  numeroDocumento?: string;
+  tipoDocumento?: string;
+  formaJuridica?: string;
+  mesCierre?: number;
+  fechaNacimiento?: string; // xs:dateTime
+  fechaFallecimiento?: string; // xs:dateTime
+  fechaContratoSocial?: string; // xs:dateTime
+  idActividadPrincipal?: string;
+  descripcionActividadPrincipal?: string;
+  periodoActividadPrincipal?: number;
+  claveInactivaAsociada?: string[];
+  domicilio?: DomicilioA13[]; // calle, numero, piso, oficinaDptoLocal, codigoPostal, estadoDomicilio...
+  metadata?: PadronMetadata;
+}
+```
+
+#### PersonaA4 (datos completos)
 
 ```typescript
 interface PersonaA4 {
   idPersona: string;
-  tipoPersona: 'FISICA' | 'JURIDICA';
+  tipoPersona: TipoPersonaPadron;
   tipoClave?: string;
   estadoClave?: string;
   apellido?: string;
@@ -261,7 +371,7 @@ interface PersonaA4 {
   razonSocial?: string;
   numeroDocumento?: string;
   tipoDocumento?: string;
-  fechaNacimiento?: string;
+  fechaNacimiento?: string; // xs:dateTime (también las demás fecha*)
   sexo?: string;
   numeroInscripcion?: string;
   formaJuridica?: string;
@@ -290,15 +400,16 @@ interface PersonaA4 {
   categoria?: CategoriaA4[];
   email?: EmailA4[];
   telefono?: TelefonoA4[];
+  metadata?: PadronMetadata;
 }
 ```
 
-### PersonaA10 (datos basicos)
+#### PersonaA10 (datos básicos)
 
 ```typescript
 interface PersonaA10 {
   idPersona: string;
-  tipoPersona: 'FISICA' | 'JURIDICA';
+  tipoPersona: TipoPersonaPadron;
   tipoClave?: string;
   estadoClave?: string;
   nombre?: string;
@@ -311,69 +422,86 @@ interface PersonaA10 {
   dependencia?: DependenciaA10;
   claveInactivaAsociada?: string[];
   domicilio?: DomicilioA10[];
+  metadata?: PadronMetadata;
 }
 ```
 
-### ParameterRecord (tablas A100)
+#### ParameterRecord (tablas A100) y metadata
 
 ```typescript
 interface ParameterRecord {
   id: string;
   descripcion: string;
-  atributos?: ParameterAttribute[];
+  atributos?: { name: string; value?: string }[]; // value tal cual lo envía ARCA (xs:string)
 }
 
-interface ParameterAttribute {
-  name: string;
-  value?: string; // tal cual lo envia ARCA (xs:string)
+interface PadronMetadata {
+  fechaHora?: string; // xs:dateTime
+  servidor?: string;
 }
+
+type ListaPadron<T> = T[] & { metadata?: PadronMetadata };
 ```
 
 ## Manejo de errores
 
-```
+```text
 Error
   └── ArcaError (base, de @ramiidv/arca-common)
         ├── ArcaPadronError (respuesta de ARCA sin un dato obligatorio, ej: personaReturn sin persona)
         ├── ArcaAuthError (errores de WSAA)
-        │     └── ArcaTicketVigenteError (TA vigente que no esta en memoria ni en el storage)
-        ├── ArcaValidationError (CUIT o documento invalido: no se llamo a ARCA)
+        │     └── ArcaTicketVigenteError (TA vigente que no está en memoria ni en el storage)
+        ├── ArcaValidationError (CUIT o documento inválido: no se llamó a ARCA)
         ├── ArcaServiceError
         │     └── ArcaPadronServiceError (errores de negocio: reason + errors + cause)
         └── ArcaSoapError (HTTP/red/timeout y SOAP Faults no reconocidos)
 ```
 
-Todos tienen un `code` estable y `instanceof` funciona aunque haya mas de una copia del paquete
+Todos tienen un `code` estable y `instanceof` funciona aunque haya más de una copia del paquete
 cargada. ARCA informa los errores de negocio como SOAP Fault; el SDK reconoce los textos de los
 manuales y los convierte en `ArcaPadronServiceError` con un `reason` tipado (el `ArcaSoapError`
 original queda en `cause`). No se reintentan.
 
 | `reason`        | Mensaje de ARCA                                                                                                                                                            |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `inexistente`   | "La Clave (CUIT/CUIL) consultada es inexistente", "No existe persona con ese Id"                                                                                           |
+| `inexistente`   | "La Clave (CUIT/CUIL) consultada es inexistente", "No existe persona con ese Id" (Fault, o `errorConstancia` en `getConstanciaInscripcion`)                                |
 | `inactiva`      | "La clave (CUIT/CUIL) consultada se encuentra INACTIVA" (A13: usar `getPersonaA13V2`)                                                                                      |
 | `id_invalido`   | "El Id de la persona no es valido"                                                                                                                                         |
 | `no_autorizado` | "No autorizado, par token/sign invalido.", "Falta token y/o sign.", "Debe enviar la CUIT representada", "Este token no le permite actuar en representacion de la CUIT ..." |
+| `otro`          | Cualquier otro error de negocio                                                                                                                                            |
 
 Un SOAP Fault con otro texto queda como `ArcaSoapError` (con `faultString`). En la constancia de
-inscripcion, los motivos por los que ARCA no emite la constancia (CUIT limitada, domicilio
+inscripción, los motivos por los que ARCA no emite la constancia (CUIT limitada, domicilio
 incompleto, etc.) no son excepciones: vienen en `errorConstancia`, `errorRegimenGeneral` y
 `errorMonotributo`.
 
 ```typescript
-import { ArcaAuthError, ArcaPadronServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-padron';
+import { readFileSync } from 'node:fs';
+import {
+  ArcaAuthError,
+  ArcaPadron,
+  ArcaPadronServiceError,
+  ArcaSoapError,
+  ArcaValidationError,
+} from '@ramiidv/arca-padron';
+
+const padron = new ArcaPadron({
+  cert: readFileSync('./cert.pem', 'utf-8'),
+  key: readFileSync('./key.pem', 'utf-8'),
+  cuit: '20123456786',
+});
 
 try {
   await padron.getPersona('20111111112');
 } catch (error) {
   if (error instanceof ArcaValidationError) {
-    console.error('CUIT invalida:', error.message);
+    console.error('CUIT inválida:', error.message);
   } else if (error instanceof ArcaPadronServiceError) {
     if (error.reason === 'inexistente') console.error('La CUIT no existe');
-    else if (error.reason === 'inactiva') console.error('La CUIT esta inactiva');
+    else if (error.reason === 'inactiva') console.error('La CUIT está inactiva');
     else console.error(error.errors[0]?.msg);
   } else if (error instanceof ArcaAuthError) {
-    console.error('Error de autenticacion:', error.message);
+    console.error('Error de autenticación:', error.message);
   } else if (error instanceof ArcaSoapError) {
     console.error('Error HTTP/red:', error.statusCode, error.message);
   }
@@ -382,60 +510,56 @@ try {
 
 ## Eventos
 
-El SDK emite eventos para monitoreo y debugging:
+`onEvent` (o `padron.on(tipo, handler)`) recibe `auth:login`, `auth:cache-hit`, `auth:clock-skew`,
+`auth:storage-error`, `request:start`, `request:end`, `request:retry` y `request:error` (ver
+`ArcaEvent` en `@ramiidv/arca-common`):
 
 ```typescript
+import { readFileSync } from 'node:fs';
+import { ArcaPadron } from '@ramiidv/arca-padron';
+
 const padron = new ArcaPadron({
-  // ...
+  cert: readFileSync('./cert.pem', 'utf-8'),
+  key: readFileSync('./key.pem', 'utf-8'),
+  cuit: '20123456786',
   onEvent: (evento) => {
-    switch (evento.type) {
-      case 'auth:login':
-        console.log(`Login para ${evento.service}`);
-        break;
-      case 'auth:cache-hit':
-        console.log(`Token reutilizado para ${evento.service} (${evento.source})`);
-        break;
-      case 'request:start':
-        console.log(`Inicio ${evento.method}`);
-        break;
-      case 'request:end':
-        console.log(`Fin ${evento.method} (${evento.durationMs}ms)`);
-        break;
-      case 'request:retry':
-        console.log(`Reintento #${evento.attempt}`);
-        break;
-      case 'request:error':
-        console.log(`Error: ${evento.error.message}`);
-        break;
-    }
+    if (evento.type === 'request:end') console.log(`${evento.method}: ${evento.durationMs}ms`);
+    if (evento.type === 'request:retry') console.log(`Reintento #${evento.attempt} de ${evento.method}`);
   },
 });
 ```
 
-## Enums utiles
+## Entornos
 
-```typescript
-import { Provincia, TipoDomicilio, TipoPersona, ImpuestoId, CollectionName } from '@ramiidv/arca-padron';
+| Servicio                       | Homologación                                                                 | Producción                                                               |
+| ------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `ws_sr_constancia_inscripcion` | `https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5`         | `https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5`         |
+| `ws_sr_padron_a4`              | `https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA4`         | `https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA4`         |
+| `ws_sr_padron_a10`             | `https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA10`        | `https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA10`        |
+| `ws_sr_padron_a13`             | `https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13`        | `https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13`        |
+| `ws_sr_padron_a100`            | `https://awshomo.afip.gov.ar/sr-parametros/webservices/parameterServiceA100` | `https://aws.afip.gov.ar/sr-parametros/webservices/parameterServiceA100` |
 
-// Verificar si el contribuyente esta inscripto en IVA (mejor: condicionIvaDesdePadron)
-const tieneIva = contribuyente.impuesto?.some(
-  (imp) => imp.idImpuesto === ImpuestoId.IVA_RESPONSABLE_INSCRIPTO && imp.estado?.startsWith('ACTIVO'),
-);
+El manual de la constancia de inscripción (v4.1) publica los hosts `awshomo.arca.gob.ar` /
+`aws.arca.gob.ar`. El SDK usa `awshomo.afip.gov.ar` / `aws.afip.gov.ar`: son los `soap:address` de
+los WSDL oficiales de los cinco servicios y los que publica el manual de A13 (v1.4), y responden
+igual. Para usar otro host, pasá `endpoints`. Las URLs, namespaces e ids de servicio están en
+`ENDPOINTS`; los de WSAA, en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
 
-// ImpuestoId.MONOTRIBUTO = 20, IVA_RESPONSABLE_INSCRIPTO = 30, BIENES_PERSONALES = 180,
-// EMPLEADOR = 301, AUTONOMOS = 308 (manuales de ARCA). IVA_EXENTO (32) e IVA_NO_ALCANZADO (34)
-// no figuran en los manuales del padron.
-//
-// `DocTipo` son los codigos numericos de WSFEv1, no el `tipoDocumento` string del padron
-// ("DNI", "LC"...).
-```
+### Enums útiles
 
-## Requisitos
+- `ImpuestoId`: `MONOTRIBUTO` (20), `IVA_RESPONSABLE_INSCRIPTO` (30), `BIENES_PERSONALES` (180),
+  `EMPLEADOR` (301), `AUTONOMOS` (308)... (manuales de ARCA). `IVA_EXENTO` (32),
+  `IVA_RESPONSABLE_NO_INSCRIPTO` (33) e `IVA_NO_ALCANZADO` (34) no figuran en los manuales del padrón.
+- `TipoDomicilio`, `TipoPersona`, `EstadoClave`, `CollectionName`, `Provincia`, `CondicionIva`.
+- `DocTipo` son los códigos numéricos de WSFEv1, no el `tipoDocumento` string del padrón ("DNI", "LC"...).
 
-- Node.js >= 18 (soporte nativo de `fetch`)
-- Certificado digital emitido por ARCA/AFIP
-- Autorizacion para los servicios web correspondientes: `ws_sr_constancia_inscripcion`,
-  `ws_sr_padron_a4`, `ws_sr_padron_a10`, `ws_sr_padron_a13`, `ws_sr_padron_a100` (cada uno por separado)
+`ensureArray`, `parseXml` y `buildXml` siguen exportados por compatibilidad, pero están deprecados:
+importalos de `@ramiidv/arca-common`.
+
+## Ejemplos
+
+En [examples](https://github.com/ramiidv/arca-sdks/tree/main/packages/padron/examples): constancia de
+inscripción y condición frente al IVA, consultas A4 y A10, tablas de parámetros y manejo de errores.
 
 ## Licencia
 

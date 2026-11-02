@@ -20,6 +20,15 @@ const RECEPTOR_CUIT = new Set([1, 2, 3, 51, 52, 53, 201, 202, 203, 206, 207, 208
 /** Condiciones de IVA gravadas (110) y las que llevan subtotal de IVA (127, 400). */
 const GRAVADAS = new Set([3, 4, 5, 6]);
 const CON_SUBTOTAL = new Set([4, 5, 6]);
+/** Facturas de Crédito Electrónica MiPyME: exigen `fechaVencimientoPago` (148 / 764). */
+const FCE_FACTURA = new Set([201, 206]);
+/** Notas de débito/crédito FCE: no llevan `fechaVencimientoPago` (149 / 765). */
+const FCE_NOTA = new Set([202, 203, 207, 208]);
+const esFCE = (tipo: number) => FCE_FACTURA.has(tipo) || FCE_NOTA.has(tipo);
+/** Notas de débito/crédito que exigen comprobantes asociados o período (160, 161 / 778, 779). */
+const NOTA_CON_ASOCIADOS = new Set([2, 3, 7, 8, 52, 53]);
+/** Tipos que admiten `cancelaEnMismaMonedaExtranjera` = "S" (118). */
+const CANCELA_MISMA_MONEDA = new Set([1, 6, 51, 201, 206]);
 
 const SENA = 97;
 const BONIFICACION = 99;
@@ -102,8 +111,12 @@ function itemsDe(c: MtxcaComprobanteBase): MtxcaItem[] {
 }
 
 /**
- * Valida las reglas de ítems que el manual marca como excluyentes para
- * `informarComprobanteCAEA` (1100-1112, 1121) y el par tipo/número de documento (707).
+ * Valida las reglas que el manual marca como excluyentes para
+ * `informarComprobanteCAEA`: presencia de campos de los ítems (1100-1112,
+ * 1121), par tipo/número de documento (707), condición de IVA del receptor
+ * (390, RG 5616), `fechaVencimientoPago` en FCE (764, 765), comprobantes
+ * asociados de notas de débito/crédito (778, 779), compradores (753) y
+ * `fechaHoraGen` (754: obligatoria para todo comprobante CAEA desde el 01/08/2026).
  *
  * @throws ArcaValidationError
  */
@@ -115,11 +128,74 @@ export function validateComprobanteCAEA(c: MtxcaComprobanteBase): void {
 
 /** Igual que `validateComprobanteCAEA`, pero agrega los errores a `errors` en lugar de lanzar. */
 export function reglasComprobanteCAEA(c: MtxcaComprobanteBase, errors: ValidationErrorDetail[]): void {
+  const add = (field: string, message: string, value?: unknown) => errors.push({ field, message, value });
   itemsDe(c).forEach((item, i) => validarItemEstructura(item, i, c.codigoTipoComprobante, errors));
   if ((c.codigoTipoDocumento === undefined) !== (c.numeroDocumento === undefined)) {
+    add('numeroDocumento', 'codigoTipoDocumento y numeroDocumento se informan juntos (707)');
+  }
+  reglaCondicionIVAReceptor(c, 390, errors);
+  reglasFCE(c, [764, 765], errors);
+  reglasAsociados(c, [778, 779], errors);
+  if (Array.isArray(c.compradores) && c.compradores.length > 0) {
+    add('compradores', 'no se admiten en informarComprobanteCAEA (753)');
+  }
+  if ((c as { fechaHoraGen?: unknown }).fechaHoraGen === undefined) {
+    add('fechaHoraGen', 'es obligatoria para comprobantes CAEA desde el 01/08/2026 (754)');
+  }
+}
+
+/** RG 5616: la condición de IVA del receptor es obligatoria (190 en CAE, 390 en CAEA). */
+function reglaCondicionIVAReceptor(c: MtxcaComprobanteBase, codigo: number, errors: ValidationErrorDetail[]): void {
+  if (c.condicionIVAReceptor === undefined) {
     errors.push({
-      field: 'numeroDocumento',
-      message: 'codigoTipoDocumento y numeroDocumento se informan juntos (707)',
+      field: 'condicionIVAReceptor',
+      message: `es obligatoria (RG 5616; ver getCondicionesIVAReceptor()) (${codigo})`,
+    });
+  }
+}
+
+/**
+ * `fechaVencimientoPago` en FCE: obligatoria en 201/206 y no corresponde en
+ * 202/203/207/208, cualquiera sea el concepto (148/149 en CAE, 764/765 en CAEA).
+ */
+function reglasFCE(
+  c: MtxcaComprobanteBase,
+  [obligatoria, prohibida]: [number, number],
+  errors: ValidationErrorDetail[],
+) {
+  const tipo = c.codigoTipoComprobante;
+  if (FCE_FACTURA.has(tipo) && c.fechaVencimientoPago === undefined) {
+    errors.push({
+      field: 'fechaVencimientoPago',
+      message: `es obligatoria en Facturas de Crédito Electrónica MiPyME (${obligatoria})`,
+    });
+  }
+  if (FCE_NOTA.has(tipo) && c.fechaVencimientoPago !== undefined) {
+    errors.push({
+      field: 'fechaVencimientoPago',
+      message: `no corresponde en notas de débito/crédito de FCE MiPyME (${prohibida})`,
+      value: c.fechaVencimientoPago,
+    });
+  }
+}
+
+/**
+ * Notas de débito/crédito 2, 3, 7, 8, 52, 53: comprobantes asociados o período,
+ * pero no los dos (160/161 en CAE, 778/779 en CAEA).
+ */
+function reglasAsociados(c: MtxcaComprobanteBase, [falta, ambos]: [number, number], errors: ValidationErrorDetail[]) {
+  if (!NOTA_CON_ASOCIADOS.has(c.codigoTipoComprobante)) return;
+  const asociados = Array.isArray(c.comprobantesAsociados) && c.comprobantesAsociados.length > 0;
+  const periodo = c.periodoComprobantesAsociados !== undefined;
+  if (!asociados && !periodo) {
+    errors.push({
+      field: 'comprobantesAsociados',
+      message: `una nota de débito/crédito requiere comprobantesAsociados o periodoComprobantesAsociados (${falta})`,
+    });
+  } else if (asociados && periodo) {
+    errors.push({
+      field: 'periodoComprobantesAsociados',
+      message: `no corresponde si se informan comprobantesAsociados (${ambos})`,
     });
   }
 }
@@ -129,8 +205,11 @@ export function reglasComprobanteCAEA(c: MtxcaComprobanteBase, errors: Validatio
  * las validaciones excluyentes del manual: presencia de campos por unidad de
  * medida y tipo de comprobante, fórmulas de importe e IVA por ítem, subtotales
  * de IVA por alícuota y la coherencia de gravado/no gravado/exento/subtotal/
- * otros tributos/total, con el margen de error del manual. Usa los importes ya
- * redondeados como se envían (2 decimales; 6 en cantidad y precio).
+ * otros tributos/total, con el margen de error del manual; además, fechas por
+ * concepto y FCE (122-124, 148, 149), condición de IVA del receptor (190, RG
+ * 5616), comprobantes asociados (160, 161), moneda (118, 120, 169, 194),
+ * tributos (301, 302) y compradores (432, 433). Usa los importes ya
+ * redondeados como se envían (mitad al par; 2 decimales, 6 en cantidad y precio).
  *
  * No reemplaza las validaciones de padrón que hace ARCA (CUIT activa, punto de
  * venta habilitado, correlatividad, etc.).
@@ -161,12 +240,20 @@ export function reglasComprobanteCAE(c: MtxcaComprobanteBase, errors: Validation
       add('codigoTipoDocumento', `debe ser 80 (CUIT) para el tipo de comprobante ${tipo} (129)`, c.codigoTipoDocumento);
   }
 
+  reglaCondicionIVAReceptor(c, 190, errors);
+
+  // 122-124 por concepto; en FCE, fechaVencimientoPago sigue 148/149.
   const servicios = c.codigoConcepto === 2 || c.codigoConcepto === 3;
-  for (const campo of ['fechaServicioDesde', 'fechaServicioHasta', 'fechaVencimientoPago'] as const) {
+  const campos = esFCE(tipo)
+    ? (['fechaServicioDesde', 'fechaServicioHasta'] as const)
+    : (['fechaServicioDesde', 'fechaServicioHasta', 'fechaVencimientoPago'] as const);
+  for (const campo of campos) {
     const presente = c[campo] !== undefined;
     if (servicios && !presente) add(campo, 'es obligatoria si codigoConcepto es 2 o 3 (122-124)');
     if (!servicios && presente) add(campo, 'solo corresponde si codigoConcepto es 2 o 3 (122-124)', c[campo]);
   }
+  reglasFCE(c, [148, 149], errors);
+  reglasAsociados(c, [160, 161], errors);
   const fecha = (v: FechaInput | undefined) => {
     if (v === undefined) return undefined;
     try {
@@ -193,14 +280,26 @@ export function reglasComprobanteCAE(c: MtxcaComprobanteBase, errors: Validation
     if (c.cancelaEnMismaMonedaExtranjera === 'S')
       add('cancelaEnMismaMonedaExtranjera', 'no corresponde con codigoMoneda PES (169)', 'S');
   }
+  if (c.cancelaEnMismaMonedaExtranjera === 'S' && !CANCELA_MISMA_MONEDA.has(tipo)) {
+    add('cancelaEnMismaMonedaExtranjera', 'solo corresponde en los tipos 1, 6, 51, 201 y 206 (118)', 'S');
+  }
   if (c.cotizacionMoneda === undefined && c.cancelaEnMismaMonedaExtranjera !== 'S') {
     add('cotizacionMoneda', 'es obligatoria salvo cancelaEnMismaMonedaExtranjera = "S" (194)');
   }
 
   (c.otrosTributos ?? []).forEach((t, i) => {
-    if (t?.codigo === 99 && !t.descripcion)
-      add(`otrosTributos[${i}].descripcion`, 'es obligatoria si codigo es 99 (301)');
+    if (t?.descripcion) return;
+    if (esFCE(tipo)) add(`otrosTributos[${i}].descripcion`, 'es obligatoria en FCE MiPyME (302)');
+    else if (t?.codigo === 99) add(`otrosTributos[${i}].descripcion`, 'es obligatoria si codigo es 99 (301)');
   });
+
+  const compradores = Array.isArray(c.compradores) ? c.compradores : [];
+  if (compradores.length > 0 && c.codigoConcepto !== 1) {
+    add('compradores', 'solo corresponden si codigoConcepto es 1 (productos) (432)');
+  }
+  if (compradores.length > 1 && esFCE(tipo)) {
+    add('compradores', 'una FCE MiPyME no admite compradores múltiples (433)');
+  }
 
   // --- Ítems ---------------------------------------------------------------
   const ivaItem: number[] = [];
@@ -305,6 +404,29 @@ export function reglasComprobanteCAE(c: MtxcaComprobanteBase, errors: Validation
       }
     }
   });
+
+  // Bonificaciones (99): |Σ IVA| <= IVA del resto de los ítems de la condición (516).
+  if (ITEM_CON_IVA.has(tipo)) {
+    const condiciones = new Set(
+      items.filter((it) => it.codigoUnidadMedida === BONIFICACION).map((it) => it.codigoCondicionIVA),
+    );
+    for (const cond of condiciones) {
+      const deCond = items.filter((it) => it.codigoCondicionIVA === cond);
+      const bonif = deCond.filter((it) => it.codigoUnidadMedida === BONIFICACION);
+      const ivaBonif = Math.abs(sum(bonif.map((it) => imp(it.importeIVA))));
+      const ivaResto = sum(
+        deCond.filter((it) => it.codigoUnidadMedida !== BONIFICACION).map((it) => imp(it.importeIVA)),
+      );
+      if (ivaBonif > ivaResto && !dentroDelMargen(ivaBonif, ivaResto, deCond.length)) {
+        const k = items.indexOf(bonif[0]);
+        add(
+          `items[${k}].importeIVA`,
+          `el IVA de las bonificaciones con condición ${cond} (${fmt(ivaBonif)}) no puede superar el IVA de los ítems de esa condición = ${fmt(ivaResto)} (516)`,
+          bonif[0].importeIVA,
+        );
+      }
+    }
+  }
 
   // --- Subtotales de IVA (127, 400-405) -----------------------------------
   const subtotales = c.subtotalesIVA ?? [];

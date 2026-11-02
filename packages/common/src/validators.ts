@@ -1,3 +1,4 @@
+import { partesAR } from './dates.js';
 import { ArcaValidationError } from './errors.js';
 import type { ValidationErrorDetail } from './errors.js';
 
@@ -6,14 +7,18 @@ import type { ValidationErrorDetail } from './errors.js';
 // ---------------------------------------------------------------------------
 
 const CUIT_WEIGHTS = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2] as const;
-const VALID_PREFIXES = [20, 23, 24, 27, 30, 33, 34];
+/**
+ * Prefijos válidos: personas humanas (20, 23, 24, 27), personas jurídicas (30,
+ * 33, 34) y CUIT país / sujetos del exterior (50, 51, 55).
+ */
+const VALID_PREFIXES = [20, 23, 24, 27, 30, 33, 34, 50, 51, 55];
 
 /**
- * Normaliza un CUIT/CUIL a 11 dígitos.
- * Acepta string con o sin guiones, o number.
+ * Normaliza un CUIT/CUIL quitando guiones, puntos y espacios.
+ * Acepta string (ej: `"20-12345678-6"`, `"20.12345678.6"`) o number. No valida.
  */
 export function normalizeCuit(cuit: string | number): string {
-  return String(cuit).replace(/-/g, '');
+  return String(cuit).replace(/[-.\s]/g, '');
 }
 
 /**
@@ -122,15 +127,19 @@ export const formatCuil = formatCuit;
 // ---------------------------------------------------------------------------
 
 /**
- * Valida un CBU (formato de 22 dígitos con checksums).
- * Retorna el CBU validado.
+ * Valida un CBU (formato de 22 dígitos con checksums). Acepta espacios y
+ * guiones como separadores (se quitan).
+ * Retorna el CBU validado, solo dígitos.
  * @throws ArcaValidationError si el CBU es inválido.
  */
 export function validateCBU(cbu: string): string {
+  const raw = cbu;
+  // Solo string: un CBU tiene 22 dígitos y no entra exacto en un `number`.
+  cbu = typeof raw === 'string' ? raw.replace(/[\s-]/g, '') : '';
   if (!/^\d{22}$/.test(cbu)) {
     throw new ArcaValidationError(
-      `CBU inválido: "${cbu}". Debe tener 22 dígitos.`,
-      [{ field: 'cbu', message: 'El CBU debe tener 22 dígitos numéricos', value: cbu }],
+      `CBU inválido: "${String(raw)}". Debe tener 22 dígitos.`,
+      [{ field: 'cbu', message: 'El CBU debe tener 22 dígitos numéricos', value: raw }],
       'cbu',
     );
   }
@@ -199,11 +208,6 @@ export function isValidCBU(cbu: string): boolean {
 const AFIP_DATE_RE = /^(\d{4})(\d{2})(\d{2})$/;
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** Zona horaria de ARCA: las fechas de los comprobantes son fechas calendario de Argentina. */
-const AR_TIMEZONE = 'America/Argentina/Buenos_Aires';
-
-let arDateFormatter: Intl.DateTimeFormat | undefined;
-
 function invalidDate(value: unknown, field: string, message: string): ArcaValidationError {
   return new ArcaValidationError(
     `Fecha inválida en campo "${field}": "${String(value)}". ${message}`,
@@ -256,27 +260,20 @@ export function formatDate(date: Date | string): string {
     throw invalidDate(date, 'fecha', 'La fecha no es válida.');
   }
 
-  arDateFormatter ??= new Intl.DateTimeFormat('en-US', {
-    timeZone: AR_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  const parts = arDateFormatter.formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value);
-  return `${pad(part('year'), 4)}${pad(part('month'), 2)}${pad(part('day'), 2)}`;
+  const p = partesAR(date);
+  return `${p.year}${p.month}${p.day}`;
 }
 
 /**
- * Parsea una fecha en formato `YYYYMMDD` (usado por AFIP/ARCA) o `YYYY-MM-DD` a `Date`.
+ * Parsea una fecha en formato `YYYYMMDD` (usado por ARCA) o `YYYY-MM-DD` a `Date`.
  *
  * Devuelve el mediodía de Argentina (15:00 UTC) de ese día, así
- * `formatDate(parseAfipDate(x))` devuelve la misma fecha sin importar la zona
+ * `formatDate(parseArcaDate(x))` devuelve la misma fecha sin importar la zona
  * horaria del proceso.
  *
  * @throws ArcaValidationError si el formato no es exacto o la fecha no existe.
  */
-export function parseAfipDate(dateStr: string): Date {
+export function parseArcaDate(dateStr: string): Date {
   if (typeof dateStr !== 'string') {
     throw invalidDate(dateStr, 'fecha', 'Formato esperado: YYYYMMDD o YYYY-MM-DD.');
   }
@@ -286,11 +283,14 @@ export function parseAfipDate(dateStr: string): Date {
   return date;
 }
 
+/** @deprecated Usar `parseArcaDate` (mismo comportamiento). */
+export const parseAfipDate: (dateStr: string) => Date = parseArcaDate;
+
 /** Convierte un `Date` o un string `YYYYMMDD`/`YYYY-MM-DD` a `Date`, validando con las mismas reglas. */
 function toValidDate(date: Date | string, fieldName: string): Date {
   if (typeof date === 'string') {
     try {
-      return parseAfipDate(date);
+      return parseArcaDate(date);
     } catch {
       throw invalidDate(date, fieldName, 'Formato esperado: YYYYMMDD o YYYY-MM-DD, con una fecha existente.');
     }
@@ -307,7 +307,7 @@ function toValidDate(date: Date | string, fieldName: string): Date {
 
 /**
  * Valida que un valor sea un `Date` válido, o un string `YYYYMMDD`/`YYYY-MM-DD`
- * con una fecha existente (misma validación estricta que `parseAfipDate`).
+ * con una fecha existente (misma validación estricta que `parseArcaDate`).
  * @throws ArcaValidationError si la fecha es inválida.
  */
 export function validateFecha(date: Date | string, fieldName: string): void {
@@ -315,9 +315,11 @@ export function validateFecha(date: Date | string, fieldName: string): void {
 }
 
 /**
- * Valida que fechaFin sea posterior a fechaInicio. Acepta `Date` o strings
+ * Valida que fechaFin no sea anterior a fechaInicio (pueden ser iguales: WSFE
+ * acepta `FchServDesde == FchServHasta`). Se comparan fechas calendario de
+ * Argentina: la hora de un `Date` no cuenta. Acepta `Date` o strings
  * `YYYYMMDD`/`YYYY-MM-DD` (validados como en `validateFecha`).
- * @throws ArcaValidationError si alguna fecha es inválida o fechaFin no es posterior a fechaInicio.
+ * @throws ArcaValidationError si alguna fecha es inválida o fechaFin es anterior a fechaInicio.
  */
 export function validateFechaRango(fechaInicio: Date | string, fechaFin: Date | string | undefined): void {
   if (fechaFin === undefined) return;
@@ -325,13 +327,14 @@ export function validateFechaRango(fechaInicio: Date | string, fechaFin: Date | 
   const inicio = toValidDate(fechaInicio, 'fechaInicio');
   const fin = toValidDate(fechaFin, 'fechaFin');
 
-  if (fin.getTime() <= inicio.getTime()) {
+  // Se comparan fechas calendario de Argentina (la hora de un `Date` no cuenta).
+  if (formatDate(fin) < formatDate(inicio)) {
     throw new ArcaValidationError(
-      'La fecha de fin debe ser posterior a la fecha de inicio.',
+      'La fecha de fin no puede ser anterior a la fecha de inicio.',
       [
         {
           field: 'fechaFin',
-          message: `fechaFin (${fin.toISOString()}) debe ser posterior a fechaInicio (${inicio.toISOString()})`,
+          message: `fechaFin (${fin.toISOString()}) no puede ser anterior a fechaInicio (${inicio.toISOString()})`,
           value: { fechaInicio, fechaFin },
         },
       ],

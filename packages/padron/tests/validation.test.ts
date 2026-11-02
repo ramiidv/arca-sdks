@@ -2,6 +2,7 @@
  * Respuestas XML realistas (armadas según los WSDL de ARCA) que pasan por
  * `fetch` mockeado y por el parser real de arca-common.
  */
+import { testCert } from '@ramiidv/arca-common/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ArcaSoapError, ArcaValidationError, CondicionIva } from '@ramiidv/arca-common';
 import { ArcaPadron } from '../src/arca-padron.js';
@@ -152,7 +153,7 @@ describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => 
 });
 
 function padronSinTickets(cuit: string) {
-  return new ArcaPadron({ cert: 'C', key: 'K', cuit });
+  return new ArcaPadron({ ...testCert(), cuit });
 }
 
 // ---------------------------------------------------------------------------

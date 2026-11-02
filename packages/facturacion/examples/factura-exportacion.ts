@@ -7,10 +7,14 @@
  * Si la respuesta se pierde (ArcaResultadoInciertoExpo), WSFEX permite
  * reenviar la misma solicitud con el mismo Id: si ya estaba autorizada,
  * devuelve el CAE original con reproceso = true, sin duplicar.
+ *
+ * El Id es único por CUIT: serializá las emisiones de exportación de toda la
+ * CUIT. Si dos emisiones usan el mismo Id, la segunda falla con
+ * ArcaConflictoExpo (no se autorizó) y se reintenta sin `id`.
  */
 
 import fs from 'node:fs';
-import { ArcaFacturacion, ArcaResultadoInciertoExpo, CbteTipo } from '@ramiidv/arca-facturacion';
+import { ArcaConflictoExpo, ArcaFacturacion, ArcaResultadoInciertoExpo, CbteTipo } from '@ramiidv/arca-facturacion';
 import type { FacturarExpoOpts } from '@ramiidv/arca-facturacion';
 
 async function main() {
@@ -62,10 +66,16 @@ async function main() {
   try {
     result = await arca.facturarExpo(opts);
   } catch (e) {
-    if (!(e instanceof ArcaResultadoInciertoExpo)) throw e;
-    // Persistí e.intento antes de reintentar. Reenviar con el mismo Id, número y fecha:
-    result = await arca.facturarExpo({ ...opts, ...e.intento });
-    if (result.reproceso) console.log('WSFEX ya la tenía autorizada (reproceso)');
+    if (e instanceof ArcaConflictoExpo) {
+      // Otra emisión usó el mismo Id: esta no se autorizó. Reintentar con Id y número nuevos.
+      result = await arca.facturarExpo(opts);
+    } else if (e instanceof ArcaResultadoInciertoExpo) {
+      // Persistí e.intento antes de reintentar. Reenviar con el mismo Id, número y fecha:
+      result = await arca.facturarExpo({ ...opts, ...e.intento });
+      if (result.reproceso) console.log('WSFEX ya la tenía autorizada (reproceso)');
+    } else {
+      throw e;
+    }
   }
 
   if (result.aprobada) {
