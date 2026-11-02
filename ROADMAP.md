@@ -60,6 +60,11 @@ sign ni CUIT reales) como fixtures para los tests unitarios.
   `{ endpoint, transport? }`): hoy cdc, sire, mtxca, fecred, padron y
   facturacion usan formas distintas.
 - Rechazos uniformes: mtxca devuelve `resultado: 'R'`, fecred lanza.
+- Respuesta inválida: facturacion, cdc, padron y agro ya lanzan
+  `ArcaResponseError` (vía `decodeResponse({ kind })`); mtxca, fecred y sire
+  siguen con `ArcaSoapError` (`uncertain` en emisiones) para no romper los
+  `catch` existentes. Unificar en la major.
+- cdc `constatar()` devuelve `events`; las tablas, `eventos`.
 - Constantes de endpoints con la misma forma en todos los paquetes.
 - Quitar los alias deprecados (`afipSoapCall`, `parseAfipDate`, re-exports de
   padron).
