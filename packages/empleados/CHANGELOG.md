@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [87f58c1]
+  - @ramiidv/arca-common@0.6.0
+
 ## 0.4.0
 
 ### Minor Changes
