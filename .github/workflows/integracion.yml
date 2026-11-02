@@ -20,9 +20,13 @@ concurrency:
   group: integracion
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   homologacion:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       ARCA_TEST_CERT: ${{ secrets.ARCA_TEST_CERT }}
       ARCA_TEST_KEY: ${{ secrets.ARCA_TEST_KEY }}
@@ -37,8 +41,10 @@ jobs:
           node-version: 24
           cache: npm
       # WSAA no emite un ticket nuevo mientras el anterior siga vigente (hasta 12 h):
-      # se restaura el último guardado y se guarda el de esta corrida.
-      - uses: actions/cache@v4
+      # se restaura el último guardado y se guarda el de esta corrida aunque fallen
+      # los tests (si no, las corridas siguientes quedan sin ticket hasta que venza).
+      # Sólo corre en schedule/manual sobre main: los PRs no ven esta cache.
+      - uses: actions/cache/restore@v4
         with:
           path: .arca-test-tickets
           key: arca-test-tickets-${{ github.run_id }}
@@ -46,3 +52,8 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run test:integration
+      - if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .arca-test-tickets
+          key: arca-test-tickets-${{ github.run_id }}
