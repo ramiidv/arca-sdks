@@ -40,21 +40,7 @@ changesets `*-auditoria.md`.
 
 ## Próximos pasos técnicos
 
-### 1. Verificar contra homologación lo que los manuales no definen
-
-Requiere el certificado de homologación. Grabar las respuestas (sin token,
-sign ni CUIT reales) como fixtures para los tests unitarios.
-
-- empleados: relleno de campos numéricos no informados en MR/BT (ceros o
-  espacios), formato de la retribución (centavos implícitos), codificación y
-  fin de línea del TXT, significado de NA/NB y de la marca agropecuaria.
-- sire: importes negativos en los tipos 19 y 20.
-- agro: `dateTime` con huso (`-03:00`); el manual de WSCPE lo muestra sin huso.
-- facturacion: `Cuit_pais_cliente` en 0 cuando se informa `Id_impositivo` (WSFEX).
-- fecred: el manual de WSFECRED no es público; las reglas de negocio solo se
-  compararon contra el XSD.
-
-### 2. Próxima major: API uniforme entre paquetes
+### 1. Próxima major: API uniforme entre paquetes
 
 - Clientes de bajo nivel con la misma configuración (`SoapServiceClientConfig`:
   `{ endpoint, transport? }`): hoy cdc, sire, mtxca, fecred, padron y
@@ -69,7 +55,7 @@ sign ni CUIT reales) como fixtures para los tests unitarios.
 - Quitar los alias deprecados (`afipSoapCall`, `parseAfipDate`, re-exports de
   padron).
 
-### 3. Mantenimiento
+### 2. Mantenimiento
 
 - Cuando Node 20 deje de usarse en la práctica, subir `engines` a `>=22.12`,
   sacar 20.19 de la matriz de CI y pasar a vitest 5.

@@ -116,10 +116,7 @@ export interface OpcionesSerializacion {
    * Cómo se escribe un campo numérico no informado: `'ceros'` (default) o `'espacios'`.
    * No aplica a `rectificacion` ni a la marca de la posición 130, que tienen
    * default `0` según el manual.
-   *
-   * **No verificado con ARCA**: el manual no dice cómo se informa un campo vacío. En
-   * una modificación (`MR`) o baja (`BT`), los ceros podrían interpretarse como código
-   * `0` y pisar el dato vigente. Si no está seguro, pruebe con `'espacios'` (ver README).
+   * En modificaciones (`MR`) y bajas (`BT`) conviene informar todos los campos vigentes.
    */
   numericoVacio?: 'ceros' | 'espacios';
 }

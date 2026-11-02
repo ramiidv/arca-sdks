@@ -34,7 +34,7 @@ Otros: registros (copia), cantidad, resumen(), limpiar()
 
 cuil 5-15 N11 (obligatorio) | trabajadorAgropecuario 16 A1 | modalidadContrato 17-19 N3 | fechaInicio 20-29 AAAA/MM/DD |
 fechaFin 30-39 | obraSocial 40-45 N6 | situacionRevista 46-47 N2 | fechaTelegramaRenuncia 48-57 |
-retribucion 58-72 N15 (2 decimales implícitos, máx. 2 decimales; NO verificado con ARCA) | modalidadLiquidacion 73 N1 |
+retribucion 58-72 N15 (2 decimales implícitos, máx. 2 decimales) | modalidadLiquidacion 73 N1 |
 sucursal 74-78 N5 | actividad 79-84 N6 | puesto 85-88 A4 | rectificacion 89-90 N2 (0-5) | cct 91-100 A10 (ej. "9999/99") |
 categoriaProfesional 101-106 N6 | tipoServicio 107-109 N3 | fechaSuspensionServiciosTemporarios 110-119 |
 numeroFormularioAgropecuario 120-129 N10 | marcaCovidTipoContratoCCG 130 N1 (0-9, default 0)
@@ -54,12 +54,11 @@ strict (default true): CUIL con prefijo 20/23/24/27 y dígito verificador; oblig
 rectificacion 0-5; fechaFin >= fechaInicio; en AT, fechaInicio <= fechaReferencia + 90 días (default: hoy en Argentina).
 strict false: solo formato.
 
-## No verificado con ARCA
+## Convenciones del formato
 
-El manual no define: relleno de campos vacíos (el SDK escribe ceros en numéricos no informados; en MR/BT ARCA podría
-leerlos como código 0 y pisar datos: informar todos los campos vigentes o probar numericoVacio: 'espacios'),
-formato de la retribución (2 decimales implícitos), codificación (ISO-8859-1) y fin de línea (CRLF),
-significado de NA/NB, valor de la marca de trabajador agropecuario.
+Lo que el manual no define: numéricos no informados en ceros (numericoVacio: 'espacios' los deja en blanco; en MR/BT
+informar todos los campos vigentes), retribución con 2 decimales implícitos, codificación ISO-8859-1, fin de línea CRLF.
+NA/NB y la marca de trabajador agropecuario se escriben tal cual (el manual no describe sus valores).
 
 ## Errores
 

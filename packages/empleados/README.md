@@ -7,9 +7,9 @@ laborales en registros de ancho fijo de 130 posiciones.
 - No hace llamadas a servicios web: ARCA no expone un web service para esto. El archivo se sube a mano
   en Simplificación Registral → Relaciones laborales → Carga Masiva → Nuevo → Cargar Archivo → Enviar.
 - Fuente del formato: [Manual de Ayuda de Simplificación Registral (ARCA, feb. 2025), pág. 24](https://www.arca.gob.ar/simplificacionregistral/ayuda/documentos/SR_Manual-de-Ayuda_20250218_definitivo.pdf).
-- Varios detalles del formato **no están documentados por ARCA** (ver
-  [Pendiente de verificar con ARCA](#pendiente-de-verificar-con-arca)). Probá el archivo generado en
-  Simplificación Registral ("Ver el archivo cargado") antes de enviarlo.
+- Lo que el manual no define (relleno, codificación, fin de línea) sigue las
+  [convenciones del formato](#convenciones-del-formato). Revisá el archivo cargado en Simplificación
+  Registral ("Ver el archivo cargado") antes de enviarlo.
 
 ## Instalación
 
@@ -88,13 +88,9 @@ const sr = new ArcaEmpleados({
 - **En ambos modos** se rechaza (`ArcaValidationError`) una propiedad que no es del diseño de registro:
   un nombre mal escrito (`retribucon`, `obraSocal`) dejaría el campo vacío en silencio.
 
-> **Advertencia: numéricos no informados en `MR` y `BT`.** El manual no dice cómo se informa un campo
-> que no se quiere modificar. Con el default (`numericoVacio: 'ceros'`), una modificación que solo trae
-> la retribución escribe `000000` en obra social, `000` en modalidad de contrato, etc., y **ARCA podría
-> interpretarlos como código `0` y pisar el dato vigente**. No encontramos documentación que confirme
-> ni descarte ese comportamiento, por eso el default no cambió. Si vas a enviar modificaciones o bajas,
-> informá todos los campos vigentes de la relación o probá en Simplificación Registral con
-> `numericoVacio: 'espacios'` antes de enviar.
+> **Modificaciones y bajas (`MR`, `BT`):** informá todos los campos vigentes de la relación. Con el
+> default (`numericoVacio: 'ceros'`) un numérico no informado se escribe en ceros (ej: `000000` en obra
+> social); con `numericoVacio: 'espacios'` va en blanco.
 
 ## API
 
@@ -174,14 +170,13 @@ Nada se trunca en silencio: un valor que no entra en su campo, `NaN`, un número
 en un campo de código, un tipo incorrecto, una fecha inexistente, un salto de línea o un caracter no
 representable lanzan `ArcaSerializationError`.
 
-## Pendiente de verificar con ARCA
+## Convenciones del formato
 
-El manual solo publica la tabla del diseño de registro. Lo siguiente es convención del SDK y **no está
-verificado con ARCA**:
+El manual solo publica la tabla del diseño de registro. Lo que no define se resuelve así:
 
 | Tema                             | Lo que hace el SDK                                                                                                                                                                         | Configurable                   |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
-| Relleno de campos vacíos         | Numéricos no informados en ceros (salvo rectificación y marca 130, siempre `0`); alfanuméricos y fechas en espacios. Ver la advertencia de [Configuración](#configuración) para `MR`/`BT`. | `numericoVacio: 'espacios'`    |
+| Relleno de campos vacíos         | Numéricos no informados en ceros (salvo rectificación y marca 130, siempre `0`); alfanuméricos y fechas en espacios. Ver [Configuración](#configuración) para `MR`/`BT`. | `numericoVacio: 'espacios'`    |
 | Formato de la retribución        | 2 decimales implícitos, sin separador: `1500.5` → `000000000150050`. Más de 2 decimales es error (no se redondea). El manual solo dice "con indicación de centavos".                       | —                              |
 | Codificación                     | ISO-8859-1 (`Buffer` en latin1, 1 byte por caracter); caracteres no representables dan error.                                                                                              | `encoding`, `noRepresentables` |
 | Fin de línea                     | CRLF, también después del último registro.                                                                                                                                                 | `eol`, `eolFinal`              |

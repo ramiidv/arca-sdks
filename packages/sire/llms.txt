@@ -42,7 +42,7 @@ Opcionales: codigoTrazabilidad (texto libre ≤36), coe (≤12), coeOriginal (�
 
 FechaHora = Date | "YYYY-MM-DD" | "YYYYMMDD" | "YYYY-MM-DDThh:mm[:ss[.SSS]]" (hora Argentina) | ISO con Z/±hh:mm. Se envía como "AAAA-MM-DDThh:mm:ss.SSS-03:00".
 Fechas (manual 3.2.2, se validan comparando fechas calendario de Argentina): fechaRetencion >= 2019-12-01; fechaComprobante <= fechaRetencion; tipos 3, 19 y 20: fechaComprobante = fechaRetencion.
-Importes: finitos, máximo 11 enteros, se envían con 2 decimales. El SDK exige >= 0 (criterio propio, el manual no lo dice) salvo importeComprobante de los tipos 19 y 20 ("con valor negativo"), que puede ser negativo (no verificado en homologación).
+Importes: finitos, máximo 11 enteros, se envían con 2 decimales. El SDK exige >= 0 (criterio propio, el manual no lo dice) salvo importeComprobante de los tipos 19 y 20 ("con valor negativo"), que puede ser negativo.
 
 ## Errores
 

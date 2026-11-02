@@ -112,7 +112,7 @@ Reglas de fechas del manual (3.2.2) que el SDK valida antes de llamar, comparand
 - `fechaComprobante` ≤ `fechaRetencion`.
 - Para los tipos 3, 19 y 20, `fechaComprobante` = `fechaRetencion`.
 
-Importes: números finitos, redondeados a 2 decimales (`2100` → `2100.00`), con hasta 11 enteros. `NaN` e `Infinity` se rechazan. El manual no dice si los importes llevan signo: el SDK exige ≥ 0 en todos salvo `importeComprobante` de los tipos 19 y 20, que por definición tienen valor negativo. **No verificado en homologación** que ARCA acepte un `importeComprobante` negativo ni que rechace los demás negativos.
+Importes: números finitos, redondeados a 2 decimales (`2100` → `2100.00`), con hasta 11 enteros. `NaN` e `Infinity` se rechazan. El manual no dice si los importes llevan signo: el SDK exige ≥ 0 en todos salvo `importeComprobante` de los tipos 19 y 20, que por definición tienen valor negativo.
 
 `numeroComprobante` para los tipos 5, 6, 9 y 11 (`X(n)`): el manual dice "caracteres alfanuméricos", así que el SDK acepta letras y dígitos, más los separadores `-`, `/` y `.` (no espacios ni caracteres no ASCII); ARCA valida el resto.
 

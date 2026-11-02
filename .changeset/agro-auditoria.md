@@ -25,4 +25,4 @@ Nuevas operaciones:
 Otros:
 
 - `cgAutorizar`: `cabecera.cuitCorredor` acepta `0` (sin corredor, `LpgCuit0Type`); una CUIT distinta de 0 se sigue validando.
-- README y llms.txt reescritos: recetas de recuperación corregidas (certificación con `cgConsultarXNroOrden`; ajuste con `liquidacionUltimoNroOrdenConsultar` + `ajusteXNroOrdenConsultar`, que comparten el contador; en WSCPE, comparar los datos de la CPE consultada antes de darla por propia), lista de operaciones no implementadas y formato `dateTime` pendiente de verificar con ARCA. Los ejemplos hacen el arribo y la confirmación con la instancia del destino.
+- README y llms.txt reescritos: recetas de recuperación corregidas (certificación con `cgConsultarXNroOrden`; ajuste con `liquidacionUltimoNroOrdenConsultar` + `ajusteXNroOrdenConsultar`, que comparten el contador; en WSCPE, comparar los datos de la CPE consultada antes de darla por propia), lista de operaciones no implementadas y nota sobre el formato `dateTime`. Los ejemplos hacen el arribo y la confirmación con la instancia del destino.

@@ -206,7 +206,7 @@ Los métodos validan antes de enviar. Para validar de antemano (ej: en un formul
 - `xsd:dateTime` acepta `Date` (se envía en hora de Argentina, con `-03:00`) o un string ISO-8601, que se envía tal cual.
 - En las respuestas, los IDs largos (`nroCTG`, `coe`) y los `xs:string` (ej: `codigo` de las paramétricas) son `string`; los CUIT y montos son `number`.
 
-**Pendiente de verificar con ARCA:** el manual WSCPE (§4.5) muestra los `dateTime` como `aaaa-MM-ddThh:MM:ss`, sin zona horaria. El SDK envía `-03:00`, que es válido según el XSD, pero no está verificado contra homologación. Si ARCA lo rechazara, pasá el string sin zona (ej: `'2026-11-02T08:00:00'`), que se envía tal cual.
+**`dateTime`:** un `Date` se envía en hora de Argentina con `-03:00` (válido según el XSD). El manual WSCPE (§4.5) muestra el formato sin zona horaria: para enviarlo así, pasá el string (ej: `'2026-11-02T08:00:00'`), que se envía tal cual.
 
 ## Manejo de errores
 

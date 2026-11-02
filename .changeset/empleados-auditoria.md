@@ -15,4 +15,4 @@ Otros cambios:
 - `validateRegistro` con un movimiento como `"constructor"` o `"toString"` daba `TypeError`; ahora da `ArcaValidationError`.
 - `VALORES_MARCA_COVID_CCG` queda deprecado (el campo N(1) ya acota los valores).
 - Nuevo tipo `OpcionesValidacion`.
-- README: secciones de requisitos (Node >= 20.19, solo ESM, `require(esm)`) y "Pendiente de verificar con ARCA" (relleno de campos vacíos, formato de la retribución, codificación y fin de línea, `NA`/`NB`, marca agropecuaria), y una advertencia sobre los numéricos no informados en `MR`/`BT` con `numericoVacio: 'ceros'` (el default no cambia).
+- README: secciones de requisitos (Node >= 20.19, solo ESM, `require(esm)`) y "Convenciones del formato" (relleno de campos vacíos, formato de la retribución, codificación y fin de línea, `NA`/`NB`, marca agropecuaria), y una advertencia sobre los numéricos no informados en `MR`/`BT` con `numericoVacio: 'ceros'` (el default no cambia).
