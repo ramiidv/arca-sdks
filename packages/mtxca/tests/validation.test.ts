@@ -273,10 +273,14 @@ describe('validateComprobanteCAE', () => {
 });
 
 describe('validateComprobanteCAEA', () => {
+  it('exige fechaHoraGen (754)', () => {
+    expect(messages(() => validateComprobanteCAEA(facturaA()))).toEqual([expect.stringMatching(/\(754\)$/)]);
+  });
+
   it('aplica las reglas de presencia de ítems, no las de importes', () => {
-    expect(fields(() => validateComprobanteCAEA(facturaA({ importeTotal: 1 })))).toEqual([]);
+    expect(fields(() => validateComprobanteCAEA(caea(facturaA({ importeTotal: 1 }))))).toEqual([]);
     const a = facturaA();
-    expect(fields(() => validateComprobanteCAEA({ ...a, items: [{ ...a.items[0], codigoMtx: undefined }] }))).toContain(
+    expect(fields(() => validateComprobanteCAEA({ ...caea(a), items: [{ ...a.items[0], codigoMtx: undefined }] }))).toContain(
       'items[0].codigoMtx',
     );
   });
@@ -294,7 +298,12 @@ function messages(fn: () => void): string[] {
 }
 
 const servicios = { fechaServicioDesde: '2026-11-01', fechaServicioHasta: '2026-11-30' };
-const caea = (c: MtxcaComprobanteBase) => ({ ...c, numeroComprobante: 1, caea: '36434058476543' });
+const caea = (c: MtxcaComprobanteBase) => ({
+  ...c,
+  numeroComprobante: 1,
+  caea: '36434058476543',
+  fechaHoraGen: '2026-11-01T10:30:00',
+});
 
 describe('FCE MiPyME: fechaVencimientoPago (148, 149 / 764, 765)', () => {
   const fce = (tipo: number, overrides: Partial<MtxcaComprobanteBase> = {}) =>

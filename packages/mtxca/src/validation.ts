@@ -115,7 +115,8 @@ function itemsDe(c: MtxcaComprobanteBase): MtxcaItem[] {
  * `informarComprobanteCAEA`: presencia de campos de los ítems (1100-1112,
  * 1121), par tipo/número de documento (707), condición de IVA del receptor
  * (390, RG 5616), `fechaVencimientoPago` en FCE (764, 765), comprobantes
- * asociados de notas de débito/crédito (778, 779) y compradores (753).
+ * asociados de notas de débito/crédito (778, 779), compradores (753) y
+ * `fechaHoraGen` (754: obligatoria para todo comprobante CAEA desde el 01/08/2026).
  *
  * @throws ArcaValidationError
  */
@@ -137,6 +138,9 @@ export function reglasComprobanteCAEA(c: MtxcaComprobanteBase, errors: Validatio
   reglasAsociados(c, [778, 779], errors);
   if (Array.isArray(c.compradores) && c.compradores.length > 0) {
     add('compradores', 'no se admiten en informarComprobanteCAEA (753)');
+  }
+  if ((c as { fechaHoraGen?: unknown }).fechaHoraGen === undefined) {
+    add('fechaHoraGen', 'es obligatoria para comprobantes CAEA desde el 01/08/2026 (754)');
   }
 }
 

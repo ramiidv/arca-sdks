@@ -18,3 +18,4 @@ Nuevo:
 - `evento` de ARCA: `onEvento(evento, method)` en la configuración (`ArcaMtxcaConfig` y `MtxcaClientConfig`) lo recibe de cualquier respuesta, incluidas las que devuelven un número o una lista; `solicitarCAEA`, `consultarCAEA` y `getCotizacionMoneda` lo incluyen como `evento?` en el resultado.
 
 Documentación: Node >= 20.19 (solo ESM; desde CommonJS con `require()`), reglas de FCE y tabla de reglas validadas, redondeo, SOAP Fault `Client` (no incierto) vs `Server` (incierto) en emisiones, QR y eventos.
+- `informarComprobanteCAEA` exige `fechaHoraGen` (regla 754: obligatoria para todo comprobante CAEA desde el 01/08/2026).

@@ -175,7 +175,7 @@ describe('ArcaMtxca: CAEA, QR y eventos', () => {
   it('informarComprobanteCAEA exige condicionIVAReceptor (390) antes de enviar', async () => {
     const m = mockFetch();
     const err = await mtxca(m.fetch)
-      .informarComprobanteCAEA({ ...facturaA({ condicionIVAReceptor: undefined }), caea: CAEA })
+      .informarComprobanteCAEA({ ...facturaA({ condicionIVAReceptor: undefined }), caea: CAEA, fechaHoraGen: '2026-11-01T10:30:00' })
       .catch((e) => e);
     expect(err).toBeInstanceOf(ArcaValidationError);
     expect((err as ArcaValidationError).details.map((d) => d.message)).toEqual([

@@ -206,6 +206,7 @@ Los campos del request se llaman igual que en el XSD (`ComprobanteType`, `ItemTy
 | ND/NC 2, 3, 7, 8, 52, 53: `comprobantesAsociados` o `periodoComprobantesAsociados`, no ambos                   | 160, 161          | 778, 779                         |
 | `cancelaEnMismaMonedaExtranjera: 'S'` solo en 1, 6, 51, 201 y 206                                              | 118               | — (ARCA solo observa)            |
 | `compradores` solo con concepto 1; en FCE, uno solo                                                            | 432, 433          | no se admiten (753)              |
+| `fechaHoraGen` obligatoria en todo comprobante CAEA (desde el 01/08/2026)                                       | —                 | 754                              |
 
 En FCE (201-208) el ítem no exige `importeIVA` ni se valida su fórmula (514/515 aplican a 1, 2, 3, 51, 52, 53); el precio va sin IVA en FCE A y con IVA en FCE B, y los totales (110-116) se validan igual que en A y B.
 
