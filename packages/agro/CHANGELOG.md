@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0
+
+### Minor Changes
+
+- d535462: Cambio incompatible: se quita `serverStatus()` (deprecado). Usar `status()`, que devuelve lo mismo.
+
+### Patch Changes
+
+- Updated dependencies [87f58c1]
+  - @ramiidv/arca-common@0.6.0
+
 ## 0.4.0
 
 ### Minor Changes

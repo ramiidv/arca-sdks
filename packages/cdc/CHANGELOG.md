@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0
+
+### Minor Changes
+
+- 3f83d31: Cambio incompatible: toda la API en camelCase, con los nombres de ARCA (`CbteModo` → `cbteModo`, `CuitEmisor` → `cuitEmisor`, `CodAutorizacion` → `codAutorizacion`...). Afecta a `ConstatarInput`, `ConstatarResult` (`resultado`, `fchProceso`, `observaciones`, `events`, `cmpResp`), los mensajes (`{ code, msg }`), las tablas de parámetros (`{ cod, desc }`, `{ id, desc }`), `CdcAuth` (`{ token, sign, cuit }`) y las rutas de los errores de validación.
+
+### Patch Changes
+
+- Updated dependencies [87f58c1]
+  - @ramiidv/arca-common@0.6.0
+
 ## 0.4.0
 
 ### Minor Changes

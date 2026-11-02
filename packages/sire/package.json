@@ -1,6 +1,6 @@
 {
   "name": "@ramiidv/arca-sire",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "TypeScript SDK para el web service SIRE de ARCA (ex AFIP): emisión y anulación de certificados de retención electrónicos de IVA (C2005)",
   "author": "ramiidv",
   "license": "MIT",
@@ -59,6 +59,6 @@
     "node": ">=20.19.0"
   },
   "dependencies": {
-    "@ramiidv/arca-common": "^0.5.0"
+    "@ramiidv/arca-common": "^0.6.0"
   }
 }

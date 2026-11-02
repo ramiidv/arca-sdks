@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0
+
+### Minor Changes
+
+- d535462: Cambio incompatible: se quitan `endpoint` y `wsaaEndpoint` (deprecados). Usar `endpoints: { mtxca, wsaa }`.
+
+### Patch Changes
+
+- 87f58c1: Un texto obligatorio vacío (o solo con espacios) da el error "no puede estar vacío" en lugar de `formato inválido (\S)`.
+- Updated dependencies [87f58c1]
+  - @ramiidv/arca-common@0.6.0
+
 ## 0.4.0
 
 ### Minor Changes

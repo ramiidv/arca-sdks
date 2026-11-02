@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0
+
+### Minor Changes
+
+- d535462: Cambio incompatible: se quita lo deprecado.
+  
+  - `ArcaFecred.fecred` → `client`.
+  - `FecredClientConfig.soapOptions` y `onEvent` → `transport` (`transport.onEvent`).
+
+### Patch Changes
+
+- 87f58c1: Usa el `choice()` de `@ramiidv/arca-common/schema` en lugar de uno propio. El error de `idCtaCte` sin una opción (o con las dos) ahora dice "debe tener exactamente uno de codCtaCte, idFactura".
+- Updated dependencies [87f58c1]
+  - @ramiidv/arca-common@0.6.0
+
 ## 0.4.0
 
 ### Minor Changes
