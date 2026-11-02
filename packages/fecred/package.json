@@ -1,7 +1,7 @@
 {
   "name": "@ramiidv/arca-fecred",
   "version": "0.5.0",
-  "description": "TypeScript SDK para el web service WSFECRED de ARCA (ex AFIP) - Factura de Credito Electronica MiPyME",
+  "description": "TypeScript SDK para el web service WSFECRED de ARCA (ex AFIP) - Factura de Crédito Electrónica MiPyME",
   "author": "ramiidv",
   "license": "MIT",
   "type": "module",

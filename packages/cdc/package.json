@@ -1,7 +1,7 @@
 {
   "name": "@ramiidv/arca-cdc",
   "version": "0.5.0",
-  "description": "SDK para el web service WSCDC de ARCA (ex AFIP) - Constatacion de Comprobantes",
+  "description": "SDK para el web service WSCDC de ARCA (ex AFIP) - Constatación de Comprobantes",
   "author": "ramiidv",
   "license": "MIT",
   "type": "module",
