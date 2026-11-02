@@ -1,8 +1,8 @@
 /**
  * Marca que llevan todas las instancias de errores de los SDKs de ARCA: la
  * lista de `code` de su cadena de clases. Se usa `Symbol.for` para que la marca
- * sea la misma aunque haya más de una copia del paquete cargada (build ESM y
- * CJS en el mismo proceso, o dos versiones en node_modules), y se basa en los
+ * sea la misma aunque haya más de una copia del paquete cargada (ej: dos
+ * versiones en node_modules, o una copia empaquetada por un bundler), y se basa en los
  * `code` (no en el nombre de la clase) para sobrevivir a la minificación.
  */
 const ERROR_KINDS = Symbol.for('@ramiidv/arca-common:error-kinds');
@@ -55,16 +55,52 @@ export class ArcaError extends Error {
   }
 }
 
+/** Opciones de `ArcaAuthError`. */
+export interface ArcaAuthErrorOptions {
+  cause?: unknown;
+  /**
+   * `faultcode` del SOAP Fault de WSAA (ej: `ns1:cms.cert.expired`). Si no se
+   * indica y `cause` es un `ArcaSoapError`, se toma de ahí.
+   */
+  faultCode?: string;
+  /** Código HTTP de la respuesta de WSAA. Si no se indica, se toma de `cause` (`ArcaSoapError`). */
+  statusCode?: number;
+  /**
+   * `true` si el error es transitorio y un login posterior puede funcionar sin
+   * cambiar nada (WSAA no disponible, red, timeout). Default: `false`.
+   */
+  retryable?: boolean;
+}
+
 /**
  * Error de autenticación WSAA.
  * Se lanza cuando falla el login, el certificado es inválido, o la respuesta de WSAA es inesperada.
+ *
+ * `faultCode`/`statusCode` vienen del error de WSAA (si lo hubo) y `retryable`
+ * indica si tiene sentido volver a intentar más tarde sin cambiar nada. El
+ * error original queda en `cause`.
  */
 export class ArcaAuthError extends ArcaError {
   static override readonly code: string = 'ARCA_AUTH_ERROR';
+  /** `faultcode` del SOAP Fault de WSAA (ej: `ns1:coe.notAuthorized`), si lo hubo. */
+  public readonly faultCode?: string;
+  /** Código HTTP de la respuesta de WSAA, si hubo respuesta. */
+  public readonly statusCode?: number;
+  /**
+   * `true`: error transitorio (WSAA no disponible, red, timeout), se puede
+   * volver a intentar después de la espera de `loginErrorCooldownMs`.
+   * `false`: hay que corregir algo (certificado, relación con el servicio,
+   * configuración) antes de volver a pedir un TA.
+   */
+  public readonly retryable: boolean;
 
-  constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
+  constructor(message: string, options?: ArcaAuthErrorOptions) {
+    super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = 'ArcaAuthError';
+    const cause = options?.cause instanceof ArcaSoapError ? options.cause : undefined;
+    this.faultCode = options?.faultCode ?? cause?.faultCode;
+    this.statusCode = options?.statusCode ?? cause?.statusCode;
+    this.retryable = options?.retryable ?? false;
   }
 }
 
@@ -114,6 +150,13 @@ export interface ArcaSoapErrorOptions {
   uncertain?: boolean;
   /** `true` si el request se abortó por el `signal` del caller (no por timeout). */
   aborted?: boolean;
+  /**
+   * Extracto del body de una respuesta HTTP no-2xx sin SOAP Fault (hasta 500
+   * caracteres, espacios colapsados), para diagnosticar (ej: página de error de un proxy).
+   */
+  responseBody?: string;
+  /** Contenido del `<detail>` (SOAP 1.1) o `<Detail>` (SOAP 1.2) del Fault, parseado. */
+  faultDetail?: unknown;
 }
 
 /**
@@ -128,6 +171,10 @@ export class ArcaSoapError extends ArcaError {
   public readonly responseDate?: Date;
   public readonly uncertain: boolean;
   public readonly aborted: boolean;
+  /** Extracto del body de una respuesta HTTP no-2xx sin SOAP Fault (ver `ArcaSoapErrorOptions.responseBody`). */
+  public readonly responseBody?: string;
+  /** Contenido del `<detail>`/`<Detail>` del SOAP Fault, si vino. */
+  public readonly faultDetail?: unknown;
 
   constructor(message: string, statusCodeOrOptions?: number | ArcaSoapErrorOptions) {
     const opts: ArcaSoapErrorOptions =
@@ -140,6 +187,8 @@ export class ArcaSoapError extends ArcaError {
     this.responseDate = opts.responseDate;
     this.uncertain = opts.uncertain ?? false;
     this.aborted = opts.aborted ?? false;
+    if (opts.responseBody !== undefined) this.responseBody = opts.responseBody;
+    if (opts.faultDetail !== undefined) this.faultDetail = opts.faultDetail;
   }
 }
 

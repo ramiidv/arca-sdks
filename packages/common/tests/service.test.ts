@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ArcaSdkBase,
+  ArcaResponseError,
   ArcaSoapError,
   ArcaValidationError,
   type ArcaEvent,
@@ -9,8 +10,15 @@ import {
   type ServerStatus,
   SoapServiceClient,
   parseServerStatus,
+  serverStatusOk,
+  statusOf,
   WsaaClient,
+  WSAA_ENDPOINTS,
 } from '../src/index.js';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { FileTicketStorage } from '../src/ticket-storage.js';
 import {
   childOrder,
   fakeTicketStorage,
@@ -124,8 +132,10 @@ describe('parseServerStatus', () => {
     });
   });
 
-  it('lanza ArcaSoapError si falta un campo', () => {
-    expect(() => parseServerStatus({ appserver: 'OK', dbserver: 'OK' }, 'FEDummy')).toThrow(ArcaSoapError);
+  it('lanza ArcaResponseError si falta un campo o la respuesta no es un objeto', () => {
+    expect(() => parseServerStatus({ appserver: 'OK', dbserver: 'OK' }, 'FEDummy')).toThrow(ArcaResponseError);
+    expect(() => parseServerStatus({ appserver: 'OK', dbserver: {}, authserver: 'OK' })).toThrow(/falta dbserver/);
+    expect(() => parseServerStatus(null as never)).toThrow(ArcaResponseError);
   });
 });
 
@@ -143,5 +153,71 @@ describe('testing', () => {
     const xml = '<a><ns:b/><c><d/></c><e>1</e></a>';
     expect(childOrder(xml, 'a')).toEqual(['b', 'c', 'e']);
     expect(childOrder(xml, 'c')).toEqual(['d']);
+  });
+});
+
+describe('ArcaSdkBase: WsaaClient compartido de otro entorno', () => {
+  it('lanza ArcaValidationError si config.wsaa es de otro entorno', () => {
+    const prod = new WsaaClient({ ...testCert(), production: true });
+    expect(() => demo({ wsaa: prod })).toThrow(ArcaValidationError);
+    expect(() => demo({ wsaa: prod })).toThrow(/producción.*homologación/);
+    expect(demo({ wsaa: prod, production: true }).wsaa).toBe(prod);
+    const homo = new WsaaClient({ ...testCert() });
+    expect(() => demo({ wsaa: homo, production: true })).toThrow(ArcaValidationError);
+  });
+
+  it('con un endpoint WSAA propio no se valida', () => {
+    const proxy = new WsaaClient({ ...testCert(), endpoint: 'http://proxy/wsaa', production: true });
+    expect(demo({ wsaa: proxy }).wsaa).toBe(proxy);
+    const official = new WsaaClient({ ...testCert(), endpoint: WSAA_ENDPOINTS.production });
+    expect(() => demo({ wsaa: official })).toThrow(ArcaValidationError);
+  });
+});
+
+describe('statusOf / serverStatusOk', () => {
+  const OK = { appserver: 'OK', dbserver: 'OK', authserver: 'OK' };
+
+  it('ok solo si respondió y todos los servidores están en OK (sin distinguir mayúsculas)', async () => {
+    const r = await statusOf({
+      a: async () => OK,
+      b: async () => ({ appserver: 'ok', dbserver: 'Ok', authserver: 'OK' }),
+      c: async () => ({ ...OK, dbserver: 'DOWN' }),
+      d: async () => {
+        throw new ArcaSoapError('caído');
+      },
+      e: () => Promise.reject('texto'),
+    });
+    expect(r.a).toEqual({ ok: true, status: OK });
+    expect(r.b.ok).toBe(true);
+    expect(r.c).toMatchObject({ ok: false, status: { ...OK, dbserver: 'DOWN' } });
+    expect(!r.c.ok && r.c.error).toBeInstanceOf(ArcaResponseError);
+    expect(!r.c.ok && r.c.error.message).toMatch(/dbserver=DOWN/);
+    expect(r.d).toMatchObject({ ok: false, error: expect.any(ArcaSoapError) });
+    expect(r.d).not.toHaveProperty('status');
+    expect(!r.e.ok && r.e.error.message).toBe('texto');
+  });
+
+  it('serverStatusOk', () => {
+    expect(serverStatusOk(OK)).toBe(true);
+    expect(serverStatusOk({ ...OK, authserver: ' ok ' })).toBe(true);
+    expect(serverStatusOk({ ...OK, appserver: 'NO' })).toBe(false);
+    expect(serverStatusOk({} as ServerStatus)).toBe(false);
+  });
+});
+
+describe('FileTicketStorage: nombres de archivo', () => {
+  it('sanitiza la key: sin separadores de ruta ni caracteres especiales', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'arca-tickets-'));
+    const dir = join(base, 'tickets');
+    try {
+      const storage = new FileTicketStorage(dir);
+      const ticket = { token: 't', sign: 's', expirationTime: new Date(Date.now() + 3_600_000).toISOString() };
+      await storage.set('homo:abc/../../x\\y:ws fe*?', ticket);
+      expect(await readdir(dir)).toEqual(['homo_abc_.._.._x_y_ws_fe__.json']);
+      expect(await readdir(base)).toEqual(['tickets']);
+      expect(await storage.get('homo:abc/../../x\\y:ws fe*?')).toEqual(ticket);
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
   });
 });

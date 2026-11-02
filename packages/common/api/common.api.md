@@ -15,27 +15,35 @@ export interface AccessTicket {
     token: string;
 }
 
-// @public
-export function afipSoapCall(endpoint: string, namespace: string, method: string, params: Record<string, unknown>, opts?: AfipSoapCallOptions): Promise<Record<string, unknown>>;
+// @public @deprecated (undocumented)
+export const afipSoapCall: typeof arcaSoapCall;
 
-// @public
-export interface AfipSoapCallOptions extends SoapCallOptions {
-    qualified?: boolean;
-    requestElement?: string | null;
-    responseElement?: string;
-    soapActionFromMethod?: boolean;
-}
+// @public @deprecated (undocumented)
+export type AfipSoapCallOptions = ArcaSoapCallOptions;
 
 // @public
 export function anySignal(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined;
 
 // @public
+export const AR_TIMEZONE = "America/Argentina/Buenos_Aires";
+
+// @public
 export class ArcaAuthError extends ArcaError {
-    constructor(message: string, options?: {
-        cause?: unknown;
-    });
+    constructor(message: string, options?: ArcaAuthErrorOptions);
     // (undocumented)
     static readonly code: string;
+    readonly faultCode?: string;
+    readonly retryable: boolean;
+    readonly statusCode?: number;
+}
+
+// @public
+export interface ArcaAuthErrorOptions {
+    // (undocumented)
+    cause?: unknown;
+    faultCode?: string;
+    retryable?: boolean;
+    statusCode?: number;
 }
 
 // @public
@@ -46,9 +54,11 @@ export interface ArcaBaseConfig {
     cuit: number | string;
     fetch?: typeof fetch;
     key: string;
+    keyPassphrase?: string;
     legacyTls?: LegacyTlsMode;
     loginErrorCooldownMs?: number;
     onEvent?: (event: ArcaEvent) => void;
+    permanentErrorCooldownMs?: number;
     production?: boolean;
     retries?: number;
     retryDelayMs?: number;
@@ -157,6 +167,17 @@ export class ArcaServiceError extends ArcaError {
 }
 
 // @public
+export function arcaSoapCall(endpoint: string, namespace: string, method: string, params: Record<string, unknown>, opts?: ArcaSoapCallOptions): Promise<Record<string, unknown>>;
+
+// @public
+export interface ArcaSoapCallOptions extends SoapCallOptions {
+    qualified?: boolean;
+    requestElement?: string | null;
+    responseElement?: string;
+    soapActionFromMethod?: boolean;
+}
+
+// @public
 export class ArcaSoapError extends ArcaError {
     constructor(message: string, statusCodeOrOptions?: number | ArcaSoapErrorOptions);
     // (undocumented)
@@ -165,8 +186,10 @@ export class ArcaSoapError extends ArcaError {
     static readonly code: string;
     // (undocumented)
     readonly faultCode?: string;
+    readonly faultDetail?: unknown;
     // (undocumented)
     readonly faultString?: string;
+    readonly responseBody?: string;
     // (undocumented)
     readonly responseDate?: Date;
     // (undocumented)
@@ -181,7 +204,9 @@ export interface ArcaSoapErrorOptions {
     // (undocumented)
     cause?: unknown;
     faultCode?: string;
+    faultDetail?: unknown;
     faultString?: string;
+    responseBody?: string;
     responseDate?: Date;
     statusCode?: number;
     uncertain?: boolean;
@@ -218,6 +243,18 @@ export function buildXml(obj: Record<string, unknown>): string;
 export interface CallOptions {
     signal?: AbortSignal;
 }
+
+// @public
+export interface CertificateInfo {
+    cuit?: string;
+    issuer: string;
+    notAfter: Date;
+    notBefore: Date;
+    subject: string;
+}
+
+// @public
+export function certificateInfo(pem: string): CertificateInfo;
 
 // @public
 export function checkServiceErrors(result: Record<string, unknown>, serviceName: string): void;
@@ -382,6 +419,17 @@ export function formatCuit(cuit: string | number): string;
 export function formatDate(date: Date | string): string;
 
 // @public
+export function formatDateTimeAR(d: Date, options?: FormatDateTimeAROptions): string;
+
+// @public
+export interface FormatDateTimeAROptions {
+    millis?: boolean;
+}
+
+// @public
+export function generarUrlQR(input: QRInput, options?: QROptions): string;
+
+// @public
 export function getNestedValue(obj: Record<string, unknown>, ...keys: string[]): unknown;
 
 // @public
@@ -412,8 +460,11 @@ export const normalizeCuil: typeof normalizeCuit;
 // @public
 export function normalizeCuit(cuit: string | number): string;
 
+// @public @deprecated (undocumented)
+export const parseAfipDate: (dateStr: string) => Date;
+
 // @public
-export function parseAfipDate(dateStr: string): Date;
+export function parseArcaDate(dateStr: string): Date;
 
 // @public
 export function parseServerStatus(result: Record<string, unknown>, method?: string): ServerStatus;
@@ -479,6 +530,36 @@ export enum Provincia {
 }
 
 // @public
+export const QR_URL = "https://www.arca.gob.ar/fe/qr/";
+
+// @public
+export interface QRInput {
+    codAut: number | string;
+    ctz: number;
+    cuit: number | string;
+    fecha: string | Date;
+    importe: number;
+    moneda: string;
+    nroCmp: number;
+    nroDocRec?: number | string;
+    ptoVta: number;
+    tipoCmp: number;
+    tipoCodAut?: 'E' | 'A';
+    tipoDocRec?: number;
+}
+
+// @public
+export interface QROptions {
+    baseUrl?: string;
+}
+
+// @public
+export function roundHalfEven(value: number, digits: number): number;
+
+// @public
+export function roundHalfUp(value: number, digits: number): number;
+
+// @public
 export function safeEmit(onEvent: ((event: ArcaEvent) => void) | undefined, event: ArcaEvent): void;
 
 // @public (undocumented)
@@ -492,7 +573,10 @@ export interface ServerStatus {
 }
 
 // @public
-export interface ServiceCallOptions extends Pick<AfipSoapCallOptions, 'requestElement' | 'responseElement' | 'qualified' | 'soapAction' | 'soapActionFromMethod' | 'parseNumbers'> {
+export function serverStatusOk(status: ServerStatus): boolean;
+
+// @public
+export interface ServiceCallOptions extends Pick<ArcaSoapCallOptions, 'requestElement' | 'responseElement' | 'qualified' | 'soapAction' | 'soapActionFromMethod' | 'parseNumbers'> {
     kind?: SoapOperationKind;
     // (undocumented)
     signal?: AbortSignal;
@@ -515,6 +599,7 @@ export type ServiceStatus = {
 } | {
     ok: false;
     error: Error;
+    status?: ServerStatus;
 };
 
 // @public
@@ -623,6 +708,8 @@ export class WsaaClient {
     readonly endpoint: string;
     getAccessTicket(service: string, opts?: CallOptions): Promise<AccessTicket>;
     now(): Date;
+    readonly production: boolean;
+    resetLoginCooldown(service?: string): void;
     ticketKey(service: string): string;
 }
 
@@ -634,9 +721,11 @@ export interface WsaaClientConfig {
     endpoint?: string;
     fetch?: typeof fetch;
     key: string;
+    keyPassphrase?: string;
     legacyTls?: LegacyTlsMode;
     loginErrorCooldownMs?: number;
     onEvent?: (event: ArcaEvent) => void;
+    permanentErrorCooldownMs?: number;
     production?: boolean;
     retries?: number;
     retryDelayMs?: number;

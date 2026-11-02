@@ -25,10 +25,17 @@
  * const resp = decodeResponse<Resp>(result, { numero: must(int()) }, 'autorizarResponse');
  * ```
  */
+import { formatDateTimeAR } from './dates.js';
 import { ArcaResponseError, ArcaValidationError } from './errors.js';
 import type { ValidationErrorDetail } from './errors.js';
+import { roundHalfUp } from './rounding.js';
 import { ensureArray } from './soap-client.js';
+import type { SoapOperationKind } from './types.js';
 import { formatDate, validateCuit } from './validators.js';
+
+export { formatDateTimeAR } from './dates.js';
+export type { FormatDateTimeAROptions } from './dates.js';
+export { roundHalfEven, roundHalfUp } from './rounding.js';
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -124,6 +131,16 @@ export const siNo = (): Field => ({ scalar: { kind: 'bool', format: 'SN' } });
 /** `xsd:double`: número finito, sin redondeo. */
 export const double = (min?: number, max?: number): Field => ({ scalar: { kind: 'double', min, max } });
 /**
+ * `xsd:string` que no puede estar vacío ni tener solo espacios (mensaje: "no
+ * puede estar vacío"), con largo mínimo/máximo opcional.
+ */
+export const nonEmptyStr = (o: { max?: number; min?: number } = {}): Field =>
+  str({ minLen: o.min, maxLen: o.max, pattern: /\S/, patternMessage: 'no puede estar vacío' });
+/** Importe no negativo con 2 decimales (`dec(2, 0, max)`), con tope opcional. */
+export const importe = (max?: number): Field => dec(2, 0, max);
+/** Porcentaje de 0 a 100 con 2 decimales (`dec(2, 0, 100)`). */
+export const porcentaje = (): Field => dec(2, 0, 100);
+/**
  * Escalar propio (ej: una fecha con un formato particular del servicio, un
  * número de documento que acepta string con guiones o number).
  */
@@ -169,40 +186,6 @@ export const wrapped = (item: string, f: Field, minItems = 1): Field => ({ ...f,
 // ---------------------------------------------------------------------------
 // Encode (requests)
 // ---------------------------------------------------------------------------
-
-const AR_TIMEZONE = 'America/Argentina/Buenos_Aires';
-let arDateTimeFormatter: Intl.DateTimeFormat | undefined;
-
-/**
- * Formatea un `Date` como `xsd:dateTime` en hora de Argentina
- * (`AAAA-MM-DDTHH:mm:ss-03:00`; Argentina no tiene horario de verano desde 2009).
- */
-export function formatDateTimeAR(d: Date): string {
-  arDateTimeFormatter ??= new Intl.DateTimeFormat('en-US', {
-    timeZone: AR_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  });
-  const parts = arDateTimeFormatter.formatToParts(d);
-  const p = (t: Intl.DateTimeFormatPartTypes) => parts.find((x) => x.type === t)?.value ?? '00';
-  return `${p('year')}-${p('month')}-${p('day')}T${p('hour')}:${p('minute')}:${p('second')}-03:00`;
-}
-
-/**
- * Redondea a `digits` decimales, mitad hacia arriba (en valor absoluto), sobre
- * el valor decimal que se escribió: `8.575` → `8.58` aunque en binario sea
- * `8.57499999…`.
- */
-export function roundHalfUp(value: number, digits: number): number {
-  const scaled = Number((Math.abs(value) * 10 ** digits).toPrecision(15));
-  const result = (Math.sign(value) * Math.round(scaled)) / 10 ** digits;
-  return result === 0 ? 0 : result;
-}
 
 const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/;
 
@@ -536,8 +519,17 @@ function decodeNode(node: unknown, schema: Schema, path: string, ctx: DecodeCont
 
 /** Opciones de `decodeResponse`. */
 export interface DecodeOptions {
-  /** Error a lanzar ante una respuesta inválida (default: `ArcaResponseError`). */
+  /**
+   * Error a lanzar ante una respuesta inválida (default: `ArcaResponseError`,
+   * con `uncertain` según `kind`). Tiene prioridad sobre `kind`.
+   */
   error?: ResponseErrorFactory;
+  /**
+   * Tipo de la operación que devolvió la respuesta. Con `'emision'`, el error
+   * por defecto es un `ArcaResponseError` con `uncertain: true` (ARCA respondió
+   * pero no se puede confirmar el resultado). Default: `'consulta'`.
+   */
+  kind?: SoapOperationKind;
   /**
    * Listas que no vinieron en la respuesta: `'array'` (default) las devuelve
    * como `[]`; `'omit'` no incluye la propiedad.
@@ -551,13 +543,15 @@ export interface DecodeOptions {
  * listas ausentes se devuelven como `[]` (ver `emptyLists`); un objeto opcional
  * vacío (`<x/>`) se omite.
  *
- * @throws ArcaResponseError (o el de `options.error`) si falta (o viene vacío)
+ * @throws ArcaResponseError (`uncertain` si `kind: 'emision'`; o el de `options.error`) si falta (o viene vacío)
  *   un elemento obligatorio, o un valor no tiene el tipo del schema (número no
  *   numérico, entero con decimales, valor fuera de `values`, S/N inválido).
  */
 export function decodeResponse<T>(node: unknown, schema: Schema, path: string, options: DecodeOptions = {}): T {
   const ctx: DecodeContext = {
-    error: options.error ?? defaultResponseError,
+    error:
+      options.error ??
+      (options.kind === 'emision' ? (message) => new ArcaResponseError(message, true) : defaultResponseError),
     emptyLists: options.emptyLists ?? 'array',
   };
   return decodeNode(node, schema, path, ctx) as T;

@@ -1,3 +1,4 @@
+import { testCert } from '@ramiidv/arca-common/testing';
 import { describe, it, expect, vi } from 'vitest';
 import { ArcaSoapError, ArcaValidationError, ArcaServiceError } from '@ramiidv/arca-common';
 import { ArcaMtxca } from '../src/arca-mtxca.js';
@@ -7,8 +8,7 @@ import { facturaA, hangingFetch, mockFetch, soapResponse } from './helpers.js';
 
 function mtxca(fetchImpl: typeof fetch, extra: Partial<ArcaMtxcaConfig> = {}): ArcaMtxca {
   const m = new ArcaMtxca({
-    cert: 'CERT',
-    key: 'KEY',
+    ...testCert(),
     cuit: '20-12345678-6',
     fetch: fetchImpl,
     retryDelayMs: 1,
@@ -43,7 +43,7 @@ function sinNumero() {
 
 describe('ArcaMtxca', () => {
   it('normaliza y valida el CUIT y usa el endpoint de homologación por defecto', async () => {
-    expect(() => new ArcaMtxca({ cert: 'C', key: 'K', cuit: '20123456780' })).toThrow(ArcaValidationError);
+    expect(() => new ArcaMtxca({ ...testCert(), cuit: '20123456780' })).toThrow(ArcaValidationError);
     const m = mockFetch(ultimo(1));
     const a = mtxca(m.fetch);
     expect(a.cuit).toBe('20123456786');
@@ -57,8 +57,7 @@ describe('ArcaMtxca', () => {
     await mtxca(m.fetch, { endpoints: { mtxca: 'https://proxy.local/mtxca' } }).ultimoComprobante(4000, 1);
     expect(m.calls[0].url).toBe('https://proxy.local/mtxca');
     const a = new ArcaMtxca({
-      cert: 'C',
-      key: 'K',
+      ...testCert(),
       cuit: '20123456786',
       endpoints: { wsaa: 'https://proxy.local/wsaa' },
     });

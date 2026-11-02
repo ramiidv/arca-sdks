@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 import { parseXml } from '@ramiidv/arca-common';
-import { fakeTicketStorage } from '@ramiidv/arca-common/testing';
+import { fakeTicketStorage, testCert } from '@ramiidv/arca-common/testing';
 import { ArcaAgro } from '../src/index.js';
 import type { ArcaAgroConfig } from '../src/index.js';
 
@@ -53,8 +53,7 @@ export function setup(responder: Responder, config: Partial<ArcaAgroConfig> = {}
   });
   const agro = new ArcaAgro({
     cuit: CUIT,
-    cert: 'CERT',
-    key: 'KEY',
+    ...testCert(),
     fetch: fetchMock as unknown as typeof fetch,
     ticketStorage,
     retries: 2,

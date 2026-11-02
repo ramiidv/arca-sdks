@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import { ArcaResponseError, ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
 import {
   AUTH,
   NS,
@@ -95,7 +95,7 @@ describe('dummy', () => {
       soapResponse('dummyResponse', '<appserver>OK</appserver>'),
       soapResponse('dummyResponse', '<appserver>OK</appserver>'),
     );
-    await expect(client(m.fetch).dummy()).rejects.toBeInstanceOf(ArcaSoapError);
+    await expect(client(m.fetch).dummy()).rejects.toBeInstanceOf(ArcaResponseError);
   });
 });
 

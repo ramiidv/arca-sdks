@@ -1,8 +1,9 @@
 import { EventEmitter } from 'node:events';
-import { ArcaSoapError } from './errors.js';
+import { WSAA_ENDPOINTS } from './constants.js';
+import { ArcaResponseError, ArcaValidationError } from './errors.js';
 import { anySignal } from './signals.js';
-import { afipSoapCall, safeEmit } from './soap-client.js';
-import type { AfipSoapCallOptions } from './soap-client.js';
+import { arcaSoapCall, safeEmit } from './soap-client.js';
+import type { ArcaSoapCallOptions } from './soap-client.js';
 import type {
   AccessTicket,
   ArcaBaseConfig,
@@ -38,10 +39,11 @@ export interface EnvEndpoints {
 export interface ArcaSdkConfig extends ArcaBaseConfig {
   /**
    * `WsaaClient` compartido con otros SDKs que usan el mismo certificado (ej:
-   * `facturacion.wsaa`). Si se pasa, se ignoran `cert`, `key`,
+   * `facturacion.wsaa`). Si se pasa, se ignoran `cert`, `key`, `keyPassphrase`,
    * `tokenTTLMinutes`, `ticketStorage`, `clockOffsetMs`, `autoClockSkew`,
-   * `loginErrorCooldownMs` y `endpoints.wsaa`, y sus eventos los emite la
-   * instancia que lo creó.
+   * `loginErrorCooldownMs`, `permanentErrorCooldownMs` y `endpoints.wsaa`, y
+   * sus eventos los emite la instancia que lo creó. Su entorno
+   * (`wsaa.production`) tiene que coincidir con `production`.
    */
   wsaa?: WsaaClient;
   /** Signal global: cancela todas las llamadas de esta instancia (ej: al apagar la app). */
@@ -58,6 +60,7 @@ export function createWsaaClient(
   return new WsaaClient({
     cert: config.cert,
     key: config.key,
+    keyPassphrase: config.keyPassphrase,
     production: config.production ?? false,
     endpoint: config.endpoints?.wsaa,
     tokenTTLMinutes: config.tokenTTLMinutes,
@@ -69,6 +72,7 @@ export function createWsaaClient(
     clockOffsetMs: config.clockOffsetMs,
     autoClockSkew: config.autoClockSkew,
     loginErrorCooldownMs: config.loginErrorCooldownMs,
+    permanentErrorCooldownMs: config.permanentErrorCooldownMs,
     fetch: config.fetch,
     legacyTls: config.legacyTls,
   });
@@ -119,10 +123,14 @@ export abstract class ArcaSdkBase<TService extends string = string> {
   readonly #signal?: AbortSignal;
   readonly #services: Readonly<Record<TService, string>>;
 
-  /** @throws ArcaValidationError si la CUIT es inválida. */
+  /**
+   * @throws ArcaValidationError si la CUIT es inválida, si el certificado o la
+   *   clave son inválidos, o si `config.wsaa` es de otro entorno que `production`.
+   */
   constructor(config: ArcaSdkConfig, services: Readonly<Record<TService, string>>) {
     this.cuit = validateCuit(config.cuit);
     this.production = config.production ?? false;
+    if (config.wsaa) checkSharedWsaa(config.wsaa, this.production);
     this.#signal = config.signal;
     this.#services = services;
 
@@ -175,6 +183,23 @@ export abstract class ArcaSdkBase<TService extends string = string> {
   }
 }
 
+/**
+ * Un `WsaaClient` compartido tiene que ser del mismo entorno que el SDK: un TA
+ * de homologación no sirve en producción (y al revés). Con un endpoint WSAA
+ * propio (proxy, mock) no se puede saber, así que no se valida.
+ */
+function checkSharedWsaa(wsaa: WsaaClient, production: boolean): void {
+  const official = wsaa.endpoint === WSAA_ENDPOINTS.production || wsaa.endpoint === WSAA_ENDPOINTS.testing;
+  if (!official || wsaa.production === production) return;
+  const env = (prod: boolean) => (prod ? 'producción' : 'homologación');
+  throw new ArcaValidationError(
+    `El WsaaClient compartido (config.wsaa) es de ${env(wsaa.production)} pero el SDK está configurado para ` +
+      `${env(production)} (production: ${production}). Usá el mismo valor de production en los dos.`,
+    [{ field: 'wsaa', message: 'entorno distinto al del SDK', value: { wsaa: wsaa.production, production } }],
+    'wsaa',
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Clientes de bajo nivel
 // ---------------------------------------------------------------------------
@@ -192,7 +217,7 @@ export interface SoapServiceClientConfig {
 /** Opciones de `SoapServiceClient.soapCall`. */
 export interface ServiceCallOptions
   extends Pick<
-    AfipSoapCallOptions,
+    ArcaSoapCallOptions,
     'requestElement' | 'responseElement' | 'qualified' | 'soapAction' | 'soapActionFromMethod' | 'parseNumbers'
   > {
   /** Tipo de operación (default: `consulta`). Las emisiones nunca se reintentan. */
@@ -202,7 +227,7 @@ export interface ServiceCallOptions
 
 /**
  * Base de los clientes SOAP de bajo nivel de cada servicio: guarda endpoint,
- * namespace y transporte, y llama a `afipSoapCall` con ellos.
+ * namespace y transporte, y llama a `arcaSoapCall` con ellos.
  */
 export abstract class SoapServiceClient {
   public readonly endpoint: string;
@@ -221,7 +246,7 @@ export abstract class SoapServiceClient {
     params: Record<string, unknown>,
     opts: ServiceCallOptions = {},
   ): Promise<Record<string, unknown>> {
-    return afipSoapCall(this.endpoint, this.namespace, method, params, {
+    return arcaSoapCall(this.endpoint, this.namespace, method, params, {
       ...this.transport,
       ...opts,
       kind: opts.kind ?? 'consulta',
@@ -232,33 +257,52 @@ export abstract class SoapServiceClient {
 /**
  * Convierte la respuesta de un método `dummy` (`appserver`/`dbserver`/
  * `authserver`, en cualquier capitalización: `AppServer` en los servicios
- * ASMX) en un `ServerStatus`.
+ * ASMX) en un `ServerStatus`. Los valores quedan tal cual los devolvió el
+ * servicio (ver `serverStatusOk`).
  *
- * @throws ArcaSoapError si falta alguno de los tres campos.
+ * @throws ArcaResponseError si falta alguno de los tres campos o la respuesta no es un objeto.
  */
 export function parseServerStatus(result: Record<string, unknown>, method = 'dummy'): ServerStatus {
+  if (result === null || typeof result !== 'object') {
+    throw new ArcaResponseError(`Respuesta inválida de ${method}: no es un objeto`);
+  }
   const byLower = new Map(Object.keys(result).map((k) => [k.toLowerCase(), result[k]]));
   const field = (name: keyof ServerStatus): string => {
     const value = byLower.get(name);
     if (value === undefined || value === null || value === '' || typeof value === 'object') {
-      throw new ArcaSoapError(`Respuesta inválida de ${method}: falta ${name}`);
+      throw new ArcaResponseError(`Respuesta inválida de ${method}: falta ${name}`);
     }
     return String(value);
   };
   return { appserver: field('appserver'), dbserver: field('dbserver'), authserver: field('authserver') };
 }
 
+/**
+ * `true` si todos los servidores informados (`appserver`, `dbserver`,
+ * `authserver` y cualquier otro campo de texto) están en `OK` (sin distinguir
+ * mayúsculas).
+ */
+export function serverStatusOk(status: ServerStatus): boolean {
+  const values = Object.values(status as unknown as Record<string, unknown>).filter((v) => typeof v === 'string');
+  return values.length > 0 && values.every((v) => (v as string).trim().toUpperCase() === 'OK');
+}
+
 // ---------------------------------------------------------------------------
 // Estado de varios servicios
 // ---------------------------------------------------------------------------
 
-/** Estado de un servicio dentro de un `status()` de varios servicios. */
-export type ServiceStatus = { ok: true; status: ServerStatus } | { ok: false; error: Error };
+/**
+ * Estado de un servicio dentro de un `status()` de varios servicios. `ok` es
+ * `true` solo si el servicio respondió y todos sus servidores están en `OK`; si
+ * respondió con algún servidor caído, `status` tiene los valores informados.
+ */
+export type ServiceStatus = { ok: true; status: ServerStatus } | { ok: false; error: Error; status?: ServerStatus };
 
 /**
  * Consulta el estado de varios servicios en paralelo. Una falla de uno no
- * impide conocer el de los demás: cada uno queda como `{ ok, status }` o
- * `{ ok: false, error }`.
+ * impide conocer el de los demás: cada uno queda como `{ ok: true, status }`,
+ * `{ ok: false, error, status }` (respondió con algún servidor que no está en
+ * `OK`) o `{ ok: false, error }` (no respondió).
  */
 export async function statusOf<K extends string>(
   checks: Record<K, () => Promise<ServerStatus>>,
@@ -268,10 +312,20 @@ export async function statusOf<K extends string>(
   const out = {} as Record<K, ServiceStatus>;
   keys.forEach((k, i) => {
     const r = results[i];
-    out[k] =
-      r.status === 'fulfilled'
-        ? { ok: true, status: r.value }
-        : { ok: false, error: r.reason instanceof Error ? r.reason : new Error(String(r.reason)) };
+    if (r.status === 'rejected') {
+      out[k] = { ok: false, error: r.reason instanceof Error ? r.reason : new Error(String(r.reason)) };
+    } else if (serverStatusOk(r.value)) {
+      out[k] = { ok: true, status: r.value };
+    } else {
+      const detail = Object.entries(r.value as unknown as Record<string, unknown>)
+        .map(([name, value]) => `${name}=${String(value)}`)
+        .join(', ');
+      out[k] = {
+        ok: false,
+        status: r.value,
+        error: new ArcaResponseError(`${k}: servidores no disponibles (${detail})`),
+      };
+    }
   });
   return out;
 }

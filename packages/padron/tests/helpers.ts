@@ -7,6 +7,7 @@ import {
   mockFetch as commonMockFetch,
   soapEnvelope,
   xmlResponse,
+  testCert,
 } from '@ramiidv/arca-common/testing';
 import { ArcaPadron } from '../src/arca-padron.js';
 import type { ArcaPadronConfig } from '../src/types.js';
@@ -80,8 +81,7 @@ export const CUIT_REPRESENTADA = '20123456786';
 /** ArcaPadron con un ticket vigente para todos los servicios (no llama a WSAA). */
 export async function padron(extra: Partial<ArcaPadronConfig> = {}): Promise<ArcaPadron> {
   return new ArcaPadron({
-    cert: '-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----',
-    key: 'KEY',
+    ...testCert(),
     cuit: CUIT_REPRESENTADA,
     ticketStorage: fakeTicketStorage(),
     retryDelayMs: 1,

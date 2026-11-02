@@ -1,5 +1,5 @@
 import { parseXml } from '@ramiidv/arca-common';
-import { soapEnvelope } from '@ramiidv/arca-common/testing';
+import { soapEnvelope, testCert } from '@ramiidv/arca-common/testing';
 import { vi } from 'vitest';
 import { ArcaSire } from '../src/index.js';
 import type { ArcaSireConfig } from '../src/index.js';
@@ -27,8 +27,7 @@ export function fault(code: string, message: string): string {
 
 export function makeSire(fetchImpl: typeof fetch, extra: Partial<ArcaSireConfig> = {}): ArcaSire {
   const sire = new ArcaSire({
-    cert: 'CERT',
-    key: 'KEY',
+    ...testCert(),
     cuit: CUIT_AGENTE,
     fetch: fetchImpl,
     retryDelayMs: 1,

@@ -1,3 +1,4 @@
+import { testCert } from '@ramiidv/arca-common/testing';
 import { describe, it, expect, vi } from 'vitest';
 import { ArcaAgro, ArcaSoapError, ArcaValidationError, WSAA_SERVICES } from '../src/index.js';
 import type { ArcaEvent, TicketStorage } from '../src/index.js';
@@ -12,7 +13,7 @@ const LPG_DUMMY = lpgResp(
 
 describe('ArcaAgro', () => {
   it('rechaza un CUIT con dígito verificador inválido', () => {
-    expect(() => new ArcaAgro({ cuit: 20123456789, cert: 'c', key: 'k' })).toThrow(ArcaValidationError);
+    expect(() => new ArcaAgro({ cuit: 20123456789, ...testCert() })).toThrow(ArcaValidationError);
   });
 
   it('status usa allSettled: una falla no oculta el otro servicio', async () => {
@@ -40,7 +41,7 @@ describe('ArcaAgro', () => {
         deleted.push(key);
       },
     };
-    const agro = new ArcaAgro({ cuit: '20123456786', cert: 'c', key: 'k', ticketStorage: storage });
+    const agro = new ArcaAgro({ cuit: '20123456786', ...testCert(), ticketStorage: storage });
     await agro.clearAuthCache();
     expect(deleted).toHaveLength(2);
     expect(deleted.some((k) => k.endsWith(WSAA_SERVICES.cpe))).toBe(true);
@@ -90,7 +91,7 @@ describe('ArcaAgro', () => {
 
   it('config.wsaa comparte el cliente WSAA', () => {
     const { agro } = setup(() => CPE_DUMMY);
-    const otro = new ArcaAgro({ cuit: '20123456786', cert: 'c', key: 'k', wsaa: agro.wsaa });
+    const otro = new ArcaAgro({ cuit: '20123456786', ...testCert(), wsaa: agro.wsaa });
     expect(otro.wsaa).toBe(agro.wsaa);
     expect(otro.cuit).toBe('20123456786');
   });

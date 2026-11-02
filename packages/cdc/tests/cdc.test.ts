@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaServiceError, ArcaSoapError, ArcaValidationError, CdcClient, WSCDC_ENDPOINTS } from '../src/index.js';
 import type { ConstatarInput } from '../src/index.js';
 import { asmxResponse, childOrder, CUIT, makeCdc, mockFetch, NS, requestBody } from './helpers.js';
@@ -225,7 +226,7 @@ describe('ComprobanteDummy', () => {
 
   it('lanza si falta un campo de la respuesta', async () => {
     const fetch = mockFetch(asmxResponse('ComprobanteDummy', '<AppServer>OK</AppServer>'));
-    await expect(new CdcClient({ endpoint: 'https://x/', fetch }).dummy()).rejects.toBeInstanceOf(ArcaSoapError);
+    await expect(new CdcClient({ endpoint: 'https://x/', fetch }).dummy()).rejects.toBeInstanceOf(ArcaResponseError);
   });
 });
 

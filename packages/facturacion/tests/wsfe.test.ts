@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import { ArcaResponseError, ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
 import { ArcaResultadoIncierto, ArcaWSFEError } from '../src/errors.js';
 import { CbteTipo, CondicionIva, DocTipo, IvaTipo, Moneda, TributoTipo } from '../src/constants.js';
 import { requiereRecuperacion } from '../src/facturacion.js';
@@ -539,6 +539,6 @@ describe('status', () => {
     const r = await arca.status();
     expect(r.wsfe).toEqual({ ok: true, status: { appserver: 'OK', dbserver: 'OK', authserver: 'OK' } });
     expect(r.wsfex.ok).toBe(false);
-    expect(!r.wsfex.ok && r.wsfex.error).toBeInstanceOf(ArcaSoapError);
+    expect(!r.wsfex.ok && r.wsfex.error).toBeInstanceOf(ArcaResponseError);
   });
 });

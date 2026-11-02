@@ -1,3 +1,4 @@
+import { testCert } from '@ramiidv/arca-common/testing';
 import { describe, it, expect, vi } from 'vitest';
 import { ArcaValidationError, type WsaaClient } from '@ramiidv/arca-common';
 import { ArcaFecred, ENDPOINTS } from '../src/index.js';
@@ -10,7 +11,7 @@ function fakeWsaa() {
   } as unknown as WsaaClient & { getAccessTicket: ReturnType<typeof vi.fn>; clearTicket: ReturnType<typeof vi.fn> };
 }
 
-const base = { cert: 'CERT', key: 'KEY' };
+const base = { ...testCert() };
 
 describe('ArcaFecred', () => {
   it('valida el CUIT del config con dígito verificador y lo envía como dígitos', async () => {

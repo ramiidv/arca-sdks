@@ -311,9 +311,10 @@ describe('WsaaClient: secretos', () => {
 describe('WsaaClient: cooldown tras login fallido', () => {
   const certFault = () =>
     xmlResponse(soapFault('ns1:cms.cert.untrusted', 'Certificado no emitido por AC de confianza'), 500);
+  const unavailable = () => xmlResponse(soapFault('ns1:wsaa.unavailable', 'El servicio no está disponible'), 500);
 
   it('rechaza sin llamar a WSAA durante loginErrorCooldownMs, con cause', async () => {
-    const fetch = mockFetch(certFault());
+    const fetch = mockFetch(unavailable());
     const wsaa = client();
     const first = await wsaa.getAccessTicket('wsfe').catch((e) => e);
     expect(first).toBeInstanceOf(ArcaAuthError);
@@ -322,7 +323,8 @@ describe('WsaaClient: cooldown tras login fallido', () => {
     expect(second).toBeInstanceOf(ArcaAuthError);
     expect(second.message).toMatch(/loginErrorCooldownMs/);
     expect(second.cause).toBeInstanceOf(ArcaSoapError);
-    expect(second.cause.faultCode).toBe('ns1:cms.cert.untrusted');
+    expect(second.cause.faultCode).toBe('ns1:wsaa.unavailable');
+    expect(second).toMatchObject({ faultCode: 'ns1:wsaa.unavailable', statusCode: 500, retryable: true });
     expect(fetch).toHaveBeenCalledTimes(1);
 
     // Otro servicio no está afectado.
@@ -347,14 +349,14 @@ describe('WsaaClient: cooldown tras login fallido', () => {
   });
 
   it('vence después de loginErrorCooldownMs; 0 lo desactiva', async () => {
-    mockFetch(certFault());
+    mockFetch(unavailable());
     const wsaa = client({ loginErrorCooldownMs: 20 });
     await wsaa.getAccessTicket('wsfe').catch(() => {});
     await new Promise((r) => setTimeout(r, 30));
     mockFetch(xmlResponse(loginResponse('T1', new Date(Date.now() + 12 * HOUR))));
     expect((await wsaa.getAccessTicket('wsfe')).token).toBe('T1');
 
-    const fetch = mockFetch(certFault(), certFault());
+    const fetch = mockFetch(unavailable(), unavailable());
     const noCooldown = client({ loginErrorCooldownMs: 0 });
     await noCooldown.getAccessTicket('wsfe').catch(() => {});
     await noCooldown.getAccessTicket('wsfe').catch(() => {});

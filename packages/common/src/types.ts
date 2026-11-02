@@ -60,8 +60,8 @@ export interface TicketStorageGetOptions {
 /**
  * Uso del transporte TLS "legacy" (`node:https` con `ciphers: 'DEFAULT@SECLEVEL=1'`).
  *
- * Algunos hosts de producción de ARCA (ej: `servicios1.afip.gov.ar`, WSFEv1 y
- * WSCDC) negocian Diffie-Hellman de 1024 bits, que Node >= 17 rechaza con
+ * Algunos hosts de producción de ARCA (ej: `servicios1.afip.gov.ar`: WSFEv1,
+ * WSFEX y WSCDC) negocian Diffie-Hellman de 1024 bits, que Node rechaza con
  * `ERR_SSL_DH_KEY_TOO_SMALL`.
  *
  * - `auto` (default): usa `fetch`; si el handshake falla por ese motivo,
@@ -85,8 +85,10 @@ export type LegacyTlsMode = 'auto' | 'never' | 'always';
 export interface ArcaBaseConfig {
   /** Contenido del certificado X.509 en formato PEM */
   cert: string;
-  /** Contenido de la clave privada en formato PEM */
+  /** Contenido de la clave privada RSA en formato PEM (PKCS#1 o PKCS#8, encriptada o no). */
   key: string;
+  /** Contraseña de la clave privada, si está encriptada. */
+  keyPassphrase?: string;
   /** CUIT del contribuyente que opera (representado), con o sin guiones. */
   cuit: number | string;
   /** Usar entorno de producción (default: false = testing/homologación) */
@@ -97,7 +99,11 @@ export interface ArcaBaseConfig {
   retries?: number;
   /** Delay inicial entre reintentos en milisegundos, se duplica con cada intento (default: 1000) */
   retryDelayMs?: number;
-  /** Tiempo de vida del Ticket de Acceso solicitado a WSAA, en minutos (default: 720 = 12 horas). */
+  /**
+   * Vigencia del TRA (pedido de acceso firmado) en minutos, de 1 a 1440
+   * (default: 720). No es la vida del Ticket de Acceso: WSAA emite los TA con
+   * una vigencia propia (12 horas, según el manual).
+   */
   tokenTTLMinutes?: number;
   /** Callback para eventos del SDK (auth, requests, retries). */
   onEvent?: (event: ArcaEvent) => void;
@@ -108,10 +114,19 @@ export interface ArcaBaseConfig {
   /** Ajustar automáticamente el reloj si WSAA rechaza el TRA por desfase (default: true). */
   autoClockSkew?: boolean;
   /**
-   * Tras un login WSAA fallido, durante cuántos ms se rechazan nuevos logins
-   * para el mismo servicio sin llamar a WSAA (default: 60000; 0 lo desactiva).
+   * Tras un login WSAA fallido por un error transitorio (`wsaa.*`,
+   * `wsn.unavailable`, red, timeout), durante cuántos ms se rechazan nuevos
+   * logins para el mismo servicio sin llamar a WSAA (default: 60000; 0 lo desactiva).
    */
   loginErrorCooldownMs?: number;
+  /**
+   * Tras un login WSAA rechazado por un error que no se resuelve reintentando
+   * (certificado vencido o no confiable, firma inválida, servicio no
+   * autorizado, etc.), durante cuántos ms se rechazan nuevos logins para ese
+   * servicio. Default: `Infinity` (hasta `clearTicket`/`clearAllTickets`/
+   * `resetLoginCooldown`); 0 lo desactiva.
+   */
+  permanentErrorCooldownMs?: number;
   /** `fetch` propio para todos los requests HTTP (proxy, mTLS, tests). Default: `globalThis.fetch`. */
   fetch?: typeof fetch;
   /** Uso del transporte TLS legacy para hosts con DH de 1024 bits (default: `auto`). */

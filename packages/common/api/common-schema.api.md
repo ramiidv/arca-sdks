@@ -43,6 +43,7 @@ export const dec: (digits: number, min?: number, max?: number, minExclusive?: bo
 export interface DecodeOptions {
     emptyLists?: 'array' | 'omit';
     error?: ResponseErrorFactory;
+    kind?: SoapOperationKind;
 }
 
 // @public
@@ -70,10 +71,18 @@ export interface Field {
 }
 
 // @public
-export function formatDateTimeAR(d: Date): string;
+export function formatDateTimeAR(d: Date, options?: FormatDateTimeAROptions): string;
+
+// @public
+export interface FormatDateTimeAROptions {
+    millis?: boolean;
+}
 
 // @public
 export const id: () => Field;
+
+// @public
+export const importe: (max?: number) => Field;
 
 // @public
 export const int: (min?: number, max?: number, minExclusive?: boolean) => Field;
@@ -84,6 +93,12 @@ export const list: (f: Field, minItems?: number) => Field;
 // @public
 export const must: (f: Field) => Field;
 
+// @public
+export const nonEmptyStr: (o?: {
+    max?: number;
+    min?: number;
+}) => Field;
+
 // @public (undocumented)
 export const obj: (schema: Schema) => Field;
 
@@ -91,7 +106,13 @@ export const obj: (schema: Schema) => Field;
 export const opt: (f: Field) => Field;
 
 // @public
+export const porcentaje: () => Field;
+
+// @public
 export type ResponseErrorFactory = (message: string) => Error;
+
+// @public
+export function roundHalfEven(value: number, digits: number): number;
 
 // @public
 export function roundHalfUp(value: number, digits: number): number;
