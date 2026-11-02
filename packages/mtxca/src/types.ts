@@ -20,6 +20,12 @@ export interface ArcaMtxcaConfig extends ArcaSdkConfig {
    * se indiquen usan las oficiales.
    */
   endpoints?: { mtxca?: string; wsaa?: string };
+  /**
+   * Recibe el `evento` (aviso informativo de ARCA) de cualquier respuesta que
+   * lo traiga, incluidas las que devuelven un número o una lista. Los errores
+   * del callback se ignoran.
+   */
+  onEvento?: (evento: CodigoDescripcion, method: string) => void;
 }
 
 /** Credenciales de cada request (`AuthRequestType`). */
@@ -63,7 +69,11 @@ export interface MtxcaItem {
   importeBonificacion?: number;
   /** Condición de IVA del ítem (`CodigoCondicionIVA`). */
   codigoCondicionIVA: number;
-  /** IVA del ítem (2 decimales). Obligatorio en clase A (1, 2, 3, 51, 52, 53); no corresponde en 6, 7, 8. */
+  /**
+   * IVA del ítem (2 decimales). Obligatorio en clase A (1, 2, 3, 51, 52, 53); no
+   * corresponde en 6, 7, 8 (514). En FCE (201-208) el manual no lo exige ni
+   * valida su fórmula.
+   */
   importeIVA?: number;
   /** Importe del ítem con IVA incluido (2 decimales). Negativo en unidad 95/99. */
   importeItem: number;
@@ -127,7 +137,11 @@ export interface MtxcaComprobanteBase {
   fechaEmision?: FechaInput;
   codigoTipoDocumento?: number;
   numeroDocumento?: number | string;
-  /** Condición de IVA del receptor, RG 5616 (`getCondicionesIVAReceptor()`). */
+  /**
+   * Condición de IVA del receptor, RG 5616 (`getCondicionesIVAReceptor()`).
+   * Obligatoria: `autorizar()` e `informarComprobanteCAEA()` la exigen
+   * localmente (ARCA observa 190 / 390 y pasará a rechazar).
+   */
   condicionIVAReceptor?: number;
   importeGravado?: number;
   importeNoGravado?: number;
@@ -140,6 +154,7 @@ export interface MtxcaComprobanteBase {
   codigoMoneda: string;
   /** Cotización (6 decimales). Debe ser 1 para PES. */
   cotizacionMoneda?: number;
+  /** "S" solo en los tipos 1, 6, 51, 201 y 206 (118), con moneda extranjera (169). */
   cancelaEnMismaMonedaExtranjera?: 'S' | 'N';
   observaciones?: string;
   codigoConcepto: number;
@@ -147,14 +162,24 @@ export interface MtxcaComprobanteBase {
   fechaServicioDesde?: FechaInput;
   /** Obligatoria si `codigoConcepto` es 2 o 3. */
   fechaServicioHasta?: FechaInput;
-  /** Obligatoria si `codigoConcepto` es 2 o 3. */
+  /**
+   * Obligatoria si `codigoConcepto` es 2 o 3 (124). En FCE no depende del
+   * concepto: obligatoria en 201 y 206 (148) y no corresponde en 202, 203, 207
+   * y 208 (149).
+   */
   fechaVencimientoPago?: FechaInput;
+  /** En ND/NC 2, 3, 7, 8, 52, 53: obligatorio este o `periodoComprobantesAsociados`, no ambos (160, 161). */
   comprobantesAsociados?: MtxcaComprobanteAsociado[];
   periodoComprobantesAsociados?: MtxcaPeriodo;
+  /** En FCE, cada tributo lleva `descripcion` (302). */
   otrosTributos?: MtxcaOtroTributo[];
   items: MtxcaItem[];
   subtotalesIVA?: MtxcaSubtotalIVA[];
   datosAdicionales?: MtxcaDatoAdicional[];
+  /**
+   * Solo con `codigoConcepto` 1 (432); en FCE, uno solo (433). No se admite en
+   * `informarComprobanteCAEA` (753).
+   */
   compradores?: MtxcaComprador[];
   /** Códigos de actividad (`getActividadesVigentes()`). */
   actividades?: number[];
@@ -274,6 +299,8 @@ export interface MtxcaCAEA {
   fechaHasta: string;
   fechaTopeInforme: string;
   observaciones: CodigoDescripcion[];
+  /** Anuncio informativo del sistema (`solicitarCAEA` / `consultarCAEA`), si lo hay. */
+  evento?: CodigoDescripcion;
 }
 
 /**
@@ -378,4 +405,6 @@ export interface CotizacionResult {
   fechaCotizacion: string;
   /** Cotización, o `null` si ARCA no tiene cotización para esa moneda (respuesta sin valor, sin error). */
   cotizacion: number | null;
+  /** Anuncio informativo del sistema, si lo hay. */
+  evento?: CodigoDescripcion;
 }

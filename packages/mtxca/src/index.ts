@@ -73,6 +73,12 @@ export {
   Moneda,
 } from './constants.js';
 
+// QR (RG 4892)
+export { urlQR } from './qr.js';
+export type { ComprobanteQR } from './qr.js';
+export { QR_URL } from '@ramiidv/arca-common';
+export type { QROptions } from '@ramiidv/arca-common';
+
 // Validación y redondeo
 export { validateComprobanteCAE, validateComprobanteCAEA } from './validation.js';
 export { roundImporte, roundDecimal } from './format.js';

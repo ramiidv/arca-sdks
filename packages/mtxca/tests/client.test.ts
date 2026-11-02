@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ArcaResponseError, ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import { soapFault } from '@ramiidv/arca-common/testing';
 import {
   AUTH,
   NS,
@@ -173,6 +174,7 @@ describe('autorizarComprobante', () => {
       facturaA({
         importeTotal: 122.004999,
         importeGravado: 100.005,
+        importeExento: 8.575,
         cotizacionMoneda: 1.0000001,
         items: [
           {
@@ -187,12 +189,14 @@ describe('autorizarComprobante', () => {
     );
     const raw = m.calls[0].body;
     expect(raw).toContain('<importeTotal>122.00</importeTotal>');
-    expect(raw).toContain('<importeGravado>100.01</importeGravado>');
+    // Round Half Even (nota 4 del manual): 100.005 → 100.00, 8.575 → 8.58, 1.005 → 1.00.
+    expect(raw).toContain('<importeGravado>100.00</importeGravado>');
+    expect(raw).toContain('<importeExento>8.58</importeExento>');
     expect(raw).toContain('<cotizacionMoneda>1.000000</cotizacionMoneda>');
     expect(raw).toContain('<cantidad>1.234568</cantidad>');
     expect(raw).toContain('<precioUnitario>0.300000</precioUnitario>');
     expect(raw).toContain('<importeIVA>21.00</importeIVA>');
-    expect(raw).toContain('<importeItem>1.01</importeItem>');
+    expect(raw).toContain('<importeItem>1.00</importeItem>');
   });
 
   it('rechaza localmente importes no finitos, negativos donde el XSD no los admite y fechas inválidas', async () => {
@@ -746,10 +750,12 @@ describe('schemas del XSD (DSL de common)', () => {
     expect((err as ArcaSoapError).uncertain).toBe(true);
   });
 
-  it('redondea mitad hacia afuera sobre el decimal (8.575 → 8.58, como roundImporte)', async () => {
-    const m = mockFetch(APROBADO);
+  it('redondea mitad al par sobre el decimal (8.575 → 8.58, 8.565 → 8.56, como roundImporte)', async () => {
+    const m = mockFetch(APROBADO, APROBADO);
     await client(m.fetch).autorizarComprobante(AUTH, facturaA({ importeOtrosTributos: 8.575 }));
     expect(m.calls[0].body).toContain('<importeOtrosTributos>8.58</importeOtrosTributos>');
+    await client(m.fetch).autorizarComprobante(AUTH, facturaA({ importeOtrosTributos: 8.565 }));
+    expect(m.calls[1].body).toContain('<importeOtrosTributos>8.56</importeOtrosTributos>');
   });
 
   it('numeroDocumento: acepta number, 0 y guiones; con tipo 80 valida el dígito verificador', async () => {
@@ -809,5 +815,223 @@ describe('schemas del XSD (DSL de common)', () => {
     await expect(c.consultarCAEA(AUTH, '123')).rejects.toMatchObject({ field: 'caea' });
     expect(await c.consultarPtosVtaCAEANoInformados(AUTH, 36434058476543 as unknown as string)).toEqual([]);
     expect(m.calls[0].body).toContain('<CAEA>36434058476543</CAEA>');
+  });
+});
+
+describe('CAEA: operaciones restantes', () => {
+  const CAEA = '36434058476543';
+  const EVENTO = '<evento><codigo>1</codigo><descripcion>Mantenimiento programado</descripcion></evento>';
+  const caeaResponse =
+    `<CAEAResponse><fechaProceso>2026-10-27</fechaProceso><CAEA>${CAEA}</CAEA><periodo>202611</periodo><orden>1</orden>` +
+    '<fechaDesde>2026-11-01</fechaDesde><fechaHasta>2026-11-15</fechaHasta><fechaTopeInforme>2026-11-23</fechaTopeInforme></CAEAResponse>';
+  const informado = (element: string, resultado: string, extra = '') =>
+    soapResponse(
+      element,
+      `<resultado>${resultado}</resultado><fechaProceso>2026-11-02</fechaProceso><comprobanteCAEAResponse><CAEA>${CAEA}</CAEA>` +
+        `<codigoTipoComprobante>1</codigoTipoComprobante><numeroPuntoVenta>4000</numeroPuntoVenta><numeroComprobante>1</numeroComprobante></comprobanteCAEAResponse>${extra}`,
+    );
+
+  it('consultarCAEA: envía CAEA, parsea CAEAResponse y evento; con error lanza', async () => {
+    const m = mockFetch(
+      soapResponse('consultarCAEAResponse', caeaResponse + EVENTO),
+      soapResponse(
+        'consultarCAEAResponse',
+        '<arrayErrores><codigoDescripcion><codigo>1700</codigo><descripcion>CAEA inexistente</descripcion></codigoDescripcion></arrayErrores>',
+      ),
+    );
+    const c = client(m.fetch);
+    expect(await c.consultarCAEA(AUTH, CAEA)).toEqual({
+      fechaProceso: '2026-10-27',
+      caea: CAEA,
+      periodo: 202611,
+      orden: 1,
+      fechaDesde: '2026-11-01',
+      fechaHasta: '2026-11-15',
+      fechaTopeInforme: '2026-11-23',
+      observaciones: [],
+      evento: { codigo: 1, descripcion: 'Mantenimiento programado' },
+    });
+    expect(childOrder(m.calls[0].body, 'ser:consultarCAEARequest')).toEqual(['authRequest', 'CAEA']);
+    await expect(c.consultarCAEA(AUTH, CAEA)).rejects.toBeInstanceOf(ArcaServiceError);
+  });
+
+  it('informarCAEANoUtilizado (sin punto de venta): request, aprobado sin numeroPuntoVenta y emisión', async () => {
+    const m = mockFetch(
+      soapResponse(
+        'informarCAEANoUtilizadoResponse',
+        `<resultado>A</resultado><fechaProceso>2026-11-16</fechaProceso><CAEA>${CAEA}</CAEA>`,
+      ),
+    );
+    const res = await client(m.fetch).informarCAEANoUtilizado(AUTH, Number(CAEA) as unknown as string);
+    expect(res).toEqual({ resultado: 'A', fechaProceso: '2026-11-16', caea: CAEA, errores: [], evento: undefined });
+    expect('numeroPuntoVenta' in res).toBe(false);
+    expect(childOrder(m.calls[0].body, 'ser:informarCAEANoUtilizadoRequest')).toEqual(['authRequest', 'CAEA']);
+    const h = hangingFetch();
+    const err = await client(h.fetch, { timeout: 20, retries: 3 })
+      .informarCAEANoUtilizado(AUTH, CAEA)
+      .catch((e) => e);
+    expect((err as ArcaSoapError).uncertain).toBe(true);
+    expect(h.fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('informarCAEANoUtilizado: aprobado sin fechaProceso es inválido e incierto', async () => {
+    const m = mockFetch(
+      soapResponse('informarCAEANoUtilizadoResponse', `<resultado>A</resultado><CAEA>${CAEA}</CAEA>`),
+    );
+    const err = await client(m.fetch)
+      .informarCAEANoUtilizado(AUTH, CAEA)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect((err as ArcaSoapError).uncertain).toBe(true);
+  });
+
+  it('informarComprobanteCAEA: R devuelve errores sin comprobante; O devuelve observaciones y comprobante', async () => {
+    const m = mockFetch(
+      soapResponse(
+        'informarComprobanteCAEAResponse',
+        '<resultado>R</resultado><arrayErrores><codigoDescripcion><codigo>705</codigo><descripcion>CAEA inválido</descripcion></codigoDescripcion></arrayErrores>',
+      ),
+      informado(
+        'informarComprobanteCAEAResponse',
+        'O',
+        '<arrayObservaciones><codigoDescripcion><codigo>729</codigo><descripcion>Fecha de vencimiento de pago</descripcion></codigoDescripcion></arrayObservaciones>' +
+          EVENTO,
+      ),
+    );
+    const c = client(m.fetch);
+    const r = await c.informarComprobanteCAEA(AUTH, { ...facturaA(), caea: CAEA });
+    expect(r).toEqual({
+      resultado: 'R',
+      fechaProceso: undefined,
+      observaciones: [],
+      errores: [{ codigo: 705, descripcion: 'CAEA inválido' }],
+      evento: undefined,
+    });
+    const o = await c.informarComprobanteCAEA(AUTH, { ...facturaA(), caea: CAEA });
+    expect(o).toMatchObject({
+      resultado: 'O',
+      fechaProceso: '2026-11-02',
+      comprobante: { caea: CAEA, numeroComprobante: 1 },
+      observaciones: [{ codigo: 729, descripcion: 'Fecha de vencimiento de pago' }],
+      evento: { codigo: 1, descripcion: 'Mantenimiento programado' },
+    });
+  });
+
+  it('informarAjusteIVACAEA: wrapper propio, parseo y emisión sin reintentos', async () => {
+    const m = mockFetch(informado('informarAjusteIVACAEAResponse', 'A'));
+    const res = await client(m.fetch).informarAjusteIVACAEA(AUTH, {
+      ...facturaA({ codigoTipoComprobante: 2 }),
+      caea: CAEA,
+    });
+    expect(res).toMatchObject({ resultado: 'A', comprobante: { caea: CAEA } });
+    const req = requestBody(m.calls[0]);
+    expect(req.name).toBe('ser:informarAjusteIVACAEARequest');
+    expect(m.calls[0].headers.soapaction).toBe(`"${NS}informarAjusteIVACAEA"`);
+    expect(childOrder(req.raw, 'ser:informarAjusteIVACAEARequest')).toEqual(['authRequest', 'comprobanteCAEARequest']);
+    const h = hangingFetch();
+    const err = await client(h.fetch, { timeout: 20, retries: 3 })
+      .informarAjusteIVACAEA(AUTH, { ...facturaA({ codigoTipoComprobante: 2 }), caea: CAEA })
+      .catch((e) => e);
+    expect((err as ArcaSoapError).uncertain).toBe(true);
+    expect(h.fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('consultarPuntosVentaCAE y consultarPuntosVentaCAEA', async () => {
+    const pv =
+      '<arrayPuntosVenta><puntoVenta><numeroPuntoVenta>4000</numeroPuntoVenta><bloqueado>N</bloqueado></puntoVenta></arrayPuntosVenta>';
+    const m = mockFetch(
+      soapResponse('consultarPuntosVentaCAEResponse', pv),
+      soapResponse('consultarPuntosVentaCAEAResponse', pv.replace('4000', '4001')),
+      soapResponse('consultarPuntosVentaCAEResponse', ''),
+    );
+    const c = client(m.fetch);
+    expect(await c.consultarPuntosVentaCAE(AUTH)).toEqual([
+      { numeroPuntoVenta: 4000, bloqueado: 'N', fechaBaja: undefined },
+    ]);
+    expect(await c.consultarPuntosVentaCAEA(AUTH)).toEqual([
+      { numeroPuntoVenta: 4001, bloqueado: 'N', fechaBaja: undefined },
+    ]);
+    expect(requestBody(m.calls[0]).name).toBe('ser:consultarPuntosVentaCAERequest');
+    expect(requestBody(m.calls[1]).name).toBe('ser:consultarPuntosVentaCAEARequest');
+    // arrayPuntosVenta es obligatorio en estas dos.
+    await expect(c.consultarPuntosVentaCAE(AUTH)).rejects.toBeInstanceOf(ArcaSoapError);
+  });
+});
+
+describe('SOAP Fault', () => {
+  const fault = (code: string, msg: string) => ({ status: 500, body: soapFault(code, msg) });
+
+  it('emisión con Fault Client (ej. token vencido): no es uncertain y hace 1 solo fetch', async () => {
+    const m = mockFetch(fault('soapenv:Client', 'Token vencido'), fault('soapenv:Client', 'Token vencido'));
+    const err = await client(m.fetch, { retries: 3 })
+      .autorizarComprobante(AUTH, facturaA())
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect((err as ArcaSoapError).uncertain).toBe(false);
+    expect((err as ArcaSoapError).faultString).toBe('Token vencido');
+    expect(m.fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('emisión con Fault Server: uncertain y 1 solo fetch', async () => {
+    const m = mockFetch(fault('soapenv:Server', 'Error interno'), fault('soapenv:Server', 'Error interno'));
+    const err = await client(m.fetch, { retries: 3 })
+      .informarComprobanteCAEA(AUTH, { ...facturaA(), caea: '36434058476543' })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect((err as ArcaSoapError).uncertain).toBe(true);
+    expect(m.fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('consulta con Fault: ArcaSoapError no uncertain', async () => {
+    const m = mockFetch(fault('soapenv:Client', 'Token vencido'));
+    const err = await client(m.fetch)
+      .consultarCAEA(AUTH, '36434058476543')
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect((err as ArcaSoapError).uncertain).toBe(false);
+    expect((err as ArcaSoapError).faultString).toBe('Token vencido');
+  });
+});
+
+describe('evento', () => {
+  const EVENTO = '<evento><codigo>2</codigo><descripcion>Aviso</descripcion></evento>';
+
+  it('onEvento recibe el evento de respuestas que devuelven un número o una lista', async () => {
+    const m = mockFetch(
+      soapResponse('consultarUltimoComprobanteAutorizadoResponse', `<numeroComprobante>7</numeroComprobante>${EVENTO}`),
+      soapResponse('consultarTiposDocumentoResponse', `<arrayTiposDocumento/>${EVENTO}`),
+      soapResponse('consultarPuntosVentaResponse', '<arrayPuntosVenta/>'),
+    );
+    const eventos: unknown[] = [];
+    const c = client(m.fetch, {
+      onEvento: (e, method) => {
+        eventos.push([e, method]);
+        throw new Error('ignorado');
+      },
+    });
+    expect(await c.consultarUltimoComprobanteAutorizado(AUTH, 4000, 1)).toBe(7);
+    expect(await c.consultarTiposDocumento(AUTH)).toEqual([]);
+    expect(await c.consultarPuntosVenta(AUTH)).toEqual([]);
+    expect(eventos).toEqual([
+      [{ codigo: 2, descripcion: 'Aviso' }, 'consultarUltimoComprobanteAutorizado'],
+      [{ codigo: 2, descripcion: 'Aviso' }, 'consultarTiposDocumento'],
+    ]);
+  });
+
+  it('consultarCotizacionMoneda y solicitarCAEA exponen evento', async () => {
+    const m = mockFetch(
+      soapResponse('consultarCotizacionMonedaResponse', `<cotizacionMoneda>1000</cotizacionMoneda>${EVENTO}`),
+      soapResponse(
+        'solicitarCAEAResponse',
+        '<CAEAResponse><fechaProceso>2026-10-27</fechaProceso><CAEA>36434058476543</CAEA><periodo>202611</periodo><orden>1</orden>' +
+          `<fechaDesde>2026-11-01</fechaDesde><fechaHasta>2026-11-15</fechaHasta><fechaTopeInforme>2026-11-23</fechaTopeInforme></CAEAResponse>${EVENTO}`,
+      ),
+    );
+    const c = client(m.fetch);
+    expect((await c.consultarCotizacionMoneda(AUTH, 'DOL', '2026-11-01')).evento).toEqual({
+      codigo: 2,
+      descripcion: 'Aviso',
+    });
+    expect((await c.solicitarCAEA(AUTH, 202611, 1)).evento).toEqual({ codigo: 2, descripcion: 'Aviso' });
   });
 });

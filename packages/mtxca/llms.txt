@@ -1,10 +1,12 @@
 # @ramiidv/arca-mtxca
 
-> TypeScript SDK para el web service WSMTXCA de ARCA (ex AFIP): factura electrónica con detalle de ítems, con CAE y CAEA. ESM, Node >= 18.
+> TypeScript SDK para el web service WSMTXCA de ARCA (ex AFIP): factura electrónica con detalle de ítems, con CAE y CAEA.
 
 ## Instalación
 
 npm install @ramiidv/arca-mtxca
+
+Requisitos: Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)). Depende de `@ramiidv/arca-common`.
 
 ## Configuración
 
@@ -24,8 +26,11 @@ const mtxca = new ArcaMtxca({
   clockOffsetMs?: number, autoClockSkew?: boolean, loginErrorCooldownMs?: number,
   fetch?: typeof fetch, legacyTls?: 'auto' | 'never' | 'always',
   onEvent?: (event: ArcaEvent) => void,
+  onEvento?: (evento: { codigo, descripcion }, method: string) => void, // `evento` de ARCA de cualquier respuesta
 });
 ```
+
+`ArcaMtxcaConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common` (incluye `wsaa` y `signal`).
 
 Endpoints: homologación https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService, producción https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService. Namespace http://impl.service.wsmtxca.afip.gov.ar/service/, SOAPAction = namespace + operación, wrappers `{operacion}Request` / `{operacion}Response`.
 
@@ -42,14 +47,14 @@ const res = await mtxca.autorizar({
   numeroComprobante?: number,        // omitido => último + 1
   fechaEmision?: Date | string,
   codigoTipoDocumento: 80, numeroDocumento: '30000000007',
-  condicionIVAReceptor: 1,           // RG 5616, ver getCondicionesIVAReceptor(tipo)
+  condicionIVAReceptor: 1,           // RG 5616, obligatoria (190/390), ver getCondicionesIVAReceptor(tipo)
   importeGravado: 100, importeNoGravado: 0, importeExento: 0,
   importeSubtotal: 100,              // obligatorio
   importeOtrosTributos?: number,
   importeTotal: 121,                 // obligatorio
   codigoMoneda: 'PES',               // obligatorio
   cotizacionMoneda: 1,
-  codigoConcepto: 1,                 // 2/3 exigen fechaServicioDesde/Hasta y fechaVencimientoPago
+  codigoConcepto: 1,                 // 2/3 exigen fechaServicioDesde/Hasta y fechaVencimientoPago (salvo FCE)
   items: [{
     unidadesMtx: 1, codigoMtx: '7790001000012',  // obligatorios salvo unidad 97/99
     codigo?: string, descripcion: 'Producto',
@@ -68,14 +73,22 @@ if (res.resultado === 'R') res.errores;                 // rechazo: NO lanza
 else res.comprobante.cae, res.comprobante.fechaVencimientoCAE; // 'A' u 'O' (con observaciones)
 ```
 
-Reglas validadas localmente (manual WSMTXCA): importeItem = (precio*cantidad - bonif)*(1+alícuota) en clase A (precio sin IVA) y precio*cantidad - bonif en clase B (precio con IVA); importeGravado = Σ(importeItem - IVA) de condiciones 3-6; importeNoGravado = Σ condición 1; importeExento = Σ condición 2; importeSubtotal = gravado + no gravado + exento; importeTotal = subtotal + otros tributos + Σ subtotalesIVA = otros tributos + Σ importeItem. Margen: relativo <= 0.01% o absoluto <= 0.01 por elemento. Redondeo: importes 2 decimales, cantidad/precio/bonificación/cotización 6 (`roundImporte`, `roundDecimal`).
+Reglas validadas localmente (manual WSMTXCA): importeItem = (precio*cantidad - bonif)*(1+alícuota) en clase A (precio sin IVA) y precio*cantidad - bonif en clase B (precio con IVA); importeGravado = Σ(importeItem - IVA) de condiciones 3-6; importeNoGravado = Σ condición 1; importeExento = Σ condición 2; importeSubtotal = gravado + no gravado + exento; importeTotal = subtotal + otros tributos + Σ subtotalesIVA = otros tributos + Σ importeItem. Margen: relativo <= 0.01% o absoluto <= 0.01 por elemento. Bonificación (99) en clase A: |Σ IVA| <= IVA de los demás ítems de la condición (516). Redondeo Round Half Even (mitad al par, nota 4 del manual: 8.565 -> 8.56, 8.575 -> 8.58): importes 2 decimales, cantidad/precio/bonificación/cotización 6 (`roundImporte`, `roundDecimal`).
+
+Otras reglas validadas (código CAE / CAEA):
+- condicionIVAReceptor obligatoria (190 / 390; ARCA hoy observa, el SDK la exige).
+- FCE 201/206: fechaVencimientoPago obligatoria cualquiera sea el concepto (148 / 764); FCE 202/203/207/208: no corresponde (149 / 765). Fuera de FCE: fechas de servicio y vencimiento solo con concepto 2/3 (122-124, solo CAE).
+- FCE: otrosTributos[].descripcion obligatoria (302); un solo comprador (433). compradores solo con concepto 1 (432); en informarComprobanteCAEA no se admiten (753).
+- ND/NC 2,3,7,8,52,53: comprobantesAsociados o periodoComprobantesAsociados, no ambos (160/161 / 778/779).
+- cancelaEnMismaMonedaExtranjera 'S' solo en 1, 6, 51, 201, 206 (118, solo CAE).
+- En FCE el ítem no exige importeIVA ni se valida su fórmula (514/515 aplican a 1,2,3,51,52,53).
 
 ## Errores
 
 - ArcaValidationError: datos inválidos (sin request). `details[]` con field/message.
 - autorizar / autorizarAjusteIVA / informar*: un rechazo devuelve resultado 'R' con errores.
 - Consultas: arrayErrores => ArcaServiceError (`errors[]` con code/msg).
-- ArcaSoapError: Fault/HTTP/red/timeout. En emisiones nunca se reintenta; `uncertain: true` => pudo procesarse.
+- ArcaSoapError: Fault/HTTP/red/timeout/respuesta ilegible. En emisiones nunca se reintenta; `uncertain: true` => pudo procesarse (Fault Server, timeout, 5xx). Fault Client (ej. "Token vencido") no es incierto.
   Recuperación: `ultimoComprobante(ptoVta, tipo)` y `consultarComprobante(tipo, ptoVta, nro)`; para solicitarCAEA, `consultarCAEAEntreFechas`.
 - `ultimoComprobante` devuelve 0 solo ante el error 1502 (sin comprobantes).
 
@@ -86,7 +99,8 @@ Reglas validadas localmente (manual WSMTXCA): importeItem = (precio*cantidad - b
 - ultimoComprobante(ptoVta, cbteTipo, opts?) -> number
 - siguienteComprobante(ptoVta, cbteTipo, opts?) -> number
 - consultarComprobante(cbteTipo, ptoVta, cbteNro, opts?) -> { comprobante, observaciones, evento? }
-- solicitarCAEA(periodo AAAAMM, orden 1|2, opts?) -> MtxcaCAEA { caea, fechaDesde, fechaHasta, fechaTopeInforme, ... }
+- urlQR(comprobante, resultado?, options?) -> string: URL del QR (RG 4892) con la CUIT de la instancia. Con resultado de autorizar/informarComprobanteCAEA (tipoCodAut E/A), o sin resultado con el comprobante de consultarComprobante. Lanza ArcaValidationError si fue rechazado o falta la cotización. También `urlQR(cuit, comprobante, resultado?, options?)` exportada.
+- solicitarCAEA(periodo AAAAMM, orden 1|2, opts?) -> MtxcaCAEA { caea, fechaDesde, fechaHasta, fechaTopeInforme, ..., evento? }
 - consultarCAEA(caea, opts?) -> MtxcaCAEA
 - consultarCAEAEntreFechas(desde, hasta, opts?) -> MtxcaCAEA[]
 - informarComprobanteCAEA({ ...comprobante, numeroComprobante, caea, fechaHoraGen? }, opts?) -> MtxcaInformarCAEAResult
@@ -97,7 +111,7 @@ Reglas validadas localmente (manual WSMTXCA): importeItem = (precio*cantidad - b
 - getTiposComprobante, getTiposDocumento, getAlicuotasIVA, getCondicionesIVA, getUnidadesMedida, getTiposTributo, getTiposDatosAdicionales -> { codigo: number, descripcion }[]
 - getCondicionesIVAReceptor(cbteTipo) -> { codigo, descripcion }[]
 - getMonedas() -> { codigo: string, descripcion }[]
-- getCotizacionMoneda(codigo, fecha = hoy) -> { codigoMoneda, fechaCotizacion, cotizacion: number | null }
+- getCotizacionMoneda(codigo, fecha = hoy) -> { codigoMoneda, fechaCotizacion, cotizacion: number | null, evento? }
 - getActividadesVigentes() -> { codigo, orden, descripcion }[]
 - getPuntosVenta / getPuntosVentaCAE / getPuntosVentaCAEA -> { numeroPuntoVenta, bloqueado: 'S'|'N', fechaBaja? }[]
 - clearAuthCache(): Promise<void>
@@ -107,3 +121,7 @@ Bajo nivel: `mtxca.client` / `new MtxcaClient({ endpoint })`, una función por o
 ## Enums
 
 CbteTipo (1,2,3,6,7,8,51,52,53,201,202,203,206,207,208), Concepto (1,2,3), CodigoCondicionIVA (1 no gravado, 2 exento, 3 0%, 4 10.5%, 5 21%, 6 27%), UnidadMedidaEspecial (95, 97 seña, 99 bonificación), Moneda (PES, DOL, 060).
+
+## Ejemplos
+
+https://github.com/ramiidv/arca-sdks/tree/main/packages/mtxca/examples

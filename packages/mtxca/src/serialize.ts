@@ -1,8 +1,7 @@
-import { ArcaValidationError, validateCuit } from '@ramiidv/arca-common';
+import { ArcaValidationError, roundHalfEven, validateCuit } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
 import { encodeRequest, formatDateTimeAR } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
-import { roundTo } from './format.js';
 import { COMPROBANTE_CAE, COMPROBANTE_CAEA } from './schemas.js';
 import type { MtxcaComprobanteBase, MtxcaComprobanteCAE, MtxcaComprobanteCAEA } from './types.js';
 
@@ -25,9 +24,9 @@ function digitos(v: unknown, guiones = false): unknown {
 }
 
 /**
- * Redondea los `dec()` del schema con `roundTo` antes de `encodeRequest`, para
- * que lo enviado coincida con `roundImporte`/`roundDecimal` (el redondeo del
- * DSL difiere en casos como 8.575 → 8.57).
+ * Redondea los `dec()` del schema mitad al par (Round Half Even, nota 4 del
+ * manual) antes de `encodeRequest`, cuyo redondeo es mitad hacia arriba
+ * (8.565 → 8.57). Lo enviado coincide con `roundImporte`/`roundDecimal`.
  */
 function redondear(input: unknown, schema: Schema): unknown {
   if (!isObject(input)) return input;
@@ -36,7 +35,9 @@ function redondear(input: unknown, schema: Schema): unknown {
     if (!Object.hasOwn(out, key)) continue;
     const round = (v: unknown): unknown => {
       if (f.schema) return redondear(v, f.schema);
-      return f.scalar?.kind === 'dec' && typeof v === 'number' && Number.isFinite(v) ? roundTo(v, f.scalar.digits) : v;
+      return f.scalar?.kind === 'dec' && typeof v === 'number' && Number.isFinite(v)
+        ? roundHalfEven(v, f.scalar.digits)
+        : v;
     };
     const v = out[key];
     out[key] = f.minItems !== undefined && Array.isArray(v) ? v.map(round) : round(v);
@@ -89,7 +90,8 @@ function validarCuits(c: R, errors: ValidationErrorDetail[]): void {
 /**
  * Valida un comprobante contra el XSD (`ComprobanteType`) y lo arma con los
  * elementos en el orden de la secuencia (Axis2 valida el orden). Redondea los
- * importes a 2 decimales y cantidad/precio/bonificación/cotización a 6.
+ * importes a 2 decimales y cantidad/precio/bonificación/cotización a 6
+ * (mitad al par).
  *
  * `caea`: agrega `codigoTipoAutorizacion`, `codigoAutorizacion` (el CAEA),
  * `fechaVencimiento` y `fechaHoraGen`, que en CAE no deben informarse.

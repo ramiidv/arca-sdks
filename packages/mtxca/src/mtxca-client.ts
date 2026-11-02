@@ -21,6 +21,7 @@ import {
   COTIZACION,
   COTIZACION_RESPONSE,
   ENTRE_FECHAS,
+  EVENTO,
   FECHA_PROCESO,
   PARAMETROS,
   PUNTOS_VENTA_RESPONSE,
@@ -64,6 +65,11 @@ export interface MtxcaClientConfig {
   onEvent?: (event: ArcaEvent) => void;
   fetch?: typeof fetch;
   legacyTls?: LegacyTlsMode;
+  /**
+   * Recibe el `evento` (aviso informativo de ARCA) de cualquier respuesta que
+   * lo traiga. Los errores del callback se ignoran.
+   */
+  onEvento?: (evento: CodigoDescripcion, method: string) => void;
 }
 
 const SERVICE = 'WSMTXCA';
@@ -75,6 +81,8 @@ function isResultado(value: string): value is MtxcaResultado {
 /**
  * Respuesta ilegible: `ArcaSoapError` (`uncertain` en emisiones: el
  * comprobante pudo haberse procesado aunque la respuesta no se pueda leer).
+ * No se usa `decodeResponse(..., { kind })` solo porque lanza
+ * `ArcaResponseError`, y este SDK documenta `ArcaSoapError` para este caso.
  */
 function invalid(message: string, kind: SoapOperationKind): ArcaSoapError {
   return new ArcaSoapError(message, { uncertain: kind === 'emision' });
@@ -142,24 +150,27 @@ interface ComprobanteRaw
  *   `ArcaSoapError` tiene `uncertain: true`.
  */
 export class MtxcaClient extends SoapServiceClient {
+  readonly #onEvento?: MtxcaClientConfig['onEvento'];
+
   constructor(config: MtxcaClientConfig) {
     if (!config?.endpoint) throw new TypeError('MtxcaClient: endpoint es obligatorio');
-    const { endpoint, timeout, retries, retryDelayMs, onEvent, fetch, legacyTls } = config;
+    const { endpoint, timeout, retries, retryDelayMs, onEvent, fetch, legacyTls, onEvento } = config;
     super({
       endpoint,
       namespace: MTXCA_NAMESPACE,
       transport: { timeout, retries, retryDelayMs, onEvent, fetch, legacyTls },
     });
+    this.#onEvento = onEvento;
   }
 
-  private call(
+  private async call(
     method: string,
     params: R,
     kind: SoapOperationKind,
     opts?: CallOptions,
     requestElement: string | null = `${method}Request`,
   ): Promise<R> {
-    return this.soapCall(method, params, {
+    const result = await this.soapCall(method, params, {
       kind,
       signal: opts?.signal,
       requestElement,
@@ -168,6 +179,19 @@ export class MtxcaClient extends SoapServiceClient {
       // Todo como texto: los schemas convierten cada campo según el XSD.
       parseNumbers: false,
     });
+    this.notificarEvento(result, method);
+    return result;
+  }
+
+  /** Pasa el `evento` de la respuesta a `onEvento` (un `evento` ilegible se ignora acá). */
+  private notificarEvento(result: R, method: string): void {
+    if (!this.#onEvento || result['evento'] === undefined) return;
+    try {
+      const { evento } = decodeResponse<{ evento?: CodigoDescripcion }>(result, { evento: EVENTO }, method);
+      if (evento) this.#onEvento(evento, method);
+    } catch {
+      // Ignorado a propósito: el callback no debe afectar la operación.
+    }
   }
 
   private static authRequest(auth: MtxcaAuth): R {
@@ -306,7 +330,9 @@ export class MtxcaClient extends SoapServiceClient {
   /** `CAEAResponse` obligatorio de `solicitarCAEA` / `consultarCAEA`. */
   private parseCAEA(result: R, method: string, kind: SoapOperationKind): MtxcaCAEA {
     requerido(result, 'CAEAResponse', method, kind, true);
-    return toCAEA(decode<CAEARaw>(result['CAEAResponse'], CAEA_RESPONSE, `${method}.CAEAResponse`, kind));
+    const caea = toCAEA(decode<CAEARaw>(result['CAEAResponse'], CAEA_RESPONSE, `${method}.CAEAResponse`, kind));
+    const { evento } = decode<{ evento?: CodigoDescripcion }>(result, { evento: EVENTO }, method, kind);
+    return evento ? { ...caea, evento } : caea;
   }
 
   /** `consultarCAEAEntreFechas`: CAEAs otorgados con vigencia entre dos fechas. */
@@ -585,11 +611,17 @@ export class MtxcaClient extends SoapServiceClient {
     const method = 'consultarCotizacionMoneda';
     const params = encodeRequest({ codigoMoneda, fechaCotizacion }, COTIZACION, method);
     const result = await this.consulta(method, auth, params, opts);
-    const { cotizacionMoneda } = decode<{ cotizacionMoneda?: number }>(result, COTIZACION_RESPONSE, method, 'consulta');
+    const { cotizacionMoneda, evento } = decode<{ cotizacionMoneda?: number; evento?: CodigoDescripcion }>(
+      result,
+      COTIZACION_RESPONSE,
+      method,
+      'consulta',
+    );
     return {
       codigoMoneda: params['codigoMoneda'] as string,
       fechaCotizacion: params['fechaCotizacion'] as string,
       cotizacion: cotizacionMoneda ?? null,
+      ...(evento ? { evento } : {}),
     };
   }
 

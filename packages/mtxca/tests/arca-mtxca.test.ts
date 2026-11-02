@@ -169,6 +169,61 @@ describe('ArcaMtxca', () => {
   });
 });
 
+describe('ArcaMtxca: CAEA, QR y eventos', () => {
+  const CAEA = '36434058476543';
+
+  it('informarComprobanteCAEA exige condicionIVAReceptor (390) antes de enviar', async () => {
+    const m = mockFetch();
+    const err = await mtxca(m.fetch)
+      .informarComprobanteCAEA({ ...facturaA({ condicionIVAReceptor: undefined }), caea: CAEA })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    expect((err as ArcaValidationError).details.map((d) => d.message)).toEqual([
+      expect.stringMatching(/^condicionIVAReceptor: .*\(390\)$/),
+    ]);
+    expect(m.fn).not.toHaveBeenCalled();
+  });
+
+  it('informarAjusteIVACAEA usa el ticket y el wrapper propio; solo valida el XSD', async () => {
+    const m = mockFetch(
+      soapResponse(
+        'informarAjusteIVACAEAResponse',
+        `<resultado>A</resultado><fechaProceso>2026-11-02</fechaProceso><comprobanteCAEAResponse><CAEA>${CAEA}</CAEA>` +
+          '<codigoTipoComprobante>2</codigoTipoComprobante><numeroPuntoVenta>4000</numeroPuntoVenta><numeroComprobante>1</numeroComprobante></comprobanteCAEAResponse>',
+      ),
+    );
+    const res = await mtxca(m.fetch).informarAjusteIVACAEA({
+      ...facturaA({ codigoTipoComprobante: 2, condicionIVAReceptor: undefined }),
+      caea: CAEA,
+    });
+    expect(res).toMatchObject({ resultado: 'A', comprobante: { caea: CAEA, codigoTipoComprobante: 2 } });
+    expect(m.calls[0].body).toContain('<ser:informarAjusteIVACAEARequest');
+    expect(m.calls[0].body).toContain('<token>T</token>');
+  });
+
+  it('urlQR usa la CUIT de la instancia', async () => {
+    const m = mockFetch(aprobado(7));
+    const a = mtxca(m.fetch);
+    const req = facturaA({ numeroComprobante: 7 });
+    const res = await a.autorizar(req);
+    const url = a.urlQR(req, res);
+    const p = JSON.parse(Buffer.from(url.split('?p=')[1], 'base64').toString());
+    expect(p).toMatchObject({ cuit: 20123456786, nroCmp: 7, codAut: 76443051234567, tipoCodAut: 'E' });
+  });
+
+  it('onEvento de la config recibe los eventos de ARCA', async () => {
+    const m = mockFetch(
+      soapResponse(
+        'consultarPuntosVentaCAEAResponse',
+        '<arrayPuntosVenta/><evento><codigo>3</codigo><descripcion>Aviso</descripcion></evento>',
+      ),
+    );
+    const onEvento = vi.fn();
+    expect(await mtxca(m.fetch, { onEvento }).getPuntosVentaCAEA()).toEqual([]);
+    expect(onEvento).toHaveBeenCalledWith({ codigo: 3, descripcion: 'Aviso' }, 'consultarPuntosVentaCAEA');
+  });
+});
+
 describe('ArcaMtxca: validación en un solo error', () => {
   it('autorizar reporta las reglas de importes con el campo como prefijo del mensaje', async () => {
     const m = mockFetch();
