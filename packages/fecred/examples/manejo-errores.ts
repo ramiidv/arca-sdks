@@ -2,7 +2,7 @@
  * Ejemplo: manejo de errores
  *
  *   - ArcaValidationError: datos de entrada inválidos (no se llega a llamar a ARCA)
- *   - ArcaAuthError / ArcaTicketVigenteError: falla de autenticación WSAA
+ *   - ArcaAuthError / ArcaTicketVigenteError: falla de autenticación WSAA (o Fault wscommon_* de WSFECRED)
  *   - ArcaServiceError: ARCA rechazó la operación (arrayErrores, arrayErroresFormato o resultado R)
  *   - ArcaSoapError: HTTP, timeout o SOAP Fault. `uncertain` indica si ARCA pudo haberla procesado.
  */

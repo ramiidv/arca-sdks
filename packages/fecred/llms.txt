@@ -8,7 +8,7 @@
 npm install @ramiidv/arca-fecred
 ```
 
-Node.js >= 18. ESM only. Depende de @ramiidv/arca-common ^0.4.0.
+Requisitos: Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)). Depende de `@ramiidv/arca-common`.
 
 ## Configuración
 
@@ -24,7 +24,8 @@ const fecred = new ArcaFecred({
   ticketStorage?: TicketStorage, // recomendado: new FileTicketStorage('./.arca-tickets')
   fetch?: typeof fetch, legacyTls?: 'auto' | 'never' | 'always',
   onEvent?: (e: ArcaEvent) => void,
-  wsaa?: WsaaClient,            // compartir WSAA entre SDKs
+  wsaa?: WsaaClient,            // compartir WSAA entre SDKs (mismo entorno)
+  signal?: AbortSignal,         // cancela todas las llamadas de la instancia
   endpoints?: { wsfecred?: string; wsaa?: string },
 });
 ```
@@ -46,8 +47,8 @@ Fechas: `Date`, `'YYYY-MM-DD'` o `'YYYYMMDD'`. Importes: number finito, se redon
 
 ```typescript
 await fecred.status(); // dummy → { appserver, dbserver, authserver }
-await fecred.consultarMontoObligadoRecepcion({ cuitConsultada, fechaEmision }); // { obligado: boolean, montoDesde?, observaciones }
-await fecred.consultarObligadoRecepcion(cuit);           // { obligado: boolean, desde?, observaciones }
+await fecred.consultarMontoObligadoRecepcion({ cuitConsultada, fechaEmision }); // { obligado?: boolean, montoDesde?, observaciones }
+await fecred.consultarObligadoRecepcion(cuit);           // { obligado?: boolean, desde?, observaciones } (obligado undefined si ARCA no lo informa)
 await fecred.consultarCtasCtes({ rol: 'Emisor' | 'Receptor', cuitContraparte?, fecha?, estadoCtaCte?, nroPagina?, opcionTransferencia? });
 // → { ctasCtes: { codCtaCte, estadoCtaCte: { estado, fechaHoraEstado }, idFacturaCredito, importeTotalFC, saldo, saldoAceptado?, codMoneda, opcionTransferencia }[], nroPagina?, hayMas? }
 await fecred.consultarCtaCte(idCtaCte);                  // { ctaCte: CuentaCorriente }
@@ -77,20 +78,21 @@ await fecred.informarCancelacionTotalFECred({ idCtaCte, formasCancelacion: { cod
 await fecred.rechazarNotaDC({ idComprobante, motivos });
 await fecred.modificarOpcionTransferencia({ idCtaCte, opcionTransferencia: 'SCA' | 'ADC' });
 await fecred.informarFacturaAgtDptoCltv({ idCtaCte, ctaAgente: { cuitAgente, idCuenta, razonSocialAgente?, denominacion? } });
-// → { resultado: 'A' | 'O', idCtaCte, evento?, observaciones }
+// → { resultado: 'A' | 'O', idCtaCte, evento?, observaciones }. resultado 'R' se lanza como ArcaServiceError (en arca-mtxca se devuelve).
 ```
 
 ## Errores
 
 - `ArcaValidationError`: parámetros inválidos (antes de pedir ticket o llamar a ARCA). `field`, `details`.
-- `ArcaServiceError`: `arrayErrores` / `arrayErroresFormato` o `resultado = 'R'`. `errors: { code, msg, rawCode? }[]`.
-- `ArcaSoapError`: HTTP / timeout / SOAP Fault / respuesta sin campo obligatorio. `uncertain = true` en una operación: pudo haberse registrado → verificar con `consultarCtaCte` o `consultarHistorialEstadosCtaCte` antes de reintentar.
-- `ArcaAuthError`, `ArcaTicketVigenteError`: WSAA.
+- `ArcaServiceError`: `arrayErrores` / `arrayErroresFormato` o `resultado = 'R'`. `errors: { code, msg, rawCode? }[]` (errores y después observaciones). Mensaje `WSFECRED <operación>: ...`.
+- `ArcaSoapError`: HTTP / timeout / SOAP Fault / respuesta que no cumple el XSD. `uncertain = true` solo en emisiones (respuesta perdida, Fault Server, sin `resultado`): pudo haberse registrado → verificar con `consultarCtaCte` o `consultarHistorialEstadosCtaCte` antes de reintentar.
+- `ArcaAuthError`: falla de WSAA o SOAP Fault `wscommon_*` de WSFECRED (auth rechazado; no se procesó). `ArcaTicketVigenteError`: TA vigente fuera del `ticketStorage`.
 
 ## Notas
 
 - Los códigos de formas de cancelación, motivos de rechazo, ajustes y retenciones salen de `consultarTipos*()`; no hay enums.
-- Enums del XSD (objeto + tipo literal): `RolCtaCte`, `EstadoCtaCte`, `EstadoComprobante`, `TipoFechaFiltro`, `OpcionTransferencia`, `TipoCancelacion`, `TipoAceptacion`, `Resultado`.
+- Enums del XSD (objeto + tipo literal): `RolCtaCte`, `EstadoCtaCte`, `EstadoComprobante`, `TipoFechaFiltro`, `OpcionTransferencia`, `TipoCancelacion`, `TipoAceptacion`, `Resultado`. Estrictos en los requests; en las respuestas (estados, `opcionTransferencia`, `tipoAcep`, `tipoCodAuto`) se acepta cualquier string (`ValorAbierto<T>`): un valor nuevo de ARCA no rompe la consulta.
 - `codCtaCte`, CUITs y `codAutorizacion` se devuelven como string; importes como number; S/N como boolean.
-- Cliente de bajo nivel: `fecred.client` (`FecredClient`), con `{ token, sign, cuitRepresentada }` como primer parámetro.
-- Endpoints: homologación `https://fwshomo.afip.gob.ar/wsfecred/FECredService`, producción `https://serviciosjava.afip.gob.ar/wsfecred/FECredService`. Namespace `http://ar.gob.afip.wsfecred/FECredService/`; SOAPAction = namespace + operación.
+- Cliente de bajo nivel: `fecred.client` (`FecredClient`), con `{ token, sign, cuitRepresentada }` como primer parámetro. `new FecredClient({ endpoint, namespace })` requiere el namespace (`ENDPOINTS.wsfecred.namespace`).
+- Endpoints en `ENDPOINTS.wsfecred`: homologación `https://fwshomo.afip.gob.ar/wsfecred/FECredService`, producción `https://serviciosjava.afip.gob.ar/wsfecred/FECredService`. Namespace `http://ar.gob.afip.wsfecred/FECredService/`; SOAPAction = namespace + operación.
+- Ejemplos: https://github.com/ramiidv/arca-sdks/tree/main/packages/fecred/examples

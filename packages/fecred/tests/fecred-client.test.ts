@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FecredClient } from '../src/fecred-client.js';
-import { ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import { ArcaAuthError, ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import { soapFaultResponse } from '@ramiidv/arca-common/testing';
 import {
   AUTH,
   ID_FACTURA_XML,
@@ -150,18 +151,22 @@ describe('obligación de recepción', () => {
     expect(r.montoDesde).toBe(3958316);
   });
 
-  it('sin obligado ni errores es una respuesta inválida', async () => {
+  it('obligado y respuesta son opcionales (minOccurs 0): solo arrayObservacion no lanza', async () => {
+    const obs =
+      '<arrayObservacion><codigoDescripcion><codigo>3</codigo><descripcion>CUIT sin datos</descripcion></codigoDescripcion></arrayObservacion>';
     const fetch = mockFetch(
       ok(
         'consultarMontoObligadoRecepcion',
-        '<consultarMontoObligadoRecepcionReturn></consultarMontoObligadoRecepcionReturn>',
+        `<consultarMontoObligadoRecepcionReturn>${obs}</consultarMontoObligadoRecepcionReturn>`,
       ),
+      ok('consultarObligadoRecepcion', `<consultarObligadoRecepcionReturn>${obs}</consultarObligadoRecepcionReturn>`),
     );
-    const err = await client(fetch)
-      .consultarMontoObligadoRecepcion(AUTH, { cuitConsultada: 30712345671, fechaEmision: '2026-11-01' })
-      .catch((e) => e);
-    expect(err).toBeInstanceOf(ArcaSoapError);
-    expect(err.message).toMatch(/obligado/);
+    const c = client(fetch);
+    const observaciones = [{ codigo: 3, descripcion: 'CUIT sin datos' }];
+    expect(
+      await c.consultarMontoObligadoRecepcion(AUTH, { cuitConsultada: 30712345671, fechaEmision: '2026-11-01' }),
+    ).toEqual({ observaciones });
+    expect(await c.consultarObligadoRecepcion(AUTH, 30712345671)).toEqual({ observaciones });
   });
 
   it('consultarObligadoRecepcion: respuesta N → false, desde', async () => {
@@ -205,11 +210,12 @@ describe('errores de negocio', () => {
     expect(err.errors[0]).toMatchObject({ rawCode: 'FMT01', msg: 'Formato inválido' });
   });
 
-  it('aceptarFECred con resultado R y errores → ArcaServiceError', async () => {
+  it('aceptarFECred con resultado R y errores → ArcaServiceError con el método y las observaciones', async () => {
     const fetch = mockFetch(
       ok(
         'aceptarFECred',
         '<operacionFECredReturn><resultado>R</resultado><idCtaCte><codCtaCte>1</codCtaCte></idCtaCte>' +
+          '<arrayObservaciones><codigoDescripcion><codigo>7</codigo><descripcion>Obs</descripcion></codigoDescripcion></arrayObservaciones>' +
           '<arrayErrores><codigoDescripcion><codigo>2004</codigo><descripcion>Saldo no coincide</descripcion></codigoDescripcion></arrayErrores></operacionFECredReturn>',
       ),
     );
@@ -217,7 +223,28 @@ describe('errores de negocio', () => {
       .aceptarFECred(AUTH, { idCtaCte: { codCtaCte: 1 }, saldoAceptado: 10, codMoneda: 'PES', cotizacionMonedaUlt: 1 })
       .catch((e) => e);
     expect(err).toBeInstanceOf(ArcaServiceError);
-    expect(err.errors[0].code).toBe(2004);
+    expect(err.message).toBe('WSFECRED aceptarFECred: [2004] Saldo no coincide, [7] Obs');
+    expect(err.errors).toEqual([
+      { code: 2004, msg: 'Saldo no coincide' },
+      { code: 7, msg: 'Obs' },
+    ]);
+  });
+
+  it('una consulta con errores incluye el método y arrayObservacion en el error', async () => {
+    const fetch = mockFetch(
+      ok(
+        'consultarObligadoRecepcion',
+        '<consultarObligadoRecepcionReturn>' +
+          '<arrayObservacion><codigoDescripcion><codigo>3</codigo><descripcion>Obs</descripcion></codigoDescripcion></arrayObservacion>' +
+          '<arrayErrores><codigoDescripcion><codigo>1</codigo><descripcion>Err</descripcion></codigoDescripcion></arrayErrores>' +
+          '</consultarObligadoRecepcionReturn>',
+      ),
+    );
+    const err = await client(fetch)
+      .consultarObligadoRecepcion(AUTH, 30712345671)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaServiceError);
+    expect(err.message).toBe('WSFECRED consultarObligadoRecepcion: [1] Err, [3] Obs');
   });
 
   it('resultado R sin errores también lanza (con las observaciones)', async () => {
@@ -232,7 +259,7 @@ describe('errores de negocio', () => {
       .aceptarFECred(AUTH, { idCtaCte: { codCtaCte: 1 }, saldoAceptado: 10, codMoneda: 'PES', cotizacionMonedaUlt: 1 })
       .catch((e) => e);
     expect(err).toBeInstanceOf(ArcaServiceError);
-    expect(err.message).toMatch(/resultado R/);
+    expect(err.message).toBe('WSFECRED aceptarFECred: operación rechazada (resultado R): [7] Obs');
     expect(err.errors).toEqual([{ code: 7, msg: 'Obs' }]);
   });
 });
@@ -421,6 +448,50 @@ describe('consultarCtaCte', () => {
     expect(r.ctaCte.notasDCAsociadas).toEqual([]);
   });
 
+  it('arrayNotasDCAsociadas, retenciones (N), ajustes (con signo) e importes opcionales', async () => {
+    const nota = COMPROBANTE_XML.replace('<codTipoCmp>201</codTipoCmp>', '<codTipoCmp>203</codTipoCmp>').replace(
+      '<nroCmp>125</nroCmp>',
+      '<nroCmp>7</nroCmp>',
+    );
+    const fetch = mockFetch(
+      ok(
+        'consultarCtaCte',
+        '<consultarCtaCteReturn><ctaCte>' +
+          '<codCtaCte>1234567890</codCtaCte>' +
+          '<estadoCtaCte><estado>Aceptada</estado><fechaHoraEstado>2026-10-25T12:00:00-03:00</fechaHoraEstado></estadoCtaCte>' +
+          `<factura>${COMPROBANTE_XML.replace(/<\/?comprobante>/g, '')}</factura>` +
+          `<arrayNotasDCAsociadas>${nota}${nota.replace('<nroCmp>7</nroCmp>', '<nroCmp>8</nroCmp>')}</arrayNotasDCAsociadas>` +
+          '<arrayRetenciones>' +
+          '<retencion><codTipo>2</codTipo><importe>500</importe><porcentaje>3</porcentaje><descMotivo>IIBB</descMotivo></retencion>' +
+          '<retencion><codTipo>4</codTipo><importe>0.50</importe><porcentaje>0.25</porcentaje></retencion>' +
+          '</arrayRetenciones>' +
+          '<arrayAjustesOperacion><ajuste><codigo>1</codigo><importe>-100.50</importe></ajuste></arrayAjustesOperacion>' +
+          '<importeInicial>121000</importeInicial><importeTotalNotasDC>2000</importeTotalNotasDC>' +
+          '<importeCancelado>0</importeCancelado><importeTotalRetPesos>500.50</importeTotalRetPesos>' +
+          '<saldo>118399.50</saldo><codMoneda>PES</codMoneda><cotizacionMonedaUlt>1</cotizacionMonedaUlt>' +
+          '</ctaCte><evento><codigo>1</codigo><descripcion>Aviso</descripcion></evento></consultarCtaCteReturn>',
+      ),
+    );
+    const r = await client(fetch).consultarCtaCte(AUTH, { codCtaCte: '1234567890' });
+    expect(r.ctaCte.notasDCAsociadas.map((n) => [n.codTipoCmp, n.nroCmp])).toEqual([
+      [203, 7],
+      [203, 8],
+    ]);
+    expect(r.ctaCte.retenciones).toEqual([
+      { codTipo: 2, importe: 500, porcentaje: 3, descMotivo: 'IIBB' },
+      { codTipo: 4, importe: 0.5, porcentaje: 0.25 },
+    ]);
+    expect(r.ctaCte.ajustesOperacion).toEqual([{ codigo: 1, importe: -100.5 }]);
+    expect(r.ctaCte).toMatchObject({
+      importeTotalNotasDC: 2000,
+      importeCancelado: 0,
+      importeTotalRetPesos: 500.5,
+      saldo: 118399.5,
+    });
+    expect(r.ctaCte.importeEmbargoPesos).toBeUndefined();
+    expect(r.evento).toEqual({ codigo: 1, descripcion: 'Aviso' });
+  });
+
   it('idCtaCte debe tener exactamente uno de codCtaCte o idFactura', async () => {
     const c = client(mockFetch());
     await expect(c.consultarCtaCte(AUTH, {} as never)).rejects.toThrow(ArcaValidationError);
@@ -601,6 +672,72 @@ describe('emisiones', () => {
     await client(fetch, { retries: 1 }).consultarCtasCtes(AUTH, { rol: 'Emisor' });
     expect(fetch.calls).toHaveLength(2);
   });
+
+  const ACEPTAR = { idCtaCte: { codCtaCte: 1 }, saldoAceptado: 10, codMoneda: 'PES', cotizacionMonedaUlt: 1 };
+
+  it('resultado O devuelve el resultado con las observaciones (no lanza)', async () => {
+    const fetch = mockFetch(
+      ok(
+        'aceptarFECred',
+        '<operacionFECredReturn><resultado>O</resultado><idCtaCte><codCtaCte>1</codCtaCte></idCtaCte>' +
+          '<evento><codigo>9</codigo><descripcion>Aviso</descripcion></evento>' +
+          '<arrayObservaciones><codigoDescripcion><codigo>7</codigo><descripcion>Obs</descripcion></codigoDescripcion></arrayObservaciones>' +
+          '</operacionFECredReturn>',
+      ),
+    );
+    const r = await client(fetch).aceptarFECred(AUTH, ACEPTAR);
+    expect(r).toEqual({
+      resultado: 'O',
+      idCtaCte: { codCtaCte: '1' },
+      evento: { codigo: 9, descripcion: 'Aviso' },
+      observaciones: [{ codigo: 7, descripcion: 'Obs' }],
+    });
+  });
+
+  it('una emisión sin resultado → ArcaSoapError uncertain', async () => {
+    const fetch = mockFetch(
+      ok(
+        'aceptarFECred',
+        '<operacionFECredReturn><idCtaCte><codCtaCte>1</codCtaCte></idCtaCte></operacionFECredReturn>',
+      ),
+    );
+    const err = await client(fetch)
+      .aceptarFECred(AUTH, ACEPTAR)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err.uncertain).toBe(true);
+    expect(err.message).toMatch(/falta aceptarFECred\.resultado/);
+  });
+
+  it('un Fault wscommon_* (auth) en una emisión → ArcaAuthError, no uncertain', async () => {
+    for (const faultCode of ['soap:Server', 'soap:Client']) {
+      const fetch = mockFetch(soapFaultResponse(faultCode, 'wscommon_005: Token inválido'));
+      const err = await client(fetch)
+        .aceptarFECred(AUTH, ACEPTAR)
+        .catch((e) => e);
+      expect(fetch.calls).toHaveLength(1);
+      expect(err).toBeInstanceOf(ArcaAuthError);
+      expect(err.uncertain).toBeUndefined();
+      expect(err.retryable).toBe(false);
+      expect(err.faultCode).toBe(faultCode);
+      expect(err.message).toBe('WSFECRED: wscommon_005: Token inválido');
+      expect(err.cause).toBeInstanceOf(ArcaSoapError);
+    }
+  });
+
+  it('un Fault wscommon_* en una consulta también es ArcaAuthError', async () => {
+    const fetch = mockFetch(soapFaultResponse('soap:Server', 'wscommon_007: CUIT representada no autorizada'));
+    await expect(client(fetch).consultarCtasCtes(AUTH, { rol: 'Emisor' })).rejects.toThrow(ArcaAuthError);
+  });
+
+  it('otro Fault Server en una emisión sigue siendo ArcaSoapError uncertain', async () => {
+    const fetch = mockFetch(soapFaultResponse('soap:Server', 'java.lang.NullPointerException'));
+    const err = await client(fetch)
+      .aceptarFECred(AUTH, ACEPTAR)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err.uncertain).toBe(true);
+  });
 });
 
 describe('historial, remitos y parámetros', () => {
@@ -693,6 +830,59 @@ describe('Agente de Depósito Colectivo', () => {
     });
   });
 
+  it('consultarFacturasAgtDptoCltv: request con idCtaCte y filtroFecha, respuesta decodificada', async () => {
+    const info =
+      '<infoAgtDptoCltv><fechaInfo>2026-10-05</fechaInfo>' +
+      '<ctaAgente><cuitAgente>30500012346</cuitAgente><idCuenta>CTA-001</idCuenta></ctaAgente>' +
+      '<recibida>S</recibida><fechaRecep>2026-10-06</fechaRecep><aceptada>N</aceptada>' +
+      '<motivoRechazo>Cuenta inexistente</motivoRechazo><CBUAgtDptoCltv>0110599520000001234567</CBUAgtDptoCltv>' +
+      '</infoAgtDptoCltv>';
+    const fetch = mockFetch(
+      ok(
+        'consultarFacturasAgtDptoCltv',
+        '<consultarFacturasAgtDptoCltvReturn><arrayFacturasAgtDptoCltv>' +
+          `<facturaInformada><idFactura>${ID_FACTURA_XML}</idFactura>${info}</facturaInformada>` +
+          '</arrayFacturasAgtDptoCltv></consultarFacturasAgtDptoCltvReturn>',
+      ),
+      ok('consultarFacturasAgtDptoCltv', '<consultarFacturasAgtDptoCltvReturn/>'),
+    );
+    const c = client(fetch);
+    const r = await c.consultarFacturasAgtDptoCltv(AUTH, {
+      idCtaCte: { codCtaCte: 5 },
+      fecha: { tipo: 'InfoAgDptoCltv', desde: '2026-10-01', hasta: '20261031' },
+    });
+    const { xml, body } = sentRequest(fetch);
+    expect(body['ser:consultarFacturasAgtDptoCltvRequest']).toMatchObject({
+      idCtaCte: { codCtaCte: 5 },
+      filtroFecha: { tipo: 'InfoAgDptoCltv', desde: '2026-10-01', hasta: '2026-10-31' },
+    });
+    expect(childOrder(xml, 'ser:consultarFacturasAgtDptoCltvRequest')).toEqual([
+      'authRequest',
+      'idCtaCte',
+      'filtroFecha',
+    ]);
+    expect(r).toEqual({
+      facturas: [
+        {
+          idFactura: { cuitEmisor: '30712345671', codTipoCmp: 201, ptoVta: 3, nroCmp: 125 },
+          infoAgtDptoCltv: {
+            fechaInfo: '2026-10-05',
+            ctaAgente: { cuitAgente: '30500012346', idCuenta: 'CTA-001' },
+            recibida: true,
+            fechaRecep: '2026-10-06',
+            aceptada: false,
+            motivoRechazo: 'Cuenta inexistente',
+            cbuAgtDptoCltv: '0110599520000001234567',
+          },
+        },
+      ],
+      observaciones: [],
+    });
+    // Sin parámetros: solo authRequest; sin facturas → lista vacía.
+    expect(await c.consultarFacturasAgtDptoCltv(AUTH)).toEqual({ facturas: [], observaciones: [] });
+    expect(childOrder(sentRequest(fetch, 1).xml, 'ser:consultarFacturasAgtDptoCltvRequest')).toEqual(['authRequest']);
+  });
+
   it('consultarCuentasEnAgtDptoCltv', async () => {
     const fetch = mockFetch(
       ok(
@@ -769,19 +959,54 @@ describe('respuestas decodificadas con el schema del XSD', () => {
     await expect(c.consultarComprobantes(AUTH, { rol: 'Receptor' })).rejects.toThrow(/infoAgtDptoCltv\|infoSCA/);
   });
 
-  it('valores fuera de la enumeración o S/N inválido → ArcaSoapError', async () => {
+  it('un valor nuevo de una enumeración se devuelve tal cual', async () => {
+    const info = infoCtaCte('1').replace('>SCA<', '>XYZ<').replace('>Modificable<', '>NuevoEstado<');
+    const cmp = COMPROBANTE_XML.replace('>E</tipoCodAuto>', '>Z</tipoCodAuto>')
+      .replace('>Recepcionado<', '>Otro<')
+      .replace(
+        '<opcionTransferencia>SCA</opcionTransferencia>',
+        '<tipoAcep>Ficta</tipoAcep><opcionTransferencia>ABC</opcionTransferencia>',
+      );
     const fetch = mockFetch(
       ok(
         'consultarCtasCtes',
-        `<consultarCtasCtesReturn><arrayInfosCtaCte>${infoCtaCte('1').replace('>SCA<', '>XYZ<')}</arrayInfosCtaCte></consultarCtasCtesReturn>`,
+        `<consultarCtasCtesReturn><arrayInfosCtaCte>${info}</arrayInfosCtaCte></consultarCtasCtesReturn>`,
       ),
-      ok('consultarCtasCtes', '<consultarCtasCtesReturn><hayMas>X</hayMas></consultarCtasCtesReturn>'),
+      ok(
+        'consultarComprobantes',
+        `<consultarCmpReturn><arrayComprobantes>${cmp}</arrayComprobantes></consultarCmpReturn>`,
+      ),
     );
     const c = client(fetch);
-    const err = await c.consultarCtasCtes(AUTH, { rol: 'Emisor' }).catch((e) => e);
+    const [cta] = (await c.consultarCtasCtes(AUTH, { rol: 'Emisor' })).ctasCtes;
+    expect(cta.opcionTransferencia).toBe('XYZ');
+    expect(cta.estadoCtaCte.estado).toBe('NuevoEstado');
+    const [comprobante] = (await c.consultarComprobantes(AUTH, { rol: 'Receptor' })).comprobantes;
+    expect(comprobante).toMatchObject({
+      tipoCodAuto: 'Z',
+      tipoAcep: 'Ficta',
+      opcionTransferencia: 'ABC',
+      estado: { estado: 'Otro' },
+    });
+  });
+
+  it('los requests siguen validando las enumeraciones', async () => {
+    const c = client(mockFetch());
+    await expect(c.consultarCtasCtes(AUTH, { rol: 'Emisor', estadoCtaCte: 'Otro' as never })).rejects.toThrow(
+      ArcaValidationError,
+    );
+  });
+
+  it('S/N inválido en una consulta → ArcaSoapError sin uncertain', async () => {
+    const fetch = mockFetch(
+      ok('consultarCtasCtes', '<consultarCtasCtesReturn><hayMas>X</hayMas></consultarCtasCtesReturn>'),
+    );
+    const err = await client(fetch)
+      .consultarCtasCtes(AUTH, { rol: 'Emisor' })
+      .catch((e) => e);
     expect(err).toBeInstanceOf(ArcaSoapError);
-    expect(err.message).toMatch(/ctasCtes\[0\]\.opcionTransferencia tiene un valor inesperado \(XYZ\)/);
-    await expect(c.consultarCtasCtes(AUTH, { rol: 'Emisor' })).rejects.toThrow(/hayMas no es S\/N \(X\)/);
+    expect(err.uncertain).toBe(false);
+    expect(err.message).toMatch(/hayMas no es S\/N \(X\)/);
   });
 
   it('arrayHistorialEstados es obligatorio', async () => {

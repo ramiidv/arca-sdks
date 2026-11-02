@@ -1,12 +1,19 @@
 import {
+  ArcaAuthError,
   ArcaServiceError,
+  ArcaSoapError,
   SoapServiceClient,
-  checkServiceErrors,
   extractServiceErrors,
   parseServerStatus,
 } from '@ramiidv/arca-common';
-import type { CallOptions, ServerStatus, SoapOperationKind, SoapServiceClientConfig } from '@ramiidv/arca-common';
-import { decode, encode, REQ, RESP, SERVICE } from './schemas.js';
+import type {
+  CallOptions,
+  ServerStatus,
+  ServiceErrorDetail,
+  SoapOperationKind,
+  SoapServiceClientConfig,
+} from '@ramiidv/arca-common';
+import { decode, encode, OBSERVACIONES, REQ, RESP, SERVICE } from './schemas.js';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import type {
   AceptarFecredParams,
@@ -25,7 +32,6 @@ import type {
   IdComprobante,
   IdComprobanteInput,
   IdCtaCteInput,
-  InfoRespuesta,
   InformarCancelacionTotalParams,
   InformarFacturaAgtDptoCltvParams,
   ModificarOpcionTransferenciaParams,
@@ -53,6 +59,26 @@ type Xml = Record<string, unknown>;
  */
 export type WsAuthSource = WsAuth | (() => Promise<WsAuth>);
 
+/**
+ * Errores de la capa común de autenticación de los WS Java de ARCA
+ * (`wscommon_NNN`: token, sign o CUIT representada inválidos o vencidos).
+ */
+const AUTH_FAULT = /\bwscommon_\d+/i;
+
+/**
+ * Un SOAP Fault `wscommon_*` es un rechazo del `authRequest` antes de procesar
+ * la operación: se lanza como `ArcaAuthError` (sin `uncertain`), con el
+ * `ArcaSoapError` original en `cause`.
+ */
+function authFault(e: unknown): ArcaAuthError | undefined {
+  if (!(e instanceof ArcaSoapError) || e.faultString === undefined) return undefined;
+  if (!AUTH_FAULT.test(`${e.faultCode ?? ''} ${e.faultString}`)) return undefined;
+  return new ArcaAuthError(`${SERVICE}: ${e.faultString}`, { cause: e });
+}
+
+const formatDetails = (details: ServiceErrorDetail[]) =>
+  details.map((d) => `[${d.rawCode ?? d.code}] ${d.msg}`).join(', ');
+
 // ---------------------------------------------------------------------------
 // FecredClient
 // ---------------------------------------------------------------------------
@@ -66,6 +92,9 @@ export type WsAuthSource = WsAuth | (() => Promise<WsAuth>);
  * Las operaciones que cambian estado en ARCA (aceptar, rechazar, informar,
  * modificar) se envían como `kind: 'emision'`: nunca se reintentan y, si la
  * respuesta se pierde, el `ArcaSoapError` tiene `uncertain = true`.
+ *
+ * Un SOAP Fault `wscommon_*` (rechazo del `authRequest`) se lanza como
+ * `ArcaAuthError`: la operación no se procesó.
  */
 export class FecredClient extends SoapServiceClient {
   constructor(config: FecredClientConfig) {
@@ -79,7 +108,8 @@ export class FecredClient extends SoapServiceClient {
   /**
    * Llama a `method` con el wrapper `<method>Request` (o Body vacío si `auth`
    * es `null`), `SOAPAction = namespace + method`, y chequea errores de negocio
-   * (`arrayErrores`/`arrayErroresFormato`). La respuesta queda como texto
+   * (`arrayErrores`/`arrayErroresFormato` → `ArcaServiceError`, con las
+   * observaciones al final de `errors`). La respuesta queda como texto
    * (`parseNumbers: false`) para decodificarla con los schemas.
    */
   private async call(
@@ -97,15 +127,35 @@ export class FecredClient extends SoapServiceClient {
           ...fields,
         }
       : {};
-    const result = await this.soapCall(method, params, {
-      signal: opts?.signal,
-      kind,
-      requestElement: auth ? `${method}Request` : null,
-      soapActionFromMethod: true,
-      parseNumbers: false,
-    });
-    checkServiceErrors(result, SERVICE);
+    let result: Xml;
+    try {
+      result = await this.soapCall(method, params, {
+        signal: opts?.signal,
+        kind,
+        requestElement: auth ? `${method}Request` : null,
+        soapActionFromMethod: true,
+        parseNumbers: false,
+      });
+    } catch (e) {
+      throw authFault(e) ?? e;
+    }
+    const errors = extractServiceErrors(result);
+    if (errors.some((e) => e.code !== 0 || e.rawCode !== undefined)) {
+      const details = [...errors, ...this.observaciones(result, method)];
+      throw new ArcaServiceError(`${SERVICE} ${method}: ${formatDetails(details)}`, details);
+    }
     return result;
+  }
+
+  /** Observaciones de la respuesta (`arrayObservaciones` o `arrayObservacion`) como detalle de error. */
+  private observaciones(result: Xml, method: string): ServiceErrorDetail[] {
+    try {
+      const r = decode<Record<string, CodigoDescripcion[]>>(result, OBSERVACIONES, method, 'consulta');
+      return [...r['observaciones']!, ...r['observacion']!].map((o) => ({ code: o.codigo, msg: o.descripcion }));
+    } catch {
+      // Observaciones ilegibles: se informa el error igual.
+      return [];
+    }
   }
 
   /** Consulta: valida el request con `reqSchema` (si hay) y decodifica la respuesta con `respSchema`. */
@@ -117,12 +167,13 @@ export class FecredClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<T> {
     const fields = params ? encode(params[0], params[1], method) : {};
-    return decode<T>(await this.call(method, auth, fields, 'consulta', opts), respSchema, method);
+    return decode<T>(await this.call(method, auth, fields, 'consulta', opts), respSchema, method, 'consulta');
   }
 
   /**
    * Emisión con `resultado`: `R` sin errores informados (no debería pasar)
    * también se lanza como `ArcaServiceError`, con las observaciones como detalle.
+   * Una respuesta sin `resultado` (o ilegible) lanza `ArcaSoapError` con `uncertain`.
    */
   private async emision<T>(
     method: string,
@@ -134,17 +185,13 @@ export class FecredClient extends SoapServiceClient {
   ): Promise<T> {
     const r = await this.call(method, auth, encode(input, reqSchema, method), 'emision', opts);
     if (r['resultado'] === 'R') {
-      const { observaciones } = decode<InfoRespuesta>(r, RESP.info, method);
-      const details = [
-        ...extractServiceErrors(r),
-        ...observaciones.map((o) => ({ code: o.codigo, msg: o.descripcion })),
-      ];
+      const details = [...extractServiceErrors(r), ...this.observaciones(r, method)];
       throw new ArcaServiceError(
-        `${SERVICE}: operación rechazada (resultado R)${details.length ? `: ${details.map((d) => `[${d.code}] ${d.msg}`).join(', ')}` : ''}`,
+        `${SERVICE} ${method}: operación rechazada (resultado R)${details.length ? `: ${formatDetails(details)}` : ''}`,
         details,
       );
     }
-    return decode<T>(r, respSchema, method);
+    return decode<T>(r, respSchema, method, 'emision');
   }
 
   // -------------------------------------------------------------------------
