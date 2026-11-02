@@ -4,6 +4,12 @@ import {
   validateAjusteUnificado,
   validateAutorizarCPEAutomotor,
   validateAutorizarCPEFerroviaria,
+  validateCgAutorizar,
+  validateConfirmacionDefinitivaCPEAutomotor,
+  validateConfirmacionDefinitivaCPEFerroviaria,
+  validateEditarCPEAutomotor,
+  validateEditarCPEConfirmada,
+  validateEditarCPEFerroviaria,
   validateLiquidacion,
 } from '../src/index.js';
 import {
@@ -96,5 +102,62 @@ describe('validadores exportados', () => {
         ajusteBase: { ptoEmision: 1, nroOrden: 1, coeAjustado: '1', codLocalidad: 1, codProv: 1 },
       }),
     ).toThrow(/ajusteCredito/);
+  });
+
+  it('validadores de edición y confirmación', () => {
+    for (const v of [
+      validateEditarCPEAutomotor,
+      validateEditarCPEFerroviaria,
+      validateEditarCPEConfirmada,
+      validateConfirmacionDefinitivaCPEAutomotor,
+      validateConfirmacionDefinitivaCPEFerroviaria,
+    ]) {
+      expect(() => v({} as never)).toThrow(ArcaValidationError);
+    }
+    const confirmacion = {
+      cuitSolicitante: '20123456786',
+      cartaPorte: { tipoCPE: 74, sucursal: 1, nroOrden: 15 },
+      pesoBrutoDescarga: 41900,
+      pesoTaraDescarga: 12000,
+    };
+    expect(() => validateConfirmacionDefinitivaCPEAutomotor(confirmacion)).not.toThrow();
+    expect(() => validateConfirmacionDefinitivaCPEAutomotor({ ...confirmacion, cuitSolicitante: '1' })).toThrow(
+      /cuitSolicitante/,
+    );
+    expect(() =>
+      validateEditarCPEConfirmada({
+        nroCTG: '010100012345',
+        intervinientes: { cuitCorredorVentaPrimaria: '30712345671' },
+      }),
+    ).not.toThrow();
+  });
+
+  it('validateCgAutorizar: cuitCorredor acepta 0 y valida CUIT reales', () => {
+    const cabecera = {
+      tipoCertificado: 'R' as const,
+      ptoEmision: 1,
+      nroOrden: 3,
+      nroIngBrutoDepositario: 901234567,
+      titularGrano: 'T' as const,
+      codGrano: 23,
+      campania: 2526,
+    };
+    const retiroTransferencia = {
+      certificadoDeposito: { coeCertificadoDeposito: '330200000001', pesoNeto: 10000 },
+      nroActDepositario: 40,
+    };
+    expect(() =>
+      validateCgAutorizar({ cabecera: { ...cabecera, cuitCorredor: 0 }, retiroTransferencia }),
+    ).not.toThrow();
+    expect(() =>
+      validateCgAutorizar({ cabecera: { ...cabecera, cuitCorredor: '0' }, retiroTransferencia }),
+    ).not.toThrow();
+    expect(() =>
+      validateCgAutorizar({ cabecera: { ...cabecera, cuitCorredor: '30712345671' }, retiroTransferencia }),
+    ).not.toThrow();
+    expect(() =>
+      validateCgAutorizar({ cabecera: { ...cabecera, cuitCorredor: '30712345672' }, retiroTransferencia }),
+    ).toThrow(/cuitCorredor/);
+    expect(() => validateCgAutorizar({ cabecera: {} } as never)).toThrow(ArcaValidationError);
   });
 });

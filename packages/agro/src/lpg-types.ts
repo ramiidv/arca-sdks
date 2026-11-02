@@ -3,7 +3,7 @@
  * oficial. Los contenedores con ítems repetidos del XSD (`certificados/certificado`,
  * `deducciones/deduccion`, `eventos/evento`, ...) se exponen como arrays.
  */
-import type { CodigoDescripcion, CuitInput, FechaInput } from './types.js';
+import type { CodigoDescripcion, ConAdvertencias, CuitInput, FechaInput } from './types.js';
 
 export type SiNo = 'S' | 'N';
 
@@ -170,6 +170,7 @@ export interface CgAutorizarParams {
     nroIngBrutoDepositante?: number;
     codGrano: number;
     campania: number;
+    /** CUIT del corredor, o `0` si no interviene (`LpgCuit0Type`). */
     cuitCorredor?: CuitInput;
     datosAdicionales?: string;
   };
@@ -298,7 +299,7 @@ export interface LiquidacionAutorizadaLpg {
 }
 
 /** Resultado de `liquidacionAutorizar` (`LpgLiqReturnType`). */
-export interface LiquidacionResultado {
+export interface LiquidacionResultado extends ConAdvertencias {
   autorizacion: LiquidacionAutorizadaLpg;
   /** Eventos informativos de ARCA (`eventos.evento[]`). */
   eventos: CodigoDescripcion[];
@@ -355,7 +356,7 @@ export interface LiquidacionConsultadaLpg {
 }
 
 /** Resultado de `liquidacionXCoeConsultar` / `liquidacionXNroOrdenConsultar` (`LpgLiqConsReturnType`). */
-export interface LiquidacionConsultaResultado {
+export interface LiquidacionConsultaResultado extends ConAdvertencias {
   liquidacion?: LiquidacionConsultadaLpg;
   autorizacion: LiquidacionAutorizadaLpg;
   /** PDF en base64 (si se pidió con `pdf: 'S'`). */
@@ -363,10 +364,14 @@ export interface LiquidacionConsultaResultado {
   eventos: CodigoDescripcion[];
 }
 
-/** Resultado de `liquidacionAnular` (`LpgAnulacionReturnType`). */
-export interface AnulacionLiquidacionResultado {
+/**
+ * Resultado de `liquidacionAnular` (`LpgAnulacionReturnType`). Si ARCA
+ * responde `resultado: 'R'` (rechazada), el método lanza `ArcaAgroServiceError`.
+ */
+export interface AnulacionLiquidacionResultado extends ConAdvertencias {
   coe?: string;
-  resultado: string;
+  /** `A` aprobada. Opcional en el XSD. */
+  resultado?: 'A' | 'R' | (string & {});
   pdf?: string;
   eventos: CodigoDescripcion[];
 }
@@ -420,7 +425,7 @@ export interface AjusteUnificadoLpg {
 }
 
 /** Resultado de `liquidacionAjustarUnificado`. */
-export interface AjusteUnificadoResultado {
+export interface AjusteUnificadoResultado extends ConAdvertencias {
   ajusteUnificado: AjusteUnificadoLpg;
   eventos: CodigoDescripcion[];
 }
@@ -458,15 +463,177 @@ export interface CertificacionAutorizadaLpg {
 }
 
 /** Resultado de `cgAutorizar`. */
-export interface CertificacionResultado {
+export interface CertificacionResultado extends ConAdvertencias {
   autorizacion: CertificacionAutorizadaLpg;
   eventos: CodigoDescripcion[];
 }
 
 /** Resultado de `cgSolicitarAnulacion` / `cgConfirmarAnulacion` (`CgSolicitarAnulacionReturnType`). */
-export interface AnulacionCertificacionResultado {
-  /** `AC`, `PA` o `AN`. */
-  estadoCertificado: string;
+export interface AnulacionCertificacionResultado extends ConAdvertencias {
+  /** `AC`, `PA` o `AN`. Opcional en el XSD. */
+  estadoCertificado?: string;
   pdf?: string;
   eventos: CodigoDescripcion[];
+}
+
+/** Resultado de `ajusteXCoeConsultar`, `ajusteXNroOrdenConsultar` y `ajustePorContratoConsultar` (`LpgAjusteConsReturnType`). */
+export interface AjusteConsultaResultado extends ConAdvertencias {
+  ajusteUnificado: AjusteUnificadoLpg;
+  /** PDF en base64 (si se pidió con `pdf: true`). */
+  pdf?: string;
+  eventos: CodigoDescripcion[];
+}
+
+/** `liquidacionPorContratoConsultarReq` sin `auth` (`LpgLiqPorContratoConsReqType`). */
+export interface LiquidacionPorContratoParams {
+  nroContrato: number;
+  cuitComprador: CuitInput;
+  cuitVendedor: CuitInput;
+  cuitCorredor?: CuitInput;
+  codGrano: number;
+}
+
+/** Mermas de una CTG o carta de porte certificada, tal como las devuelve ARCA. */
+export interface MermasCgRespuesta {
+  porcentajeSecadoHumedad?: number;
+  importeSecado?: number;
+  pesoNetoMermaSecado?: number;
+  tarifaSecado?: number;
+  importeZarandeo?: number;
+  pesoNetoMermaZarandeo?: number;
+  tarifaZarandeo?: number;
+}
+
+/** Resultado de `cgConsultarXCoe` / `cgConsultarXNroOrden` (`CgConsultarReturnType`). */
+export interface CertificacionConsultaResultado extends ConAdvertencias {
+  autorizacion: CertificacionAutorizadaLpg;
+  cabecera?: {
+    tipoCertificado?: string;
+    ptoEmision?: number;
+    nroOrden?: number;
+    nroIngBrutoDepositario?: number;
+    titularGrano?: string;
+    cuitDepositante?: number;
+    nroIngBrutoDepositante?: number;
+    codGrano?: number;
+    campania?: number;
+    /** `0` si no interviene corredor. */
+    cuitCorredor?: number;
+    datosAdicionales?: string;
+  };
+  primaria?: {
+    nroActDepositario?: number;
+    ctg: Array<
+      { nroCTG?: string; nroCartaDePorte?: string; pesoNetoConfirmadoDefinitivo?: number } & MermasCgRespuesta
+    >;
+    cartaPorteFerroviaria: Array<{ nroCartaPorte?: number; pesoNetoConfirmadoDefinitivo?: number } & MermasCgRespuesta>;
+    descripcionTipoGrano?: string;
+    montoAlmacenaje?: number;
+    montoAcarreo?: number;
+    montoGastosGenerales?: number;
+    montoZarandeo?: number;
+    porcentajeSecadoDe?: number;
+    porcentajeSecadoA?: number;
+    montoSecado?: number;
+    montoPorCadaPuntoExceso?: number;
+    montoOtros?: number;
+    calidad?: {
+      analisisMuestra?: number;
+      nroBoletin?: number;
+      codGrado?: string;
+      valorGrado?: number;
+      valorContProteico?: number;
+      valorFactor?: number;
+      detalleMuestraAnalisis: Array<{
+        descripcionRubro?: string;
+        tipoRubro?: string;
+        porcentaje?: number;
+        valor?: number;
+      }>;
+    };
+    pesoNetoMermaVolatil?: number;
+    serviciosFormaDePago?: string;
+    serviciosOtros?: number;
+    serviciosConceptosNoGravados?: number;
+    serviciosPercepcionesIVA?: number;
+    serviciosOtrasPercepciones?: number;
+  };
+  retiroTransferencia?: {
+    certificadoDeposito?: { coeCertificadoDeposito?: string; pesoNeto?: number };
+    nroActDepositario?: number;
+    cuitReceptor?: number;
+    nroCartaPorteAUtilizar?: string;
+    nroCTG?: string;
+    descripcionCausaJudicial?: string;
+  };
+  preexistente?: {
+    nroPlanta?: number;
+    tipoCertificadoDepositoPreexistente?: number;
+    nroCertificadoDepositoPreexistente?: number;
+    cacCertificadoDepositoPreexistente?: number;
+    fechaEmisionCertificadoDepositoPreexistente?: string;
+    pesoNeto?: number;
+  };
+  nroPlanta?: number;
+  cuitDepositario?: number;
+  alicuotaIVA?: number;
+  cuitRemitenteComercial?: number;
+  codLocalidad?: number;
+  codProvincia?: number;
+  kilosDisponible?: number;
+  /** PDF en base64 (si se pidió con `pdf: true`). */
+  pdf?: string;
+  eventos: CodigoDescripcion[];
+}
+
+/** `cgBuscarCtgReq` sin `auth` (`CgBuscarCtgReqType`). */
+export interface CgBuscarCtgParams {
+  /** `P` primaria, `R` retiro, `T` transferencia, `E` preexistente. */
+  tipoCertificado: 'P' | 'R' | 'T' | 'E';
+  cuitDepositante: CuitInput;
+  nroPlanta?: number;
+  codGrano: number;
+  campania: number;
+  nroCtg?: string | number;
+  tipoCtg?: 'CTG' | 'FC' | 'CPE';
+  nroCartaPorte?: string;
+  fechaConfirmacionCtgDes?: FechaInput;
+  fechaConfirmacionCtgHas?: FechaInput;
+}
+
+/** `CgCartaDePorteType`: CTG/CPE confirmada disponible para certificar. */
+export interface CtgCertificableLpg {
+  campania?: number;
+  nroPlanta?: number;
+  nroCtg?: string;
+  tipoCtg?: string;
+  nroCartaPorte?: string;
+  kilosConfirmados?: number;
+  fechaConfirmacionCtg?: string;
+  codGrano?: number;
+  cuitRemitenteComercial?: number;
+  cuitLiquida?: number;
+  cuitCertifica?: number;
+}
+
+/** `cgBuscarCertConSaldoDisponibleReq` sin `auth` (`CgBuscarCertConSaldoDisponibleReqType`). */
+export interface CgBuscarCertConSaldoDisponibleParams {
+  cuitDepositante: CuitInput;
+  codGrano: number;
+  campania: number;
+  coe?: string | number;
+  fechaEmisionDes?: FechaInput;
+  fechaEmisionHas?: FechaInput;
+}
+
+/** `CgCertificadoType`: certificado con saldo disponible. */
+export interface CertificadoConSaldoLpg {
+  coe?: string;
+  tipoCertificado?: string;
+  campania?: number;
+  cuitDepositante?: number;
+  cuitDepositario?: number;
+  nroPlanta?: number;
+  kilosDisponibles?: number;
+  codGrano?: number;
 }

@@ -353,12 +353,21 @@ export const SOLICITUD_CUIT: Schema = { cuit: cuit() };
 /** ConsultarVariedadesSemillasRequest (sin `solicitud`: `codGrano` va directo bajo el Req) */
 export const CONSULTAR_VARIEDADES: Schema = { codGrano: opt(codGrano()) };
 
+/** ConsultarRenspaRequest (sin `solicitud`) */
+export const CONSULTAR_RENSPA: Schema = { cuit: cuit(), codProvincia: int() };
+
+/** ConsultarDomiciliosPorCUITRequest (sin `solicitud`) */
+export const CONSULTAR_DOMICILIOS: Schema = { cuit: cuit() };
+
 // ---------------------------------------------------------------------------
 // Respuestas
 // ---------------------------------------------------------------------------
 
 /** CodigoDescripcion */
 export const R_CODIGO_DESCRIPCION: Schema = { codigo: must(str()), descripcion: must(str()) };
+
+/** ConsultarUltNroOrdenRespuesta */
+export const R_ULT_NRO_ORDEN: Schema = { nroOrden: must(int()) };
 
 /** CabeceraRespuesta */
 const R_CABECERA: Schema = {
@@ -590,3 +599,16 @@ export const R_LOCALIDAD_PRODUCTOR: Schema = {
 
 /** CodigoDescripcionGrano */
 export const R_VARIEDAD_SEMILLA: Schema = { codigo: must(str()), descripcion: must(str()), grano: must(int()) };
+
+/** Renspa */
+export const R_RENSPA: Schema = { nroRenspa: str(), descripcion: str() };
+
+/** DomicilioPUCRespuesta */
+export const R_DOMICILIO: Schema = { tipo: int(), orden: int(), descripcion: str() };
+
+/** TipoEmbalajeUnidadMedida */
+export const R_TIPO_EMBALAJE: Schema = {
+  codigo: must(str()),
+  descripcion: must(str()),
+  unidadMedida: list(obj(R_CODIGO_DESCRIPCION), 0),
+};

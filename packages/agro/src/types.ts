@@ -1,4 +1,4 @@
-import type { ArcaSdkConfig, ServiceStatus } from '@ramiidv/arca-common';
+import type { ArcaSdkConfig, ServiceErrorDetail, ServiceStatus } from '@ramiidv/arca-common';
 
 // Re-export de tipos de common usados en la API pública.
 export type { AccessTicket, ArcaEvent, CallOptions, ServerStatus, TicketStorage } from '@ramiidv/arca-common';
@@ -41,3 +41,13 @@ export interface CodigoDescripcion {
 
 /** Estado de un servicio en `status()` (`ServiceStatus` de arca-common). */
 export type AgroServiceStatus = ServiceStatus;
+
+/**
+ * Resultado de una operación que puede traer errores admitidos: ARCA los
+ * informa en `errores` pero no cancelan la operación (WSCPE 550 y WSLPG 1021,
+ * "Error al generar el archivo pdf": la respuesta viene sin `pdf`).
+ */
+export interface ConAdvertencias {
+  /** Errores admitidos que informó ARCA. Ausente si no hubo. */
+  advertencias?: ServiceErrorDetail[];
+}

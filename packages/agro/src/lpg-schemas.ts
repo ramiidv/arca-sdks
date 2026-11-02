@@ -5,7 +5,8 @@
  *
  * @internal
  */
-import { base64, cuit, date, dec, id, int, list, must, obj, opt, str, wrapped } from './schema.js';
+import { ArcaValidationError, validateCuit } from '@ramiidv/arca-common';
+import { base64, cuit, custom, date, dec, id, int, list, must, obj, opt, porcentaje, str, wrapped } from './schema.js';
 import type { Schema } from './schema.js';
 
 // ---------------------------------------------------------------------------
@@ -35,7 +36,22 @@ const numeroContrato = () => int(0, 999999999999999, true); // LpgNumeroContrato
 const importe12_2 = () => dec(2, 0, 999999999999.98); // LpgImporte12_2Type (maxExclusive 999999999999.99)
 const conceptoImporte = () => str({ minLen: 0, maxLen: 200 }); // LpgConceptoImporteType
 const zImporte8_2 = () => dec(2, 0, 99999999.99); // NumeroZ_8_2_Type
-const porcentaje = () => dec(2, 0, 100); // LpgPorcentajeType
+// LpgPorcentajeType = `porcentaje()` de common (dec(2, 0, 100)).
+
+/**
+ * `LpgCuit0Type`: CUIT o `0` (sin corredor). Una CUIT distinta de 0 se valida
+ * con dígito verificador y se envía normalizada.
+ */
+const cuit0 = () =>
+  custom((v, fail) => {
+    if (v === 0 || v === '0') return 0;
+    try {
+      return validateCuit(v as string | number);
+    } catch (e) {
+      if (e instanceof ArcaValidationError) return fail(e.details[0]?.message ?? 'CUIT inválido');
+      throw e;
+    }
+  });
 
 // ---------------------------------------------------------------------------
 // Requests
@@ -190,6 +206,44 @@ export const TIPO_OPERACION: Schema = { nroActLiquida: int(0) };
 /** LpgGradoEntReqType */
 export const GRADO_ENTREGADO: Schema = { codGrano: codGrano() };
 
+/** LpgLiqPorContratoConsReqType (sin `auth`) */
+export const LIQ_POR_CONTRATO: Schema = {
+  nroContrato: numeroContrato(),
+  cuitComprador: cuit(),
+  cuitVendedor: cuit(),
+  cuitCorredor: opt(cuit()),
+  codGrano: codGrano(),
+};
+
+/** LpgAjustePorContratoReqType (sin `auth`) */
+export const AJUSTE_POR_CONTRATO: Schema = { nroContrato: numeroContrato() };
+
+const tipoCertificado = () => str({ values: ['P', 'R', 'T', 'E'] }); // CgTipoCertificadoType
+
+/** CgBuscarCtgReqType (sin `auth`) */
+export const CG_BUSCAR_CTG: Schema = {
+  tipoCertificado: tipoCertificado(),
+  cuitDepositante: cuit(),
+  nroPlanta: opt(int(0, 999999, true)),
+  codGrano: codGrano(),
+  campania: campania(),
+  nroCtg: opt(id()),
+  tipoCtg: opt(str({ values: ['CTG', 'FC', 'CPE'] })),
+  nroCartaPorte: opt(str()),
+  fechaConfirmacionCtgDes: opt(date()),
+  fechaConfirmacionCtgHas: opt(date()),
+};
+
+/** CgBuscarCertConSaldoDisponibleReqType (sin `auth`) */
+export const CG_BUSCAR_CERT_SALDO: Schema = {
+  cuitDepositante: cuit(),
+  codGrano: codGrano(),
+  campania: campania(),
+  coe: opt(id()),
+  fechaEmisionDes: opt(date()),
+  fechaEmisionHas: opt(date()),
+};
+
 // --- Certificación de granos (cgAutorizar) ---------------------------------
 
 const MERMAS: Schema = {
@@ -205,7 +259,7 @@ const MERMAS: Schema = {
 /** CgAutorizarReqType (sin `auth`) */
 export const CG_AUTORIZAR: Schema = {
   cabecera: obj({
-    tipoCertificado: str({ values: ['P', 'R', 'T', 'E'] }),
+    tipoCertificado: tipoCertificado(),
     ptoEmision: ptoEmision(),
     nroOrden: nroOrden(),
     nroIngBrutoDepositario: ib(),
@@ -214,7 +268,7 @@ export const CG_AUTORIZAR: Schema = {
     nroIngBrutoDepositante: opt(ib()),
     codGrano: codGrano(),
     campania: campania(),
-    cuitCorredor: opt(cuit()),
+    cuitCorredor: opt(cuit0()),
     datosAdicionales: opt(datosAdicionales()),
   }),
   primaria: opt(
@@ -454,7 +508,7 @@ export const R_LIQ_CONS_RETURN: Schema = {
 /** LpgAnulacionReturnType */
 export const R_ANULACION_RETURN: Schema = {
   coe: id(),
-  resultado: must(str()),
+  resultado: str(),
   pdf: opt(base64()),
   ...R_EVENTOS,
 };
@@ -486,38 +540,52 @@ const R_AJUSTE_CRED_DEB: Schema = {
   totalPagoSegunCondicion: dec(2),
 };
 
-/** LpgAjusteUnificadoReturnType */
-export const R_AJUSTE_UNIFICADO_RETURN: Schema = {
-  ajusteUnificado: opt(
+/** LpgAjusteUnificadoRespType */
+const R_AJUSTE_UNIFICADO: Schema = {
+  ptoEmision: int(),
+  nroOrden: int(),
+  nroContrato: int(),
+  coeAjustado: id(),
+  codTipoOperacion: str(),
+  ajusteCredito: opt(obj(R_AJUSTE_CRED_DEB)),
+  ajusteDebito: opt(obj(R_AJUSTE_CRED_DEB)),
+  totalesUnificados: opt(
     obj({
-      ptoEmision: int(),
-      nroOrden: int(),
-      nroContrato: int(),
-      coeAjustado: id(),
-      codTipoOperacion: str(),
-      ajusteCredito: opt(obj(R_AJUSTE_CRED_DEB)),
-      ajusteDebito: opt(obj(R_AJUSTE_CRED_DEB)),
-      totalesUnificados: opt(
-        obj({
-          subTotalDebCred: dec(2),
-          totalBaseDeducciones: dec(2),
-          subTotalGeneral: dec(2),
-          ivaDeducciones: dec(2),
-          iva105: dec(2),
-          iva21: dec(2),
-          retencionesGanancias: dec(2),
-          retencionesIVA: dec(2),
-          importeOtrasRetenciones: dec(2),
-          importeNeto: dec(2),
-          ivaRG4310_18: dec(2),
-          pagoSCondicion: dec(2),
-        }),
-      ),
-      coe: id(),
-      estado: str(),
+      subTotalDebCred: dec(2),
+      totalBaseDeducciones: dec(2),
+      subTotalGeneral: dec(2),
+      ivaDeducciones: dec(2),
+      iva105: dec(2),
+      iva21: dec(2),
+      retencionesGanancias: dec(2),
+      retencionesIVA: dec(2),
+      importeOtrasRetenciones: dec(2),
+      importeNeto: dec(2),
+      ivaRG4310_18: dec(2),
+      pagoSCondicion: dec(2),
     }),
   ),
+  coe: id(),
+  estado: str(),
+};
+
+/** LpgAjusteUnificadoReturnType */
+export const R_AJUSTE_UNIFICADO_RETURN: Schema = {
+  ajusteUnificado: opt(obj(R_AJUSTE_UNIFICADO)),
   ...R_EVENTOS,
+};
+
+/** LpgAjusteConsReturnType (ajusteXCoeConsultar, ajusteXNroOrdenConsultar, ajustePorContratoConsultar) */
+export const R_AJUSTE_CONS_RETURN: Schema = {
+  ajusteUnificado: opt(obj(R_AJUSTE_UNIFICADO)),
+  pdf: opt(base64()),
+  ...R_EVENTOS,
+};
+
+/** LpgLiqPorContratoConsReturnType */
+export const R_LIQ_POR_CONTRATO_RETURN: Schema = {
+  ...R_EVENTOS,
+  coeRelacionados: wrapped('coe', id(), 0),
 };
 
 /** LpgGradoEntType */
@@ -526,36 +594,172 @@ export const R_GRADO_ENTREGADO: Schema = {
   valor: must(dec(8)),
 };
 
+/** CgAutorizacionType */
+const R_CG_AUTORIZACION: Schema = {
+  ptoEmision: int(),
+  nroOrden: int(),
+  coe: id(),
+  estado: str(),
+  fechaCertificacion: date(),
+  pesosResumen: opt(
+    obj({
+      pesoBrutoCertificado: dec(2),
+      pesoMermaVolatil: dec(2),
+      pesoMermaSecado: dec(2),
+      pesoMermaZarandeo: dec(2),
+      pesoNetoCertificado: dec(2),
+    }),
+  ),
+  serviciosResumen: opt(
+    obj({
+      servicioSecado: dec(2),
+      servicioZarandeo: dec(2),
+      servicioOtros: dec(2),
+      servicioGastosGenerales: dec(2),
+      importeIVA: dec(2),
+      servicioTotal: dec(2),
+    }),
+  ),
+  planta: opt(obj({ nroPlanta: int(), cuitTitularPlanta: cuit(), razonSocialTitularPlanta: str() })),
+};
+
 /** CgAutorizarReturnType */
 export const R_CG_AUTORIZAR_RETURN: Schema = {
-  autorizacion: opt(
+  autorizacion: opt(obj(R_CG_AUTORIZACION)),
+  ...R_EVENTOS,
+};
+
+const R_MERMAS: Schema = {
+  porcentajeSecadoHumedad: dec(2),
+  importeSecado: dec(2),
+  pesoNetoMermaSecado: dec(2),
+  tarifaSecado: dec(2),
+  importeZarandeo: dec(2),
+  pesoNetoMermaZarandeo: dec(2),
+  tarifaZarandeo: dec(2),
+};
+
+/** CgConsultarReturnType (cgConsultarXCoe, cgConsultarXNroOrden) */
+export const R_CG_CONSULTAR_RETURN: Schema = {
+  autorizacion: opt(obj(R_CG_AUTORIZACION)),
+  cabecera: opt(
     obj({
+      tipoCertificado: str(),
       ptoEmision: int(),
       nroOrden: int(),
-      coe: id(),
-      estado: str(),
-      fechaCertificacion: date(),
-      pesosResumen: opt(
-        obj({
-          pesoBrutoCertificado: dec(2),
-          pesoMermaVolatil: dec(2),
-          pesoMermaSecado: dec(2),
-          pesoMermaZarandeo: dec(2),
-          pesoNetoCertificado: dec(2),
-        }),
-      ),
-      serviciosResumen: opt(
-        obj({
-          servicioSecado: dec(2),
-          servicioZarandeo: dec(2),
-          servicioOtros: dec(2),
-          servicioGastosGenerales: dec(2),
-          importeIVA: dec(2),
-          servicioTotal: dec(2),
-        }),
-      ),
-      planta: opt(obj({ nroPlanta: int(), cuitTitularPlanta: cuit(), razonSocialTitularPlanta: str() })),
+      nroIngBrutoDepositario: int(),
+      titularGrano: str(),
+      cuitDepositante: cuit(),
+      nroIngBrutoDepositante: int(),
+      codGrano: int(),
+      campania: int(),
+      cuitCorredor: int(),
+      datosAdicionales: str(),
     }),
+  ),
+  primaria: opt(
+    obj({
+      nroActDepositario: int(),
+      ctg: list(obj({ nroCTG: id(), nroCartaDePorte: str(), pesoNetoConfirmadoDefinitivo: dec(2), ...R_MERMAS }), 0),
+      cartaPorteFerroviaria: list(obj({ nroCartaPorte: int(), pesoNetoConfirmadoDefinitivo: dec(2), ...R_MERMAS }), 0),
+      descripcionTipoGrano: str(),
+      montoAlmacenaje: dec(2),
+      montoAcarreo: dec(2),
+      montoGastosGenerales: dec(2),
+      montoZarandeo: dec(2),
+      porcentajeSecadoDe: dec(2),
+      porcentajeSecadoA: dec(2),
+      montoSecado: dec(2),
+      montoPorCadaPuntoExceso: dec(2),
+      montoOtros: dec(2),
+      calidad: opt(
+        obj({
+          analisisMuestra: int(),
+          nroBoletin: int(),
+          codGrado: str(),
+          valorGrado: dec(8),
+          valorContProteico: dec(2),
+          valorFactor: dec(8),
+          detalleMuestraAnalisis: list(
+            obj({ descripcionRubro: str(), tipoRubro: str(), porcentaje: dec(2), valor: dec(2) }),
+            0,
+          ),
+        }),
+      ),
+      pesoNetoMermaVolatil: dec(2),
+      serviciosFormaDePago: str(),
+      serviciosOtros: dec(2),
+      serviciosConceptosNoGravados: dec(2),
+      serviciosPercepcionesIVA: dec(2),
+      serviciosOtrasPercepciones: dec(2),
+    }),
+  ),
+  retiroTransferencia: opt(
+    obj({
+      certificadoDeposito: opt(obj({ coeCertificadoDeposito: id(), pesoNeto: int() })),
+      nroActDepositario: int(),
+      cuitReceptor: cuit(),
+      nroCartaPorteAUtilizar: str(),
+      nroCTG: id(),
+      descripcionCausaJudicial: str(),
+    }),
+  ),
+  preexistente: opt(
+    obj({
+      nroPlanta: int(),
+      tipoCertificadoDepositoPreexistente: int(),
+      nroCertificadoDepositoPreexistente: int(),
+      cacCertificadoDepositoPreexistente: int(),
+      fechaEmisionCertificadoDepositoPreexistente: date(),
+      pesoNeto: dec(3),
+    }),
+  ),
+  nroPlanta: int(),
+  cuitDepositario: cuit(),
+  alicuotaIVA: dec(4),
+  cuitRemitenteComercial: cuit(),
+  codLocalidad: int(),
+  codProvincia: int(),
+  kilosDisponible: dec(2),
+  pdf: opt(base64()),
+  ...R_EVENTOS,
+};
+
+/** CgBuscarCtgReturnType */
+export const R_CG_BUSCAR_CTG_RETURN: Schema = {
+  ctg: list(
+    obj({
+      campania: int(),
+      nroPlanta: int(),
+      nroCtg: id(),
+      tipoCtg: str(),
+      nroCartaPorte: str(),
+      kilosConfirmados: int(),
+      fechaConfirmacionCtg: date(),
+      codGrano: int(),
+      cuitRemitenteComercial: cuit(),
+      cuitLiquida: cuit(),
+      cuitCertifica: cuit(),
+    }),
+    0,
+  ),
+  ...R_EVENTOS,
+};
+
+/** CgBuscarCertConSaldoDisponibleReturnType */
+export const R_CG_BUSCAR_CERT_SALDO_RETURN: Schema = {
+  certificado: list(
+    obj({
+      coe: id(),
+      tipoCertificado: str(),
+      campania: int(),
+      cuitDepositante: cuit(),
+      cuitDepositario: cuit(),
+      nroPlanta: int(),
+      kilosDisponibles: int(),
+      codGrano: int(),
+    }),
+    0,
   ),
   ...R_EVENTOS,
 };
@@ -563,6 +767,6 @@ export const R_CG_AUTORIZAR_RETURN: Schema = {
 /** CgSolicitarAnulacionReturnType */
 export const R_CG_ANULACION_RETURN: Schema = {
   ...R_EVENTOS,
-  estadoCertificado: must(str()),
+  estadoCertificado: str(),
   pdf: opt(base64()),
 };

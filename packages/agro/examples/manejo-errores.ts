@@ -3,10 +3,14 @@
  *
  * - ArcaValidationError: datos inválidos, detectados antes de llamar a ARCA.
  * - ArcaAgroServiceError (extiende ArcaServiceError): ARCA rechazó la operación
- *   (`errores.error[]`, y en WSLPG también `erroresFormato`).
+ *   (`errores.error[]`, y en WSLPG también `erroresFormato`). `uncertain: true`
+ *   si la respuesta de una emisión trae errores y también el resultado.
  * - ArcaSoapError: red, timeout, HTTP o SOAP Fault. `uncertain: true` en una
  *   emisión significa que ARCA pudo haberla procesado.
  * - ArcaAgroResponseError: respuesta sin un dato imprescindible (ej: nroCTG).
+ *
+ * Los errores admitidos (550 en WSCPE: no se pudo generar el PDF) no lanzan:
+ * el resultado viene sin `pdf` y con `advertencias`.
  */
 import fs from 'node:fs';
 import {
@@ -17,6 +21,7 @@ import {
   ArcaSoapError,
   ArcaValidationError,
   TIPO_CPE,
+  cpeFaultException,
 } from '@ramiidv/arca-agro';
 import type { AutorizarCPEAutomotorParams, CPEAutomotorDetalle } from '@ramiidv/arca-agro';
 
@@ -26,6 +31,23 @@ const agro = new ArcaAgro({
   key: fs.readFileSync('key.pem', 'utf-8'),
 });
 
+const soloDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
+const segundos = (v: Date | string | undefined) =>
+  v === undefined ? Number.NaN : Math.floor(new Date(v).getTime() / 1000);
+
+/**
+ * ¿La CPE consultada es la que intentamos autorizar? Otro proceso pudo haber
+ * usado el mismo número de orden: se comparan los datos clave.
+ */
+function esLaMisma(cpe: CPEAutomotorDetalle, params: AutorizarCPEAutomotorParams): boolean {
+  return (
+    soloDigitos(cpe.destino?.cuit) === soloDigitos(params.destino.cuit) &&
+    cpe.destino?.planta === params.destino.planta &&
+    (cpe.transporte?.dominio ?? []).join(',') === params.transporte.dominio.join(',') &&
+    segundos(cpe.transporte?.fechaHoraPartida) === segundos(params.transporte.fechaHoraPartida)
+  );
+}
+
 /**
  * Autoriza una CPE y, si el resultado es incierto, consulta en ARCA si se
  * emitió antes de reintentar (manual WSCPE §1.3).
@@ -33,20 +55,27 @@ const agro = new ArcaAgro({
 async function autorizarConRecuperacion(params: AutorizarCPEAutomotorParams): Promise<CPEAutomotorDetalle> {
   const { sucursal, nroOrden, tipoCP } = params.cabecera;
   try {
-    return await agro.cpe.autorizarCPEAutomotor(params);
+    const cpe = await agro.cpe.autorizarCPEAutomotor(params);
+    // 550: la CPE quedó autorizada, pero sin PDF. Se puede pedir después con consultarCPEAutomotor.
+    for (const a of cpe.advertencias ?? []) console.warn(`Advertencia [${a.code}] ${a.msg}`);
+    return cpe;
   } catch (error) {
     const incierto =
       (error instanceof ArcaSoapError && error.uncertain) ||
+      (error instanceof ArcaAgroServiceError && error.uncertain) ||
       (error instanceof ArcaAgroResponseError && error.uncertain);
     if (!incierto) throw error;
 
-    // ¿Llegó a autorizarse? El último número de orden lo dice.
+    // ¿Llegó a autorizarse? El último número de orden lo dice...
     const ultimo = await agro.cpe.consultarUltNroOrden(sucursal, tipoCP);
-    if (ultimo >= nroOrden) {
-      return agro.cpe.consultarCPEAutomotor({ cartaPorte: { tipoCPE: tipoCP, sucursal, nroOrden } });
+    if (ultimo < nroOrden) {
+      // No se emitió: es seguro reintentar con el mismo número de orden.
+      return agro.cpe.autorizarCPEAutomotor(params);
     }
-    // No se emitió: es seguro reintentar con el mismo número de orden.
-    return agro.cpe.autorizarCPEAutomotor(params);
+    // ...pero ese número pudo usarlo otro proceso: hay que verificar que sea la nuestra.
+    const cpe = await agro.cpe.consultarCPEAutomotor({ cartaPorte: { tipoCPE: tipoCP, sucursal, nroOrden } });
+    if (esLaMisma(cpe, params)) return cpe;
+    throw new Error(`El número de orden ${nroOrden} lo usó otra CPE (CTG ${cpe.cabecera.nroCTG}): pedí uno nuevo`);
   }
 }
 
@@ -80,6 +109,9 @@ async function main() {
       console.log('Error de autenticación WSAA:', error.message);
     } else if (error instanceof ArcaSoapError) {
       console.log('Error de comunicación:', error.message, 'incierto:', error.uncertain);
+      // SOAP Fault `Exception` de WSCPE: identificador del error de negocio.
+      const ex = cpeFaultException(error);
+      if (ex) console.log(`  businessErrorId=${ex.businessErrorId} uuid=${ex.uuid}`);
     } else {
       throw error;
     }

@@ -3,13 +3,14 @@
  *
  * 1. Paramétricas (provincias, localidades, granos, plantas)
  * 2. Número de orden + autorización (tipo 74)
- * 3. Arribo, confirmación definitiva y consulta
+ * 3. Arribo y confirmación definitiva (las informa el destino, con su propia
+ *    CUIT y certificado) y consulta
  */
 import fs from 'node:fs';
-import { FileTicketStorage } from '@ramiidv/arca-common';
-import { ArcaAgro, TIPO_CPE } from '@ramiidv/arca-agro';
+import { ArcaAgro, FileTicketStorage, TIPO_CPE } from '@ramiidv/arca-agro';
 
 const CUIT = '20123456786'; // CUIT representada (homologación: el de tu certificado)
+const CUIT_DESTINO = '30500011129'; // planta de destino: otra empresa, con su propio certificado
 
 const agro = new ArcaAgro({
   cuit: CUIT,
@@ -20,6 +21,15 @@ const agro = new ArcaAgro({
   onEvent: (event) => console.log(`[${event.type}]`, 'method' in event ? event.method : ''),
 });
 
+// El destino opera con su propia instancia (su CUIT y su certificado).
+const agroDestino = new ArcaAgro({
+  cuit: CUIT_DESTINO,
+  cert: fs.readFileSync('cert-destino.pem', 'utf-8'),
+  key: fs.readFileSync('key-destino.pem', 'utf-8'),
+  production: false,
+  ticketStorage: new FileTicketStorage('.arca-tickets'),
+});
+
 async function main() {
   // 1. Paramétricas
   const provincias = await agro.cpe.consultarProvincias();
@@ -28,7 +38,7 @@ async function main() {
   console.log('Localidades de Santa Fe:', localidades.length);
   const granos = await agro.cpe.consultarTiposGrano();
   console.log('Granos:', granos.slice(0, 3));
-  const plantas = await agro.cpe.consultarPlantas('30500011129');
+  const plantas = await agro.cpe.consultarPlantas(CUIT_DESTINO);
   console.log('Plantas del destino:', plantas);
 
   // 2. Autorización. Ojo: siguienteNroOrden no es atómico (ver README).
@@ -41,8 +51,8 @@ async function main() {
     correspondeRetiroProductor: false,
     esSolicitanteCampo: true,
     datosCarga: { codGrano: 23, cosecha: 2526, pesoBruto: 42000, pesoTara: 12000 },
-    destino: { cuit: '30500011129', esDestinoCampo: false, codProvincia: 12, codLocalidad: 5244, planta: 1938 },
-    destinatario: { cuit: '30500011129' },
+    destino: { cuit: CUIT_DESTINO, esDestinoCampo: false, codProvincia: 12, codLocalidad: 5244, planta: 1938 },
+    destinatario: { cuit: CUIT_DESTINO },
     transporte: {
       cuitTransportista: '20999888772',
       dominio: ['AB123CD'],
@@ -56,13 +66,15 @@ async function main() {
   });
   console.log('CTG:', cpe.cabecera.nroCTG, 'estado:', cpe.cabecera.estado);
   if (cpe.pdf) fs.writeFileSync(`cpe-${cpe.cabecera.nroCTG}.pdf`, Buffer.from(cpe.pdf, 'base64'));
+  // Error 550: la CPE quedó autorizada pero ARCA no generó el PDF.
+  for (const a of cpe.advertencias ?? []) console.warn(`Advertencia [${a.code}] ${a.msg}`);
 
   const cartaPorte = { tipoCPE: TIPO_CPE.AUTOMOTOR, sucursal, nroOrden };
 
-  // 3. Arribo y confirmación definitiva (las hace el destino)
-  await agro.cpe.confirmarArriboCPE({ cuitSolicitante: CUIT, cartaPorte });
-  const confirmada = await agro.cpe.confirmacionDefinitivaCPEAutomotor({
-    cuitSolicitante: CUIT,
+  // 3. Arribo y confirmación definitiva: las informa el destino, con su instancia.
+  await agroDestino.cpe.confirmarArriboCPE({ cuitSolicitante: CUIT_DESTINO, cartaPorte });
+  const confirmada = await agroDestino.cpe.confirmacionDefinitivaCPEAutomotor({
+    cuitSolicitante: CUIT_DESTINO,
     cartaPorte,
     pesoBrutoDescarga: 41900,
     pesoTaraDescarga: 12000,
@@ -72,7 +84,7 @@ async function main() {
   const detalle = await agro.cpe.consultarCPEAutomotor({ nroCTG: cpe.cabecera.nroCTG });
   console.log('Detalle:', detalle.cabecera, detalle.datosCarga);
 
-  const recibidas = await agro.cpe.consultarCPEPorDestino({
+  const recibidas = await agroDestino.cpe.consultarCPEPorDestino({
     planta: 1938,
     fechaPartidaDesde: '2026-11-01',
     fechaPartidaHasta: '2026-11-07',
