@@ -5,35 +5,38 @@ o se agregue algo.
 
 ## Estado actual
 
-Versiones publicadas (release del 2026-11-01, con trusted publishing y provenance):
+Versiones publicadas (2026-11-02, con trusted publishing y provenance):
 
 | Paquete | Versión | Notas |
 |---|---|---|
-| `@ramiidv/arca-common` | 0.6.0 | `ArcaSdkBase`, `SoapServiceClient`, `/schema` (DSL del XSD), `/testing` (mocks y contratos contra el WSDL) |
-| `@ramiidv/arca-facturacion` | 6.0.0 | ESM-only, camelCase, WSFE/WSFEX sobre el DSL |
-| `@ramiidv/arca-padron` | 0.6.0 | DSL + contratos, `WsAuth` en camelCase |
-| `@ramiidv/arca-agro` | 0.5.0 | DSL + contratos (WSCPE, WSLPG) |
-| `@ramiidv/arca-cdc` | 0.5.0 | DSL + contratos, camelCase |
-| `@ramiidv/arca-fecred` | 0.5.0 | DSL + contratos, `choice()` de common |
-| `@ramiidv/arca-mtxca` | 0.5.0 | DSL + contratos |
-| `@ramiidv/arca-sire` | 0.4.1 | DSL + contratos |
-| `@ramiidv/arca-empleados` | 0.4.1 | Genera un TXT, no usa SOAP |
+| `@ramiidv/arca-common` | 0.7.0 | `ArcaSdkBase`, `SoapServiceClient`, `/schema` (DSL del XSD), `/testing`, QR, certificados |
+| `@ramiidv/arca-facturacion` | 6.1.0 | WSFEv1, WSFEX, CAEA y QR sobre el DSL |
+| `@ramiidv/arca-padron` | 0.7.0 | Constancia, A4, A10, A13, A100 |
+| `@ramiidv/arca-agro` | 0.6.0 | WSCPE, WSLPG |
+| `@ramiidv/arca-cdc` | 0.6.0 | WSCDC |
+| `@ramiidv/arca-fecred` | 0.6.0 | WSFECRED |
+| `@ramiidv/arca-mtxca` | 0.6.0 | WSMTXCA |
+| `@ramiidv/arca-sire` | 0.5.0 | SIRE C2005 |
+| `@ramiidv/arca-empleados` | 0.5.0 | Genera un TXT, no usa SOAP |
 
 Todos los SDKs con web service extienden `ArcaSdkBase`, así que comparten
 configuración, `wsaa`, `cuit`, `production`, `on`/`off`, `config.wsaa`,
 `config.signal` y `clearAuthCache()`.
 
-Rama `fix/auditoria` (sin publicar): auditoría de todos los paquetes contra los
-manuales de ARCA. Bugs (monedas 029/031 invertidas, error 550 de WSCPE, FCE en
-WSFE y WSMTXCA, reproceso de WSFEX), manejo de errores de WSAA según la
-especificación, helpers compartidos en common, documentación y CI. Ver los
-changesets `*-auditoria.md`.
+La última release (PR #10) salió de una auditoría de todos los paquetes contra
+los manuales de ARCA: bugs, manejo de errores de WSAA según la especificación,
+helpers compartidos en common, documentación y CI. El detalle está en los
+CHANGELOG de cada paquete.
 
 ## Pendientes operativos
 
-- [ ] Redesplegar arca-server con los SDKs nuevos. Para subir a facturacion 6 /
-      padron 0.6: `src/routes/afip.ts` (`padron.status()` devuelve
+- [ ] Redesplegar arca-server con los SDKs nuevos. Para subir desde facturacion 5 /
+      padron 0.5: `src/routes/afip.ts` (`padron.status()` devuelve
       `ServiceStatus`) y `tests/arca-sdk.test.ts` (`Arca` → `ArcaFacturacion`).
+      Con facturacion 6.1 / common 0.7 revisar además los cambios de
+      comportamiento de los CHANGELOG (validaciones locales nuevas, bloqueo de
+      WSAA ante errores no reintentables, `status().ok` falso si un servidor
+      no está en `OK`).
 - [ ] Commitear los cambios de la landing en `ramiidv/arca-sdk-web`.
 - [ ] Cargar en el repo los secrets `ARCA_TEST_CERT`, `ARCA_TEST_KEY` y
       `ARCA_TEST_CUIT`, y la variable `ARCA_TEST_SERVICES`.
