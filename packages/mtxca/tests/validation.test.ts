@@ -280,9 +280,9 @@ describe('validateComprobanteCAEA', () => {
   it('aplica las reglas de presencia de ítems, no las de importes', () => {
     expect(fields(() => validateComprobanteCAEA(caea(facturaA({ importeTotal: 1 }))))).toEqual([]);
     const a = facturaA();
-    expect(fields(() => validateComprobanteCAEA({ ...caea(a), items: [{ ...a.items[0], codigoMtx: undefined }] }))).toContain(
-      'items[0].codigoMtx',
-    );
+    expect(
+      fields(() => validateComprobanteCAEA({ ...caea(a), items: [{ ...a.items[0], codigoMtx: undefined }] })),
+    ).toContain('items[0].codigoMtx');
   });
 });
 
