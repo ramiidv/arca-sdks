@@ -1,7 +1,14 @@
 import { ArcaValidationError } from '@ramiidv/arca-common';
 import { ArcaSerializationError } from './errors.js';
 import { CodigoMovimiento, CODIGOS_MOVIMIENTO } from './constants.js';
-import { codificarArchivo, serializarRegistro, unirLineas } from './serializer.js';
+import {
+  codificarArchivo,
+  errorPropiedadDesconocida,
+  formatFechaSR,
+  propiedadesDesconocidas,
+  serializarRegistro,
+  unirLineas,
+} from './serializer.js';
 import { validateRegistro } from './validators.js';
 import type {
   AltaRelacionLaboral,
@@ -9,6 +16,7 @@ import type {
   ArchivoIngresoMasivo,
   BajaRelacionLaboral,
   DatosRelacionLaboral,
+  FechaInput,
   ModificacionRelacionLaboral,
   OpcionesSerializacion,
   RegistroRelacionLaboral,
@@ -43,6 +51,7 @@ function exportar(r: Readonly<RegistroRelacionLaboral>): RegistroRelacionLaboral
  *
  * Cada registro se valida y se serializa al agregarlo: si algo falla, se lanza
  * el error y el registro no se agrega. Las operaciones masivas son atómicas.
+ * Las propiedades desconocidas (nombres mal escritos) se rechazan en ambos modos.
  *
  * @example
  * ```ts
@@ -56,6 +65,7 @@ function exportar(r: Readonly<RegistroRelacionLaboral>): RegistroRelacionLaboral
 export class ArcaEmpleados {
   private readonly strict: boolean;
   private readonly serializacion: Readonly<OpcionesSerializacion>;
+  private readonly fechaReferencia: FechaInput | undefined;
   private entradas: Entrada[] = [];
 
   constructor(config: ArcaEmpleadosConfig = {}) {
@@ -67,6 +77,15 @@ export class ArcaEmpleados {
     }
     this.strict = config.strict ?? true;
     this.serializacion = Object.freeze({ ...config.serializacion });
+    if (config.fechaReferencia !== undefined) {
+      try {
+        formatFechaSR(config.fechaReferencia);
+      } catch (e) {
+        throw new TypeError(`ArcaEmpleados: config.fechaReferencia inválida (${(e as Error).message})`, { cause: e });
+      }
+    }
+    this.fechaReferencia =
+      config.fechaReferencia instanceof Date ? new Date(config.fechaReferencia.getTime()) : config.fechaReferencia;
     // Valida las opciones de serialización enseguida.
     unirLineas([], this.serializacion);
   }
@@ -90,7 +109,7 @@ export class ArcaEmpleados {
     return this.novedad(this.conMovimiento(CodigoMovimiento.ALTA, datos));
   }
 
-  /** Agrega una baja (`BT`). La fecha de baja va en `fechaFin`. */
+  /** Agrega una baja (`BT`). La fecha de baja va en `fechaFin`; `fechaInicio` también es obligatoria. */
   baja(datos: BajaRelacionLaboral): this {
     return this.novedad(this.conMovimiento(CodigoMovimiento.BAJA, datos));
   }
@@ -102,6 +121,7 @@ export class ArcaEmpleados {
 
   /**
    * Agrega un registro con cualquier código de movimiento (`AT`, `BT`, `MR`, `NA`, `NB`).
+   * Una propiedad que no es del diseño de registro (ej. `retribucon`) da `ArcaValidationError`.
    * Es la única vía para `NA` y `NB`, cuyo significado el manual no documenta.
    */
   novedad(registro: RegistroRelacionLaboral): this {
@@ -290,8 +310,20 @@ export class ArcaEmpleados {
         'movimiento',
       );
     }
+    // En ambos modos: una propiedad mal escrita dejaría el campo vacío en silencio.
+    const desconocidas = propiedadesDesconocidas(registro);
+    if (desconocidas.length > 0) {
+      const detalles = desconocidas.map((k) => errorPropiedadDesconocida(registro, k));
+      throw new ArcaValidationError(
+        `Registro ${String(registro.movimiento)} con propiedades desconocidas: ${desconocidas.join(', ')}.`,
+        detalles,
+        desconocidas[0],
+      );
+    }
     const copia = clonar(registro);
-    if (this.strict) validateRegistro(copia, this.serializacion);
+    if (this.strict) {
+      validateRegistro(copia, this.serializacion, { fechaReferencia: this.fechaReferencia });
+    }
     // En modo no estricto, los errores de formato salen como ArcaSerializationError.
     const linea = serializarRegistro(copia, this.serializacion);
     return { registro: copia, linea };

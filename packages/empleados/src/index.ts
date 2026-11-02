@@ -16,6 +16,7 @@ export type {
   ModificacionRelacionLaboral,
   EncodingArchivo,
   OpcionesSerializacion,
+  OpcionesValidacion,
   ArcaEmpleadosConfig,
   ResumenIngresoMasivo,
   ArchivoIngresoMasivo,

@@ -46,6 +46,8 @@ export type {
   AnularCertificadoParams,
   CertificadoAnulacionRequest,
   CertificadoResult,
+  SireHeaderInfo,
+  SireServerStatus,
 } from './types.js';
 export type {
   ArcaEvent,

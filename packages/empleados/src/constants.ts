@@ -53,6 +53,9 @@ export const VALORES_RECTIFICACION: readonly number[] = Object.freeze([0, 1, 2, 
  * (posición 130), según el manual: `0` a `9`. El manual indica que por defecto se
  * informa `0` y que solo se completa para trabajadores del Programa Puente al Empleo
  * (Dto. 551/22) que aplican a Convenios de Corresponsabilidad Gremial.
+ *
+ * @deprecated Todos los valores que admite el campo N(1) son válidos, así que el SDK ya
+ * no lo usa para validar. Se mantiene por compatibilidad.
  */
 export const VALORES_MARCA_COVID_CCG: readonly number[] = Object.freeze([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 

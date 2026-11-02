@@ -1,5 +1,5 @@
 import { parseXml } from '@ramiidv/arca-common';
-import { soapEnvelope, testCert } from '@ramiidv/arca-common/testing';
+import { soapEnvelope, soapFault, testCert } from '@ramiidv/arca-common/testing';
 import { vi } from 'vitest';
 import { ArcaSire } from '../src/index.js';
 import type { ArcaSireConfig } from '../src/index.js';
@@ -16,13 +16,12 @@ export const HEADER_INFO =
   '<tns:HeaderInfo><ambiente>homologacion - 207</ambiente><fecha>2026-11-01T14:43:01.733-03:00</fecha>' +
   '<vCore>2020.4</vCore><v2005>2020.7</v2005></tns:HeaderInfo>';
 
-/** SOAP Fault con el formato real de SIRE (`faultactor`, `detail` y `HeaderInfo`). */
+/** SOAP Fault de common con el agregado real de SIRE (`faultactor`, `detail` y `HeaderInfo`). */
 export function fault(code: string, message: string): string {
-  return envelope(
-    `<soapenv:Fault><faultcode>${code}</faultcode><faultstring>${message}</faultstring>` +
-      `<faultactor></faultactor><detail>${message}</detail></soapenv:Fault>`,
-    HEADER_INFO,
-  );
+  return soapFault(code, message)
+    .replace('</faultstring>', `</faultstring><faultactor></faultactor><detail>${message}</detail>`)
+    .replace('<soapenv:Body>', `<soapenv:Header>${HEADER_INFO}</soapenv:Header><soapenv:Body>`)
+    .replace('<soapenv:Envelope ', `<soapenv:Envelope xmlns:tns="${NS}" `);
 }
 
 export function makeSire(fetchImpl: typeof fetch, extra: Partial<ArcaSireConfig> = {}): ArcaSire {

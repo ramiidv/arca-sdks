@@ -168,6 +168,50 @@ describe('golden: registro 01', () => {
     expect(campo(linea, 'fechaInicio')).toBe(' '.repeat(10));
   });
 
+  it('MR y BT con numericoVacio por defecto (ceros): golden', () => {
+    // El manual no define cómo se informa un numérico vacío; el default del SDK es ceros
+    // (ver README, "Pendiente de verificar con ARCA").
+    const mr = serializarRegistro({ movimiento: 'MR', cuil: CUIL, fechaInicio: '2025-01-02', retribucion: 1000 });
+    expect(mr).toBe(
+      '01MR20123456786' +
+        ' ' + // agropecuario
+        '000' + // modalidad
+        '2025/01/02' +
+        ' '.repeat(10) + // fin
+        '000000' + // obra social
+        '00' + // situación revista
+        ' '.repeat(10) + // telegrama
+        '000000000100000' + // retribución
+        '0' + // modalidad liquidación
+        '00000' + // sucursal
+        '000000' + // actividad
+        '    ' + // puesto
+        '00' + // rectificación
+        ' '.repeat(10) + // CCT
+        '000000' + // categoría
+        '000' + // tipo servicio
+        ' '.repeat(10) + // suspensión
+        '0'.repeat(10) + // formulario agropecuario
+        '0', // marca 130
+    );
+    const bt = serializarRegistro({ movimiento: 'BT', cuil: CUIL, fechaInicio: '2025-01-02', fechaFin: '2026-10-31' });
+    expect(bt).toBe(
+      `01BT20123456786 0002025/01/022026/10/3100000000${' '.repeat(10)}${'0'.repeat(15)}000000000000    00${' '.repeat(10)}000000000${' '.repeat(10)}${'0'.repeat(10)}0`,
+    );
+    expect(bt).toHaveLength(130);
+  });
+
+  it('rechaza propiedades desconocidas (ArcaSerializationError con field)', () => {
+    let err: unknown;
+    try {
+      serializarRegistro({ movimiento: 'MR', cuil: CUIL, retribucon: 5000 } as unknown as RegistroRelacionLaboral);
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(ArcaSerializationError);
+    expect((err as ArcaSerializationError).field).toBe('retribucon');
+  });
+
   it('numericoVacio: espacios', () => {
     const linea = serializarRegistro({ movimiento: 'MR', cuil: CUIL }, { numericoVacio: 'espacios' });
     expect(campo(linea, 'obraSocial')).toBe('      ');

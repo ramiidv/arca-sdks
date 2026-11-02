@@ -8,7 +8,7 @@ El servicio oficial tiene tres operaciones y el SDK las cubre todas:
 | -------------- | --------------------- | ------------------------------------------------------------------------------- |
 | `emitir`       | `emitirCertificado()` | Emite un certificado C2005 y devuelve `certificadoNro` y `codigoSeguridad`.     |
 | `anular`       | `anularCertificado()` | Anula un certificado emitido y devuelve los datos del certificado de anulación. |
-| `dummy`        | `status()`            | Estado de los servidores (sin autenticación).                                   |
+| `dummy`        | `status()`            | Estado de los servidores y del ambiente (sin autenticación).                    |
 
 SIRE **no tiene operaciones de consulta** (ni de certificados emitidos ni de tablas de parámetros). Los certificados se consultan e imprimen desde el micrositio SIRE con clave fiscal.
 
@@ -20,7 +20,10 @@ Fuentes: [WSDL](https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005?ws
 npm install @ramiidv/arca-sire
 ```
 
-Node.js >= 18. ESM. Necesitás un certificado digital asociado al web service **SIRE** (servicio WSAA `sire-ws`).
+## Requisitos
+
+- Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
+- Certificado digital X.509 y clave privada de ARCA asociados al web service **SIRE** (servicio WSAA `sire-ws`), para la CUIT del agente de retención.
 
 ## Inicio rápido
 
@@ -54,23 +57,20 @@ const { certificadoNro, codigoSeguridad } = await sire.emitirCertificado({
 
 ## Configuración
 
-`ArcaSireConfig` extiende `ArcaBaseConfig` de `@ramiidv/arca-common`:
+`ArcaSireConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`:
 
 | Opción                                                                                       | Descripción                                                                                  |
 | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `cert`, `key`                                                                                | Certificado y clave privada en PEM.                                                          |
+| `cert`, `key`, `keyPassphrase`                                                               | Certificado y clave privada en PEM (y la contraseña de la clave, si está encriptada).        |
 | `cuit`                                                                                       | CUIT del agente de retención (se valida el dígito verificador y se envía como `cuitAgente`). |
 | `production`                                                                                 | `true` para producción (default: homologación).                                              |
 | `endpoints`                                                                                  | `{ sire?, wsaa? }` para usar otras URLs (proxy).                                             |
+| `wsaa`                                                                                       | `WsaaClient` compartido con otros SDKs (tiene que ser del mismo entorno que `production`).   |
+| `signal`                                                                                     | `AbortSignal` global: cancela todas las llamadas de la instancia.                            |
 | `timeout`, `retries`, `retryDelayMs`                                                         | Transporte. Los reintentos solo aplican a `status()`; `emitir`/`anular` nunca se reintentan. |
 | `ticketStorage`, `tokenTTLMinutes`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs` | WSAA (ver `@ramiidv/arca-common`). Usá `ticketStorage` en producción.                        |
 | `fetch`, `legacyTls`                                                                         | `fetch` propio y transporte TLS legacy.                                                      |
 | `onEvent`                                                                                    | Eventos `auth:*` y `request:*`.                                                              |
-
-Endpoints (`ENDPOINTS.sire`):
-
-- Homologación: `https://ws-aplicativos-reca.homo.afip.gob.ar/sire/ws/v1/c2005/2005`
-- Producción: `https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005`
 
 ## API
 
@@ -80,40 +80,53 @@ Todos los métodos aceptan `opts?: { signal?: AbortSignal }`.
 
 `version` (100) e `impuesto` (216, IVA) se completan solos. Campos (`EmitirCertificadoParams`, en el orden del XSD):
 
-| Campo                               | Tipo                  | Obligatorio                 | Notas (manual)                                                                         |
-| ----------------------------------- | --------------------- | --------------------------- | -------------------------------------------------------------------------------------- |
-| `codigoTrazabilidad`                | string ≤ 36           | no                          | Texto libre.                                                                           |
-| `regimen`                           | int ≤ 3 dígitos       | sí                          | Existente en la tabla REGIMEN del impuesto 216 (lo valida ARCA).                       |
-| `fechaRetencion`                    | `FechaHora`           | sí                          | Desde el 01/12/2019.                                                                   |
-| `condicion`                         | `Condicion`           | para el régimen 831         | 1 Inscripto, 2 No inscripto.                                                           |
-| `imposibilidadRetencion`            | boolean               | sí                          | `true` = retención no efectuada.                                                       |
-| `motivoNoRetencion`                 | string ≤ 30           | si `imposibilidadRetencion` |                                                                                        |
-| `importeRetencion`                  | number                | sí                          | 11 enteros + 2 decimales.                                                              |
-| `importeBaseCalculo`                | number                | sí                          |                                                                                        |
-| `regimenExclusion`                  | boolean               | sí                          |                                                                                        |
-| `porcentajeExclusion`               | 50 \| 100             | si `regimenExclusion`       |                                                                                        |
-| `fechaPublicacion`                  | `FechaHora`           | si `regimenExclusion`       | Publicación del certificado de exclusión.                                              |
-| `tipoComprobante`                   | `TipoComprobante`     | sí                          | Tabla TIPO_COMPROBANTE.                                                                |
-| `fechaComprobante`                  | `FechaHora`           | sí                          | ≤ `fechaRetencion` (igual para tipos 3, 19 y 20).                                      |
-| `numeroComprobante`                 | string                | sí (todos los tipos)        | `99999-99999999` para 1-4 y 17-20; hasta 16 caracteres para 5, 9, 11; hasta 12 para 6. |
-| `coe`, `coeOriginal`, `cae`         | string ≤ 12 / 12 / 14 | no                          |                                                                                        |
-| `importeComprobante`                | number                | sí                          |                                                                                        |
-| `motivoEmisionNotaCredito`          | string ≤ 30           | solo tipo 3                 |                                                                                        |
-| `cuitRetenido`                      | CUIT                  | sí                          | Se valida el dígito verificador y se envía como número.                                |
-| `numeroCertificadoOriginal`         | string ≤ 25           | solo tipos 3, 19, 20        |                                                                                        |
-| `fechaRetencionCertificadoOriginal` | `FechaHora`           | solo tipos 3, 19, 20        |                                                                                        |
-| `importeCertificadoOriginal`        | number                | solo tipos 3, 19, 20        |                                                                                        |
+| Campo                               | Tipo                  | Obligatorio                 | Notas (manual)                                                                                                |
+| ----------------------------------- | --------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `codigoTrazabilidad`                | string ≤ 36           | no                          | Texto libre.                                                                                                  |
+| `regimen`                           | int ≤ 3 dígitos       | sí                          | Existente en la tabla REGIMEN del impuesto 216 (lo valida ARCA).                                              |
+| `fechaRetencion`                    | `FechaHora`           | sí                          | Desde el 01/12/2019.                                                                                          |
+| `condicion`                         | `Condicion`           | para el régimen 831         | 1 Inscripto, 2 No inscripto.                                                                                  |
+| `imposibilidadRetencion`            | boolean               | sí                          | `true` = retención no efectuada.                                                                              |
+| `motivoNoRetencion`                 | string ≤ 30           | si `imposibilidadRetencion` |                                                                                                               |
+| `importeRetencion`                  | number                | sí                          | 11 enteros + 2 decimales.                                                                                     |
+| `importeBaseCalculo`                | number                | sí                          |                                                                                                               |
+| `regimenExclusion`                  | boolean               | sí                          |                                                                                                               |
+| `porcentajeExclusion`               | 50 \| 100             | si `regimenExclusion`       |                                                                                                               |
+| `fechaPublicacion`                  | `FechaHora`           | si `regimenExclusion`       | Publicación del certificado de exclusión.                                                                     |
+| `tipoComprobante`                   | `TipoComprobante`     | sí                          | Tabla TIPO_COMPROBANTE.                                                                                       |
+| `fechaComprobante`                  | `FechaHora`           | sí                          | ≤ `fechaRetencion` (igual para tipos 3, 19 y 20).                                                             |
+| `numeroComprobante`                 | string                | sí (todos los tipos)        | `99999-99999999` para 1-4 y 17-20; hasta 16 caracteres (letras, dígitos, `-` `/` `.`) para 5, 9 y 11; hasta 12 para 6.                 |
+| `coe`, `coeOriginal`, `cae`         | string ≤ 12 / 12 / 14 | no                          | El manual dice "completar con espacios hasta que se incorporen los regímenes": si no corresponde, omitilos.   |
+| `importeComprobante`                | number                | sí                          | Negativo solo en los tipos 19 y 20 (liquidaciones "con valor negativo").                                      |
+| `motivoEmisionNotaCredito`          | string ≤ 30           | solo tipo 3                 |                                                                                                               |
+| `cuitRetenido`                      | CUIT/CUIL/CDI         | sí                          | Se valida el dígito verificador y el prefijo (20, 23, 24, 27, 30, 33, 34, 50, 51, 55) y se envía como número. |
+| `numeroCertificadoOriginal`         | string ≤ 25           | solo tipos 3, 19, 20        |                                                                                                               |
+| `fechaRetencionCertificadoOriginal` | `FechaHora`           | solo tipos 3, 19, 20        |                                                                                                               |
+| `importeCertificadoOriginal`        | number                | solo tipos 3, 19, 20        |                                                                                                               |
 
 `FechaHora` es `Date` o string (`YYYY-MM-DD`, `YYYYMMDD`, `YYYY-MM-DDThh:mm[:ss[.SSS]]` en hora de Argentina, o con zona `Z`/`±hh:mm`). Se envía siempre como `AAAA-MM-DDThh:mm:ss.SSS-03:00`.
 
-Importes: números finitos y no negativos, redondeados a 2 decimales (`2100` → `2100.00`). `NaN`, `Infinity` y negativos se rechazan.
+Reglas de fechas del manual (3.2.2) que el SDK valida antes de llamar, comparando **fechas calendario de Argentina** (la hora no cuenta):
+
+- `fechaRetencion` a partir del 2019-12-01.
+- `fechaComprobante` ≤ `fechaRetencion`.
+- Para los tipos 3, 19 y 20, `fechaComprobante` = `fechaRetencion`.
+
+Importes: números finitos, redondeados a 2 decimales (`2100` → `2100.00`), con hasta 11 enteros. `NaN` e `Infinity` se rechazan. El manual no dice si los importes llevan signo: el SDK exige ≥ 0 en todos salvo `importeComprobante` de los tipos 19 y 20, que por definición tienen valor negativo. **No verificado en homologación** que ARCA acepte un `importeComprobante` negativo ni que rechace los demás negativos.
+
+`numeroComprobante` para los tipos 5, 6, 9 y 11 (`X(n)`): el manual dice "caracteres alfanuméricos", así que el SDK acepta letras y dígitos, más los separadores `-`, `/` y `.` (no espacios ni caracteres no ASCII); ARCA valida el resto.
+
+`cuitRetenido`: el manual dice "CUIT/CUIL/CDI existente en ARCA". La CDI tiene el mismo formato de 11 dígitos con dígito verificador; ARCA no publica qué prefijos usa, así que el SDK acepta los mismos que `validateCuit` de common. Si existe o no lo valida ARCA.
 
 Devuelve `{ certificadoNro, codigoSeguridad }` (strings). Con ambos datos se imprime el certificado desde el micrositio SIRE.
 
 ### `anularCertificado(params, opts?): Promise<CertificadoResult>`
 
 ```typescript
-import { MotivoAnulacion } from '@ramiidv/arca-sire';
+import { ArcaSire, MotivoAnulacion } from '@ramiidv/arca-sire';
+
+declare const sire: ArcaSire;
+declare const certificadoNro: string;
 
 const anulacion = await sire.anularCertificado({
   numeroCertificado: certificadoNro,
@@ -123,9 +136,21 @@ const anulacion = await sire.anularCertificado({
 // anulacion.certificadoNro / codigoSeguridad: el certificado que anula al informado
 ```
 
-### `status(opts?): Promise<ServerStatus>`
+### `status(opts?): Promise<SireServerStatus>`
 
-`{ appserver, dbserver, authserver }`, cada uno `"OK"` si funciona.
+`{ appserver, dbserver, authserver }`, cada uno `"OK"` si funciona, más `headerInfo` con el `HeaderInfo` que SIRE devuelve en el header SOAP: `{ ambiente, fecha, vCore, v2005 }` (ej: `ambiente: "homologacion - 207"`). Sirve para comprobar que estás apuntando al entorno correcto.
+
+### Tablas
+
+Constantes tomadas del anexo del manual:
+
+- `TipoComprobante`: 1 Factura, 2 Recibo, 3 Nota de crédito, 4 Nota de débito, 5 Otro comprobante, 6 Orden de pago, 9 Escritura pública, 11 Factura (16 dígitos), 17/18 Liquidación de servicios públicos clase A/B, 19/20 ídem con valor negativo.
+- `Condicion`: 1 Inscripto, 2 No inscripto.
+- `MotivoAnulacion`: 1 CUIT errónea del sujeto retenido, 2 Fecha de la retención errónea, 3 Régimen incorrecto, 4 Otros.
+- `REGIMENES_CON_CONDICION`: `[831]` (tabla REGIMEN_CONDICION).
+- `SIRE_VERSION` (100), `IMPUESTO_IVA` (216), `SIRE_SERVICE_ID` (`sire-ws`), `SIRE_NAMESPACE`.
+
+El manual no publica la tabla REGIMEN completa: los regímenes válidos los valida ARCA.
 
 ### Bajo nivel
 
@@ -133,18 +158,22 @@ const anulacion = await sire.anularCertificado({
 
 ## Manejo de errores
 
-| Error                                                | Cuándo                                                                                                                                                                                                                                                | ¿Se emitió/anuló? |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| `ArcaValidationError`                                | Datos inválidos detectados localmente (antes de autenticar). `details` tiene un ítem por campo.                                                                                                                                                       | No                |
-| `ArcaAuthError` / `ArcaTicketVigenteError`           | Falla de WSAA.                                                                                                                                                                                                                                        | No                |
-| `ArcaSireServiceError` (extiende `ArcaServiceError`) | ARCA rechazó el request con un SOAP Fault de negocio (`soapenv:Client`), de schema, de request mal formado o de token/sign. `message`/`errors[0].msg` tienen el texto de ARCA, `faultCode` el código del Fault y `cause` el `ArcaSoapError` original. | No                |
-| `ArcaSoapError` con `uncertain: true`                | Timeout, error de red después de enviar, HTTP 5xx sin Fault, respuesta ilegible o sin `certificadoNro`/`codigoSeguridad`, o un Fault `soapenv:Server` de sistema (ej: "Error de conexión a la base de datos").                                        | **No se sabe**    |
-| `ArcaSoapError` con `uncertain: false`               | El request no llegó a enviarse (DNS, conexión rechazada, abort antes de enviar).                                                                                                                                                                      | No                |
+| Error                                                | Cuándo                                                                                                                                                                                                                                                                 | ¿Se emitió/anuló? |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `ArcaValidationError`                                | Datos inválidos detectados localmente (antes de autenticar). `details` tiene un ítem por campo.                                                                                                                                                                        | No                |
+| `ArcaAuthError` / `ArcaTicketVigenteError`           | Falla de WSAA, o SIRE rechazó el token/sign (ej: `MISSING_AUTHENTICATION_TOKEN`). En ese caso el SDK descarta el ticket cacheado para que el próximo intento pida uno nuevo.                                                                                           | No                |
+| `ArcaSireServiceError` (extiende `ArcaServiceError`) | ARCA rechazó el request con un SOAP Fault de negocio (`soapenv:Client`, aunque no traiga `faultstring`), de schema o de request mal formado. `message`/`errors[0].msg` tienen el texto de ARCA, `faultCode` el código del Fault y `cause` el `ArcaSoapError` original. | No                |
+| `ArcaSoapError` con `uncertain: true`                | Timeout, error de red después de enviar, HTTP 5xx sin Fault, respuesta ilegible o sin `certificadoNro`/`codigoSeguridad`, o un Fault `soapenv:Server` de sistema (ej: "Error de conexión a la base de datos").                                                         | **No se sabe**    |
+| `ArcaSoapError` con `uncertain: false`               | El request no llegó a enviarse (DNS, conexión rechazada, abort antes de enviar).                                                                                                                                                                                       | No                |
 
-Criterio para los SOAP Faults: el manual (sección 4) define `soapenv:Client` como error de negocio y `soapenv:Server` como error de sistema. En homologación, además, el servidor responde `soapenv:Server` para rechazos previos a procesar (XML que no cumple el schema, operación inexistente, `MISSING_AUTHENTICATION_TOKEN`); esos también se informan como `ArcaSireServiceError`. Cualquier otro `soapenv:Server` en `emitir`/`anular` se deja como `ArcaSoapError` incierto.
+Criterio para los SOAP Faults: el manual (sección 4) define `soapenv:Client` como error de negocio y `soapenv:Server` como error de sistema. En homologación, además, el servidor responde `soapenv:Server` para rechazos previos a procesar (XML que no cumple el schema, operación inexistente, `MISSING_AUTHENTICATION_TOKEN`); esos también se informan como rechazo. Cualquier otro `soapenv:Server` en `emitir`/`anular` se deja como `ArcaSoapError` incierto. El manual no publica la lista de Faults de autenticación: el SDK trata como tal un `faultstring` del estilo `XXX_TOKEN`/`XXX_SIGN`.
 
 ```typescript
-import { ArcaSireServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-sire';
+import { ArcaAuthError, ArcaSire, ArcaSireServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-sire';
+import type { EmitirCertificadoParams } from '@ramiidv/arca-sire';
+
+declare const sire: ArcaSire;
+declare const datos: EmitirCertificadoParams;
 
 try {
   await sire.emitirCertificado(datos);
@@ -153,6 +182,8 @@ try {
     console.error(err.details); // [{ field, message, value }]
   } else if (err instanceof ArcaSireServiceError) {
     console.error('Rechazado por ARCA:', err.message); // seguro: no se emitió
+  } else if (err instanceof ArcaAuthError) {
+    console.error('Autenticación:', err.message); // no se emitió
   } else if (err instanceof ArcaSoapError && err.uncertain) {
     // Ver "Resultado incierto"
   }
@@ -169,34 +200,33 @@ SIRE no ofrece ninguna operación para consultar certificados, y el manual defin
 2. Ante un error incierto, no reenvíes automáticamente. Verificá en el micrositio SIRE (clave fiscal) si existe un certificado para ese retenido, comprobante y fecha.
 3. Si existe, registrá su número; si no, recién entonces volvé a emitir. Si quedó un duplicado, anulalo con `anularCertificado`.
 
-## Tablas
-
-Constantes tomadas del anexo del manual:
-
-- `TipoComprobante`: 1 Factura, 2 Recibo, 3 Nota de crédito, 4 Nota de débito, 5 Otro comprobante, 6 Orden de pago, 9 Escritura pública, 11 Factura (16 dígitos), 17/18 Liquidación de servicios públicos clase A/B, 19/20 ídem con valor negativo.
-- `Condicion`: 1 Inscripto, 2 No inscripto.
-- `MotivoAnulacion`: 1 CUIT errónea del sujeto retenido, 2 Fecha de la retención errónea, 3 Régimen incorrecto, 4 Otros.
-- `REGIMENES_CON_CONDICION`: `[831]` (tabla REGIMEN_CONDICION).
-- `SIRE_VERSION` (100), `IMPUESTO_IVA` (216), `SIRE_SERVICE_ID` (`sire-ws`), `SIRE_NAMESPACE`.
-
-El manual no publica la tabla REGIMEN completa: los regímenes válidos los valida ARCA.
-
 ## Eventos
 
 ```typescript
+import { ArcaSire } from '@ramiidv/arca-sire';
+
 const sire = new ArcaSire({
-  // ...
+  cert: '...',
+  key: '...',
+  cuit: '20123456786',
   onEvent: (e) => console.log(e.type, 'method' in e ? e.method : e.service),
 });
 ```
 
-## Migración desde 0.2.x
+`onEvent` recibe `auth:login`, `auth:cache-hit`, `auth:clock-skew`, `auth:storage-error`, `request:start`, `request:end`, `request:retry` y `request:error` (ver `ArcaEvent` en `@ramiidv/arca-common`). También se puede suscribir con `sire.on(tipo, handler)`.
 
-La 0.2.x apuntaba a endpoints y operaciones que no existen en ARCA (`registrarRetencion`, `consultarRetenciones`, `consultarComprobante`, `generarCertificado`, `consultarAlicuotas`, etc.); ninguna llamada de esa versión funcionaba. Reemplazos:
+## Entornos
 
-- `registrarRetencion` → `emitirCertificado` (campos nuevos, ver tabla).
-- `anularRetencion(nro)` → `anularCertificado({ numeroCertificado, motivoAnulacion })`.
-- Consultas y tablas: no existen en el servicio; usar el micrositio SIRE y las constantes del SDK.
+| Entorno      | SIRE C2005 (`ENDPOINTS.sire`)                                        |
+| ------------ | -------------------------------------------------------------------- |
+| Homologación | `https://ws-aplicativos-reca.homo.afip.gob.ar/sire/ws/v1/c2005/2005` |
+| Producción   | `https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005`      |
+
+Se elige con `production` y se puede sobrescribir con `endpoints.sire`. `status().headerInfo.ambiente` indica en qué ambiente respondió el servicio (ej: `"homologacion - 207"`).
+
+## Ejemplos
+
+En [`examples/`](https://github.com/ramiidv/arca-sdks/tree/main/packages/sire/examples): emitir un certificado, anularlo y manejo de errores.
 
 ## Licencia
 

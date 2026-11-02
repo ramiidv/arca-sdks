@@ -8,16 +8,32 @@
  *
  * @internal No se exporta desde `index.ts`.
  */
-import { bool, cuit, dec, int, must, opt, str } from '@ramiidv/arca-common/schema';
+import {
+  bool,
+  cuit,
+  dec,
+  importe as importeNoNegativo,
+  int,
+  must,
+  nonEmptyStr,
+  opt,
+  str,
+} from '@ramiidv/arca-common/schema';
 import type { Field, Schema } from '@ramiidv/arca-common/schema';
 
-/** Máximo de un importe `11,2` (11 enteros + 2 decimales, sin signo). */
+/** Máximo de un importe `11,2` (11 enteros + 2 decimales, manual 5.1). */
 const IMPORTE_MAX = 99_999_999_999.99;
 
-/** Texto no vacío (ni solo espacios) de hasta `maxLen` caracteres. */
-const texto = (maxLen?: number): Field => str({ maxLen, pattern: /\S/, patternMessage: 'no puede estar vacío' });
-/** Importe `xs:double` del manual: 11 enteros + 2 decimales, sin signo. */
-const importe = (): Field => dec(2, 0, IMPORTE_MAX);
+/**
+ * Texto no vacío (ni solo espacios) de hasta `max` caracteres. Un opcional sin
+ * valor no se envía (manual 5.1, punto 5): no hace falta mandarlo "con espacios".
+ */
+const texto = (max?: number): Field => nonEmptyStr({ max });
+/**
+ * Importe `xs:double` del manual: 11 enteros + 2 decimales. El manual no dice
+ * que sea sin signo; el SDK exige ≥ 0 salvo en `importeComprobante`.
+ */
+const importe = (): Field => importeNoNegativo(IMPORTE_MAX);
 /** `xs:dateTime` ya serializado por `formatSireDateTime`. */
 const fechaHora = (): Field => str();
 
@@ -43,10 +59,12 @@ export const CERTIFICADO = {
   fechaComprobante: fechaHora(),
   /** Formato según el tipo de comprobante (se valida aparte). */
   numeroComprobante: opt(str()),
+  /** El manual (3.2.2) dice "completar con espacios hasta que se incorporen los regímenes": omitirlo. */
   coe: opt(texto(12)),
   coeOriginal: opt(texto(12)),
   cae: opt(texto(14)),
-  importeComprobante: importe(),
+  /** Puede ser negativo solo en los tipos 19 y 20 ("con valor negativo"; se valida aparte). */
+  importeComprobante: dec(2, -IMPORTE_MAX, IMPORTE_MAX),
   motivoEmisionNotaCredito: opt(texto(30)),
   cuitRetenido: cuit(),
   numeroCertificadoOriginal: opt(texto(25)),

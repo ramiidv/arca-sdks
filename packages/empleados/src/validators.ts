@@ -1,8 +1,8 @@
 import { ArcaValidationError, collectErrors, validateCuit } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
-import { PREFIJOS_CUIL_PERSONA_FISICA, VALORES_MARCA_COVID_CCG, VALORES_RECTIFICACION } from './constants.js';
+import { PREFIJOS_CUIL_PERSONA_FISICA, VALORES_RECTIFICACION } from './constants.js';
 import { erroresDeFormato, formatFechaSR } from './serializer.js';
-import type { FechaInput, OpcionesSerializacion, RegistroRelacionLaboral } from './types.js';
+import type { FechaInput, OpcionesSerializacion, OpcionesValidacion, RegistroRelacionLaboral } from './types.js';
 
 /**
  * Valida un CUIL de trabajador: 11 dígitos, prefijo de persona física
@@ -61,8 +61,12 @@ function requerido(
  *   inicio, modalidad de contrato, obra social y domicilio de desempeño (sucursal).
  *   La fecha de fin es obligatoria en contratos a plazo fijo, pero el SDK no conoce la
  *   tabla de modalidades (no es pública) y no lo puede verificar.
- * - `BT`: CUIL y fecha de fin (fecha de baja).
- * - `MR`, `NA`, `NB`: CUIL.
+ * - `BT`: CUIL, fecha de inicio y fecha de fin (fecha de baja).
+ * - `MR`, `NA`, `NB`: CUIL y fecha de inicio.
+ *
+ * La fecha de inicio se exige en todos los movimientos por la nota de la pantalla de
+ * ingreso masivo (manual pág. 23): "fecha inicio de vínculo son obligatorios para todos
+ * los eventos".
  *
  * El servicio de ARCA aplica sus propias validaciones al importar el archivo.
  */
@@ -70,15 +74,15 @@ export const CAMPOS_OBLIGATORIOS: Readonly<
   Record<RegistroRelacionLaboral['movimiento'], readonly (keyof RegistroRelacionLaboral)[]>
 > = Object.freeze({
   AT: Object.freeze(['cuil', 'fechaInicio', 'modalidadContrato', 'obraSocial', 'sucursal'] as const),
-  BT: Object.freeze(['cuil', 'fechaFin'] as const),
-  MR: Object.freeze(['cuil'] as const),
-  NA: Object.freeze(['cuil'] as const),
-  NB: Object.freeze(['cuil'] as const),
+  BT: Object.freeze(['cuil', 'fechaInicio', 'fechaFin'] as const),
+  MR: Object.freeze(['cuil', 'fechaInicio'] as const),
+  NA: Object.freeze(['cuil', 'fechaInicio'] as const),
+  NB: Object.freeze(['cuil', 'fechaInicio'] as const),
 });
 
 function enRango(
   r: RegistroRelacionLaboral,
-  campo: 'rectificacion' | 'marcaCovidTipoContratoCCG',
+  campo: 'rectificacion',
   validos: readonly number[],
   errores: ValidationErrorDetail[],
 ): void {
@@ -90,6 +94,16 @@ function enRango(
   }
 }
 
+/** Días de anticipación máxima con que se puede comunicar un alta (manual pág. 18). */
+const MAX_DIAS_ANTICIPACION_ALTA = 90;
+
+/** Suma días a una fecha `AAAA/MM/DD` (aritmética de calendario, sin zona horaria). */
+function sumarDias(fecha: string, dias: number): string {
+  const [a, m, d] = fecha.split('/').map(Number);
+  const t = new Date(Date.UTC(a, m - 1, d + dias));
+  return `${t.getUTCFullYear()}/${String(t.getUTCMonth() + 1).padStart(2, '0')}/${String(t.getUTCDate()).padStart(2, '0')}`;
+}
+
 function fechaComparable(f: FechaInput): string | undefined {
   try {
     return formatFechaSR(f);
@@ -99,13 +113,18 @@ function fechaComparable(f: FechaInput): string | undefined {
 }
 
 /**
- * Valida un registro completo: formato (que se pueda escribir en las 130 posiciones)
- * y reglas de negocio (CUIL con dígito verificador y prefijo de persona física,
- * campos obligatorios por movimiento, rectificación 00-05, marca 0-9, fechaFin ≥ fechaInicio).
- * Informa todos los errores juntos.
+ * Valida un registro completo: formato (que se pueda escribir en las 130 posiciones,
+ * sin propiedades desconocidas) y reglas de negocio (CUIL con dígito verificador y
+ * prefijo de persona física, campos obligatorios por movimiento, rectificación 00-05,
+ * fechaFin ≥ fechaInicio y, en un alta, fechaInicio a lo sumo 90 días posterior a
+ * `validacion.fechaReferencia`, default hoy en Argentina). Informa todos los errores juntos.
  * @throws ArcaValidationError
  */
-export function validateRegistro(registro: RegistroRelacionLaboral, opciones?: OpcionesSerializacion): void {
+export function validateRegistro(
+  registro: RegistroRelacionLaboral,
+  opciones?: OpcionesSerializacion,
+  validacion: OpcionesValidacion = {},
+): void {
   const errores = erroresDeFormato(registro, opciones);
   if (errores.length === 1 && errores[0].field === 'registro') {
     throw new ArcaValidationError(errores[0].message, errores, 'registro');
@@ -115,11 +134,36 @@ export function validateRegistro(registro: RegistroRelacionLaboral, opciones?: O
   if (!conErrorDeFormato.has('cuil')) {
     collectErrors(() => validateCuilTrabajador(registro.cuil), errores);
   }
-  const obligatorios = CAMPOS_OBLIGATORIOS[registro.movimiento];
-  if (obligatorios) requerido(registro, [...obligatorios], errores);
+  // Object.hasOwn: un movimiento como "constructor" no debe resolver a Object.prototype.
+  if (Object.hasOwn(CAMPOS_OBLIGATORIOS, registro.movimiento)) {
+    requerido(registro, [...CAMPOS_OBLIGATORIOS[registro.movimiento]], errores);
+  }
 
+  // La marca de la posición 130 (0-9) ya queda acotada por el formato N(1).
   enRango(registro, 'rectificacion', VALORES_RECTIFICACION, errores);
-  enRango(registro, 'marcaCovidTipoContratoCCG', VALORES_MARCA_COVID_CCG, errores);
+
+  if (registro.movimiento === 'AT' && presente(registro.fechaInicio)) {
+    const ini = fechaComparable(registro.fechaInicio!);
+    let hoy: string;
+    try {
+      hoy = formatFechaSR(validacion.fechaReferencia ?? new Date());
+    } catch (e) {
+      throw new ArcaValidationError(
+        `fechaReferencia inválida: ${(e as Error).message}`,
+        [{ field: 'fechaReferencia', message: (e as Error).message, value: validacion.fechaReferencia }],
+        'fechaReferencia',
+        { cause: e },
+      );
+    }
+    const limite = sumarDias(hoy, MAX_DIAS_ANTICIPACION_ALTA);
+    if (ini && ini > limite) {
+      errores.push({
+        field: 'fechaInicio',
+        message: `fechaInicio (${ini}) supera los ${MAX_DIAS_ANTICIPACION_ALTA} días de anticipación permitidos para el alta (límite ${limite}, referencia ${hoy})`,
+        value: registro.fechaInicio,
+      });
+    }
+  }
 
   if (presente(registro.fechaInicio) && presente(registro.fechaFin)) {
     const ini = fechaComparable(registro.fechaInicio!);

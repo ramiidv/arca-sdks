@@ -7,11 +7,9 @@ laborales en registros de ancho fijo de 130 posiciones.
 - No hace llamadas a servicios web: ARCA no expone un web service para esto. El archivo se sube a mano
   en Simplificación Registral → Relaciones laborales → Carga Masiva → Nuevo → Cargar Archivo → Enviar.
 - Fuente del formato: [Manual de Ayuda de Simplificación Registral (ARCA, feb. 2025), pág. 24](https://www.arca.gob.ar/simplificacionregistral/ayuda/documentos/SR_Manual-de-Ayuda_20250218_definitivo.pdf).
-
-> **¿Y el F.935?** Las versiones 0.1/0.2 de este paquete hablaban de "archivos F935" con registros
-> `00`–`05` separados por `|`. Ese formato no existe: el F.935 era el archivo encriptado que generaba
-> el viejo aplicativo "Mi Simplificación – Ingreso Masivo de Datos v2.0", que ya no se usa. El formato
-> vigente es el TXT de ancho fijo que describe el manual, y es el que genera la versión 0.3.0.
+- Varios detalles del formato **no están documentados por ARCA** (ver
+  [Pendiente de verificar con ARCA](#pendiente-de-verificar-con-arca)). Probá el archivo generado en
+  Simplificación Registral ("Ver el archivo cargado") antes de enviarlo.
 
 ## Instalación
 
@@ -19,9 +17,17 @@ laborales en registros de ancho fijo de 130 posiciones.
 npm install @ramiidv/arca-empleados
 ```
 
-Requiere Node.js 18 o superior. ESM.
+## Requisitos
 
-## Uso
+- Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
+- Clave fiscal con acceso al servicio **Simplificación Registral** para subir el archivo (el SDK no
+  necesita certificado digital).
+- Los códigos (modalidad de contrato, obra social, situación de revista, sucursal, actividad, puesto,
+  convenio, categoría, tipo de servicio, modalidad de liquidación) se obtienen en el propio servicio con
+  **"Ver tablas informativas de códigos"**. ARCA no publica esas tablas en un documento público, así que
+  el SDK no las trae: valida solo que cada código sea numérico/alfanumérico y entre en su campo.
+
+## Inicio rápido
 
 ```ts
 import { writeFileSync } from 'node:fs';
@@ -39,18 +45,58 @@ sr.alta({
   cct: '9999/99',
 })
   .baja({ cuil: '27-11111111-7', fechaInicio: '2024-03-01', fechaFin: '2026-10-31' })
-  .modificacion({ cuil: '20-34567890-6', retribucion: 1200000 });
+  .modificacion({ cuil: '20-34567890-6', fechaInicio: '2025-01-02', retribucion: 1200000 });
 
 const { buffer, contenido, lineas, resumen } = sr.generar();
 writeFileSync('relaciones-laborales.txt', buffer); // ISO-8859-1 + CRLF
 ```
 
-Los códigos (modalidad de contrato, obra social, situación de revista, sucursal, actividad, puesto,
-convenio, categoría, tipo de servicio, modalidad de liquidación) se obtienen en el propio servicio con
-**"Ver tablas informativas de códigos"**. ARCA no publica esas tablas en un documento público, así que el
-SDK no las trae: valida solo que cada código sea numérico/alfanumérico y entre en su campo.
+## Configuración
 
-### API
+```ts
+import { ArcaEmpleados } from '@ramiidv/arca-empleados';
+
+const sr = new ArcaEmpleados({
+  strict: true, // default
+  fechaReferencia: '2026-11-01', // "hoy" para el límite de 90 días del alta (default: fecha actual en Argentina)
+  serializacion: {
+    eol: '\r\n', // o '\n'
+    eolFinal: true, // fin de línea después del último registro
+    encoding: 'latin1', // o 'ascii'
+    noRepresentables: 'error', // o 'transliterar' (quita diacríticos: Ñ→N, Ú→U)
+    numericoVacio: 'ceros', // o 'espacios' (ver advertencia abajo)
+  },
+});
+```
+
+| Opción                           | Default         | Descripción                                                                                                        |
+| -------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `strict`                         | `true`          | Formato + reglas de negocio. `false`: solo formato.                                                                |
+| `fechaReferencia`                | hoy (Argentina) | Fecha de la novedad para validar que el alta no supere los 90 días de anticipación.                                |
+| `serializacion.eol`              | `'\r\n'`        | Fin de línea.                                                                                                      |
+| `serializacion.eolFinal`         | `true`          | Fin de línea después del último registro.                                                                          |
+| `serializacion.encoding`         | `'latin1'`      | ISO-8859-1 o `'ascii'`.                                                                                            |
+| `serializacion.noRepresentables` | `'error'`       | `'transliterar'` quita diacríticos; si aún no es representable, lanza.                                             |
+| `serializacion.numericoVacio`    | `'ceros'`       | Cómo se escribe un numérico no informado: `'ceros'` o `'espacios'` (salvo rectificación y marca 130, siempre `0`). |
+
+- `strict: true`: formato + reglas de negocio: CUIL con prefijo de persona física 20/23/24/27 y dígito
+  verificador; campos obligatorios por movimiento (`CAMPOS_OBLIGATORIOS`); rectificación `00`–`05`;
+  `fechaFin ≥ fechaInicio`; en un alta, `fechaInicio` como máximo 90 días después de `fechaReferencia`
+  (manual, pág. 18). Todos los errores se informan juntos en `ArcaValidationError.details`.
+- `strict: false`: solo formato (que el registro entre en las 130 posiciones). Un valor que no entra en
+  su campo da `ArcaSerializationError`.
+- **En ambos modos** se rechaza (`ArcaValidationError`) una propiedad que no es del diseño de registro:
+  un nombre mal escrito (`retribucon`, `obraSocal`) dejaría el campo vacío en silencio.
+
+> **Advertencia: numéricos no informados en `MR` y `BT`.** El manual no dice cómo se informa un campo
+> que no se quiere modificar. Con el default (`numericoVacio: 'ceros'`), una modificación que solo trae
+> la retribución escribe `000000` en obra social, `000` en modalidad de contrato, etc., y **ARCA podría
+> interpretarlos como código `0` y pisar el dato vigente**. No encontramos documentación que confirme
+> ni descarte ese comportamiento, por eso el default no cambió. Si vas a enviar modificaciones o bajas,
+> informá todos los campos vigentes de la relación o probá en Simplificación Registral con
+> `numericoVacio: 'espacios'` antes de enviar.
+
+## API
 
 | Método                                                                                                  | Movimiento               | Descripción                                                         |
 | ------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------- |
@@ -65,33 +111,26 @@ SDK no las trae: valida solo que cada código sea numérico/alfanumérico y entr
 
 Cada registro se valida y se serializa **al agregarlo**: si falla, se lanza el error y no se agrega.
 
+Campos obligatorios en modo `strict` (`CAMPOS_OBLIGATORIOS`):
+
+| Movimiento       | Campos                                                               |
+| ---------------- | -------------------------------------------------------------------- |
+| `AT`             | `cuil`, `fechaInicio`, `modalidadContrato`, `obraSocial`, `sucursal` |
+| `BT`             | `cuil`, `fechaInicio`, `fechaFin`                                    |
+| `MR`, `NA`, `NB` | `cuil`, `fechaInicio`                                                |
+
+`fechaInicio` es obligatoria en todos los movimientos por la nota de la pantalla de ingreso masivo
+(manual, pág. 23): "fecha inicio de vínculo son obligatorios para todos los eventos". Los datos mínimos
+del alta son los de la RG 5508/2024. La fecha de fin es obligatoria en un alta a plazo fijo y ARCA la
+rechaza en un contrato por tiempo indeterminado (manual, pág. 18), pero el SDK no lo puede chequear sin
+la tabla de modalidades.
+
 Funciones sueltas (uso avanzado): `serializarRegistro`, `serializarArchivo`, `codificarArchivo`,
 `formatFechaSR` (fecha → `AAAA/MM/DD`; distinto del `formatDate` de common, que da `AAAAMMDD`),
-`validateRegistro`, `validateCuilTrabajador`, `DISENO_REGISTRO`, `CAMPOS_OBLIGATORIOS`.
+`validateRegistro(registro, opcionesSerializacion?, { fechaReferencia? })`, `validateCuilTrabajador`,
+`DISENO_REGISTRO`, `CAMPOS_OBLIGATORIOS`.
 
-### Configuración
-
-```ts
-new ArcaEmpleados({
-  strict: true, // default
-  serializacion: {
-    eol: '\r\n', // o '\n'
-    eolFinal: true, // fin de línea después del último registro
-    encoding: 'latin1', // o 'ascii'
-    noRepresentables: 'error', // o 'transliterar' (quita diacríticos: Ñ→N, Ú→U)
-    numericoVacio: 'ceros', // o 'espacios'
-  },
-});
-```
-
-- `strict: true`: formato + reglas de negocio (CUIL con prefijo de persona física 20/23/24/27 y dígito
-  verificador, campos obligatorios por movimiento, rectificación `00`–`05`, marca `0`–`9`,
-  `fechaFin ≥ fechaInicio`). Todos los errores se informan juntos en `ArcaValidationError.details`.
-- `strict: false`: solo formato (que el registro entre en las 130 posiciones). Datos que no son un
-  objeto o un movimiento inválido dan `ArcaValidationError`; un valor que no entra en su campo da
-  `ArcaSerializationError` con `field`, `desde`, `hasta` y `value`.
-
-## Diseño de registro (oficial)
+### Diseño de registro (oficial)
 
 Un único tipo de registro, `01`, de 130 posiciones. Tabla transcripta del manual (pág. 24):
 
@@ -120,52 +159,63 @@ Un único tipo de registro, `01`, de 130 posiciones. Tabla transcripta del manua
 | 120-129 | Número formulario agropecuario (`numeroFormularioAgropecuario`)                   | N    | 10    |                              |
 | 130     | Marca licencia COVID / tipo de contrato CCG (`marcaCovidTipoContratoCCG`)         | N    | 1     | `0`–`9`                      |
 
-### Qué es oficial y qué es convención
-
 **Oficial (manual):** las posiciones, largos y tipos de la tabla; el formato `AAAA/MM/DD` de las fechas;
 los códigos `AT,BT,MR,NA,NB`; rectificación `00`–`05`; la marca de la posición 130 (`0`–`9`, default
 `0`); que la retribución se informa "con indicación de centavos"; que el CCT `9999/99` es "excluido de
-convenio"; los datos mínimos del alta (RG 5508/2024): CUIL, domicilio de desempeño, fecha de inicio,
-modalidad de contratación, obra social y fecha de fin si el contrato es a plazo fijo.
+convenio"; los datos mínimos del alta (RG 5508/2024); que la fecha de inicio es obligatoria en todos los
+eventos (pág. 23); que el alta se puede comunicar hasta 90 días antes del inicio (pág. 18).
 
-**Convención no documentada por ARCA** (la habitual en los diseños de registro de ARCA; configurable
-donde se indica):
-
-| Tema                             | Lo que hace el SDK                                                                                                | Configurable                                     |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| Numéricos                        | Ceros a la izquierda                                                                                              | —                                                |
-| Numérico no informado            | Ceros (salvo rectificación y marca 130, siempre `0`)                                                              | `numericoVacio: 'espacios'`                      |
-| Alfanuméricos                    | Espacios a la derecha; sin cambiar mayúsculas                                                                     | —                                                |
-| Fecha no informada               | 10 espacios                                                                                                       | —                                                |
-| Retribución                      | 2 decimales implícitos, sin separador: `1500.5` → `000000000150050`. Más de 2 decimales es error (no se redondea) | —                                                |
-| Codificación                     | ISO-8859-1 (`Buffer` en latin1, 1 byte por caracter)                                                              | `encoding: 'ascii'`                              |
-| Caracteres no representables     | Error                                                                                                             | `noRepresentables: 'transliterar'`               |
-| Fin de línea                     | CRLF, también después del último registro                                                                         | `eol`, `eolFinal`                                |
-| Fechas `Date`                    | Se toma la fecha calendario de Argentina (`America/Argentina/Buenos_Aires`)                                       | Pasá un string `AAAA-MM-DD` para fijarla literal |
-| Marca de trabajador agropecuario | Se escribe el caracter que pases (el manual no dice cuál)                                                         | —                                                |
-
-**No verificado / no documentado:**
-
-- El significado de `NA` y `NB`. El manual los lista sin describirlos (`AT`, `BT` y `MR` = alta, baja y
-  modificación coinciden con la RG 3399/2012). Se pueden usar con `novedad()`; el SDK solo exige el CUIL.
-- El significado de cada valor de "Rectificación" y de la marca de la posición 130.
-- Qué campos exige ARCA para `BT`, `MR`, `NA` y `NB`. El SDK exige: `AT` → `cuil`, `fechaInicio`,
-  `modalidadContrato`, `obraSocial`, `sucursal`; `BT` → `cuil`, `fechaFin`; el resto → `cuil`
-  (`CAMPOS_OBLIGATORIOS`). La fecha de fin obligatoria para contratos a plazo fijo no se puede chequear
-  sin la tabla de modalidades. El servicio de ARCA hace su propia validación al importar el archivo y
-  muestra los rechazos en el listado de novedades.
+**Convención del SDK** (la habitual en los diseños de registro de ARCA, configurable donde se indica):
+numéricos con ceros a la izquierda; alfanuméricos con espacios a la derecha y sin cambiar mayúsculas;
+fechas no informadas como 10 espacios; un `Date` se convierte a la fecha calendario de Argentina (pasá un
+string `AAAA-MM-DD` para fijarla literal).
 
 Nada se trunca en silencio: un valor que no entra en su campo, `NaN`, un número negativo o con decimales
 en un campo de código, un tipo incorrecto, una fecha inexistente, un salto de línea o un caracter no
 representable lanzan `ArcaSerializationError`.
 
-## Errores
+## Pendiente de verificar con ARCA
 
-| Clase                             | Cuándo                                                                                                                                                                                                                                                  |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ArcaValidationError` (de common) | Reglas de negocio, datos que no son un objeto, movimiento inválido, `generar()` sin registros. `details[]` por campo; en las operaciones masivas el campo es `"[i].campo"` y `cause` es el error original (o un `AggregateError` con uno por registro). |
-| `ArcaSerializationError`          | Un valor no se puede escribir en el formato. `field`, `desde`, `hasta`, `value`, `indice` (en `serializarArchivo`), `cause`.                                                                                                                            |
-| `ArcaEmpleadosError`              | Base de los errores propios (acepta `{ cause }`).                                                                                                                                                                                                       |
+El manual solo publica la tabla del diseño de registro. Lo siguiente es convención del SDK y **no está
+verificado con ARCA**:
+
+| Tema                             | Lo que hace el SDK                                                                                                                                                                         | Configurable                   |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| Relleno de campos vacíos         | Numéricos no informados en ceros (salvo rectificación y marca 130, siempre `0`); alfanuméricos y fechas en espacios. Ver la advertencia de [Configuración](#configuración) para `MR`/`BT`. | `numericoVacio: 'espacios'`    |
+| Formato de la retribución        | 2 decimales implícitos, sin separador: `1500.5` → `000000000150050`. Más de 2 decimales es error (no se redondea). El manual solo dice "con indicación de centavos".                       | —                              |
+| Codificación                     | ISO-8859-1 (`Buffer` en latin1, 1 byte por caracter); caracteres no representables dan error.                                                                                              | `encoding`, `noRepresentables` |
+| Fin de línea                     | CRLF, también después del último registro.                                                                                                                                                 | `eol`, `eolFinal`              |
+| Significado de `NA` y `NB`       | El manual los lista sin describirlos (`AT`, `BT` y `MR` coinciden con la RG 3399/2012). Se aceptan con `novedad()`.                                                                        | —                              |
+| Marca de trabajador agropecuario | Se escribe el caracter que pases: el manual no dice cuál es el valor de la marca.                                                                                                          | —                              |
+| Rectificación y marca 130        | Se validan los rangos, pero el manual no describe el significado de cada valor.                                                                                                            | —                              |
+| Campos exigidos por movimiento   | Los de `CAMPOS_OBLIGATORIOS`. ARCA hace su propia validación al importar y muestra los rechazos en el listado de novedades.                                                                | `strict: false`                |
+
+## Manejo de errores
+
+| Clase                             | Cuándo                                                                                                                                                                                                                                                                            |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ArcaValidationError` (de common) | Reglas de negocio, propiedades desconocidas, datos que no son un objeto, movimiento inválido, `generar()` sin registros. `details[]` por campo; en las operaciones masivas el campo es `"[i].campo"` y `cause` es el error original (o un `AggregateError` con uno por registro). |
+| `ArcaSerializationError`          | Un valor no se puede escribir en el formato. `field`, `desde`, `hasta`, `value`, `indice` (en `serializarArchivo`), `cause`.                                                                                                                                                      |
+| `ArcaEmpleadosError`              | Base de los errores propios (acepta `{ cause }`).                                                                                                                                                                                                                                 |
+
+```ts
+import { ArcaEmpleados, ArcaSerializationError, ArcaValidationError } from '@ramiidv/arca-empleados';
+
+try {
+  new ArcaEmpleados().alta({ cuil: '20-12345678-7', fechaInicio: '2026-02-30', obraSocial: '1234567' });
+} catch (e) {
+  if (e instanceof ArcaValidationError) {
+    for (const d of e.details) console.error(`${d.field}: ${d.message}`);
+  } else if (e instanceof ArcaSerializationError) {
+    console.error(e.field, e.desde, e.hasta, e.message);
+  }
+}
+```
+
+## Ejemplos
+
+En [`examples/`](https://github.com/ramiidv/arca-sdks/tree/main/packages/empleados/examples): alta,
+baja y modificación, carga masiva y manejo de errores.
 
 ## Licencia
 

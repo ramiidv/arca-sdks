@@ -1,4 +1,4 @@
-import type { ArcaSdkConfig } from '@ramiidv/arca-common';
+import type { ArcaSdkConfig, ServerStatus } from '@ramiidv/arca-common';
 import type { Condicion, MotivoAnulacion, TipoComprobante } from './constants.js';
 
 // ---------------------------------------------------------------------------
@@ -14,6 +14,23 @@ export interface ArcaSireConfig extends ArcaSdkConfig {
     /** URL de WSAA. */
     wsaa?: string;
   };
+}
+
+/** `HeaderInfo` que SIRE devuelve en el header SOAP (manual, 3.1.2): datos del ambiente. */
+export interface SireHeaderInfo {
+  /** Descripción del ambiente (ej: `"homologacion - 207"`). Sirve para detectar un entorno equivocado. */
+  ambiente?: string;
+  /** Fecha y hora de la respuesta (`AAAA-MM-DDThh:mm:ss.SSS-03:00`). */
+  fecha?: string;
+  /** Versión interna de la aplicación. */
+  vCore?: string;
+  /** Versión del formulario 2005. */
+  v2005?: string;
+}
+
+/** Respuesta de `status()`: estado de los servidores más el `HeaderInfo`, si vino. */
+export interface SireServerStatus extends ServerStatus {
+  headerInfo?: SireHeaderInfo;
 }
 
 /** Credenciales del Ticket de Acceso de WSAA. */
@@ -46,7 +63,7 @@ export interface EmitirCertificadoParams {
   codigoTrazabilidad?: string;
   /** Código de régimen (hasta 3 dígitos), existente en la tabla REGIMEN para el impuesto 216. */
   regimen: number;
-  /** Fecha de la retención (a partir del 01/12/2019). */
+  /** Fecha de la retención: a partir del 01/12/2019 (fecha calendario de Argentina; se valida). */
   fechaRetencion: FechaHora;
   /** Condición del sujeto retenido. Obligatoria para los regímenes de `REGIMENES_CON_CONDICION` (831). */
   condicion?: Condicion | number;
@@ -66,24 +83,39 @@ export interface EmitirCertificadoParams {
   fechaPublicacion?: FechaHora;
   /** Tipo de comprobante (tabla TIPO_COMPROBANTE). */
   tipoComprobante: TipoComprobante | number;
-  /** Fecha del comprobante: menor o igual a `fechaRetencion` (igual para tipos 3, 19 y 20). */
+  /**
+   * Fecha del comprobante: menor o igual a `fechaRetencion` (igual para tipos 3, 19 y 20).
+   * Se valida comparando fechas calendario de Argentina (la hora no se tiene en cuenta).
+   */
   fechaComprobante: FechaHora;
   /**
    * Número del comprobante, con el formato del tipo (ej: `"00003-00008497"`).
-   * Obligatorio para todos los tipos de la tabla TIPO_COMPROBANTE.
+   * Obligatorio para todos los tipos de la tabla TIPO_COMPROBANTE. Para los tipos
+   * 5, 6, 9 y 11 (`X(n)`, "caracteres alfanuméricos") se admiten solo letras y dígitos.
    */
   numeroComprobante?: string;
-  /** COE (hasta 12 caracteres). */
+  /**
+   * COE (hasta 12 caracteres). El manual dice "completar con espacios hasta que se
+   * incorporen los regímenes", pero como es opcional, sin valor se omite el tag
+   * (manual 5.1, punto 5): no lo envíes con espacios (el SDK lo rechaza).
+   */
   coe?: string;
-  /** COE original (hasta 12 caracteres). */
+  /** COE original (hasta 12 caracteres). Igual que `coe`: si no corresponde, omitirlo. */
   coeOriginal?: string;
-  /** CAE (hasta 14 caracteres). */
+  /** CAE (hasta 14 caracteres). Igual que `coe`: si no corresponde, omitirlo. */
   cae?: string;
-  /** Importe del comprobante (11 enteros, 2 decimales). */
+  /**
+   * Importe del comprobante (11 enteros, 2 decimales). Puede ser negativo solo en los
+   * tipos 19 y 20 (liquidaciones "con valor negativo"); en el resto debe ser ≥ 0.
+   */
   importeComprobante: number;
   /** Motivo de la nota de crédito (hasta 30 caracteres). Obligatorio solo para `tipoComprobante` 3. */
   motivoEmisionNotaCredito?: string;
-  /** CUIT/CUIL del sujeto retenido. */
+  /**
+   * CUIT/CUIL/CDI del sujeto retenido (manual: "existente en ARCA"). Se valida el
+   * dígito verificador y el prefijo con `validateCuit` de common (20, 23, 24, 27, 30,
+   * 33, 34, 50, 51, 55). Los prefijos que ARCA asigna a las CDI no están publicados.
+   */
   cuitRetenido: string | number;
   /** Número del certificado que origina la nota de crédito (hasta 25). Obligatorio solo para tipos 3, 19 y 20. */
   numeroCertificadoOriginal?: string;

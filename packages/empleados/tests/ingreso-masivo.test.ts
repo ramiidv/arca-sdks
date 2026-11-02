@@ -51,11 +51,60 @@ describe('validateRegistro', () => {
     expect(CAMPOS_OBLIGATORIOS.AT).toEqual(['cuil', 'fechaInicio', 'modalidadContrato', 'obraSocial', 'sucursal']);
     const e = capturar(() => validateRegistro({ movimiento: 'AT', cuil: '20123456786' })) as ArcaValidationError;
     expect(e.details.map((d) => d.field)).toEqual(['fechaInicio', 'modalidadContrato', 'obraSocial', 'sucursal']);
-    expect(() => validateRegistro({ movimiento: 'BT', cuil: '20123456786' })).toThrow(/fechaFin/);
-    expect(() => validateRegistro({ movimiento: 'BT', cuil: '20123456786', fechaFin: '2026-11-30' })).not.toThrow();
-    expect(() => validateRegistro({ movimiento: 'MR', cuil: '20123456786' })).not.toThrow();
-    expect(() => validateRegistro({ movimiento: 'NA', cuil: '20123456786' })).not.toThrow();
-    expect(() => validateRegistro({ movimiento: 'NB', cuil: '20123456786' })).not.toThrow();
+    const bt = capturar(() => validateRegistro({ movimiento: 'BT', cuil: '20123456786' })) as ArcaValidationError;
+    expect(bt.details.map((d) => d.field)).toEqual(['fechaInicio', 'fechaFin']);
+    expect(() =>
+      validateRegistro({ movimiento: 'BT', cuil: '20123456786', fechaInicio: '2025-01-02', fechaFin: '2026-11-30' }),
+    ).not.toThrow();
+    // fechaInicio es obligatoria para todos los eventos (manual pág. 23).
+    for (const movimiento of ['MR', 'NA', 'NB'] as const) {
+      expect(CAMPOS_OBLIGATORIOS[movimiento]).toEqual(['cuil', 'fechaInicio']);
+      expect(() => validateRegistro({ movimiento, cuil: '20123456786' })).toThrow(/fechaInicio/);
+      expect(() => validateRegistro({ movimiento, cuil: '20123456786', fechaInicio: '2025-01-02' })).not.toThrow();
+    }
+  });
+
+  it('movimiento con nombre de propiedad de Object.prototype: error de validación, no TypeError', () => {
+    for (const movimiento of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      const e = capturar(() =>
+        validateRegistro({ movimiento, cuil: '20123456786' } as unknown as RegistroRelacionLaboral),
+      );
+      expect(e).toBeInstanceOf(ArcaValidationError);
+      expect((e as ArcaValidationError).details.map((d) => d.field)).toContain('movimiento');
+    }
+  });
+
+  it('rechaza propiedades desconocidas', () => {
+    const e = capturar(() =>
+      validateRegistro({
+        movimiento: 'MR',
+        cuil: '20123456786',
+        fechaInicio: '2025-01-02',
+        retribucon: 5000,
+      } as unknown as RegistroRelacionLaboral),
+    ) as ArcaValidationError;
+    expect(e).toBeInstanceOf(ArcaValidationError);
+    expect(e.details).toEqual([expect.objectContaining({ field: 'retribucon', value: 5000 })]);
+    expect(e.message).toMatch(/Propiedad desconocida "retribucon"/);
+  });
+
+  it('alta: fechaInicio hasta 90 días después de la fecha de referencia (manual pág. 18)', () => {
+    const r = (fechaInicio: string): RegistroRelacionLaboral => ({ ...alta(), movimiento: 'AT', fechaInicio });
+    const ref = { fechaReferencia: '2026-11-01' };
+    expect(() => validateRegistro(r('2027-01-30'), undefined, ref)).not.toThrow(); // +90 días
+    const e = capturar(() => validateRegistro(r('2027-01-31'), undefined, ref)) as ArcaValidationError;
+    expect(e.details).toEqual([expect.objectContaining({ field: 'fechaInicio' })]);
+    expect(e.message).toMatch(/90 días.*límite 2027\/01\/30/);
+    // Date como referencia: se toma la fecha calendario de Argentina (02:00Z = 23:00 del día anterior).
+    expect(() =>
+      validateRegistro(r('2027-01-30'), undefined, { fechaReferencia: new Date('2026-11-02T02:00:00Z') }),
+    ).not.toThrow();
+    // Fechas pasadas no tienen límite; tampoco aplica a otros movimientos.
+    expect(() => validateRegistro(r('2000-01-01'), undefined, ref)).not.toThrow();
+    expect(() =>
+      validateRegistro({ movimiento: 'MR', cuil: '20123456786', fechaInicio: '2030-01-01' }, undefined, ref),
+    ).not.toThrow();
+    expect(() => validateRegistro(r('2026-11-02'), undefined, { fechaReferencia: 'ayer' })).toThrow(/fechaReferencia/);
   });
 
   it('informa todos los errores (formato + negocio) juntos', () => {
@@ -78,12 +127,19 @@ describe('validateRegistro', () => {
   });
 
   it('rectificación 00-05 y marca 0-9', () => {
-    expect(() => validateRegistro({ movimiento: 'MR', cuil: '20123456786', rectificacion: 5 })).not.toThrow();
+    expect(() =>
+      validateRegistro({ movimiento: 'MR', cuil: '20123456786', fechaInicio: '2025-01-02', rectificacion: 5 }),
+    ).not.toThrow();
     expect(() => validateRegistro({ movimiento: 'MR', cuil: '20123456786', rectificacion: '06' })).toThrow(
       /rectificacion/,
     );
     expect(() =>
-      validateRegistro({ movimiento: 'MR', cuil: '20123456786', marcaCovidTipoContratoCCG: 9 }),
+      validateRegistro({
+        movimiento: 'MR',
+        cuil: '20123456786',
+        fechaInicio: '2025-01-02',
+        marcaCovidTipoContratoCCG: 9,
+      }),
     ).not.toThrow();
   });
 
@@ -97,8 +153,8 @@ describe('ArcaEmpleados', () => {
     const sr = new ArcaEmpleados()
       .alta(alta())
       .baja({ cuil: '27111111117', fechaInicio: '2025-03-01', fechaFin: '2026-10-31' })
-      .modificacion({ cuil: '20345678906', retribucion: 2000.5 })
-      .novedad({ movimiento: 'NA', cuil: '23987654325' });
+      .modificacion({ cuil: '20345678906', fechaInicio: '2025-01-02', retribucion: 2000.5 })
+      .novedad({ movimiento: 'NA', cuil: '23987654325', fechaInicio: '2025-01-02' });
     const out = sr.generar();
     expect(out.lineas).toHaveLength(4);
     for (const l of out.lineas) {
@@ -156,6 +212,42 @@ describe('ArcaEmpleados', () => {
     expect(sr.cantidad).toBe(1);
   });
 
+  it('rechaza propiedades desconocidas en ambos modos (no deja el campo vacío en silencio)', () => {
+    for (const strict of [true, false]) {
+      const sr = new ArcaEmpleados({ strict });
+      const e = capturar(() =>
+        sr.modificacion({
+          cuil: '20123456786',
+          fechaInicio: '2025-01-02',
+          retribucon: 5000,
+          obraSocal: '126205',
+        } as unknown as AltaRelacionLaboral),
+      ) as ArcaValidationError;
+      expect(e).toBeInstanceOf(ArcaValidationError);
+      expect(e.details.map((d) => d.field)).toEqual(['retribucon', 'obraSocal']);
+      expect(e.field).toBe('retribucon');
+      // tipoRegistro es fijo ("01"): tampoco se acepta como propiedad.
+      expect(() =>
+        sr.novedad({ ...alta(), movimiento: 'AT', tipoRegistro: '02' } as unknown as RegistroRelacionLaboral),
+      ).toThrow(/tipoRegistro/);
+      expect(sr.cantidad).toBe(0);
+    }
+    const masivo = capturar(() =>
+      new ArcaEmpleados().altasMasivas([alta(), { ...alta(), sucrsal: 2 } as unknown as AltaRelacionLaboral]),
+    ) as ArcaValidationError;
+    expect(masivo.details.map((d) => d.field)).toEqual(['[1].sucrsal']);
+  });
+
+  it('fechaReferencia: límite de 90 días del alta', () => {
+    const sr = new ArcaEmpleados({ fechaReferencia: '2026-11-01' });
+    expect(() => sr.alta({ ...alta(), fechaInicio: '2027-01-31' })).toThrow(/90 días/);
+    sr.alta({ ...alta(), fechaInicio: '2027-01-30' });
+    expect(sr.cantidad).toBe(1);
+    // no estricto: no aplica reglas de negocio
+    new ArcaEmpleados({ strict: false, fechaReferencia: '2026-11-01' }).alta({ ...alta(), fechaInicio: '2027-06-01' });
+    expect(() => new ArcaEmpleados({ fechaReferencia: '2026-13-01' })).toThrow(TypeError);
+  });
+
   it('rechaza un movimiento distinto al del método', () => {
     expect(() => new ArcaEmpleados().alta({ ...alta(), movimiento: 'BT' } as AltaRelacionLaboral)).toThrow(
       /movimiento/,
@@ -175,13 +267,15 @@ describe('ArcaEmpleados', () => {
     expect(sr.cantidad).toBe(1);
 
     sr.altasMasivas([alta('27111111117'), alta('20345678906')]);
-    sr.bajasMasivas([{ cuil: '23987654325', fechaFin: '2026-11-30' }]);
-    sr.modificacionesMasivas([{ cuil: '23987654325', puesto: '12' }]);
+    sr.bajasMasivas([{ cuil: '23987654325', fechaInicio: '2025-01-02', fechaFin: '2026-11-30' }]);
+    sr.modificacionesMasivas([{ cuil: '23987654325', fechaInicio: '2025-01-02', puesto: '12' }]);
     expect(sr.resumen()).toMatchObject({ totalRegistros: 5, altas: 3, bajas: 1, modificaciones: 1 });
   });
 
   it('masivas: un solo error conserva el error original como cause', () => {
-    const e = capturar(() => new ArcaEmpleados().bajasMasivas([{ cuil: '20123456786' }])) as ArcaValidationError;
+    const e = capturar(() =>
+      new ArcaEmpleados().bajasMasivas([{ cuil: '20123456786', fechaInicio: '2025-01-02' }]),
+    ) as ArcaValidationError;
     expect(e.cause).toBeInstanceOf(ArcaValidationError);
     expect(e.details[0].field).toBe('[0].fechaFin');
   });

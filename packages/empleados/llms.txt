@@ -1,69 +1,74 @@
 # @ramiidv/arca-empleados
 
-TypeScript SDK that generates the TXT file for "Ingreso masivo de datos - Relaciones laborales" of ARCA's
-(ex AFIP) Simplificación Registral service: fixed-width records of 130 characters, single record type "01".
-No web service calls: the file is uploaded manually in Simplificación Registral > Relaciones laborales > Carga Masiva.
-Source: https://www.arca.gob.ar/simplificacionregistral/ayuda/documentos/SR_Manual-de-Ayuda_20250218_definitivo.pdf (page 24)
+> SDK de TypeScript que genera el archivo TXT de "Ingreso masivo de datos - Relaciones laborales" del servicio Simplificación Registral de ARCA (ex AFIP): registros de ancho fijo de 130 caracteres, un único tipo de registro "01". Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
 
-Not "F935": versions <= 0.2 generated an invented pipe-delimited "F935" format. Do not use it.
+No hace llamadas a web services: el archivo se sube a mano en Simplificación Registral > Relaciones laborales > Carga Masiva.
+Fuente: https://www.arca.gob.ar/simplificacionregistral/ayuda/documentos/SR_Manual-de-Ayuda_20250218_definitivo.pdf (pág. 24, diseño de registro).
 
-## Install
+No es "F935": las primeras versiones del paquete generaban un formato "F935" separado por `|` que no existe. No lo uses.
+
+## Instalación
 
 npm install @ramiidv/arca-empleados
 
-## Usage
+## Uso
 
 ```ts
 import { writeFileSync } from 'node:fs';
 import { ArcaEmpleados } from '@ramiidv/arca-empleados';
 
-const sr = new ArcaEmpleados({ strict: true }); // config optional
+const sr = new ArcaEmpleados({ strict: true }); // config opcional
 sr.alta({ cuil: '20-12345678-6', fechaInicio: '2026-11-02', modalidadContrato: 8, obraSocial: '126205', sucursal: 1 })
-  .baja({ cuil: '27111111117', fechaFin: '2026-10-31' })       // BT: baja date goes in fechaFin
-  .modificacion({ cuil: '20345678906', retribucion: 1200000 }) // MR
-  .novedad({ movimiento: 'NA', cuil: '23987654325' });         // any code: AT|BT|MR|NA|NB
+  .baja({ cuil: '27111111117', fechaInicio: '2024-03-01', fechaFin: '2026-10-31' })   // BT: la fecha de baja va en fechaFin
+  .modificacion({ cuil: '20345678906', fechaInicio: '2025-01-02', retribucion: 1200000 }) // MR
+  .novedad({ movimiento: 'NA', cuil: '23987654325', fechaInicio: '2025-01-02' });      // cualquier código: AT|BT|MR|NA|NB
 const { contenido, lineas, buffer, resumen } = sr.generar();
 writeFileSync('relaciones.txt', buffer); // ISO-8859-1, CRLF
 ```
 
-Bulk (atomic: all-or-nothing, error details use field "[i].campo"):
+Masivas (atómicas: todo o nada; los errores usan el campo "[i].campo"):
 altasMasivas([...]), bajasMasivas([...]), modificacionesMasivas([...]), novedadesMasivas([...])
-Other: registros (copy), cantidad, resumen(), limpiar()
+Otros: registros (copia), cantidad, resumen(), limpiar()
 
-## Fields (DatosRelacionLaboral) -> positions
+## Campos (DatosRelacionLaboral) -> posiciones
 
-cuil 5-15 N11 (required) | trabajadorAgropecuario 16 A1 | modalidadContrato 17-19 N3 | fechaInicio 20-29 AAAA/MM/DD |
+cuil 5-15 N11 (obligatorio) | trabajadorAgropecuario 16 A1 | modalidadContrato 17-19 N3 | fechaInicio 20-29 AAAA/MM/DD |
 fechaFin 30-39 | obraSocial 40-45 N6 | situacionRevista 46-47 N2 | fechaTelegramaRenuncia 48-57 |
-retribucion 58-72 N15 (2 implied decimals, max 2 decimals) | modalidadLiquidacion 73 N1 | sucursal 74-78 N5 |
-actividad 79-84 N6 | puesto 85-88 A4 | rectificacion 89-90 N2 (0-5) | cct 91-100 A10 (e.g. "9999/99") |
+retribucion 58-72 N15 (2 decimales implícitos, máx. 2 decimales; NO verificado con ARCA) | modalidadLiquidacion 73 N1 |
+sucursal 74-78 N5 | actividad 79-84 N6 | puesto 85-88 A4 | rectificacion 89-90 N2 (0-5) | cct 91-100 A10 (ej. "9999/99") |
 categoriaProfesional 101-106 N6 | tipoServicio 107-109 N3 | fechaSuspensionServiciosTemporarios 110-119 |
 numeroFormularioAgropecuario 120-129 N10 | marcaCovidTipoContratoCCG 130 N1 (0-9, default 0)
-Positions 1-2 = "01", 3-4 = movimiento.
+Posiciones 1-2 = "01", 3-4 = movimiento.
 
-Numeric codes: non-negative integer or digit string. Dates: Date (Argentina calendar date) or
-"AAAA-MM-DD" / "AAAAMMDD" / "AAAA/MM/DD" strings. Code tables are not public (only inside the service).
+Cualquier otra propiedad (ej. un nombre mal escrito como "retribucon") se rechaza con ArcaValidationError, en modo strict y no strict.
+Códigos numéricos: entero no negativo o string de dígitos. Fechas: Date (fecha calendario de Argentina) o strings
+"AAAA-MM-DD" / "AAAAMMDD" / "AAAA/MM/DD". Las tablas de códigos no son públicas (solo dentro del servicio).
 
 ## Config
 
-new ArcaEmpleados({ strict?: boolean, serializacion?: { eol?: '\r\n'|'\n', eolFinal?: boolean,
+new ArcaEmpleados({ strict?: boolean, fechaReferencia?: Date | string, serializacion?: { eol?: '\r\n'|'\n', eolFinal?: boolean,
   encoding?: 'latin1'|'ascii', noRepresentables?: 'error'|'transliterar', numericoVacio?: 'ceros'|'espacios' } })
 
-strict (default true): CUIL prefix 20/23/24/27 + check digit; required fields per movement
-(AT: cuil, fechaInicio, modalidadContrato, obraSocial, sucursal; BT: cuil, fechaFin; MR/NA/NB: cuil);
-rectificacion 0-5; fechaFin >= fechaInicio. strict false: only format checks.
+strict (default true): CUIL con prefijo 20/23/24/27 y dígito verificador; obligatorios por movimiento
+(AT: cuil, fechaInicio, modalidadContrato, obraSocial, sucursal; BT: cuil, fechaInicio, fechaFin; MR/NA/NB: cuil, fechaInicio);
+rectificacion 0-5; fechaFin >= fechaInicio; en AT, fechaInicio <= fechaReferencia + 90 días (default: hoy en Argentina).
+strict false: solo formato.
 
-Padding/encoding/EOL/implied decimals are NOT defined by ARCA's manual: SDK uses ARCA's usual convention
-(zeros left for numeric, spaces right for alphanumeric, blank dates as spaces, ISO-8859-1, CRLF).
-NA/NB meanings are not documented by ARCA.
+## No verificado con ARCA
 
-## Errors
+El manual no define: relleno de campos vacíos (el SDK escribe ceros en numéricos no informados; en MR/BT ARCA podría
+leerlos como código 0 y pisar datos: informar todos los campos vigentes o probar numericoVacio: 'espacios'),
+formato de la retribución (2 decimales implícitos), codificación (ISO-8859-1) y fin de línea (CRLF),
+significado de NA/NB, valor de la marca de trabajador agropecuario.
 
-ArcaValidationError (from @ramiidv/arca-common): business rules, non-object input, invalid movimiento; details[] per field.
-ArcaSerializationError: value does not fit its field (never truncated); field, desde, hasta, value, indice, cause.
-ArcaEmpleadosError: base class.
+## Errores
 
-## Advanced exports
+ArcaValidationError (de @ramiidv/arca-common): reglas de negocio, propiedades desconocidas, datos que no son objeto, movimiento inválido; details[] por campo.
+ArcaSerializationError: el valor no entra en su campo (nunca se trunca); field, desde, hasta, value, indice, cause.
+ArcaEmpleadosError: clase base.
 
-serializarRegistro(registro, opts) -> 130-char string; serializarArchivo(registros, opts) -> string;
+## Exports avanzados
+
+serializarRegistro(registro, opts) -> string de 130; serializarArchivo(registros, opts) -> string;
 codificarArchivo(contenido, encoding) -> Buffer; formatFechaSR(fecha) -> "AAAA/MM/DD";
-validateRegistro, validateCuilTrabajador, DISENO_REGISTRO, CAMPOS_OBLIGATORIOS, CodigoMovimiento.
+validateRegistro(registro, opts?, { fechaReferencia? }), validateCuilTrabajador, DISENO_REGISTRO, CAMPOS_OBLIGATORIOS, CodigoMovimiento.
