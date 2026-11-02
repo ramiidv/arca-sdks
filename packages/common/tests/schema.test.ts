@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ArcaResponseError, ArcaValidationError, parseXml } from '../src/index.js';
 import {
   bool,
+  choice,
   custom,
   cuit,
   date,
@@ -210,5 +211,48 @@ describe('schema v2', () => {
 
   it('emptyLists: omit', () => {
     expect(decodeResponse({}, { l: list(str(), 0) }, 'r', { emptyLists: 'omit' })).toEqual({});
+  });
+});
+
+describe('schema: choice, patternMessage y orden de errores', () => {
+  const Req = { idCtaCte: choice({ codCtaCte: id(), idFactura: obj({ nro: int() }) }) };
+
+  it('choice en un request: exactamente una opción', () => {
+    expect(encodeRequest({ idCtaCte: { codCtaCte: '123' } }, Req, 't')).toEqual({ idCtaCte: { codCtaCte: '123' } });
+    expect(() => encodeRequest({ idCtaCte: {} }, Req, 't')).toThrow(
+      /idCtaCte: debe tener exactamente uno de codCtaCte, idFactura/,
+    );
+    expect(() => encodeRequest({ idCtaCte: { codCtaCte: '1', idFactura: { nro: 1 } } }, Req, 't')).toThrow(
+      /exactamente uno/,
+    );
+  });
+
+  it('choice en una respuesta: al menos una opción', () => {
+    const Resp = { info: opt(choice({ a: str(), b: str() })) };
+    expect(decodeResponse({ info: { b: 'x' } }, Resp, 'r')).toEqual({ info: { b: 'x' } });
+    expect(decodeResponse({}, Resp, 'r')).toEqual({});
+    expect(() => decodeResponse({ info: { c: 'x' } }, Resp, 'r')).toThrow(/falta r.info.a\|b/);
+    expect(() => decodeResponse({ info: '' }, Resp, 'r')).toThrow(/falta r.info.a\|b/);
+  });
+
+  it('patternMessage reemplaza el mensaje del pattern', () => {
+    const s = { nombre: str({ pattern: /\S/, patternMessage: 'no puede estar vacío' }) };
+    expect(() => encodeRequest({ nombre: ' ' }, s, 't')).toThrow(
+      'Validación de t fallida: nombre: no puede estar vacío',
+    );
+  });
+
+  it('los errores de extraCheck se intercalan según el orden de los campos', () => {
+    const s = { a: int(), b: int(), c: int() };
+    const err = (() => {
+      try {
+        encodeRequest({ a: 'x', b: 1, c: 'z' }, s, 't', (_input, errors) => {
+          errors.push({ field: 'b', message: 'b: regla extra', value: 1 });
+        });
+      } catch (e) {
+        return e as ArcaValidationError;
+      }
+    })();
+    expect(err?.details.map((d) => d.field)).toEqual(['a', 'b', 'c']);
   });
 });

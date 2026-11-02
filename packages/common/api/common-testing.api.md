@@ -98,6 +98,7 @@ export interface XsdComplexType {
 
 // @public
 export interface XsdElement {
+    all?: boolean;
     choice?: boolean;
     inline?: XsdComplexType;
     maxOccurs: number;

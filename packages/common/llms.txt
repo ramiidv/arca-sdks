@@ -260,6 +260,16 @@ function collectErrors(fn: () => void, errors: ValidationErrorDetail[]): void;
 function collectErrorsWithPrefix(fn: () => void, errors: ValidationErrorDetail[], prefix: string): void;
 ```
 
+## Schema DSL (`@ramiidv/arca-common/schema`)
+
+Describes the complex types of a WSDL. The same schema validates and encodes a request (`encodeRequest`: XSD order, required fields, ranges, CUIT, decimals, dates; throws `ArcaValidationError` with every error, `extraCheck` errors interleaved by field order) and decodes a response fetched with `parseNumbers: false` (`decodeResponse`).
+
+Builders: `str({ minLen, maxLen, values, pattern, patternMessage })`, `int`, `id`, `dec`, `double`, `bool`, `siNo`, `cuit`, `date`, `date8`, `datetime`, `base64`, `custom`, `obj`, `choice`, `opt`, `must`, `list`, `wrapped`, `xml`.
+
+`choice(schema)`: element whose content is an `xsd:choice`. Requests: exactly one option. Responses: at least one (an empty element is invalid).
+
+`@ramiidv/arca-common/testing`: `loadXsdTypes(wsdl)` and `checkSchemaAgainstXsd(schema, type, types, { direction, ignore })` for contract tests (names, sequence order — `xsd:all` is unordered —, required elements, cardinality, `xsd:choice` ↔ `choice()`).
+
 ## Exported types (types.ts)
 
 ```typescript

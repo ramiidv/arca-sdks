@@ -4,15 +4,14 @@
  * `@ramiidv/arca-common/schema`. El orden de las claves es el de la `xsd:sequence`.
  *
  * Las claves son los nombres de la API del SDK; cuando el elemento del XML se
- * llama distinto se indica con `as('NombreXml', ...)` (`xml()` del DSL). Lo
- * único que se agrega al DSL es `choice`: `xsd:choice` en respuestas (al menos
- * una de las opciones).
+ * llama distinto se indica con `as('NombreXml', ...)` (`xml()` del DSL).
  *
  * @internal No se exporta desde `index.ts`.
  */
-import { ArcaSoapError, ensureArray, formatDate, validateCBU } from '@ramiidv/arca-common';
+import { ArcaSoapError, formatDate, validateCBU } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
 import {
+  choice,
   cuit,
   date,
   datetime,
@@ -29,7 +28,7 @@ import {
   wrapped,
   xml,
 } from '@ramiidv/arca-common/schema';
-import type { Field, Schema } from '@ramiidv/arca-common/schema';
+import type { Schema } from '@ramiidv/arca-common/schema';
 import {
   EstadoComprobante,
   EstadoCtaCte,
@@ -46,55 +45,22 @@ export const SERVICE = 'WSFECRED';
 type Obj = Record<string, unknown>;
 
 // ---------------------------------------------------------------------------
-// xsd:choice (lo único que el DSL no expresa)
+// Helpers
 // ---------------------------------------------------------------------------
-
-interface Choice {
-  /** `xsd:choice`: en las respuestas tiene que venir al menos una opción. */
-  readonly choice?: boolean;
-}
 
 /** El elemento del XML se llama `name` (la clave del schema es el nombre de la API). */
 const as = xml;
-/** `xsd:choice` entre los elementos de `schema`. */
-const choice = (schema: Schema): Field => ({ ...obj(schema), choice: true }) as Field & Choice;
 
 const isObj = (v: unknown): v is Obj => v !== null && typeof v === 'object' && !Array.isArray(v);
-const isAbsent = (v: unknown) => v === undefined || v === null || v === '';
 
 const responseError = (message: string) => new ArcaSoapError(`${SERVICE}: ${message}`, { uncertain: true });
 
-/** Verifica que cada `choice` de la respuesta traiga al menos una opción. */
-function checkChoices(node: unknown, schema: Schema, path: string): void {
-  if (!isObj(node)) return;
-  for (const [key, f] of Object.entries(schema)) {
-    if (!f.schema) continue;
-    let v = node[f.xml ?? key];
-    if (f.wrap) v = isObj(v) ? v[f.wrap] : undefined;
-    ensureArray(v).forEach((item, i) => {
-      const p = f.minItems === undefined ? `${path}.${key}` : `${path}.${key}[${i}]`;
-      if ((f as Field & Choice).choice) {
-        const options = Object.entries(f.schema!).map(([k, c]) => c.xml ?? k);
-        if (!isObj(item) || options.every((k) => isAbsent(item[k]))) {
-          throw responseError(`Respuesta inválida: falta ${p}.${options.join('|')}`);
-        }
-      }
-      checkChoices(item, f.schema!, p);
-    });
-  }
-}
-
 /**
- * Reglas que el DSL no expresa: `xsd:choice` de `idCtaCte` (exactamente uno),
- * rango de `fecha` y dígitos verificadores del CBU.
+ * Reglas que el DSL no expresa: rango de `fecha` y dígitos verificadores del CBU.
  */
 function checkRequest(input: Obj, errors: ValidationErrorDetail[]): void {
   const push = (field: string, message: string, value: unknown) =>
     errors.push({ field, message: `${field}: ${message}`, value });
-  const idCtaCte = input['idCtaCte'];
-  if (isObj(idCtaCte) && (idCtaCte['codCtaCte'] === undefined) === (idCtaCte['idFactura'] === undefined)) {
-    push('idCtaCte', 'debe tener exactamente uno de codCtaCte o idFactura', idCtaCte);
-  }
   const fecha = input['fecha'];
   if (isObj(fecha)) {
     try {
@@ -128,7 +94,6 @@ export function encode(input: unknown, schema: Schema, method: string): Obj {
  * que no cumple el schema lanza `ArcaSoapError` (`uncertain`).
  */
 export function decode<T>(node: unknown, schema: Schema, path: string): T {
-  checkChoices(node, schema, path);
   return decodeResponse<T>(node, schema, path, { error: responseError });
 }
 
@@ -173,7 +138,7 @@ export const ID_COMPROBANTE: Schema = {
   nroCmp: must(int(1, 99999999)),
 };
 
-/** `IdCtaCteType` (`xsd:choice`: en requests, exactamente uno; ver `checkRequest`). */
+/** `IdCtaCteType` (`xsd:choice`: usar con `choice()`). */
 export const ID_CTA_CTE: Schema = { codCtaCte: opt(id()), idFactura: opt(obj(ID_COMPROBANTE)) };
 
 /** `FiltroFechaType`. */
@@ -236,9 +201,9 @@ export const REQ = {
     nroPagina: nroPagina(),
   },
   idComprobante: { idComprobante: obj(ID_COMPROBANTE) },
-  idCtaCte: { idCtaCte: obj(ID_CTA_CTE) },
+  idCtaCte: { idCtaCte: choice(ID_CTA_CTE) },
   aceptarFECred: {
-    idCtaCte: obj(ID_CTA_CTE),
+    idCtaCte: choice(ID_CTA_CTE),
     confirmarNotasDC: as(
       'arrayConfirmarNotasDC',
       opt(wrapped('confirmarNota', obj({ acepta: siNo(), idNota: obj(ID_COMPROBANTE) }))),
@@ -256,16 +221,16 @@ export const REQ = {
     informaCBU: opt(siNo()),
     cbuComprador: as('CBUComprador', opt(cbu())),
   },
-  rechazarFECred: { idCtaCte: obj(ID_CTA_CTE), motivos: motivosRechazo() },
+  rechazarFECred: { idCtaCte: choice(ID_CTA_CTE), motivos: motivosRechazo() },
   informarCancelacionTotalFECred: {
-    idCtaCte: obj(ID_CTA_CTE),
+    idCtaCte: choice(ID_CTA_CTE),
     formasCancelacion: as('arrayFormasCancelacion', codigosDescripciones()),
     importeCancelacion: importePositivo(),
   },
-  modificarOpcionTransferencia: { idCtaCte: obj(ID_CTA_CTE), opcionTransferencia: enumOf(OpcionTransferencia) },
-  informarFacturaAgtDptoCltv: { idCtaCte: obj(ID_CTA_CTE), ctaAgente: obj(CUENTA_EN_AGENTE) },
+  modificarOpcionTransferencia: { idCtaCte: choice(ID_CTA_CTE), opcionTransferencia: enumOf(OpcionTransferencia) },
+  informarFacturaAgtDptoCltv: { idCtaCte: choice(ID_CTA_CTE), ctaAgente: obj(CUENTA_EN_AGENTE) },
   rechazarNotaDC: { idComprobante: obj(ID_COMPROBANTE), motivos: motivosRechazo() },
-  consultarFacturasAgtDptoCltv: { idCtaCte: opt(obj(ID_CTA_CTE)), fecha: as('filtroFecha', opt(obj(FILTRO_FECHA))) },
+  consultarFacturasAgtDptoCltv: { idCtaCte: opt(choice(ID_CTA_CTE)), fecha: as('filtroFecha', opt(obj(FILTRO_FECHA))) },
 } satisfies Record<string, Schema>;
 
 // ---------------------------------------------------------------------------

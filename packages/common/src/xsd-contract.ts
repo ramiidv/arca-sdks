@@ -22,6 +22,8 @@ export interface XsdElement {
   inline?: XsdComplexType;
   /** El elemento es parte de un `xsd:choice`. */
   choice?: boolean;
+  /** El elemento es parte de un `xsd:all` (sin orden). */
+  all?: boolean;
 }
 
 /** Tipo complejo del XSD: sus elementos en orden. */
@@ -49,7 +51,7 @@ const localName = (qname: string | undefined) => qname?.split(':').pop();
 const occurs = (v: unknown, dflt: number) => (v === undefined ? dflt : v === 'unbounded' ? Infinity : Number(v));
 const children = (node: XmlNode | undefined, name: string) => (node?.[name] as XmlNode[] | undefined) ?? [];
 
-function readElement(node: XmlNode, choice: boolean, minOverride?: number): XsdElement {
+function readElement(node: XmlNode, choice: boolean, minOverride?: number, all = false): XsdElement {
   const inline = children(node, 'complexType')[0];
   return {
     name: String(node.name ?? localName(node.ref as string)),
@@ -58,18 +60,19 @@ function readElement(node: XmlNode, choice: boolean, minOverride?: number): XsdE
     type: localName(node.type as string | undefined) ?? localName(node.ref as string | undefined),
     inline: inline ? readComplexType(inline) : undefined,
     choice: choice || undefined,
+    all: all || undefined,
   };
 }
 
 /** Elementos de una `sequence`/`choice`/`all` (con choices y sequences anidados). */
-function readGroup(group: XmlNode, choice: boolean): XsdElement[] {
+function readGroup(group: XmlNode, choice: boolean, all = false): XsdElement[] {
   const out: XsdElement[] = [];
   const groupMin = occurs(group.minOccurs, 1);
   // fast-xml-parser no conserva el orden entre elementos de distinto nombre
   // dentro del grupo (element vs choice); en los WSDL de ARCA los choices
   // anidados van al final o solos, así que se agregan después.
   for (const el of children(group, 'element')) {
-    out.push(readElement(el, choice, choice || groupMin === 0 ? 0 : undefined));
+    out.push(readElement(el, choice, choice || groupMin === 0 ? 0 : undefined, all));
   }
   for (const c of children(group, 'choice')) out.push(...readGroup(c, true));
   for (const s of children(group, 'sequence')) out.push(...readGroup(s, choice));
@@ -85,7 +88,7 @@ function readComplexType(node: XmlNode): XsdComplexType {
     elements.push({ name: `__base:${localName(extension.base as string)}`, minOccurs: 1, maxOccurs: 1 });
   for (const s of children(body, 'sequence')) elements.push(...readGroup(s, false));
   for (const c of children(body, 'choice')) elements.push(...readGroup(c, true));
-  for (const a of children(body, 'all')) elements.push(...readGroup(a, false));
+  for (const a of children(body, 'all')) elements.push(...readGroup(a, false, true));
   return { elements };
 }
 
@@ -142,7 +145,9 @@ export interface ContractOptions {
  * un elemento global) y devuelve las diferencias (vacío si coinciden): nombres
  * que no existen en el XSD, orden distinto al de la `xsd:sequence`, elementos
  * obligatorios ausentes u opcionales en el schema, y listas que en el XSD no
- * se repiten (o al revés). Recorre los objetos anidados.
+ * se repiten (o al revés), y `xsd:choice` que no son `choice()` en el schema (o
+ * al revés). Los elementos de un `xsd:all` no tienen orden. Recorre los
+ * objetos anidados.
  */
 export function checkSchemaAgainstXsd(
   schema: Schema,
@@ -184,8 +189,9 @@ function compare(
       continue;
     }
     const { el, index } = match;
-    if (!el.choice && index < lastIndex) problems.push(`${p}: en el XSD va antes que ${lastName}`);
-    if (!el.choice) {
+    const ordered = !el.choice && !el.all;
+    if (ordered && index < lastIndex) problems.push(`${p}: en el XSD va antes que ${lastName}`);
+    if (ordered) {
       lastIndex = Math.max(lastIndex, index);
       lastName = name;
     }
@@ -239,7 +245,12 @@ function checkField(
 
   if (field.schema) {
     if (!itemType) problems.push(`${path}: es un objeto en el schema pero un tipo simple en el XSD`);
-    else compare(field.schema, itemType, path, types, options, problems, visiting);
+    else {
+      const isChoice = itemType.elements.length > 0 && itemType.elements.every((e) => e.choice);
+      if (isChoice && !field.choice) problems.push(`${path}: es un xsd:choice en el XSD; usar choice() en el schema`);
+      if (!isChoice && field.choice) problems.push(`${path}: es choice() en el schema pero no un xsd:choice en el XSD`);
+      compare(field.schema, itemType, path, types, options, problems, visiting);
+    }
   } else if (itemType && itemType.elements.length > 0) {
     problems.push(`${path}: es un tipo complejo en el XSD pero un escalar en el schema`);
   }
