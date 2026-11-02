@@ -72,10 +72,10 @@ export interface ConstatarInput {
   /**
    * Tipo de documento del receptor (ver `getDocTipos()`). Obligatorio en
    * comprobantes A/M y si el importe supera el tope de identificación; si se
-   * informa, también hay que informar `DocNroReceptor`.
+   * informa, también hay que informar `docNroReceptor`.
    */
   docTipoReceptor?: number | string;
-  /** Número de documento del receptor (solo dígitos, hasta 20). */
+  /** Número de documento del receptor (solo dígitos, hasta 20; con `docTipoReceptor` 80 se valida como CUIT). */
   docNroReceptor?: number | string;
   /** Datos opcionales (ver `getTiposOpcionales()`). */
   opcionales?: Opcional[];
@@ -110,18 +110,28 @@ export interface ConstatarResult {
   /**
    * `A` = comprobante constatado (puede traer observaciones no excluyentes, ej: 200
    * para un CAEA aún no rendido). `R` = rechazado por validaciones funcionales: el
-   * detalle viene en `Observaciones`.
+   * detalle viene en `observaciones`.
    */
   resultado: 'A' | 'R';
   /** Fecha/hora de la constatación (`YYYYMMDDHHMMSS`). */
   fchProceso: string;
-  /** Datos del comprobante constatado. ARCA los devuelve siempre según el manual (minOccurs=0 en el WSDL). */
+  /**
+   * Datos del comprobante constatado. ARCA los devuelve siempre según el manual
+   * (minOccurs=0 en el WSDL); en un rechazo (`R`) incompleto se omiten.
+   */
   cmpResp?: ComprobanteConstatado;
   /** Observaciones (motivos del rechazo funcional, u observaciones no excluyentes). */
   observaciones: CdcMensaje[];
-  /** Eventos informados por ARCA. */
+  /** Eventos informados por ARCA (`Events`). */
   events: CdcMensaje[];
 }
+
+/**
+ * Lista de una tabla de parámetros. Es un array común; si ARCA informó
+ * `Events`, se leen en `lista.eventos` (propiedad no enumerable: no aparece al
+ * iterar, serializar con `JSON.stringify` ni copiar el array).
+ */
+export type ListaCdc<T> = T[] & { eventos?: CdcMensaje[] };
 
 // ---------------------------------------------------------------------------
 // Tablas de parámetros
@@ -131,6 +141,7 @@ export interface ConstatarResult {
 export interface ModalidadItem {
   /** Código de modalidad: `CAE`, `CAI`, `CAEA`. */
   cod: string;
+  /** Descripción (`''` si ARCA no la informa). */
   desc: string;
   fchDesde?: string;
   fchHasta?: string;

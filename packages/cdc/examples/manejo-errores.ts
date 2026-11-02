@@ -5,16 +5,18 @@
  *   - ArcaTicketVigenteError: WSAA ya emitió un ticket (configurá ticketStorage)
  *   - ArcaAuthError: falla de autenticación WSAA
  *   - ArcaServiceError: ARCA devolvió Errors (formato, auth 600-602, infraestructura 500-503)
- *   - ArcaSoapError: error HTTP/SOAP (timeout, SOAP Fault, respuesta inválida)
+ *   - ArcaResponseError: ARCA respondió con una forma inesperada
+ *   - ArcaSoapError: error HTTP/SOAP (timeout, SOAP Fault)
  *
- * Un rechazo funcional (Resultado "R") NO es un error: se devuelve con sus
- * Observaciones.
+ * Un rechazo funcional (resultado "R") NO es un error: se devuelve con sus
+ * observaciones.
  */
 
 import fs from 'node:fs';
 import {
   ArcaCdc,
   ArcaAuthError,
+  ArcaResponseError,
   ArcaServiceError,
   ArcaSoapError,
   ArcaTicketVigenteError,
@@ -65,6 +67,8 @@ async function main() {
       await cdc.clearAuthCache();
     } else if (e instanceof ArcaServiceError) {
       for (const err of e.errors) console.error(`ARCA [${err.code}]: ${err.msg}`);
+    } else if (e instanceof ArcaResponseError) {
+      console.error('Respuesta inesperada de ARCA:', e.message);
     } else if (e instanceof ArcaSoapError) {
       // Es una consulta: se puede reintentar sin riesgo.
       console.error('Error de conexión:', e.message, e.statusCode ?? '');

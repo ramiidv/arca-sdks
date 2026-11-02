@@ -44,6 +44,34 @@ export interface WsAuth {
 }
 
 // ---------------------------------------------------------------------------
+// Datos comunes de las respuestas
+// ---------------------------------------------------------------------------
+
+/**
+ * `metadata` de las respuestas de Padrón: cuándo y en qué servidor procesó ARCA
+ * la consulta. Útil para auditoría y para reportar incidentes a ARCA.
+ */
+export interface PadronMetadata {
+  /** Fecha y hora de proceso (`xs:dateTime`, tal cual lo envía ARCA: "2026-02-26T15:52:37.653-03:00"). */
+  fechaHora?: string;
+  /** Nombre del equipo que procesó el requerimiento. */
+  servidor?: string;
+}
+
+/**
+ * Lista devuelta por un método de Padrón. Es un array común; si ARCA informó
+ * `metadata`, se lee en `lista.metadata` (propiedad no enumerable: no aparece al
+ * iterar, serializar con `JSON.stringify` ni copiar el array).
+ */
+export type ListaPadron<T> = T[] & { metadata?: PadronMetadata };
+
+/**
+ * Tipo de persona. ARCA informa `FISICA` o `JURIDICA`; el SDK no rechaza otro
+ * valor (lo devuelve tal cual), por eso el tipo admite cualquier string.
+ */
+export type TipoPersonaPadron = 'FISICA' | 'JURIDICA' | (string & {});
+
+// ---------------------------------------------------------------------------
 // Padron A4 - Full persona
 // ---------------------------------------------------------------------------
 
@@ -63,6 +91,7 @@ export interface ImpuestoA4 {
   estado?: string;
   periodo?: number;
   diaPeriodo?: number;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   ffInscripcion?: string;
 }
 
@@ -89,7 +118,9 @@ export interface RelacionA4 {
   idPersonaAsociada?: string;
   tipoRelacion?: string;
   subtipoRelacion?: string;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   ffRelacion?: string;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   ffVencimiento?: string;
 }
 
@@ -115,7 +146,9 @@ export interface TelefonoA4 {
 
 export interface PersonaA4 {
   idPersona: string;
-  tipoPersona: 'FISICA' | 'JURIDICA';
+  /** `metadata` de la respuesta (fecha/hora y servidor de ARCA), si vino. */
+  metadata?: PadronMetadata;
+  tipoPersona: TipoPersonaPadron;
   tipoClave?: string;
   estadoClave?: string;
   apellido?: string;
@@ -123,15 +156,21 @@ export interface PersonaA4 {
   razonSocial?: string;
   numeroDocumento?: string;
   tipoDocumento?: string;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   fechaNacimiento?: string;
   sexo?: string;
   numeroInscripcion?: string;
   formaJuridica?: string;
   mesCierre?: number;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   fechaInscripcion?: string;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   fechaContratoSocial?: string;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   fechaFallecimiento?: string;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   fechaJubilado?: string;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   fechaVencimientoMigracion?: string;
   localidadInscripcion?: string;
   provinciaInscripcion?: string;
@@ -173,7 +212,9 @@ export interface DomicilioA10 {
 
 export interface PersonaA10 {
   idPersona: string;
-  tipoPersona: 'FISICA' | 'JURIDICA';
+  /** `metadata` de la respuesta (fecha/hora y servidor de ARCA), si vino. */
+  metadata?: PadronMetadata;
+  tipoPersona: TipoPersonaPadron;
   tipoClave?: string;
   estadoClave?: string;
   nombre?: string;
@@ -229,7 +270,9 @@ export interface DomicilioA13 {
 
 export interface PersonaA13 {
   idPersona: string;
-  tipoPersona: 'FISICA' | 'JURIDICA';
+  /** `metadata` de la respuesta (fecha/hora y servidor de ARCA), si vino. */
+  metadata?: PadronMetadata;
+  tipoPersona: TipoPersonaPadron;
   tipoClave?: string;
   estadoClave?: string;
   nombre?: string;
@@ -239,8 +282,11 @@ export interface PersonaA13 {
   tipoDocumento?: string;
   formaJuridica?: string;
   mesCierre?: number;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   fechaNacimiento?: string;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   fechaFallecimiento?: string;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   fechaContratoSocial?: string;
   idActividadPrincipal?: string;
   descripcionActividadPrincipal?: string;
@@ -328,7 +374,9 @@ export interface ComponenteSociedadA5 {
   nombrePersonaAsociada?: string;
   razonSocialPersonaAsociada?: string;
   tipoComponente?: string;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   ffRelacion?: string;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   ffVencimiento?: string;
 }
 
@@ -342,7 +390,12 @@ export interface MonotributoA5 {
 }
 
 export interface ErrorConstanciaA5 {
-  /** Mensajes de error (ej: "La CUIT no está activa", constancia bloqueada, etc.) */
+  /**
+   * Mensajes de error (ej: "No existe persona con ese Id", CUIT limitada, constancia
+   * bloqueada). En `getPersonaList_v2` también se informan acá, sin hacer fallar la
+   * consulta, las CUITs inválidas (no se envían a ARCA) y las personas que ARCA
+   * devolvió con datos inválidos.
+   */
   error: string[];
   idPersona?: string;
   nombre?: string;
@@ -362,14 +415,16 @@ export interface ErrorRegimenA5 {
  */
 export interface PersonaA5 {
   idPersona: string;
-  tipoPersona?: 'FISICA' | 'JURIDICA';
+  tipoPersona?: TipoPersonaPadron;
   tipoClave?: string;
   estadoClave?: string;
   nombre?: string;
   apellido?: string;
   razonSocial?: string;
   mesCierre?: number;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   fechaContratoSocial?: string;
+  /** `xs:dateTime`: string tal cual lo envía ARCA (no se convierte a `Date`). */
   fechaFallecimiento?: string;
   esSucesion?: string;
   domicilioFiscal?: DomicilioA5;
@@ -384,6 +439,11 @@ export interface PersonaA5 {
   errorConstancia?: ErrorConstanciaA5;
   errorRegimenGeneral?: ErrorRegimenA5;
   errorMonotributo?: ErrorRegimenA5;
+  /**
+   * `metadata` de la respuesta (fecha/hora y servidor de ARCA), si vino. En
+   * `getPersonaList_v2` está en el array (ver `ListaPadron`), no en cada persona.
+   */
+  metadata?: PadronMetadata;
 }
 
 // ---------------------------------------------------------------------------

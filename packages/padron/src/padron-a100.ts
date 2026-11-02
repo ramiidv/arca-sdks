@@ -1,8 +1,8 @@
 import { ArcaValidationError } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
-import { decode, list, must, obj, str, type Schema } from './mapping.js';
+import { Metadata, conMetadata, decode, list, must, obj, str, type Schema } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
-import type { ParameterAttribute, ParameterRecord, WsAuth } from './types.js';
+import type { ListaPadron, PadronMetadata, ParameterAttribute, ParameterRecord, WsAuth } from './types.js';
 
 export type PadronA100ClientConfig = PadronClientConfig;
 
@@ -13,6 +13,7 @@ const METHOD = 'getParameterCollectionByName';
  * @internal Exportado para los tests de contrato.
  */
 export const ParameterCollectionReturnSchema: Schema = {
+  metadata: obj(Metadata),
   parameterCollection: must(
     obj({
       name: str(),
@@ -29,6 +30,7 @@ export const ParameterCollectionReturnSchema: Schema = {
 };
 
 interface ParameterCollectionReturn {
+  metadata?: PadronMetadata;
   parameterCollection: {
     name?: string;
     parameterList?: Array<{ attributeList?: ParameterAttribute[]; description: string; id: string }>;
@@ -36,7 +38,7 @@ interface ParameterCollectionReturn {
 }
 
 /**
- * Client for ws_sr_padron_a100 - Tablas de parámetros.
+ * Cliente de ws_sr_padron_a100: tablas de parámetros.
  *
  * `id`, `description`, `name` y `value` son `xs:string` en el WSDL y se
  * devuelven tal cual los envía ARCA (`"10.50"`, `"1E3"`, `"007"`): la
@@ -46,13 +48,14 @@ export class PadronA100Client extends BasePadronClient {
   /**
    * Tabla de parámetros por nombre de colección (ver `CollectionName`).
    * @param collectionName - Nombre de la colección (ej: "SUPA.E_PROVINCIA")
-   * @returns los registros de la tabla (`[]` si ARCA devuelve la colección vacía)
+   * @returns los registros de la tabla (`[]` si ARCA devuelve la colección vacía), con
+   *   el `metadata` de la respuesta en la propiedad `metadata` del array si vino
    */
   async getParameterCollectionByName(
     auth: WsAuth,
     collectionName: string,
     opts?: CallOptions,
-  ): Promise<ParameterRecord[]> {
+  ): Promise<ListaPadron<ParameterRecord>> {
     if (typeof collectionName !== 'string' || collectionName.trim() === '') {
       throw new ArcaValidationError(
         'collectionName es obligatorio',
@@ -63,15 +66,16 @@ export class PadronA100Client extends BasePadronClient {
 
     const result = await this.call(METHOD, { ...this.authParams(auth), collectionName: collectionName.trim() }, opts);
 
-    const { parameterCollection } = decode<ParameterCollectionReturn>(
+    const { metadata, parameterCollection } = decode<ParameterCollectionReturn>(
       result,
       ParameterCollectionReturnSchema,
       `${METHOD}.parameterCollectionReturn`,
     );
-    return (parameterCollection.parameterList ?? []).map((p) => ({
+    const registros = (parameterCollection.parameterList ?? []).map((p) => ({
       id: p.id,
       descripcion: p.description ?? '',
       atributos: p.attributeList?.length ? p.attributeList : undefined,
     }));
+    return conMetadata(registros, metadata);
   }
 }

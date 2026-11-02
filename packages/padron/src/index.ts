@@ -57,6 +57,9 @@ export type {
   DomicilioA10,
   ParameterRecord,
   ParameterAttribute,
+  PadronMetadata,
+  ListaPadron,
+  TipoPersonaPadron,
   PersonaA13,
   DomicilioA13,
   PersonaA5,
@@ -88,5 +91,15 @@ export {
   CollectionName,
 } from './constants.js';
 
-// Utilities (from common)
-export { ensureArray, parseXml, buildXml } from '@ramiidv/arca-common';
+// Utilidades (de arca-common), deprecadas en este paquete
+import {
+  buildXml as commonBuildXml,
+  ensureArray as commonEnsureArray,
+  parseXml as commonParseXml,
+} from '@ramiidv/arca-common';
+/** @deprecated Importar de `@ramiidv/arca-common`. Se va a quitar de este paquete en una versión mayor. */
+export const ensureArray: typeof commonEnsureArray = commonEnsureArray;
+/** @deprecated Importar de `@ramiidv/arca-common`. Se va a quitar de este paquete en una versión mayor. */
+export const parseXml: typeof commonParseXml = commonParseXml;
+/** @deprecated Importar de `@ramiidv/arca-common`. Se va a quitar de este paquete en una versión mayor. */
+export const buildXml: typeof commonBuildXml = commonBuildXml;

@@ -1,18 +1,32 @@
 import { validateCuit } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
-import { Dependencia, dec, decodePersona, id, int, list, must, obj, str, type Schema } from './mapping.js';
+import {
+  Actividad,
+  CategoriaA4,
+  Dependencia,
+  DomicilioA4,
+  dec,
+  decodePersona,
+  id,
+  int,
+  list,
+  must,
+  obj,
+  str,
+  type Schema,
+} from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
 import type { PersonaA4, WsAuth } from './types.js';
 
 export type PadronA4ClientConfig = PadronClientConfig;
 
 /**
- * Client for ws_sr_padron_a4 - Datos completos de un contribuyente.
+ * Cliente de ws_sr_padron_a4: datos completos de un contribuyente.
  */
 export class PadronA4Client extends BasePadronClient {
   /**
    * Datos completos de un contribuyente.
-   * @param auth - Authentication object with Token, Sign, and CuitRepresentada
+   * @param auth - Credenciales: `token`, `sign` y `cuitRepresentada`
    * @param cuit - CUIT/CUIL a consultar (con o sin guiones; se valida el dígito verificador)
    * @param opts - Opciones por llamada (signal)
    * @throws ArcaPadronServiceError si ARCA informa la CUIT inexistente, inactiva, etc.
@@ -28,34 +42,6 @@ export class PadronA4Client extends BasePadronClient {
 // Schemas de la respuesta (WSDL personaServiceA4, orden del WSDL). Todos los
 // elementos son `minOccurs="0"`; los `must()` son los que el SDK exige.
 // ---------------------------------------------------------------------------
-
-const Actividad: Schema = {
-  descripcionActividad: str(),
-  idActividad: must(id()),
-  nomenclador: int(),
-  orden: int(),
-  periodo: int(),
-};
-
-const Categoria: Schema = {
-  descripcionCategoria: str(),
-  estado: str(),
-  idCategoria: must(int()),
-  idImpuesto: int(),
-  periodo: int(),
-};
-
-const Domicilio: Schema = {
-  codPostal: str(),
-  datoAdicional: str(),
-  descripcionProvincia: str(),
-  direccion: str(),
-  idProvincia: int(),
-  localidad: str(),
-  orden: int(),
-  tipoDatoAdicional: str(),
-  tipoDomicilio: str(),
-};
 
 const Email: Schema = {
   direccion: must(str({ minLen: 1 })),
@@ -103,10 +89,10 @@ export const PersonaA4Schema: Schema = {
   actividad: list(obj(Actividad)),
   apellido: str(),
   cantidadSociosEmpresaMono: int(),
-  categoria: list(obj(Categoria)),
+  categoria: list(obj(CategoriaA4)),
   claveInactivaAsociada: list(id()),
   dependencia: obj(Dependencia),
-  domicilio: list(obj(Domicilio)),
+  domicilio: list(obj(DomicilioA4)),
   email: list(obj(Email)),
   estadoClave: str(),
   fechaContratoSocial: str(),

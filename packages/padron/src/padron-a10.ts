@@ -7,12 +7,12 @@ import type { PersonaA10, WsAuth } from './types.js';
 export type PadronA10ClientConfig = PadronClientConfig;
 
 /**
- * Client for ws_sr_padron_a10 - Datos básicos de un contribuyente.
+ * Cliente de ws_sr_padron_a10: datos básicos de un contribuyente.
  */
 export class PadronA10Client extends BasePadronClient {
   /**
    * Datos básicos de un contribuyente.
-   * @param auth - Authentication object with Token, Sign, and CuitRepresentada
+   * @param auth - Credenciales: `token`, `sign` y `cuitRepresentada`
    * @param cuit - CUIT/CUIL a consultar (con o sin guiones; se valida el dígito verificador)
    * @param opts - Opciones por llamada (signal)
    * @throws ArcaPadronServiceError si ARCA informa la CUIT inexistente, inactiva, etc.

@@ -143,6 +143,82 @@ describe('condicionIvaDesdePadron (constancia de inscripción)', () => {
   });
 });
 
+describe('condicionIvaDesdePadron: errores de la constancia y casos especiales', () => {
+  const LIMITADA = 'La CUIT del contribuyente fue limitada en los términos de la RG AFIP 3832/16.';
+
+  it('errorConstancia con IVA (30) activo → Responsable Inscripto, pero el motivo advierte el error', () => {
+    const r = condicionIvaDesdePadron(
+      a5({ impuestos: [imp(30, 'IVA')], errorConstancia: { error: [LIMITADA], idPersona: '20111111112' } }),
+    );
+    expect(r.condicionIva).toBe(CondicionIva.RESPONSABLE_INSCRIPTO);
+    expect(r.motivo).toContain('Inscripto en IVA (impuesto 30).');
+    expect(r.motivo).toContain(`Atención: ARCA informó un error en la constancia (${LIMITADA})`);
+  });
+
+  it('errorConstancia con monotributo activo → advierte el error', () => {
+    const r = condicionIvaDesdePadron(
+      a5({ impuestos: [imp(20, 'MONOTRIBUTO')], errorConstancia: { error: ['Constancia bloqueada'] } }),
+    );
+    expect(r.condicionIva).toBe(CondicionIva.MONOTRIBUTISTA);
+    expect(r.motivo).toContain('Constancia bloqueada');
+  });
+
+  it('errorConstancia sin impuestos → null; sin texto de error dice "sin detalle" (no "constancia: .")', () => {
+    const conTexto = condicionIvaDesdePadron(a5({ errorConstancia: { error: [LIMITADA] } }));
+    expect(conTexto.condicionIva).toBeNull();
+    expect(conTexto.motivo).toBe(`ARCA no emitió la constancia: ${LIMITADA}.`);
+
+    const vacio = condicionIvaDesdePadron(a5({ errorConstancia: { error: [] } }));
+    expect(vacio.condicionIva).toBeNull();
+    expect(vacio.motivo).toBe('ARCA no emitió la constancia: sin detalle.');
+    expect(vacio.motivo).not.toMatch(/: \./);
+
+    const blancos = condicionIvaDesdePadron(a5({ errorConstancia: { error: ['  '] } }));
+    expect(blancos.motivo).toBe('ARCA no emitió la constancia: sin detalle.');
+  });
+
+  it('errorConstancia + errores de régimen: cada error aparece una sola vez', () => {
+    const r = condicionIvaDesdePadron(
+      a5({
+        errorConstancia: { error: [LIMITADA] },
+        errorRegimenGeneral: {
+          error: [],
+          mensaje: 'No cumple con las condiciones para enviar datos del regimen general',
+        },
+      }),
+    );
+    expect(r.condicionIva).toBeNull();
+    expect(r.motivo.split(LIMITADA)).toHaveLength(2);
+    expect(r.motivo).toContain('régimen general: No cumple con las condiciones');
+  });
+
+  it('errorConstancia con impuestos que no definen la condición → null y advierte el error', () => {
+    const r = condicionIvaDesdePadron(
+      a5({ impuestos: [imp(11, 'GANANCIAS PERSONAS FISICAS')], errorConstancia: { error: [LIMITADA] } }),
+    );
+    expect(r.condicionIva).toBeNull();
+    expect(r.motivo).toMatch(/no alcanza para determinar/);
+    expect(r.motivo).toContain(LIMITADA);
+  });
+
+  it('monotributo (20) e IVA (30) activos a la vez → prioriza monotributo', () => {
+    const r = condicionIvaDesdePadron(a5({ impuestos: [imp(30, 'IVA'), imp(20, 'MONOTRIBUTO')] }));
+    expect(r.condicionIva).toBe(CondicionIva.MONOTRIBUTISTA);
+  });
+
+  it('impuesto 33 (IVA responsable no inscripto) → null con un motivo propio', () => {
+    const r = condicionIvaDesdePadron(a5({ impuestos: [imp(33, 'IVA RESPONSABLE NO INSCRIPTO')] }));
+    expect(r.condicionIva).toBeNull();
+    expect(r.motivo).toMatch(/responsable no inscripto \(impuesto 33\)/);
+    expect(r.motivo).not.toMatch(/No figura inscripto/);
+  });
+
+  it('impuesto 33 en baja no cuenta', () => {
+    const r = condicionIvaDesdePadron(a5({ impuestos: [imp(33, 'IVA RESPONSABLE NO INSCRIPTO', 'BD')] }));
+    expect(r.motivo).toMatch(/No figura inscripto/);
+  });
+});
+
 describe('condicionIvaDesdePadron (A4)', () => {
   const a4 = (extra: Partial<PersonaA4>): PersonaA4 => ({ idPersona: '20111111112', tipoPersona: 'FISICA', ...extra });
 

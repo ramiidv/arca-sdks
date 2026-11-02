@@ -7,6 +7,15 @@ export { Provincia, DocTipo, CondicionIva } from '@ramiidv/arca-common';
 // Endpoints
 // ---------------------------------------------------------------------------
 
+/**
+ * Endpoints de los servicios de Padrón.
+ *
+ * El manual de la constancia de inscripción (v4.1) publica los hosts
+ * `awshomo.arca.gob.ar` / `aws.arca.gob.ar`. El SDK usa `awshomo.afip.gov.ar` /
+ * `aws.afip.gov.ar`: son los `soap:address` de los WSDL oficiales de los cinco
+ * servicios y los que publica el manual de A13 (v1.4), y responden igual. Para
+ * usar otro host, pasá `endpoints` en la configuración.
+ */
 export const ENDPOINTS = {
   wsaa: WSAA_ENDPOINTS,
   /** Constancia de inscripción (ex Padrón A5: ws_sr_padron_a5 está deprecado por ARCA). */
@@ -77,6 +86,12 @@ export enum ImpuestoId {
   MONOTRIBUTO_AUTONOMO = 21,
   /** IVA. */
   IVA_RESPONSABLE_INSCRIPTO = 30,
+  /**
+   * IVA responsable no inscripto. Sin respaldo en los manuales del padrón. La
+   * categoría fue eliminada (Ley 25.865) y no tiene `CondicionIVAReceptorId`:
+   * `condicionIvaDesdePadron` devuelve `null` con un motivo propio.
+   */
+  IVA_RESPONSABLE_NO_INSCRIPTO = 33,
   /** IVA exento. Sin respaldo en los manuales del padrón: el A4 informa la exención como impuesto 30 con estado EXENTO. */
   IVA_EXENTO = 32,
   /** IVA no alcanzado. Sin respaldo en los manuales del padrón. */

@@ -21,12 +21,12 @@ npm install @ramiidv/arca-cdc
 
 ## Requisitos
 
-- Node.js >= 18
+- Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
 - Certificado digital X.509 y clave privada de ARCA, con el servicio **`wscdc`** asociado
   - **Homologación**: [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx)
   - **Producción**: [Administración de Certificados Digitales](https://www.afip.gob.ar/ws/documentacion/certificados.asp)
 
-## Uso rápido
+## Inicio rápido
 
 ```typescript
 import fs from 'node:fs';
@@ -61,7 +61,7 @@ if (r.resultado === 'A') {
 
 ## Configuración
 
-`ArcaCdcConfig` extiende `ArcaBaseConfig` de `@ramiidv/arca-common`:
+`ArcaCdcConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`:
 
 | Opción                            | Tipo                            | Default      | Descripción                                                                       |
 | --------------------------------- | ------------------------------- | ------------ | --------------------------------------------------------------------------------- |
@@ -73,14 +73,17 @@ if (r.resultado === 'A') {
 | `retryDelayMs`                    | `number`                        | `1000`       | Delay inicial del backoff exponencial                                             |
 | `tokenTTLMinutes`                 | `number`                        | `720`        | Vigencia pedida a WSAA                                                            |
 | `ticketStorage`                   | `TicketStorage`                 | memoria      | Persistencia del ticket WSAA (recomendado en producción; ver `FileTicketStorage`) |
+| `keyPassphrase`                   | `string`                        | --           | Contraseña de la clave, si está encriptada                                        |
 | `clockOffsetMs` / `autoClockSkew` |                                 | `0` / `true` | Ajuste de reloj para WSAA                                                         |
 | `loginErrorCooldownMs`            | `number`                        | `60000`      | Espera tras un login WSAA fallido                                                 |
 | `fetch`                           | `typeof fetch`                  | global       | `fetch` propio (proxy, tests)                                                     |
 | `legacyTls`                       | `'auto' \| 'never' \| 'always'` | `'auto'`     | Transporte TLS legacy (ver abajo)                                                 |
 | `endpoints`                       | `{ wscdc?, wsaa? }`             | --           | Sobrescribe las URLs                                                              |
 | `onEvent`                         | `(e: ArcaEvent) => void`        | --           | Eventos (auth, requests, reintentos)                                              |
+| `wsaa`                            | `WsaaClient`                    | --           | `WsaaClient` compartido con otros SDKs (mismo certificado y entorno)              |
+| `signal`                          | `AbortSignal`                   | --           | Cancela todas las llamadas de la instancia; se combina con el de cada llamada     |
 
-## Métodos
+## API
 
 Todos aceptan un último parámetro opcional `opts?: { signal?: AbortSignal }`.
 
@@ -94,6 +97,11 @@ Todos aceptan un último parámetro opcional `opts?: { signal?: AbortSignal }`.
 | `getTiposOpcionales()` | `OpcionalesTipoConsultar`        | `{ id: string, desc }[]`                                              |
 | `clearAuthCache()`     | --                               | `Promise<void>`: descarta los tickets WSAA                            |
 
+Las tablas devuelven un `ListaCdc<T>`: un array común (`desc` es `''` si ARCA no la informa) con los
+`Events` de ARCA, si vinieron, en `lista.eventos` (propiedad no enumerable: no aparece al iterar,
+serializar ni copiar el array). `status()` devuelve lo que informa ARCA sin evaluarlo: usá
+`serverStatusOk(status)` de `@ramiidv/arca-common` para saber si los tres servidores están en `OK`.
+
 ### `constatar(input)`
 
 ```typescript
@@ -106,8 +114,8 @@ interface ConstatarInput {
   cbteFch: string | Date; // se envía YYYYMMDD
   impTotal: number; // >= 0, se redondea a 2 decimales; 0 si el comprobante no tiene total
   codAutorizacion: string; // 14 dígitos
-  docTipoReceptor?: number | string; // ver getDocTipos(); se informa junto con DocNroReceptor
-  docNroReceptor?: number | string; // solo dígitos (CUIT validado si DocTipoReceptor = 80)
+  docTipoReceptor?: number | string; // ver getDocTipos(); se informa junto con docNroReceptor
+  docNroReceptor?: number | string; // solo dígitos (CUIT validado si docTipoReceptor = 80)
   opcionales?: { id: string; valor: string }[]; // ver getTiposOpcionales()
 }
 
@@ -116,7 +124,7 @@ interface ConstatarResult {
   fchProceso: string; // YYYYMMDDHHMMSS
   cmpResp?: ComprobanteConstatado; // los datos del comprobante tal como los devuelve ARCA
   observaciones: { code: number; msg: string }[];
-  events: { code: number; msg: string }[];
+  events: { code: number; msg: string }[]; // Events de ARCA
 }
 ```
 
@@ -125,7 +133,8 @@ Cómo interpretar la respuesta (manual WSCDC, 2.2.3):
 - **`resultado: 'A'`**: el comprobante está registrado y autorizado. Puede traer observaciones no
   excluyentes (ej: `200`, CAEA aún no rendido pero en plazo).
 - **`resultado: 'R'`**: rechazo por validaciones funcionales (`100` código inexistente, `102` CUIT
-  emisor no coincide, `110` importe no coincide, etc.). El detalle está en `observaciones`.
+  emisor no coincide, `110` importe no coincide, etc.). El detalle está en `observaciones`. Si en un
+  rechazo ARCA devuelve `CmpResp` incompleto, el resultado viene sin `cmpResp`.
 - **`Errors` de ARCA** (validaciones de formato `1`-`10`, autenticación `600`-`602`,
   infraestructura `500`-`503`): el SDK **lanza `ArcaServiceError`**, porque el comprobante no se
   llegó a constatar. ARCA en esos casos también responde `resultado: R`, pero no significa que el
@@ -133,16 +142,60 @@ Cómo interpretar la respuesta (manual WSCDC, 2.2.3):
 
 El importe se compara con margen: error relativo <= 0,01% o absoluto <= 1 (manual, 2.8).
 
+El input se valida una sola vez, antes de autenticarse con WSAA: un input inválido lanza
+`ArcaValidationError` sin llamar a WSAA ni a WSCDC.
+
+### Cliente de bajo nivel
+
+```typescript
+import fs from 'node:fs';
+import { ArcaCdc, CdcClient, WSCDC_ENDPOINTS, WSCDC_SERVICE_ID } from '@ramiidv/arca-cdc';
+import type { CdcAuth } from '@ramiidv/arca-cdc';
+
+const cdc = new ArcaCdc({
+  cuit: 20123456786,
+  cert: fs.readFileSync('./cert.crt', 'utf-8'),
+  key: fs.readFileSync('./key.key', 'utf-8'),
+});
+
+const client = new CdcClient({ endpoint: WSCDC_ENDPOINTS.testing });
+await client.dummy();
+
+const ticket = await cdc.wsaa.getAccessTicket(WSCDC_SERVICE_ID);
+const auth: CdcAuth = { token: ticket.token, sign: ticket.sign, cuit: '20123456786' }; // se valida la CUIT
+await client.getTiposOpcionales(auth);
+```
+
 ## Manejo de errores
 
 ```typescript
+import fs from 'node:fs';
 import {
   ArcaAuthError,
-  ArcaTicketVigenteError,
+  ArcaCdc,
+  ArcaResponseError,
   ArcaServiceError,
   ArcaSoapError,
+  ArcaTicketVigenteError,
   ArcaValidationError,
 } from '@ramiidv/arca-cdc';
+import type { ConstatarInput } from '@ramiidv/arca-cdc';
+
+const cdc = new ArcaCdc({
+  cuit: 20123456786,
+  cert: fs.readFileSync('./cert.crt', 'utf-8'),
+  key: fs.readFileSync('./key.key', 'utf-8'),
+});
+const input: ConstatarInput = {
+  cbteModo: 'CAE',
+  cuitEmisor: 30712345671,
+  ptoVta: 1,
+  cbteTipo: 6,
+  cbteNro: 150,
+  cbteFch: '20260315',
+  impTotal: 12100,
+  codAutorizacion: '73429843294823',
+};
 
 try {
   await cdc.constatar(input);
@@ -155,15 +208,23 @@ try {
     // login WSAA fallido
   } else if (e instanceof ArcaServiceError) {
     e.errors; // [{ code, msg }] tal cual los devuelve ARCA
+  } else if (e instanceof ArcaResponseError) {
+    e.message; // ARCA respondió con una forma inesperada
   } else if (e instanceof ArcaSoapError) {
     e.statusCode;
-    e.faultString; // transporte / SOAP Fault / respuesta inválida
+    e.faultString; // transporte / SOAP Fault
   }
 }
 ```
 
 Como todas las operaciones son consultas, ante un timeout o error de red alcanza con repetir la
 misma llamada (el SDK ya reintenta `retries` veces).
+
+## Eventos
+
+`onEvent` (o `cdc.on(tipo, handler)`) recibe `auth:login`, `auth:cache-hit`, `auth:clock-skew`, `auth:storage-error`,
+`request:start`, `request:end`, `request:retry` y `request:error` (ver `ArcaEvent` en
+`@ramiidv/arca-common`).
 
 ## Entornos
 
@@ -180,25 +241,10 @@ misma llamada (el SDK ya reintenta `retries` veces).
   ese handshake una vez con `ciphers: 'DEFAULT@SECLEVEL=1'` y recuerda el host. Con un `fetch`
   propio no hay fallback: tu `fetch` tiene que aceptar DH de 1024 bits.
 
-## Cliente de bajo nivel
+## Ejemplos
 
-```typescript
-import { CdcClient, WSCDC_ENDPOINTS } from '@ramiidv/arca-cdc';
-
-const client = new CdcClient({ endpoint: WSCDC_ENDPOINTS.testing });
-await client.dummy();
-
-const ticket = await cdc.wsaa.getAccessTicket('wscdc');
-const auth = { token: ticket.token, sign: ticket.sign, cuit: '20123456786' };
-await client.constatar(auth, input);
-await client.getTiposOpcionales(auth);
-```
-
-## Eventos
-
-`onEvent` recibe `auth:login`, `auth:cache-hit`, `auth:clock-skew`, `auth:storage-error`,
-`request:start`, `request:end`, `request:retry` y `request:error` (ver `ArcaEvent` en
-`@ramiidv/arca-common`).
+En [examples](https://github.com/ramiidv/arca-sdks/tree/main/packages/cdc/examples): verificar un
+comprobante, consultas de tablas y manejo de errores.
 
 ## Licencia
 
