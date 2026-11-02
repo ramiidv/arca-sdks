@@ -28,8 +28,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint:pkg": "publint --strict && attw --pack . --profile esm-only",
-    "test:integration": "vitest run tests/integration"
+    "lint:pkg": "publint --strict && attw --pack . --profile esm-only"
   },
   "keywords": [
     "afip",
@@ -49,7 +48,6 @@
     "soap",
     "tax",
     "electronic-invoice",
-    "padron",
     "exportacion",
     "qr"
   ],
