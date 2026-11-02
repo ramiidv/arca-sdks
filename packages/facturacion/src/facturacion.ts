@@ -1,4 +1,4 @@
-import { formatDate, normalizeCuit } from '@ramiidv/arca-common';
+import { formatDate, formatDateTimeAR, normalizeCuit, roundHalfUp } from '@ramiidv/arca-common';
 import {
   IVA_RATES,
   Concepto,
@@ -6,6 +6,7 @@ import {
   CondicionIva,
   Moneda,
   isTipoC,
+  WSFE_CAEA_NUMERO_NO_CORRESPONDE,
   WSFE_NUMERO_NO_CORRESPONDE,
 } from './constants.js';
 import { ArcaWSFEError } from './errors.js';
@@ -28,12 +29,11 @@ import type {
 } from './types.js';
 
 /**
- * Pasa un importe a centavos enteros. Desplaza la coma en la representación
- * decimal para evitar errores de punto flotante (1.005 → 101, no 100).
+ * Pasa un importe a centavos enteros, redondeando mitad hacia arriba sobre el
+ * valor decimal escrito (1.005 → 101, no 100).
  */
 function toCents(n: number): number {
-  const s = String(n);
-  return s.includes('e') ? Math.round(n * 100) : Math.round(Number(`${s}e2`));
+  return Math.round(roundHalfUp(n, 2) * 100);
 }
 
 const optString = (v: unknown): string | undefined =>
@@ -43,17 +43,15 @@ function fromCents(c: number): number {
   return c / 100;
 }
 
-/** Redondea un importe a 2 decimales (xs:double de WSFEv1, 2 decimales según el manual). */
+/** Redondea un importe a 2 decimales (WSFEv1: Double (13+2) según el manual). */
 export function redondear2(n: number): number {
-  return fromCents(toCents(n));
+  return roundHalfUp(n, 2);
 }
 
 /** Alícuota en puntos básicos (21% → 2100, 10,5% → 1050) para operar con enteros. */
 function rateBasisPoints(ivaId: number): number {
   return Math.round(IVA_RATES[ivaId as keyof typeof IVA_RATES] * 100);
 }
-
-let fechaHoraFormatter: Intl.DateTimeFormat | undefined;
 
 /**
  * Formatea una fecha y hora como `yyyymmddhhmmss` (hora de Argentina), el
@@ -76,19 +74,8 @@ export function formatFechaHora(value: Date | string, field = 'fechaHora'): stri
     return value;
   }
   if (!(value instanceof Date) || Number.isNaN(value.getTime())) fail(field, `${field} no es una fecha válida`, value);
-  fechaHoraFormatter ??= new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Argentina/Buenos_Aires',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  });
-  const parts = fechaHoraFormatter.formatToParts(value);
-  const part = (t: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === t)?.value ?? '';
-  return `${part('year')}${part('month')}${part('day')}${part('hour')}${part('minute')}${part('second')}`;
+  // "AAAA-MM-DDTHH:mm:ss-03:00" → "AAAAMMDDHHmmss"
+  return formatDateTimeAR(value).replace(/\D/g, '').slice(0, 14);
 }
 
 type BucketKey = number | 'exento' | 'noGravado' | 'tipoC';
@@ -271,27 +258,32 @@ function prorratear(monto: number, pesos: number[], bases: number[]): number[] {
   return shares;
 }
 
+/** Importes y alícuotas de IVA de un `FacturarOpts` (valida items y descuento). */
+export function totalesDe(opts: FacturarOpts): { importes: Importes; iva: AlicuotaIva[] } {
+  return calcularTotales(opts.items, {
+    tributos: opts.tributos,
+    tipoC: isTipoC(opts.cbteTipo),
+    descuentoGlobal: opts.descuentoGlobal,
+  });
+}
+
 /**
  * Construye un InvoiceDetail a partir de FacturarOpts y un número de comprobante.
  * No valida: usar `armarComprobante` para validar y armar.
  *
  * @param ahora - Fecha a usar si `opts.fecha` no viene (default: ahora). Permite
  *   aplicar el desfase de reloj.
+ * @param totales - Importes ya calculados con `totalesDe(opts)` (si no, se calculan).
  */
 export function buildInvoiceDetail(
   opts: FacturarOpts,
   cbteNum: number,
   ahora: Date = new Date(),
+  totales: { importes: Importes; iva: AlicuotaIva[] } = totalesDe(opts),
 ): { detail: InvoiceDetail; importes: Importes } {
   const esServicio = opts.servicio !== undefined;
   const concepto = opts.concepto ?? (esServicio ? Concepto.SERVICIOS : Concepto.PRODUCTOS);
-  const tipoC = isTipoC(opts.cbteTipo);
-
-  const { importes, iva: ivaArray } = calcularTotales(opts.items, {
-    tributos: opts.tributos,
-    tipoC,
-    descuentoGlobal: opts.descuentoGlobal,
-  });
+  const { importes, iva: ivaArray } = totales;
 
   const fecha = formatDate(opts.fecha ?? ahora);
   const moneda = opts.moneda ?? Moneda.PESOS;
@@ -315,8 +307,8 @@ export function buildInvoiceDetail(
   };
   if (cotizacion !== undefined) detail.monCotiz = cotizacion;
 
-  // CondicionIVAReceptorId: obligatorio según RG 5616 (ARCA rechaza sin él desde el
-  // 01/12/2026). Solo se completa por defecto para consumidor final sin identificar.
+  // CondicionIVAReceptorId: obligatorio según RG 5616 (validación 10246). Solo se
+  // completa por defecto para consumidor final sin identificar.
   const docTipo = opts.docTipo ?? DocTipo.CONSUMIDOR_FINAL;
   if (opts.condicionIva != null) {
     detail.condicionIvaReceptorId = opts.condicionIva;
@@ -336,8 +328,10 @@ export function buildInvoiceDetail(
   if (opts.servicio) {
     detail.fchServDesde = formatDate(opts.servicio.desde);
     detail.fchServHasta = formatDate(opts.servicio.hasta);
-    detail.fchVtoPago = formatDate(opts.servicio.vtoPago);
   }
+  // FchVtoPago: servicios (concepto 2/3) y FCE (validaciones 10049 y 10163).
+  const vtoPago = opts.vtoPago ?? opts.servicio?.vtoPago;
+  if (vtoPago !== undefined) detail.fchVtoPago = formatDate(vtoPago);
 
   if (opts.tributos && opts.tributos.length > 0) {
     detail.tributos = opts.tributos.map(
@@ -363,6 +357,10 @@ export function buildInvoiceDetail(
 
   if (opts.periodoAsoc) {
     detail.periodoAsoc = { fchDesde: formatDate(opts.periodoAsoc.desde), fchHasta: formatDate(opts.periodoAsoc.hasta) };
+  }
+
+  if (opts.compradores && opts.compradores.length > 0) {
+    detail.compradores = opts.compradores.map((c) => ({ ...c, porcentaje: redondear2(c.porcentaje) }));
   }
 
   if (opts.actividades && opts.actividades.length > 0) {
@@ -526,23 +524,34 @@ function es10016PorNumero(e: { code: number | string; msg: string }): boolean {
   return Number(e.code) === WSFE_NUMERO_NO_CORRESPONDE && !esRechazoPorFecha(String(e.msg ?? ''));
 }
 
+/** 703 de FECAEARegInformativo: el número no es el último informado + 1. */
+function es703(e: { code: number | string }): boolean {
+  return Number(e.code) === WSFE_CAEA_NUMERO_NO_CORRESPONDE;
+}
+
 /**
- * `true` si el resultado de una emisión indica que el número ya fue usado
- * (validación 10016 por número): ARCA rechazó este envío, pero un intento
- * anterior con el mismo número pudo haberse autorizado. Resolverlo con
- * `recuperarComprobante` antes de marcar el comprobante como rechazado.
+ * `true` si el resultado de una emisión indica que el número ya fue usado:
+ * ARCA rechazó este envío, pero un intento anterior con el mismo número pudo
+ * haberse autorizado. Resolverlo con `recuperarComprobante` antes de marcar el
+ * comprobante como rechazado.
  *
- * El 10016 por fecha (`CbteFch` fuera de rango o anterior al último emitido)
- * devuelve `false`: no hay nada que recuperar, hay que corregir la fecha. Si
- * el mensaje es ambiguo (menciona número y fecha) devuelve `true`, porque
- * `recuperarComprobante` es solo una consulta.
+ * - FECAESolicitar: validación 10016 por número. El 10016 por fecha (`CbteFch`
+ *   fuera de rango o anterior al último emitido) devuelve `false`: no hay nada
+ *   que recuperar, hay que corregir la fecha. Si el mensaje es ambiguo
+ *   (menciona número y fecha) devuelve `true`, porque `recuperarComprobante`
+ *   es solo una consulta.
+ * - FECAEARegInformativo (`registrarFacturaCAEA`, `tipoCodAut: "A"`):
+ *   validación 703 ("debe ser mayor en 1 al último informado").
  *
  * Acepta un `FacturaResult` (rechazo con observaciones) o el error lanzado.
  */
 export function requiereRecuperacion(resultadoOError: FacturaResult | unknown): boolean {
   if (resultadoOError instanceof ArcaWSFEError) {
-    return resultadoOError.errors.some(es10016PorNumero);
+    // Los códigos 7xx son exclusivos de las validaciones de CAEA.
+    return resultadoOError.errors.some((e) => es10016PorNumero(e) || es703(e));
   }
   const r = resultadoOError as Partial<FacturaResult> | null;
-  return !!r && r.aprobada === false && Array.isArray(r.observaciones) && r.observaciones.some(es10016PorNumero);
+  if (r?.aprobada !== false || !Array.isArray(r.observaciones)) return false;
+  const caea = r.tipoCodAut === 'A';
+  return r.observaciones.some((o) => es10016PorNumero(o) || (caea && es703(o)));
 }

@@ -1,5 +1,5 @@
 import { CondicionIva } from '@ramiidv/arca-common';
-import { CbteTipo } from './constants.js';
+import { CbteTipo, RECEPTORES_CLASE_A } from './constants.js';
 import { fail } from './validation.js';
 
 export type ClaseComprobante = 'factura' | 'nota_credito' | 'nota_debito';
@@ -18,13 +18,6 @@ export type ClaseComprobante = 'factura' | 'nota_credito' | 'nota_debito';
  *        9 (Cliente del Exterior), 10 (IVA Liberado Ley 19.640), 15 (IVA No Alcanzado)
  *     C: todas
  */
-const RECEPTORES_CLASE_A = new Set<number>([
-  CondicionIva.RESPONSABLE_INSCRIPTO,
-  CondicionIva.MONOTRIBUTISTA,
-  CondicionIva.MONOTRIBUTO_SOCIAL,
-  CondicionIva.MONOTRIBUTO_INDEPENDIENTE_PROMOVIDO,
-]);
-
 const RECEPTORES_CLASE_B = new Set<number>([
   CondicionIva.EXENTO,
   CondicionIva.CONSUMIDOR_FINAL,

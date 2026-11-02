@@ -1,10 +1,10 @@
-import { SoapServiceClient, ensureArray, parseServerStatus } from '@ramiidv/arca-common';
+import { ArcaResponseError, SoapServiceClient, ensureArray, parseServerStatus } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
-import { ENDPOINTS, WSFEX_ERRORES_INTERNOS, WSFEX_NAMESPACE } from './constants.js';
+import { ENDPOINTS, WSFEX_ERRORES_AUTH, WSFEX_ERRORES_INTERNOS, WSFEX_NAMESPACE } from './constants.js';
 import { encodeRequest } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
-import { decodeArca } from './decode.js';
-import { ArcaResultadoInciertoExpo, ArcaSoapError, ArcaWSFEError } from './errors.js';
+import { decodeArca, sinCampo } from './decode.js';
+import { ArcaConflictoExpo, ArcaResultadoInciertoExpo, ArcaSoapError, ArcaWSFEError, authErrorDe } from './errors.js';
 import * as S from './schemas.js';
 import { authXml, transportDe } from './wsfe.js';
 import type { WsClientOptions } from './wsfe.js';
@@ -36,9 +36,16 @@ function fexErr(result: R): WsfexErr | undefined {
   return { errCode: Number(err.ErrCode), errMsg: String(err.ErrMsg ?? '') };
 }
 
+/**
+ * Lanza si la respuesta trae `FEXErr`: `ArcaAuthError` para los de
+ * autenticación (1000, 1001), `ArcaWSFEError` para el resto.
+ */
 function checkFexErr(result: R): void {
   const err = fexErr(result);
-  if (err) throw new ArcaWSFEError([{ code: err.errCode, msg: err.errMsg }], 'WSFEX');
+  if (!err) return;
+  const error = new ArcaWSFEError([{ code: err.errCode, msg: err.errMsg }], 'WSFEX');
+  if (WSFEX_ERRORES_AUTH.includes(err.errCode)) throw authErrorDe(error);
+  throw error;
 }
 
 /** `FEXEvents` de una respuesta decodificada, si el código es distinto de 0. */
@@ -46,10 +53,6 @@ export function eventosWsfex(result: { fexEvents?: WsfexEvents } | undefined): M
   return ensureArray(result?.fexEvents)
     .filter((e) => e.eventCode !== 0)
     .map((e) => ({ code: e.eventCode, msg: e.eventMsg ?? '' }));
-}
-
-function sinCampo(method: string, campo: string): ArcaSoapError {
-  return new ArcaSoapError(`Respuesta de ${method} sin ${campo}`);
 }
 
 const lista = <T>(v: T[] | undefined) => (v && v.length > 0 ? v : undefined);
@@ -76,7 +79,8 @@ export function buildFexCmp(inv: WsfexInvoice): R {
     permisos: lista(inv.permisos)?.map((p) => ({ idPermiso: p.idPermiso, dstMerc: p.dstMerc })),
     dstCmp: inv.dstCmp,
     cliente: inv.cliente,
-    cuitPaisCliente: inv.cuitPaisCliente,
+    // Obligatorio en el WSDL (s:long): sin CUIT país (cliente con Id_impositivo, validación 1580) va 0.
+    cuitPaisCliente: inv.cuitPaisCliente ?? 0,
     domicilioCliente: inv.domicilioCliente,
     idImpositivo: inv.idImpositivo || undefined,
     monedaId: inv.monedaId,
@@ -154,6 +158,8 @@ export class WsfexClient extends SoapServiceClient {
    *   5xx, error interno 500/501/502/505, respuesta sin `FEXResultAuth`).
    *   Reenviar el mismo `Cmp` con el mismo `Id` (`error.request`).
    * - `ArcaWSFEError`: WSFEX rechazó el request (`FEXErr`).
+   * - `ArcaConflictoExpo`: el `Id` ya lo usaba otro comprobante (WSFEX
+   *   devolvió la respuesta de ese otro comprobante).
    */
   async authorize(auth: WsfeAuth, invoice: WsfexInvoice, opts?: CallOptions): Promise<WsfexAuthResult> {
     const cmp = buildFexCmp(invoice);
@@ -171,19 +177,23 @@ export class WsfexClient extends SoapServiceClient {
         cause: new ArcaWSFEError([{ code: err.errCode, msg: err.errMsg }], 'WSFEX'),
       });
     }
-    if (err) throw new ArcaWSFEError([{ code: err.errCode, msg: err.errMsg }], 'WSFEX');
+    checkFexErr(result);
 
     let decoded: WsfexAuthResult;
     try {
-      decoded = decodeArca<WsfexAuthResult>(result, S.FEX_AUTHORIZE_RESP, 'FEXAuthorize');
+      decoded = decodeArca<WsfexAuthResult>(result, S.FEX_AUTHORIZE_RESP, 'FEXAuthorize', 'emision');
     } catch (cause) {
       throw new ArcaResultadoInciertoExpo(invoice, { cause });
     }
     const r = decoded.fexResultAuth;
     if (!r || (r.resultado !== 'A' && r.resultado !== 'R')) {
       throw new ArcaResultadoInciertoExpo(invoice, {
-        cause: new ArcaSoapError('Respuesta de FEXAuthorize sin FEXResultAuth.Resultado', { uncertain: true }),
+        cause: new ArcaResponseError('Respuesta de FEXAuthorize sin FEXResultAuth.Resultado', true),
       });
+    }
+    // El Id es único por CUIT: si ya lo usó otro comprobante, WSFEX devuelve esa respuesta.
+    if (r.cbteTipo !== invoice.cbteTipo || r.puntoVta !== invoice.puntoVta || r.cbteNro !== Number(invoice.cbteNro)) {
+      throw new ArcaConflictoExpo(invoice, decoded, 'la respuesta es de otro comprobante');
     }
     return decoded;
   }

@@ -1,3 +1,5 @@
+import { CondicionIva } from '@ramiidv/arca-common';
+
 // ============================================================
 // Endpoints
 // ============================================================
@@ -28,6 +30,15 @@ export enum TipoExpo {
 export const WSFE_ERRORES_INTERNOS: readonly number[] = [500, 501, 502];
 
 /**
+ * Unidades de medida de WSFEX que van sin cantidad ni precio unitario, con el
+ * total explícito (validaciones 1775 y 1810): 0, 97 (anticipos/señas, total
+ * de cualquier signo) y 99 (bonificaciones, total menor a 0).
+ */
+export function isUmedSinCantidad(unidad: number): boolean {
+  return unidad === 0 || unidad === 97 || unidad === 99;
+}
+
+/**
  * Código de error interno de infraestructura de WSFEX (manual WSFEX 3.1.1,
  * "Errores de infraestructura"): 500 aplicación, 501 base de datos, 502/505
  * autorizador - transacción activa. No garantizan que el comprobante no se
@@ -46,6 +57,31 @@ export const WSFEX_ERRORES_INTERNOS: readonly number[] = [500, 501, 502, 505];
  */
 export const WSFE_NUMERO_NO_CORRESPONDE = 10016;
 
+/**
+ * Validación 703 de FECAEARegInformativo: el número de comprobante debe ser
+ * mayor en 1 al último informado. Igual que el 10016 de FECAESolicitar,
+ * después de un resultado incierto suele indicar que el intento original sí
+ * quedó informado (ver `requiereRecuperacion`).
+ */
+export const WSFE_CAEA_NUMERO_NO_CORRESPONDE = 703;
+
+/**
+ * Errores de autenticación de WSFEv1 (manual, "Errores generales"): 600 token
+ * y firma no se corresponden / usuario no autorizado (también "No apareció
+ * CUIT en lista de relaciones"), 601 CUIT representada no incluida en el
+ * token. Llegan como `ArcaAuthError` (no reintentable). El 602 ("No existen
+ * datos en nuestros registros") no es de autenticación: lo devuelven las
+ * consultas sin resultado, y sigue siendo `ArcaWSFEError`.
+ */
+export const WSFE_ERRORES_AUTH: readonly number[] = [600, 601];
+
+/**
+ * Errores de autenticación de WSFEX (manual WSFEX, "Errores generales"): 1000
+ * usuario no autorizado (token y firma), 1001 CUIT solicitante no está entre
+ * las relaciones del token. Llegan como `ArcaAuthError` (no reintentable).
+ */
+export const WSFEX_ERRORES_AUTH: readonly number[] = [1000, 1001];
+
 /** Servicios WSAA que usa este SDK. */
 export const WSAA_SERVICES = {
   wsfe: 'wsfe',
@@ -57,9 +93,10 @@ export const WSFEX_NAMESPACE = 'http://ar.gov.afip.dif.fexv1/';
 
 /**
  * URL base del QR de los comprobantes, según la especificación vigente de ARCA
- * ("Especificaciones del QR incluido en las facturas electrónicas").
+ * ("Especificaciones del QR incluido en las facturas electrónicas"). Definida
+ * en @ramiidv/arca-common.
  */
-export const QR_URL = 'https://www.arca.gob.ar/fe/qr/';
+export { QR_URL } from '@ramiidv/arca-common';
 
 // ============================================================
 // Tipos de Comprobante
@@ -153,7 +190,7 @@ export { DocTipo } from '@ramiidv/arca-common';
 // ============================================================
 
 // Definido en @ramiidv/arca-common para compartirlo con arca-padron.
-export { CondicionIva } from '@ramiidv/arca-common';
+export { CondicionIva };
 
 // ============================================================
 // Tipos de IVA (alícuotas)
@@ -181,6 +218,10 @@ export const IVA_RATES: Record<IvaTipo, number> = {
 // Tipos de Moneda
 // ============================================================
 
+/**
+ * Códigos de moneda más usados (tabla de ARCA, `FEParamGetTiposMonedas`). La
+ * lista completa se consulta con `getMonedas()`.
+ */
 export enum Moneda {
   PESOS = 'PES',
   DOLARES = 'DOL',
@@ -188,8 +229,8 @@ export enum Moneda {
   REALES = '012',
   PESOS_URUGUAYOS = '011',
   PESOS_CHILENOS = '033',
-  GUARANIES = '031',
-  BOLIVIANOS = '029',
+  GUARANIES = '029',
+  BOLIVIANOS = '031',
   PESOS_COLOMBIANOS = '032',
   PESOS_MEXICANOS = '010',
   LIBRAS_ESTERLINAS = '021',
@@ -253,13 +294,27 @@ export function isTipoE(cbteTipo: number): boolean {
   return TIPOS_E.has(cbteTipo);
 }
 
-/** Comprobantes clase A (incluida FCE A): el receptor debe ser RI o monotributista. */
+/**
+ * Comprobantes clase A y "A con leyenda operación sujeta a retención" (M):
+ * receptor identificado con CUIT (validación 10013) y RI o monotributista
+ * (tabla "Condición frente al IVA del receptor", columna A/ALEY). Lista de la
+ * validación 10007 del manual de WSFEv1 (v4.7): 01-05, 34, 39, 60, 63 y
+ * 201-203 (clase A); 51-54 (ALEY).
+ */
 const TIPOS_A = new Set<number>([
   CbteTipo.FACTURA_A,
   CbteTipo.NOTA_DEBITO_A,
   CbteTipo.NOTA_CREDITO_A,
   CbteTipo.RECIBO_A,
   CbteTipo.NOTA_VENTA_CONTADO_A,
+  CbteTipo.CBTE_A_ANEXO_I_RG1415,
+  CbteTipo.OTROS_CBTE_A_RG1415,
+  CbteTipo.CTA_VTA_LIQ_PROD_A,
+  CbteTipo.LIQUIDACION_A,
+  CbteTipo.FACTURA_M,
+  CbteTipo.NOTA_DEBITO_M,
+  CbteTipo.NOTA_CREDITO_M,
+  CbteTipo.RECIBO_M,
   CbteTipo.FCE_FACTURA_A,
   CbteTipo.FCE_NOTA_DEBITO_A,
   CbteTipo.FCE_NOTA_CREDITO_A,
@@ -273,6 +328,25 @@ export function isTipoA(cbteTipo: number): boolean {
 export function isFCE(cbteTipo: number): boolean {
   return cbteTipo >= 201 && cbteTipo <= 213;
 }
+
+/** Facturas FCE (201, 206, 211): llevan `FchVtoPago` siempre (validación 10163). */
+export function isFacturaFCE(cbteTipo: number): boolean {
+  return (
+    cbteTipo === CbteTipo.FCE_FACTURA_A || cbteTipo === CbteTipo.FCE_FACTURA_B || cbteTipo === CbteTipo.FCE_FACTURA_C
+  );
+}
+
+/**
+ * Receptores válidos para comprobantes clase A y ALEY (manual WSFEv1, tabla
+ * "Condición frente al IVA del receptor"): 1 (RI), 6 (Monotributo), 13
+ * (Monotributista Social), 16 (Monotributo Trabajador Independiente Promovido).
+ */
+export const RECEPTORES_CLASE_A: ReadonlySet<number> = new Set<number>([
+  CondicionIva.RESPONSABLE_INSCRIPTO,
+  CondicionIva.MONOTRIBUTISTA,
+  CondicionIva.MONOTRIBUTO_SOCIAL,
+  CondicionIva.MONOTRIBUTO_INDEPENDIENTE_PROMOVIDO,
+]);
 
 /** Notas de crédito y débito (WSFEv1, incluidas FCE). */
 const NOTAS = new Set<number>(
@@ -297,5 +371,10 @@ export enum TributoTipo {
   PERCEP_IIBB = 7,
   PERCEP_MUNICIPALES = 8,
   OTRAS_PERCEPCIONES = 9,
+  /**
+   * Percepción de IVA a No Categorizado: obligatoria cuando el receptor es
+   * 23000000000 (No Categorizado) con neto + IVA > 0 (validaciones 10067 y 10283).
+   */
+  PERCEP_IVA_NO_CATEGORIZADO = 13,
   OTRO = 99,
 }

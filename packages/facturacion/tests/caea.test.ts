@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import { ArcaResponseError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
 import { ArcaResultadoIncierto, ArcaWSFEError } from '../src/errors.js';
 import { CbteTipo, IvaTipo } from '../src/constants.js';
-import { formatFechaHora } from '../src/facturacion.js';
+import { formatFechaHora, requiereRecuperacion } from '../src/facturacion.js';
 import { arcaDePrueba, colgado, mockArcaFetch, orden, ultimoAutorizado, wsfeErrores, wsfeResponse } from './helpers.js';
 
 afterEach(() => {
@@ -57,7 +57,7 @@ describe('CAEA: solicitar y consultar', () => {
   it('respuesta sin ResultGet → error (no undefined)', async () => {
     const arca = await arcaDePrueba();
     mockArcaFetch({ FECAEAConsultar: wsfeResponse('FECAEAConsultar', '') });
-    await expect(arca.consultarCAEA('202611', 1)).rejects.toBeInstanceOf(ArcaSoapError);
+    await expect(arca.consultarCAEA('202611', 1)).rejects.toBeInstanceOf(ArcaResponseError);
   });
 
   it('valida período y orden', async () => {
@@ -66,6 +66,42 @@ describe('CAEA: solicitar y consultar', () => {
     await expect(arca.solicitarCAEA('2026-11', 1)).rejects.toBeInstanceOf(ArcaValidationError);
     await expect(arca.solicitarCAEA('202611', 3)).rejects.toBeInstanceOf(ArcaValidationError);
     expect(mock.fn).not.toHaveBeenCalled();
+  });
+});
+
+describe('CAEA: 703 (número ya informado) → requiereRecuperacion', () => {
+  const rechazo703 = wsfeResponse(
+    'FECAEARegInformativo',
+    '<FeCabResp><Cuit>20123456786</Cuit><PtoVta>5</PtoVta><CbteTipo>6</CbteTipo><FchProceso>20261104120000</FchProceso>' +
+      '<CantReg>1</CantReg><Resultado>R</Resultado><Reproceso>N</Reproceso></FeCabResp>' +
+      '<FeDetResp><FECAEADetResponse><Concepto>1</Concepto><DocTipo>99</DocTipo><DocNro>0</DocNro>' +
+      '<CbteDesde>10</CbteDesde><CbteHasta>10</CbteHasta><CbteFch>20261103</CbteFch><Resultado>R</Resultado>' +
+      '<Observaciones><Obs><Code>703</Code><Msg>El numero de comprobante informado debe ser mayor en 1 al ultimo informado</Msg></Obs></Observaciones>' +
+      '</FECAEADetResponse></FeDetResp>',
+  );
+
+  it('un rechazo 703 de registrarFacturaCAEA requiere recuperación', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({ FECAEARegInformativo: rechazo703 });
+    const res = await arca.registrarFacturaCAEA(CAEA, {
+      ptoVta: 5,
+      cbteTipo: CbteTipo.FACTURA_B,
+      cbteNro: 10,
+      fechaHoraGeneracion: '20261103143210',
+      items: [{ total: 121, iva: IvaTipo.IVA_21 }],
+    });
+    expect(res.aprobada).toBe(false);
+    expect(res.tipoCodAut).toBe('A');
+    expect(requiereRecuperacion(res)).toBe(true);
+  });
+
+  it('703 en un comprobante con CAE (otra operación) no se interpreta', () => {
+    const res = { aprobada: false, tipoCodAut: 'E', observaciones: [{ code: 703, msg: 'x' }] };
+    expect(requiereRecuperacion(res)).toBe(false);
+  });
+
+  it('703 como ArcaWSFEError requiere recuperación', () => {
+    expect(requiereRecuperacion(new ArcaWSFEError([{ code: 703, msg: 'mayor en 1 al ultimo informado' }]))).toBe(true);
   });
 });
 
@@ -121,6 +157,7 @@ describe('CAEA: informar comprobantes (FECAEARegInformativo)', () => {
       monId: 'PES',
       monCotiz: 1,
       condicionIvaReceptorId: 5,
+      iva: [{ id: 5, baseImp: 100, importe: 21 }],
       caea: CAEA,
     };
     await expect(arca.registrarCAEA({ ptoVta: 5, cbteTipo: 6, invoices: [inv as never] })).rejects.toBeInstanceOf(
@@ -177,6 +214,40 @@ describe('CAEA sin movimiento', () => {
     expect(err).toBeInstanceOf(ArcaSoapError);
     expect(err.uncertain).toBe(true);
     expect(mock.count('FECAEASinMovimientoInformar')).toBe(1);
+  });
+
+  it.each([500, 501, 502])(
+    'FECAEASinMovimientoInformar: error interno %i → uncertain (no es un rechazo)',
+    async (code) => {
+      const arca = await arcaDePrueba();
+      const mock = mockArcaFetch({
+        FECAEASinMovimientoInformar: wsfeErrores('FECAEASinMovimientoInformar', [{ code, msg: 'Error interno' }]),
+      });
+      const err = await arca.sinMovimientoCAEA(CAEA, 5).catch((e) => e);
+      expect(err).toBeInstanceOf(ArcaSoapError);
+      expect(err).not.toBeInstanceOf(ArcaWSFEError);
+      expect(err.uncertain).toBe(true);
+      expect(err.cause).toBeInstanceOf(ArcaWSFEError);
+      expect(mock.count('FECAEASinMovimientoInformar')).toBe(1);
+    },
+  );
+
+  it('FECAEASinMovimientoInformar: rechazo de negocio → ArcaWSFEError', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FECAEASinMovimientoInformar: wsfeErrores('FECAEASinMovimientoInformar', [
+        { code: 1300, msg: 'CAEA inexistente' },
+      ]),
+    });
+    await expect(arca.sinMovimientoCAEA(CAEA, 5)).rejects.toBeInstanceOf(ArcaWSFEError);
+  });
+
+  it('FECAEASinMovimientoInformar sin Resultado → ArcaResponseError uncertain', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({ FECAEASinMovimientoInformar: wsfeResponse('FECAEASinMovimientoInformar', '') });
+    const err = await arca.sinMovimientoCAEA(CAEA, 5).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaResponseError);
+    expect(err.uncertain).toBe(true);
   });
 
   it('FECAEASinMovimientoConsultar: orden CAEA, PtoVta y 1 o N resultados', async () => {

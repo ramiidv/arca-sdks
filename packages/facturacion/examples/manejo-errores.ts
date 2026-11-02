@@ -6,8 +6,9 @@
  *   - ArcaWSFEError: ARCA rechazó el comprobante (no se emitió)
  *   - ArcaValidationError: datos inválidos (no se envió nada)
  *   - ArcaTicketVigenteError: WSAA ya emitió un TA que no tenemos (falta ticketStorage)
- *   - ArcaAuthError: falla de autenticación WSAA
+ *   - ArcaAuthError: falla de autenticación WSAA, o ARCA rechazó el ticket (600/601)
  *   - ArcaSoapError: error HTTP/SOAP en consultas, o emisión que con certeza no se envió
+ *   - ArcaResponseError: ARCA respondió con una forma inesperada
  */
 
 import fs from 'node:fs';
@@ -64,9 +65,9 @@ async function main() {
     } else if (e instanceof ArcaTicketVigenteError) {
       console.error('Hay un TA vigente que no está en el storage: esperar a que venza.');
     } else if (e instanceof ArcaAuthError) {
-      // Certificado inválido, expirado, o respuesta WSAA inesperada
-      console.error('Error de autenticación:', e.message);
-      await arca.clearAuthCache();
+      // Certificado inválido o vencido, servicio no autorizado o CUIT no relacionada (600/601).
+      // No borrar el ticket: WSAA no emite otro mientras el actual siga vigente.
+      console.error('Error de autenticación:', e.faultCode, e.retryable, e.message);
     } else if (e instanceof ArcaWSFEError) {
       // Error de negocio con códigos de ARCA
       for (const err of e.errors) {

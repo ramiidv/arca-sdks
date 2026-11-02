@@ -4,12 +4,12 @@
  * y ordenados con `encodeRequest`.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import { ArcaResponseError, ArcaValidationError } from '@ramiidv/arca-common';
 import { ArcaResultadoIncierto, ArcaResultadoInciertoExpo } from '../src/errors.js';
-import { WsfeClient, buildDetRequest } from '../src/wsfe.js';
+import { WsfeClient } from '../src/wsfe.js';
 import { WsfexClient, buildFexCmp } from '../src/wsfex.js';
 import type { InvoiceDetail, WsfexInvoice } from '../src/types.js';
-import { mockArcaFetch, orden, wsfeResponse, wsfexResponse } from './helpers.js';
+import { caeAprobado, mockArcaFetch, orden, wsfeResponse, wsfexResponse } from './helpers.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -110,14 +110,16 @@ describe('WSFEv1: respuestas decodificadas con el schema', () => {
     ]);
   });
 
-  it('consulta con un campo obligatorio no numérico: ArcaSoapError', async () => {
+  it('consulta con un campo obligatorio no numérico: ArcaResponseError', async () => {
     mockArcaFetch({
       FECompUltimoAutorizado: wsfeResponse(
         'FECompUltimoAutorizado',
         '<PtoVta>1</PtoVta><CbteTipo>1</CbteTipo><CbteNro>abc</CbteNro>',
       ),
     });
-    await expect(new WsfeClient(false).ultimoComprobante(AUTH, 1, 1)).rejects.toThrow(ArcaSoapError);
+    const err = await new WsfeClient(false).ultimoComprobante(AUTH, 1, 1).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaResponseError);
+    expect(err.uncertain).toBe(false);
   });
 
   it('emisión con una respuesta de forma inválida: ArcaResultadoIncierto', async () => {
@@ -137,8 +139,15 @@ describe('WSFEv1: respuestas decodificadas con el schema', () => {
 });
 
 describe('WSFEv1: requests con encodeRequest', () => {
-  it('buildDetRequest ordena según el WSDL y omite los opcionales vacíos', () => {
-    const det = buildDetRequest({
+  /** `FECAEDetRequest` enviado por `solicitarCAE`, como texto (sin convertir números). */
+  async function detalleEnviado(inv: InvoiceDetail): Promise<Record<string, any>> {
+    const mock = mockArcaFetch({ FECAESolicitar: caeAprobado({ ptoVta: 1, cbteTipo: 1, cbteNro: 12345678 }) });
+    await new WsfeClient(false).solicitarCAE(AUTH, { ptoVta: 1, cbteTipo: 1, invoices: [inv] });
+    return mock.last('FECAESolicitar').params.FeCAEReq.FeDetReq.FECAEDetRequest;
+  }
+
+  it('el FECAEDetRequest va en el orden del WSDL y omite los opcionales vacíos', async () => {
+    const det = await detalleEnviado({
       ...DETALLE,
       actividades: [{ id: 620100 }],
       fchServDesde: '',
@@ -166,11 +175,37 @@ describe('WSFEv1: requests con encodeRequest', () => {
       'Iva',
       'Actividades',
     ]);
-    expect(det.CbtesAsoc).toEqual({ CbteAsoc: [{ Tipo: 1, PtoVta: 1, Nro: 7, CbteFch: '20261029' }] });
+    expect(det.CbtesAsoc).toEqual({ CbteAsoc: { Tipo: 1, PtoVta: 1, Nro: 7, CbteFch: '20261029' } });
   });
 
-  it('acepta DocNro como string de dígitos (ej: un detalle persistido)', () => {
-    expect(buildDetRequest({ ...DETALLE, docNro: '30712345671' as unknown as number }).DocNro).toBe('30712345671');
+  it('acepta DocNro como string de dígitos (ej: un detalle persistido)', async () => {
+    const det = await detalleEnviado({ ...DETALLE, docNro: '30712345671' as unknown as number });
+    expect(String(det.DocNro)).toBe('30712345671');
+  });
+
+  it('redondea los importes a 2 decimales y MonCotiz a 6 (Double 13+2 y 4+6 del manual)', async () => {
+    const mock = mockArcaFetch({ FECAESolicitar: caeAprobado({ ptoVta: 1, cbteTipo: 1, cbteNro: 12345678 }) });
+    await new WsfeClient(false).solicitarCAE(AUTH, {
+      ptoVta: 1,
+      cbteTipo: 1,
+      invoices: [
+        {
+          ...DETALLE,
+          impTotal: 121.005,
+          impNeto: 100.004,
+          impIva: 21.001,
+          monId: 'DOL',
+          monCotiz: 1015.1234567,
+          iva: [{ id: 5, baseImp: 100.004, importe: 21.001 }],
+        },
+      ],
+    });
+    const body = mock.last('FECAESolicitar').body;
+    expect(body).toContain('<ImpTotal>121.01</ImpTotal>');
+    expect(body).toContain('<ImpNeto>100.00</ImpNeto>');
+    expect(body).toContain('<ImpIVA>21.00</ImpIVA>');
+    expect(body).toContain('<MonCotiz>1015.123457</MonCotiz>');
+    expect(body).toContain('<BaseImp>100.00</BaseImp>');
   });
 
   it('un tipo inválido lanza ArcaValidationError con la ruta del campo, sin llamar a ARCA', async () => {

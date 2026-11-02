@@ -1,4 +1,4 @@
-import { ArcaSdkBase, formatDate, statusOf } from '@ramiidv/arca-common';
+import { ArcaResponseError, ArcaSdkBase, formatDate, statusOf } from '@ramiidv/arca-common';
 import type { CallOptions, ServiceStatus } from '@ramiidv/arca-common';
 import { WsfeClient } from './wsfe.js';
 import type { WsClientOptions } from './wsfe.js';
@@ -9,12 +9,12 @@ import {
   coincideConIntento,
   facturaResultDesdeConsulta,
   parseFacturaResult,
-  calcularTotales,
   formatFechaHora,
   redondear2,
+  totalesDe,
 } from './facturacion.js';
 import { eventosWsfex } from './wsfex.js';
-import { ArcaResultadoInciertoExpo, ArcaSoapError } from './errors.js';
+import { ArcaConflictoExpo, ArcaResultadoInciertoExpo } from './errors.js';
 import { fail, validateFacturarOpts, validateFacturarExpoOpts, validateInvoiceRequest } from './validation.js';
 import type {
   ArcaConfig,
@@ -64,8 +64,8 @@ import {
   NOTA_DEBITO_MAP,
   TipoExpo,
   WSAA_SERVICES,
-  isTipoC,
   isTipoE,
+  isUmedSinCantidad,
 } from './constants.js';
 
 /** TTL por defecto del cache de parámetros (24 horas). */
@@ -85,7 +85,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
   private readonly wsfex: WsfexClient;
   /** CUIT como número, como se envía en `Auth.Cuit` y en el QR. */
   private readonly cuitNum: number;
-  private readonly paramCache = new Map<string, { data: unknown; expires: number }>();
+  private readonly paramCache = new Map<string, { data: Promise<unknown>; expires: number }>();
   private readonly paramCacheTTLMs: number;
 
   /**
@@ -202,6 +202,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    * último autorizado + 1 (sin lock: serializá las emisiones por ptoVta y cbteTipo).
    *
    * - `ArcaWSFEError`: ARCA rechazó el comprobante (no se emitió).
+   * - `ArcaAuthError`: ARCA rechazó el ticket (errores 600 y 601).
    * - `ArcaResultadoIncierto`: no se sabe si se emitió; usar `recuperarComprobante(error.intento)`.
    * - `aprobada: false`: ARCA respondió con resultado "R" (no se emitió), ver `observaciones`.
    */
@@ -274,9 +275,9 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    */
   private async prepararComprobante(opts: FacturarOpts, call?: CallOptions, ahora: Date = this.wsaa.now()) {
     validateFacturarOpts(opts);
-    calcularTotales(opts.items, { descuentoGlobal: opts.descuentoGlobal, tipoC: isTipoC(opts.cbteTipo) });
+    const totales = totalesDe(opts);
     const cbteNro = opts.cbteNro ?? (await this.siguienteComprobante(opts.ptoVta, opts.cbteTipo, call));
-    return buildInvoiceDetail(opts, cbteNro, ahora);
+    return buildInvoiceDetail(opts, cbteNro, ahora, totales);
   }
 
   /**
@@ -325,6 +326,8 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    * - `ArcaResultadoInciertoExpo`: no se sabe si se autorizó. Reenviar el mismo
    *   request con el mismo `Id` (`crearFacturaExportacion(error.request)`):
    *   WSFEX devuelve `Reproceso = "S"` si ya estaba autorizado.
+   * - `ArcaConflictoExpo`: el `Id` (único por CUIT) ya lo usaba otro
+   *   comprobante; WSFEX devolvió la respuesta de ese otro comprobante.
    * - `ArcaWSFEError`: WSFEX rechazó el request.
    */
   async crearFacturaExportacion(invoice: WsfexInvoice, call?: CallOptions): Promise<WsfexAuthResult> {
@@ -445,12 +448,15 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
 
   /**
    * Crea un comprobante de exportación (Factura, NC o ND E) con API simplificada.
-   * Si no vienen `id` y `cbteNro`, usa último + 1 (sin lock: serializá las
-   * emisiones por ptoVta y cbteTipo).
+   * Si no vienen `id` y `cbteNro`, usa último + 1 sin lock. El `Id` es único
+   * **por CUIT** (manual WSFEX, "Manejo transaccional"): serializá todas las
+   * emisiones de exportación de la CUIT, no solo las del mismo punto de venta.
    *
    * - `ArcaResultadoInciertoExpo`: no se sabe si se autorizó. Reenviar con
    *   `facturarExpo({ ...opts, ...error.intento })` (mismo `id`, `cbteNro` y
    *   `fecha`): WSFEX responde `reproceso: true` si ya estaba autorizado.
+   * - `ArcaConflictoExpo`: el `Id` ya lo usaba otra solicitud (emisiones
+   *   concurrentes): este comprobante no se autorizó; reintentar sin `id`.
    * - `ArcaWSFEError`: WSFEX rechazó el comprobante.
    * - `aprobada: false`: resultado "R", ver `obs`.
    */
@@ -467,7 +473,10 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
 
     let totalCents = 0;
     const items = opts.items.map((item) => {
-      const totalItem = redondear2(item.cantidad * item.precioUnitario - (item.bonificacion ?? 0));
+      // Unidades 0, 97 y 99 (señas, bonificaciones): sin cantidad ni precio, con el total explícito (1775, 1810).
+      const totalItem = isUmedSinCantidad(item.unidad)
+        ? redondear2(item.total ?? 0)
+        : redondear2(item.cantidad * item.precioUnitario - (item.bonificacion ?? 0));
       totalCents += Math.round(totalItem * 100);
       return {
         proCodigo: item.codigo,
@@ -479,7 +488,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
         proTotalItem: totalItem,
       };
     });
-    if (totalCents < 0) fail('items', 'el total de los items no puede ser negativo');
+    if (totalCents < 0) fail('items', 'el total de los items no puede ser negativo (validación 1610)');
 
     // Permiso_existente: "S"/"N" solo para Factura E (19) de bienes; vacío en el resto
     // (tabla de validación 1720 del manual de WSFEX).
@@ -503,7 +512,6 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
       monedaId: opts.moneda,
       monedaCtz: opts.cotizacion,
       idiomaCbte: opts.idioma ?? 1,
-      formaPago: opts.formaPago,
       impTotal: totalCents / 100,
       items: items,
     };
@@ -514,6 +522,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
       else if (esServicios) invoice.fechaPago = fecha;
     }
 
+    if (opts.formaPago) invoice.formaPago = opts.formaPago;
     if (opts.incoterms) invoice.incoterms = opts.incoterms;
     if (opts.incotermsDes) invoice.incotermsDs = opts.incotermsDes;
     if (opts.obsComerciales) invoice.obsComerciales = opts.obsComerciales;
@@ -527,11 +536,15 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     // Emisión: no se reintenta. Un resultado incierto llega como ArcaResultadoInciertoExpo.
     const result = await this.wsfex.authorize(auth, invoice, callOpts);
     const r = result.fexResultAuth!;
+    // Con Id calculado (último + 1), un reproceso significa que otra emisión usó el mismo Id.
+    if (opts.id === undefined && r.reproceso === 'S') {
+      throw new ArcaConflictoExpo(invoice, result, 'WSFEX respondió Reproceso="S" con un Id nuevo');
+    }
     const aprobada = r.resultado === 'A';
     const cae = aprobada && r.cae !== undefined && r.cae !== null && r.cae !== '' ? String(r.cae) : undefined;
     if (aprobada && cae === undefined) {
       throw new ArcaResultadoInciertoExpo(invoice, {
-        cause: new ArcaSoapError('FEXAuthorize aprobó el comprobante sin informar el CAE', { uncertain: true }),
+        cause: new ArcaResponseError('FEXAuthorize aprobó el comprobante sin informar el CAE', true),
       });
     }
 
@@ -590,13 +603,13 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
   async registrarCAEA(request: CaeaRegInfRequest, call?: CallOptions): Promise<CaeaRegInfResult> {
     validateInvoiceRequest(request);
     request.invoices.forEach((inv, i) => {
-      if (!inv.caea) fail(`invoices[${i}].CAEA`, 'CAEA es requerido');
+      if (!inv.caea) fail(`invoices[${i}].caea`, 'caea es requerido');
       if (!inv.cbteFchHsGen)
         fail(
-          `invoices[${i}].CbteFchHsGen`,
-          'CbteFchHsGen (yyyymmddhhmmss) es requerido desde la RG 5782 (validación 1440)',
+          `invoices[${i}].cbteFchHsGen`,
+          'cbteFchHsGen (yyyymmddhhmmss) es requerido desde la RG 5782 (validación 1440)',
         );
-      formatFechaHora(inv.cbteFchHsGen, `invoices[${i}].CbteFchHsGen`);
+      formatFechaHora(inv.cbteFchHsGen, `invoices[${i}].cbteFchHsGen`);
     });
     const callOpts = this.opts(call);
     const auth = await this.getAuth('wsfe', callOpts);
@@ -615,7 +628,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    *
    * @example
    * ```ts
-   * const result = await arca.registrarFacturaCAEA(caea.CAEA, {
+   * const result = await arca.registrarFacturaCAEA(caea.caea, {
    *   ptoVta: 5,
    *   cbteTipo: CbteTipo.FACTURA_B,
    *   cbteNro: 120,
@@ -673,15 +686,20 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
   // Estado y parámetros WSFE
   // ============================================================
 
-  private async cachedParam<T>(key: string, fn: () => Promise<T>): Promise<T> {
-    if (this.paramCacheTTLMs > 0) {
-      const cached = this.paramCache.get(key);
-      if (cached && cached.expires > Date.now()) return cached.data as T;
-    }
-    const data = await fn();
-    if (this.paramCacheTTLMs > 0) {
-      this.paramCache.set(key, { data, expires: Date.now() + this.paramCacheTTLMs });
-    }
+  /**
+   * Cache de parámetros: guarda la promesa, así las consultas concurrentes
+   * iguales comparten un solo request. Si falla, se descarta (no se cachean errores).
+   */
+  private cachedParam<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    if (this.paramCacheTTLMs <= 0) return fn();
+    const cached = this.paramCache.get(key);
+    if (cached && cached.expires > Date.now()) return cached.data as Promise<T>;
+    const data = fn();
+    const entry = { data: data as Promise<unknown>, expires: Date.now() + this.paramCacheTTLMs };
+    this.paramCache.set(key, entry);
+    data.catch(() => {
+      if (this.paramCache.get(key) === entry) this.paramCache.delete(key);
+    });
     return data;
   }
 
@@ -773,7 +791,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    *
    * @example
    * ```ts
-   * const { MonCotiz, FchCotiz } = await arca.getCotizacion("DOL");
+   * const { monCotiz, fchCotiz } = await arca.getCotizacion("DOL");
    * ```
    */
   async getCotizacion(monedaId: string, call?: CallOptions & { fecha?: Date | string }): Promise<CotizacionResult> {
@@ -800,7 +818,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    *
    * @example
    * ```ts
-   * const url = Arca.generateQRUrl({
+   * const url = ArcaFacturacion.generateQRUrl({
    *   fecha: "2026-03-28",
    *   cuit: 20123456786,
    *   ptoVta: 1,

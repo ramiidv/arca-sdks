@@ -17,7 +17,7 @@
  */
 
 import fs from 'node:fs';
-import { ArcaFacturacion, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
+import { ArcaFacturacion, CbteTipo, IvaTipo, requiereRecuperacion } from '@ramiidv/arca-facturacion';
 
 async function main() {
   const arca = new ArcaFacturacion({
@@ -47,13 +47,16 @@ async function main() {
   if (result.aprobada) {
     console.log(`Factura registrada — Cbte #${result.cbteNro}`);
     console.log(`Total: $${result.importes.total}`);
+  } else if (requiereRecuperacion(result)) {
+    // 703: el número no es el último informado + 1. Si hubo un intento anterior, quizá ya quedó informado.
+    console.error('Número ya informado: verificarlo con recuperarComprobante');
   } else {
     console.error('Error:', result.observaciones);
   }
 
   // 4. Si no hubo movimientos en el período para un punto de venta
-  // await arca.sinMovimientoCAEA(caea.CAEA, 6);
-  // console.log(await arca.consultarSinMovimientoCAEA(caea.CAEA, 6));
+  // await arca.sinMovimientoCAEA(caea.caea, 6);
+  // console.log(await arca.consultarSinMovimientoCAEA(caea.caea, 6));
 
   // Consultar un CAEA existente
   const existente = await arca.consultarCAEA('202611', 1);
