@@ -24,6 +24,49 @@ export function fault(code: string, message: string): string {
     .replace('<soapenv:Envelope ', `<soapenv:Envelope xmlns:tns="${NS}" `);
 }
 
+/**
+ * SOAP Fault con el formato exacto de las respuestas de homologación (texto con
+ * saltos de línea e indentación). `faultstring`/`detail` van sin escapar: pasar
+ * el texto tal como viene en el XML (ej: `relaci&amp;#243;n`).
+ */
+export function homoFault(code: string, faultstring: string, detail = faultstring): string {
+  return `<soapenv:Envelope xmlns:tns="${NS}" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+          <soapenv:Header>
+            <tns:HeaderInfo>
+              <ambiente>
+                homologacion - 207
+              </ambiente>
+              <fecha>
+                2026-11-03T18:11:30.199-03:00
+              </fecha>
+              <vCore>
+                2020.4
+              </vCore>
+              <v2005>
+                2020.7
+              </v2005>
+            </tns:HeaderInfo>
+          </soapenv:Header>
+          <soapenv:Body>
+            <soapenv:Fault>
+        <faultcode>
+          ${code}
+        </faultcode>
+        <faultstring>
+          ${faultstring}
+        </faultstring>
+        <faultactor>
+          
+        </faultactor>
+        <detail>
+          ${detail}
+
+        </detail>
+      </soapenv:Fault>
+          </soapenv:Body>
+        </soapenv:Envelope>`;
+}
+
 export function makeSire(fetchImpl: typeof fetch, extra: Partial<ArcaSireConfig> = {}): ArcaSire {
   const sire = new ArcaSire({
     ...testCert(),

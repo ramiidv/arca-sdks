@@ -79,18 +79,29 @@ const { autorizacion } = await agro.lpg.liquidacionAutorizar({
     nroActComprador: 40,
     nroIngBrutoComprador: 901234567,
     codTipoOperacion: '1',
+    esLiquidacionPropia: 'N',
+    esCanje: 'N',
     codPuerto: 14,
+    desPuertoLocalidad: 'Rosario',
     codGrano: 31,
     cuitVendedor: '30712345671',
     nroIngBrutoVendedor: 900123,
+    actuaCorredor: 'N',
     liquidaCorredor: 'N',
     fechaPrecioOperacion: '2026-10-30',
     precioRefTn: 250000,
+    codGradoEnt: 'G2', // grados del grano: codigoGradoEntregadoXTipoGranoConsultar(codGrano)
+    valGradoEnt: 1,
+    factorEnt: 100,
     precioFleteTn: 0,
+    alicIvaOperacion: 10.5,
     campaniaPPal: 2526,
     codLocalidadProcedencia: 3,
     codProvProcedencia: 1,
+    // Sin certificados de depósito: peso y procedencia sin certificado.
     pesoNetoSinCertificado: 30000,
+    codLocalidadProcedenciaSinCertificado: 3,
+    codProvProcedenciaSinCertificado: 1,
   },
   deducciones: [{ codigoConcepto: 'CO', comisionGastosAdm: 1.5, alicuotaIva: 21 }],
   retenciones: [{ codigoConcepto: 'RG', baseCalculo: 7500000, alicuota: 2 }],
@@ -201,7 +212,7 @@ Además del XSD, se validan reglas del manual: hasta 3 dominios (2144), código 
 contingencia según el tipo de CPE (§4.2: G solo en ferroviaria y ferroviaria DG; en ductos DG, A, C, D, E
 o F), conceptos de cierre y de desactivación A a C y rango de `consultarCPEPorDestino` de hasta 3 días (2152).
 
-**Consultas** (se reintentan ante errores transitorios). Las listas sin resultados devuelven `[]`; si ARCA devuelve errores se lanza `ArcaAgroServiceError`, nunca una lista vacía.
+**Consultas** (se reintentan ante errores transitorios). Las listas sin resultados devuelven `[]`, también cuando el único error que informa ARCA es el 800 ("No existen solicitudes para los parámetros indicados", que homologación responde, por ejemplo, en `consultarCPEPorDestino`, `consultarCPEPPendientesDeResolucion` y `consultarPlantas` sin resultados). Con cualquier otro error se lanza `ArcaAgroServiceError`, nunca una lista vacía; fuera de las listas el 800 también es un error.
 
 | Método                                                                                      | Devuelve                                         |
 | ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
@@ -307,8 +318,8 @@ const { liquidaciones } = await agro.lpg.lsgConsultarXCoe(coe); // un ajuste con
 
 - **Anulación:** `lpgAnularContraDocumento` (y `lsgAnularContraDocumento` en la secundaria) anula generando un **contradocumento**: una nueva liquidación con la misma información que la anulada (manual WSLPG §2.4.47). Consume un número de orden del punto de emisión y arranca en estado `PA` (pendiente de aceptación): el vendedor la acepta desde el sistema web. Devuelve lo mismo que `liquidacionXCoeConsultar`. `liquidacionAnular` y `lsgAnular` siguen en el WSDL pero el manual los discontinuó (v1.21 y v1.22): el SDK no los expone.
 - **Certificación:** `cgAutorizar` lleva solo el bloque de `cabecera.tipoCertificado`: `primaria` (P), `retiroTransferencia` (R o T), `preexistente` o `preexistenteFusion` (E). `cabecera.cuitCorredor` acepta `0` (sin corredor). `cgInformarCalidad` devuelve la certificación como `cgConsultarXCoe`.
-- **Anticipos:** `lpgAutorizarAnticipo({ anticipo: { liquidacion, retenciones?, deducciones? } })` devuelve lo mismo que `liquidacionAutorizar`; `lpgCancelarAnticipo({ coe, ptoEmision, nroOrden, pdf? })` cancela el anticipo con una nueva liquidación.
-- **Validaciones del manual**, además del XSD: códigos de grado `G1`, `G2`, `G3`, `FG`, `F1`, `F2`, `F3` (§3.1), `tipoCertificadoDeposito` `'332'`, el bloque de `cgAutorizar` según su `tipoCertificado`, `ajusteCredito` y/o `ajusteDebito` en los ajustes (unificado, por contrato y `lsg*`, error 3010) y la calidad de `cgInformarCalidad` (`codGrado` y/o `valorFactor`, 3018; `valorGrado` solo con `codGrado`, 3017; no con `G1`-`G3`, 3014; obligatorio con `FG` y `F1`-`F3`, 3015).
+- **Anticipos:** `lpgAutorizarAnticipo({ anticipo: { liquidacion, retenciones?, deducciones? } })` devuelve lo mismo que `liquidacionAutorizar`; `lpgCancelarAnticipo({ coe, ptoEmision, nroOrden, pdf? })` cancela el anticipo con una nueva liquidación (el XSD exige `pdf`: si no se informa, se envía `N`).
+- **Validaciones del manual**, además del XSD: códigos de grado `G1`, `G2`, `G3`, `FG`, `F1`, `F2`, `F3` (§3.1), `tipoCertificadoDeposito` `'332'`, el bloque de `cgAutorizar` según su `tipoCertificado`, `ajusteCredito` y/o `ajusteDebito` en los ajustes (unificado, por contrato y `lsg*`, error 3010), la calidad de `cgInformarCalidad` (`codGrado` y/o `valorFactor`, 3018; `valorGrado` solo con `codGrado`, 3017; no con `G1`-`G3`, 3014; obligatorio con `FG` y `F1`-`F3`, 3015) y, en `liquidacionAutorizar` (§2.4.2.3), `esLiquidacionPropia` si liquida el comprador una compraventa (1609), `actuaCorredor` si no es liquidación propia (1617), `codGradoEnt` y/o `factorEnt` (1631), `valGradoEnt` solo con `codGradoEnt` (1634) y el peso y la procedencia sin certificado solo sin `certificados` (1644, 1646; sin `certificados`, homologación rechaza con 1646 un `pesoNetoSinCertificado` sin `codLocalidadProcedenciaSinCertificado` ni `codProvProcedenciaSinCertificado`).
 - **Sin registros:** las consultas de listas (`liquidacionPorContratoConsultar`, `lsgConsultarXContrato`, `cgBuscarCtg`, `cgBuscarCertConSaldoDisponible` y las paramétricas) devuelven `[]` cuando el único error que informa ARCA es el 600 ("No existen datos...", manual WSLPG §1.7; un 1021 al lado no cambia el resultado). En las demás operaciones el 600 es un error.
 
 ### Validación local

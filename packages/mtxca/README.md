@@ -203,8 +203,8 @@ Los campos del request se llaman igual que en el XSD (`ComprobanteType`, `ItemTy
 - `importeItem` = (`precioUnitario` × `cantidad` − `importeBonificacion`) × (1 + alícuota) en clase A; = `precioUnitario` × `cantidad` − `importeBonificacion` en clase B.
 - Unidad 99 (bonificación) y 97 (seña): sin `cantidad`, `precioUnitario` ni `importeBonificacion`; la bonificación tiene `importeItem` negativo y requiere otro ítem con la misma condición de IVA. En clase A, `importeIVA` = `importeItem` − `importeItem` / (1 + alícuota).
 - Fuera de 97/99, `unidadesMtx` y `codigoMtx` son obligatorios.
-- `importeGravado` = Σ (`importeItem` − IVA) de los ítems con condición 3–6; `importeNoGravado` = Σ ítems condición 1; `importeExento` = Σ ítems condición 2; `importeSubtotal` = gravado + no gravado + exento.
-- `subtotalesIVA`: uno por cada condición 4, 5 o 6 presente, con la suma del IVA de esos ítems.
+- `importeGravado` = Σ (`importeItem` − IVA) de los ítems con condición 3, 4, 5, 6, 8 o 9 (gravados); `importeNoGravado` = Σ ítems condición 1; `importeExento` = Σ ítems condición 2; `importeSubtotal` = gravado + no gravado + exento.
+- `subtotalesIVA`: uno por cada condición 4, 5, 6, 8 o 9 presente, con la suma del IVA de esos ítems.
 - `importeTotal` = `importeSubtotal` + `importeOtrosTributos` + Σ subtotales de IVA = `importeOtrosTributos` + Σ `importeItem`.
 - En una bonificación (99) de clase A, el IVA (en valor absoluto) no puede superar el IVA de los demás ítems de la misma condición (516).
 - Margen de error del manual: error relativo ≤ 0,01% o absoluto ≤ 0,01 × cantidad de elementos.
@@ -214,26 +214,26 @@ Los campos del request se llaman igual que en el XSD (`ComprobanteType`, `ItemTy
 
 ### Otras reglas del manual que se validan localmente
 
-| Regla                                                                                                                                                                                                      | CAE (`autorizar`)       | CAEA (`informarComprobanteCAEA`) |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------- |
-| `condicionIVAReceptor` (RG 5616) obligatoria. ARCA hoy la **observa**; el SDK la exige para no emitir sin ella                                                                                             | 190                     | 390                              |
-| `fechaServicioDesde`/`Hasta` y `fechaVencimientoPago` solo con concepto 2 o 3 (fuera de FCE)                                                                                                               | 122-124                 | — (ARCA solo observa)            |
-| FCE 201 y 206: `fechaVencimientoPago` obligatoria, cualquiera sea el concepto                                                                                                                              | 148                     | 764                              |
-| FCE 202, 203, 207 y 208: `fechaVencimientoPago` no corresponde, cualquiera sea el concepto                                                                                                                 | 149                     | 765                              |
-| FCE: cada `otrosTributos[].descripcion` es obligatoria (en el resto, solo con `codigo` 99, regla 301)                                                                                                      | 302                     | —                                |
-| ND/NC 2, 3, 7, 8, 52, 53: `comprobantesAsociados` o `periodoComprobantesAsociados`, no ambos                                                                                                               | 160, 161                | 778, 779                         |
-| `cancelaEnMismaMonedaExtranjera: 'S'` solo en 1, 6, 51, 201 y 206                                                                                                                                          | 118                     | — (ARCA solo observa)            |
-| `compradores` solo con concepto 1 y no en FCE                                                                                                                                                              | 432, 433                | no se admiten (753)              |
-| `compradores`: más de uno, con receptor informado, CUIT/CUIL/CDI, sin repetir, porcentaje entre 0 y 100 (exclusivo), distintos del emisor, suman 100, el receptor está y es uno de los de mayor porcentaje | 420-429                 | —                                |
-| `codigoConcepto` 1, 2 o 3                                                                                                                                                                                  | 121                     | 713                              |
-| Clase A y FCE: receptor con CUIT (80)                                                                                                                                                                      | 128, 129                | 718, 733                         |
-| `subtotalesIVA` si hay ítems con condición 4, 5 o 6                                                                                                                                                        | 403                     | 715                              |
-| Sujeto No Categorizado (23000000000): solo en 6, 7, 8 con `condicionIVAReceptor` 7; con gravado, tributo 13                                                                                                | 342, 145                | 889 (749 solo observa)           |
-| Datos adicionales FCE: 21 (CBU) y 27 (`ADC`/`SCA`) en 201 y 206; 22 (`S`/`N`) en las notas; 21-23 solo en FCE y con `c1`                                                                                   | 326-336                 | 925-934 (923 solo observa)       |
-| Dato adicional 5: solo en 1, 2, 3, 201, 202, 203, con `c1` de 1 a 6 y sin `c2`-`c6`                                                                                                                        | 337-340                 | 935-938                          |
-| FCE: la factura asocia 88, 91, 990 o 995; la nota lleva un solo asociado FCE, con el `cuit` del emisor; en una anulación, la NC revierte 201/202/206/207 y la ND 203/208                                   | 208, 209, 210, 212, 214 | 808, 809, 810, 812, 814          |
-| Período de asociados: no en notas FCE ni en las facturas 1, 51, 201 y 206                                                                                                                                  | 159, 162                | 777, 780                         |
-| `fechaHoraGen` obligatoria en todo comprobante CAEA, también en `informarAjusteIVACAEA` (desde el 01/08/2026)                                                                                              | —                       | 754                              |
+| Regla                                                                                                                                                                                                               | CAE (`autorizar`)       | CAEA (`informarComprobanteCAEA`) |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------- |
+| `condicionIVAReceptor` (RG 5616) obligatoria. ARCA hoy la **observa**; el SDK la exige para no emitir sin ella                                                                                                      | 190                     | 390                              |
+| `fechaServicioDesde`/`Hasta` y `fechaVencimientoPago` solo con concepto 2 o 3 (fuera de FCE)                                                                                                                        | 122-124                 | — (ARCA solo observa)            |
+| FCE 201 y 206: `fechaVencimientoPago` obligatoria, cualquiera sea el concepto                                                                                                                                       | 148                     | 764                              |
+| FCE 202, 203, 207 y 208: `fechaVencimientoPago` no corresponde, cualquiera sea el concepto                                                                                                                          | 149                     | 765                              |
+| FCE: cada `otrosTributos[].descripcion` es obligatoria (en el resto, solo con `codigo` 99, regla 301)                                                                                                               | 302                     | —                                |
+| ND/NC 2, 3, 7, 8, 52, 53: `comprobantesAsociados` o `periodoComprobantesAsociados`, no ambos                                                                                                                        | 160, 161                | 778, 779                         |
+| `cancelaEnMismaMonedaExtranjera: 'S'` solo en 1, 6, 51, 201 y 206                                                                                                                                                   | 118                     | — (ARCA solo observa)            |
+| `compradores` solo con concepto 1 y no en FCE                                                                                                                                                                       | 432, 433                | no se admiten (753)              |
+| `compradores`: más de uno, con receptor informado, CUIT/CUIL/CDI, sin repetir, porcentaje entre 0 y 100 (exclusivo), distintos del emisor, suman 100, el receptor está y es uno de los de mayor porcentaje          | 420-429                 | —                                |
+| `codigoConcepto` 1, 2 o 3                                                                                                                                                                                           | 121                     | 713                              |
+| Clase A y FCE: receptor con CUIT (80)                                                                                                                                                                               | 128, 129                | 718, 733                         |
+| `subtotalesIVA` si hay ítems con condición 4, 5, 6, 8 o 9                                                                                                                                                           | 403                     | 715                              |
+| Sujeto No Categorizado (23000000000): solo en 6, 7, 8 con `condicionIVAReceptor` 7; con gravado y sin ningún tributo con importe, tributo 13 (con otros tributos y sin el 13, ARCA autoriza con la observación 150) | 342, 145                | 889 (749 solo observa)           |
+| Datos adicionales FCE: 21 (CBU) y 27 (`ADC`/`SCA`) en 201 y 206; 22 (`S`/`N`) en las notas; 21-23 solo en FCE y con `c1`                                                                                            | 326-336                 | 925-934 (923 solo observa)       |
+| Dato adicional 5: solo en 1, 2, 3, 201, 202, 203, con `c1` de 1 a 6 y sin `c2`-`c6`                                                                                                                                 | 337-340                 | 935-938                          |
+| FCE: la factura asocia 88, 91, 990 o 995; la nota lleva un solo asociado FCE, con el `cuit` del emisor; en una anulación, la NC revierte 201/202/206/207 y la ND 203/208                                            | 208, 209, 210, 212, 214 | 808, 809, 810, 812, 814          |
+| Período de asociados: no en notas FCE ni en las facturas 1, 6, 51, 201 y 206 (ARCA rechaza también la Factura B, aunque el manual no la nombre)                                                                     | 159, 162                | 777, 780                         |
+| `fechaHoraGen` obligatoria en todo comprobante CAEA, también en `informarAjusteIVACAEA` (desde el 01/08/2026)                                                                                                       | —                       | 754                              |
 
 En CAEA, la regla de `importeIVA` 0 en las condiciones 1 a 3 solo observa (1122): `informarComprobanteCAEA` no la
 valida localmente. Los mensajes de los ítems citan la numeración de cada método (CAE 500-521, CAEA 1100-1121).
@@ -262,22 +262,22 @@ subtotalesIVA: [{ codigo: 5, importe: 18.9 }],
 
 - `CbteTipo`: 1, 2, 3, 6, 7, 8, 51, 52, 53 (A con leyenda "OPERACIÓN SUJETA A RETENCIÓN") y FCE 201–203, 206–208.
 - `Concepto`: 1 productos, 2 servicios, 3 ambos.
-- `CodigoCondicionIVA`: 1 no gravado, 2 exento, 3 0%, 4 10,5%, 5 21%, 6 27% (y `ALICUOTAS_IVA`).
+- `CodigoCondicionIVA`: 1 no gravado, 2 exento, 3 0%, 4 10,5%, 5 21%, 6 27%, 8 5%, 9 2,5% (y `ALICUOTAS_IVA`). El 8 y el 9 no figuran en el manual, pero `consultarCondicionesIVA` los devuelve y ARCA los autoriza.
 - `UnidadMedidaEspecial`: 95 (anulación/devolución), 97 (seña), 99 (bonificación).
 - `Moneda`: `PES`, `DOL`, `060` (euro). Lista completa: `getMonedas()`.
 
 ## Manejo de errores
 
-| Situación                      | Qué pasa                                                                                                                 |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| Datos inválidos localmente     | `ArcaValidationError` (no se hace ningún request).                                                                       |
-| ARCA aprueba                   | `{ resultado: 'A', comprobante: { cae, fechaVencimientoCAE, ... }, observaciones }`                                      |
-| ARCA aprueba con observaciones | `{ resultado: 'O', comprobante, observaciones }`                                                                         |
+| Situación                      | Qué pasa                                                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Datos inválidos localmente     | `ArcaValidationError` (no se hace ningún request).                                                                      |
+| ARCA aprueba                   | `{ resultado: 'A', comprobante: { cae, fechaVencimientoCAE, ... }, observaciones }`                                     |
+| ARCA aprueba con observaciones | `{ resultado: 'O', comprobante, observaciones }`                                                                        |
 | ARCA rechaza una emisión       | `ArcaRechazoError` (`operacion`, `errors[]` y `observaciones[]` con `{ code, msg }`). También es un `ArcaServiceError`. |
-| Consulta con `arrayErrores`    | `ArcaServiceError` con `errors[]` (`code`, `msg`).                                                                       |
-| Fault SOAP, HTTP, red, timeout | `ArcaSoapError` (`uncertain`, `faultString`, `statusCode`).                                                              |
-| Respuesta con forma inesperada | `ArcaResponseError` (`uncertain: true` en emisiones).                                                                    |
-| Login WSAA                     | `ArcaAuthError` / `ArcaTicketVigenteError`.                                                                              |
+| Consulta con `arrayErrores`    | `ArcaServiceError` con `errors[]` (`code`, `msg`).                                                                      |
+| Fault SOAP, HTTP, red, timeout | `ArcaSoapError` (`uncertain`, `faultString`, `statusCode`).                                                             |
+| Respuesta con forma inesperada | `ArcaResponseError` (`uncertain: true` en emisiones).                                                                   |
+| Login WSAA                     | `ArcaAuthError` / `ArcaTicketVigenteError`.                                                                             |
 
 `ArcaRechazoError` corresponde a `resultado: 'R'` de `autorizar`, `autorizarAjusteIVA`, `informarComprobanteCAEA`, `informarAjusteIVACAEA` e `informarCAEANoUtilizado*`; `operacion` es el método de ARCA (ej. `autorizarComprobante`). Los errores de ARCA sin `resultado: 'R'` (el `arrayErrores` de `solicitarCAEA`, o una emisión respondida con `arrayErrores` sin `resultado`) lanzan `ArcaServiceError`, como en las consultas.
 

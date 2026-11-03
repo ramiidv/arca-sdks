@@ -17,7 +17,7 @@ import {
 import { ArcaRechazoError as RechazoDeCommon, WSAA_ENDPOINTS } from '@ramiidv/arca-common';
 import type { EmitirCertificadoParams } from '../src/index.js';
 import { hangingReply, mockFetch, xmlResponse } from '@ramiidv/arca-common/testing';
-import { CUIT_AGENTE, HEADER_INFO, NS, envelope, fault, makeSire, sentBody } from './helpers.js';
+import { CUIT_AGENTE, HEADER_INFO, NS, envelope, fault, homoFault, makeSire, sentBody } from './helpers.js';
 
 /** `xs:sequence` de `tns:certificado` en C2005_schema.xsd. */
 const XSD_CERTIFICADO = [
@@ -266,6 +266,77 @@ describe('emitirCertificado', () => {
       ArcaAuthError,
     );
     expect(clear).not.toHaveBeenCalled();
+  });
+
+  // Faults reales de homologación (HTTP 500, soapenv:Server): rechazos de
+  // autenticación previos a procesar el request. Ninguno es incierto.
+  it.each([
+    ['MISSING_AUTHENTICATION_TOKEN', 'MISSING_AUTHENTICATION_TOKEN', 'SIRE emitir: MISSING_AUTHENTICATION_TOKEN'],
+    ['CANT_PARSE_TOKEN', 'CANT_PARSE_TOKEN', 'SIRE emitir: CANT_PARSE_TOKEN'],
+    [
+      'CANT_VERIFY_SIGN',
+      'No se pudo verificar la firma por error general',
+      'SIRE emitir: CANT_VERIFY_SIGN (No se pudo verificar la firma por error general)',
+    ],
+    [
+      'BAD_SERVICE',
+      'V2 - El service (wsfecred) no es igual a los nombres de sistema',
+      'SIRE emitir: BAD_SERVICE (V2 - El service (wsfecred) no es igual a los nombres de sistema)',
+    ],
+    [
+      'CANT_VERIFY_DATA',
+      'No se pudo verificar la firma',
+      'SIRE emitir: CANT_VERIFY_DATA (No se pudo verificar la firma)',
+    ],
+  ])('Fault real %s → ArcaAuthError (no incierto), sin borrar el ticket', async (code, detail, message) => {
+    const m = mockFetch(xmlResponse(homoFault('soapenv:Server', code, detail), 500));
+    const sire = makeSire(m, { retries: 3 });
+    const clear = vi.spyOn(sire, 'clearAuthCache');
+    const err = await sire.emitirCertificado(FACTURA).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaAuthError);
+    expect(err).not.toBeInstanceOf(ArcaSoapError);
+    expect(err).not.toBeInstanceOf(ArcaSireServiceError);
+    expect(err.uncertain).not.toBe(true);
+    expect(err.message).toBe(message);
+    expect(err.faultCode).toBe('soapenv:Server');
+    expect(err.cause).toBeInstanceOf(ArcaSoapError);
+    expect(clear).not.toHaveBeenCalled();
+    expect(m.calls).toHaveLength(1);
+  });
+
+  it.each([
+    ['No existe persona con id 20123456786.', 'No existe persona con id 20123456786.'],
+    [
+      'La CUIT del agente de retenci&amp;#243;n 30500010912 debe ser una relaci&amp;#243;n delegada.',
+      'La CUIT del agente de retención 30500010912 debe ser una relación delegada.',
+    ],
+  ])('Fault real de negocio %s → ArcaSireServiceError, no ArcaAuthError', async (raw, msg) => {
+    const sire = makeSire(mockFetch(xmlResponse(homoFault('soapenv:Client', raw), 500)));
+    const err = await sire.emitirCertificado(FACTURA).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSireServiceError);
+    expect(err).not.toBeInstanceOf(ArcaAuthError);
+    expect(err.faultCode).toBe('soapenv:Client');
+    expect(err.message).toBe(`SIRE emitir: ${msg}`);
+    expect(err.errors).toEqual([{ code: 0, msg }]);
+  });
+
+  it('Fault real de schema (namespace arca.gob.ar) → ArcaSireServiceError con &amp;apos; decodificado', async () => {
+    const raw =
+      'XML invalido, no cumple el schema: cvc-elt.1: Cannot find the declaration of element &amp;apos;ser:emitir&amp;apos;.';
+    const sire = makeSire(mockFetch(xmlResponse(homoFault('soapenv:Server', raw), 500)));
+    const err = await sire.emitirCertificado(FACTURA).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSireServiceError);
+    expect(err).not.toBeInstanceOf(ArcaAuthError);
+    expect(err.errors[0].msg).toBe(
+      "XML invalido, no cumple el schema: cvc-elt.1: Cannot find the declaration of element 'ser:emitir'.",
+    );
+  });
+
+  it('un código en mayúsculas desconocido de soapenv:Server sigue siendo incierto', async () => {
+    const sire = makeSire(mockFetch(xmlResponse(homoFault('soapenv:Server', 'INTERNAL_ERROR'), 500)));
+    const err = await sire.emitirCertificado(FACTURA).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err.uncertain).toBe(true);
   });
 
   it('un rechazo de negocio no descarta el ticket', async () => {

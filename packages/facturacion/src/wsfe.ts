@@ -49,6 +49,34 @@ function checkErrors(result: R): void {
   throw error;
 }
 
+/** 602 de WSFEv1: la consulta no tiene resultados ("Sin Resultados" / "No existen datos"). */
+const SIN_RESULTADOS = 602;
+
+/**
+ * 10102 de `FECAEASinMovimientoConsultar`: el CAEA no tiene informes "sin
+ * movimiento" ("no se encuentra registrado ... como sin movimientos").
+ */
+const CAEA_SIN_INFORMES_SIN_MOV = 10102;
+
+/**
+ * `[]` si ARCA respondió solo con alguno de los códigos de "sin resultados"
+ * indicados (ej. 602, "Sin Resultados"); cualquier otro error se relanza.
+ */
+async function vacioSiSinResultados<T>(codigos: readonly number[], fn: () => Promise<T[]>): Promise<T[]> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (
+      err instanceof ArcaWSFEError &&
+      err.errors.length > 0 &&
+      err.errors.every((e) => codigos.includes(Number(e.code)))
+    ) {
+      return [];
+    }
+    throw err;
+  }
+}
+
 /** Error interno de ARCA (500, 501, 502): no garantiza que no se haya procesado. */
 function errorInterno(result: R): ArcaWSFEError | undefined {
   const error = erroresDe(result);
@@ -277,8 +305,15 @@ export class WsfeClient extends SoapServiceClient {
     return this.getParam(auth, 'FEParamGetTiposOpcional', 'OpcionalTipo', S.PARAM_ITEM, opts);
   }
 
+  /**
+   * Puntos de venta del emisor (`FEParamGetPtosVenta`). Devuelve `[]` si no
+   * tiene ninguno (ARCA responde el error 602 "Sin Resultados"); cualquier otro
+   * error lanza.
+   */
   async getPuntosVenta(auth: WsfeAuth, opts?: CallOptions): Promise<PtoVentaItem[]> {
-    return this.getParam(auth, 'FEParamGetPtosVenta', 'PtoVenta', S.PTO_VENTA, opts);
+    return vacioSiSinResultados([SIN_RESULTADOS], () =>
+      this.getParam<PtoVentaItem>(auth, 'FEParamGetPtosVenta', 'PtoVenta', S.PTO_VENTA, opts),
+    );
   }
 
   /** Actividades del emisor (`FEParamGetActividades`). */
@@ -423,7 +458,10 @@ export class WsfeClient extends SoapServiceClient {
 
   /**
    * Consulta los informes "sin movimiento" de un CAEA
-   * (`FECAEASinMovimientoConsultar`). Devuelve `[]` si no hay ninguno.
+   * (`FECAEASinMovimientoConsultar`). Devuelve `[]` si no hay ninguno: ARCA
+   * responde sin `ResultGet` o con el error 10102 ("El CAEA informado no se
+   * encuentra registrado ... como sin movimientos") o 602 ("Sin Resultados").
+   * Cualquier otro error lanza.
    * @param caea - CAEA a consultar.
    * @param ptoVta - Punto de venta vinculado al CAEA.
    */
@@ -433,14 +471,16 @@ export class WsfeClient extends SoapServiceClient {
     ptoVta: number,
     opts?: CallOptions,
   ): Promise<CaeaSinMovItem[]> {
-    const result = await this.consulta<{ resultGet?: CaeaSinMovItem[] }>(
-      'FECAEASinMovimientoConsultar',
-      auth,
-      { caea, ptoVta },
-      { request: S.CAEA_SIN_MOV_CONSULTAR_REQ, response: S.CAEA_SIN_MOV_CONS_RESP },
-      opts,
-    );
-    return (result.resultGet ?? []).map((i) => ({ ...i, fchProceso: i.fchProceso ?? '' }));
+    return vacioSiSinResultados([CAEA_SIN_INFORMES_SIN_MOV, SIN_RESULTADOS], async () => {
+      const result = await this.consulta<{ resultGet?: CaeaSinMovItem[] }>(
+        'FECAEASinMovimientoConsultar',
+        auth,
+        { caea, ptoVta },
+        { request: S.CAEA_SIN_MOV_CONSULTAR_REQ, response: S.CAEA_SIN_MOV_CONS_RESP },
+        opts,
+      );
+      return (result.resultGet ?? []).map((i) => ({ ...i, fchProceso: i.fchProceso ?? '' }));
+    });
   }
 }
 

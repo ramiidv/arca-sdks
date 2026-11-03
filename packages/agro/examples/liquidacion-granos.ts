@@ -43,7 +43,7 @@ async function main() {
       esLiquidacionPropia: 'N',
       esCanje: 'N',
       codPuerto: 14,
-      desPuertoLocalidad: 'Puerto Rosario',
+      desPuertoLocalidad: 'Rosario',
       codGrano: 31,
       cuitVendedor: '30712345671',
       nroIngBrutoVendedor: 900123,
@@ -51,12 +51,21 @@ async function main() {
       liquidaCorredor: 'N',
       fechaPrecioOperacion: '2026-10-30',
       precioRefTn: 250000,
+      // Grado entregado: los códigos y valores de cada grano salen de
+      // codigoGradoEntregadoXTipoGranoConsultar(codGrano).
+      codGradoEnt: 'G2',
+      valGradoEnt: 1,
+      factorEnt: 100,
       precioFleteTn: 0,
       alicIvaOperacion: 10.5,
       campaniaPPal: 2526,
       codLocalidadProcedencia: 3,
       codProvProcedencia: 1,
+      // Sin certificados de depósito se informan el peso y la procedencia sin
+      // certificado; con `certificados`, ninguno de los tres (errores 1644 y 1646).
       pesoNetoSinCertificado: 30000,
+      codLocalidadProcedenciaSinCertificado: 3,
+      codProvProcedenciaSinCertificado: 1,
     },
     deducciones: [{ codigoConcepto: 'CO', detalleAclaratorio: 'Comisión', comisionGastosAdm: 1.5, alicuotaIva: 21 }],
     retenciones: [{ codigoConcepto: 'RG', baseCalculo: 7500000, alicuota: 2 }],

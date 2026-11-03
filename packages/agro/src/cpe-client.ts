@@ -3,7 +3,15 @@ import type { CallOptions, ServerStatus, ServiceErrorDetail, SoapOperationKind }
 import { CPE_NAMESPACE } from './constants.js';
 import type { ServiceContext } from './context.js';
 import { ArcaAgroResponseError } from './errors.js';
-import { at, checkErrors, decodeResult, requireValue, ticketAuth, withAdvertencias } from './internal.js';
+import {
+  at,
+  checkErrors,
+  decodeResult,
+  requireValue,
+  soloSinRegistros,
+  ticketAuth,
+  withAdvertencias,
+} from './internal.js';
 import { encodeRequest, list, obj } from './schema.js';
 import type { Schema } from './schema.js';
 import * as S from './cpe-schemas.js';
@@ -165,7 +173,8 @@ const conCabecera = (node: Record<string, unknown>): boolean =>
  * `uncertain: true` (ver README, "Recuperar una emisión incierta").
  *
  * El error 550 (no se pudo generar el PDF) no cancela la operación: el
- * resultado viene sin `pdf` y con el error en `advertencias`.
+ * resultado viene sin `pdf` y con el error en `advertencias`. En las consultas
+ * de lista, el error 800 (sin resultados) devuelve `[]`.
  */
 export class CpeClient extends SoapServiceClient {
   readonly #ctx: ServiceContext;
@@ -181,17 +190,17 @@ export class CpeClient extends SoapServiceClient {
   // ============================================================
 
   /**
-   * Llama a una operación de WSCPE. Los elementos de request/response son
+   * Llama a una operación de WSCPE y devuelve el nodo `respuesta`, sin
+   * verificar `errores`. Los elementos de request/response son
    * `<Operacion>Req` / `<Operacion>Resp` (salvo los de `ELEMENTOS`) y el
-   * SOAPAction es `namespace + operacion`. Devuelve el nodo `respuesta` y los
-   * errores admitidos, después de verificar `errores`.
+   * SOAPAction es `namespace + operacion`.
    */
-  async #call(
+  async #request(
     method: string,
     body: Record<string, unknown> | null,
     kind: SoapOperationKind,
     opts?: CallOptions,
-  ): Promise<{ node: Record<string, unknown>; advertencias: ServiceErrorDetail[] }> {
+  ): Promise<Record<string, unknown>> {
     const element = method.charAt(0).toUpperCase() + method.slice(1);
     const elementos = ELEMENTOS[method];
     const params =
@@ -211,7 +220,17 @@ export class CpeClient extends SoapServiceClient {
     if (respuesta === undefined || respuesta === null || typeof respuesta !== 'object' || Array.isArray(respuesta)) {
       throw new ArcaAgroResponseError(`${SERVICE} ${method}: la respuesta no tiene <respuesta>`, kind === 'emision');
     }
-    const node = respuesta as Record<string, unknown>;
+    return respuesta as Record<string, unknown>;
+  }
+
+  /** `#request` y verificación de `errores`: devuelve el nodo y los errores admitidos. */
+  async #call(
+    method: string,
+    body: Record<string, unknown> | null,
+    kind: SoapOperationKind,
+    opts?: CallOptions,
+  ): Promise<{ node: Record<string, unknown>; advertencias: ServiceErrorDetail[] }> {
+    const node = await this.#request(method, body, kind, opts);
     const advertencias = checkErrors(node, SERVICE, method, kind, conCabecera);
     return { node, advertencias };
   }
@@ -293,6 +312,11 @@ export class CpeClient extends SoapServiceClient {
     );
   }
 
+  /**
+   * Consulta de lista: devuelve los `<item>` de la respuesta. Si el único error
+   * no admitido es el 800 ("No existen solicitudes para los parámetros
+   * indicados"), devuelve `[]`.
+   */
   async #lista<T>(
     method: string,
     body: Record<string, unknown>,
@@ -300,7 +324,9 @@ export class CpeClient extends SoapServiceClient {
     schema: Schema,
     opts?: CallOptions,
   ): Promise<T[]> {
-    const { node } = await this.#call(method, body, 'consulta', opts);
+    const node = await this.#request(method, body, 'consulta', opts);
+    if (soloSinRegistros(node, SERVICE)) return [];
+    checkErrors(node, SERVICE, method, 'consulta');
     return decodeResult<Record<string, T[]>>(node, listOf(item, schema), `${method}.respuesta`, 'consulta')[item];
   }
 
@@ -940,13 +966,13 @@ export class CpeClient extends SoapServiceClient {
     return this.#lista('consultarTiposGrano', {}, 'grano', S.R_CODIGO_DESCRIPCION, opts);
   }
 
-  /** Plantas habilitadas de un CUIT. */
+  /** Plantas habilitadas de un CUIT. Sin plantas → `[]`. */
   async consultarPlantas(cuit: CuitInput, opts?: CallOptions): Promise<PlantaCPE[]> {
     const solicitud = encodeRequest({ cuit }, S.SOLICITUD_CUIT, 'consultarPlantas');
     return this.#lista('consultarPlantas', { solicitud }, 'planta', S.R_PLANTA, opts);
   }
 
-  /** Plantas de derivados granarios de un CUIT (titular de planta). */
+  /** Plantas de derivados granarios de un CUIT (titular de planta). Sin plantas → `[]`. */
   async consultarPlantasDG(cuit: CuitInput, opts?: CallOptions): Promise<PlantaDGCPE[]> {
     const solicitud = encodeRequest({ cuit }, S.SOLICITUD_CUIT, 'consultarPlantasDG');
     return this.#lista('consultarPlantasDG', { solicitud }, 'planta', S.R_PLANTA_DG, opts);

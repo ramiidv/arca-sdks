@@ -73,7 +73,7 @@ Emisiones (nunca se reintentan):
 - Devuelven `CPEResultado { cabecera?, pdf?, metadata?, advertencias? }`: `editarCPEAutomotor`, `editarCPEConfirmadaAutomotor`, `confirmarArriboCPE`, `confirmacionDefinitivaCPEAutomotor`, `descargadoDestinoCPE`, `rechazoCPE`, `anularCPE`, `nuevoDestinoDestinatarioCPEAutomotor`, `regresoOrigenCPEAutomotor`, `desvioCPEAutomotor`, `informarContingencia`, `cerrarContingenciaCPE`, `editarCPEFerroviaria`, `editarCPEConfirmadaFerroviaria`, `confirmacionDefinitivaCPEFerroviaria`, `nuevoDestinoDestinatarioCPEFerroviaria`, `regresoOrigenCPEFerroviaria`, `desvioCPEFerroviaria`
 - Comunes a automotor y ferroviaria (según `cartaPorte.tipoCPE`, manual §2.8): `confirmarArriboCPE`, `descargadoDestinoCPE`, `rechazoCPE`, `anularCPE`, `informarContingencia`, `cerrarContingenciaCPE`
 
-Consultas (se reintentan; listas vacías → `[]`):
+Consultas (se reintentan; listas vacías → `[]`, también si el único error es el 800 "No existen solicitudes para los parámetros indicados"; fuera de las listas el 800 lanza):
 - `consultarCPEAutomotor({ cuitSolicitante?, cartaPorte? | nroCTG? })` → `CPEAutomotorDetalle`
 - `consultarCPEFerroviaria(...)` → `CPEFerroviariaDetalle`
 - `consultaCPEFerroviariaPorNroOperativo(nroOperativo)` → `OperativoFerroviarioCPE`
@@ -101,12 +101,12 @@ Derivados granarios (DG; emisiones nunca reintentadas; `autorizar*` → detalle 
 ## LpgClient (agro.lpg)
 
 Emisiones (nunca se reintentan):
-- `liquidacionAutorizar({ liquidacion: LiquidacionLpg, deducciones?, retenciones?, percepciones? })` → `{ autorizacion: LiquidacionAutorizadaLpg (coe: string), eventos, advertencias? }`
+- `liquidacionAutorizar({ liquidacion: LiquidacionLpg, deducciones?, retenciones?, percepciones? })` → `{ autorizacion: LiquidacionAutorizadaLpg (coe: string), eventos, advertencias? }`. Valida localmente (manual §2.4.2.3): `esLiquidacionPropia` si liquida el comprador una compraventa (1609), `actuaCorredor` si no es propia (1617), `codGradoEnt` y/o `factorEnt` (1631), `valGradoEnt` solo con `codGradoEnt` (1634); con `certificados` no van `pesoNetoSinCertificado` ni la procedencia sin certificado (1644, 1646), sin `certificados`, `pesoNetoSinCertificado` necesita `codLocalidadProcedenciaSinCertificado`/`codProvProcedenciaSinCertificado` (1646, observado en homologación)
 - `lpgAnularContraDocumento({ anulacionBase: { puntoEmision, nroOrden, coeAnular } })` → `LiquidacionConsultaResultado { liquidacion?, autorizacion (coe), pdf?, eventos }`. Anula generando un contradocumento (nueva liquidación, consume un número de orden, estado inicial `PA` hasta que el vendedor la acepta). `lsgAnularContraDocumento` es el equivalente de la secundaria. `liquidacionAnular` y `lsgAnular` (en el WSDL, discontinuados por el manual v1.21/v1.22) no se exponen.
 - `liquidacionAjustarUnificado({ ajusteBase, ajusteCredito?, ajusteDebito? })` → `{ ajusteUnificado (coe: string), eventos }`
 - `liquidacionAjustarContrato({ ajusteBase, ajusteCredito?: AjustePorImporteLpg, ajusteDebito? })` → `{ ajusteContrato (coe: string), eventos }`
 - `asociarLiquidacionAContrato({ coe, nroContrato, cuitComprador, cuitVendedor, cuitCorredor?, codGrano })` → `LiquidacionConsultaResultado`
-- `lpgAutorizarAnticipo({ anticipo: { liquidacion: LiquidacionAnticipoLpg, retenciones?, deducciones? } })` → como `liquidacionAutorizar`; `lpgCancelarAnticipo({ coe, ptoEmision, nroOrden, pdf? })` → `LiquidacionConsultaResultado`
+- `lpgAutorizarAnticipo({ anticipo: { liquidacion: LiquidacionAnticipoLpg, retenciones?, deducciones? } })` → como `liquidacionAutorizar`; `lpgCancelarAnticipo({ coe, ptoEmision, nroOrden, pdf? })` → `LiquidacionConsultaResultado` (`pdf` es obligatorio en el XSD: sin `pdf: true` se envía `N`)
 - `lsgAutorizar({ liqSecundariaBase, facturaPapel? })` → `{ autorizacion (coe: string), eventos }`
 - `lsgAjustarXCoe({ coe, ptoEmision, nroOrden, codLocalidad, codProvincia, ajusteCredito?, ajusteDebito?, fusion? })`, `lsgAjustarXContrato({ nroContrato, ..., cuitComprador, cuitVendedor, cuitCorredor? (0 = sin corredor), codGrano })` → `LsgAjusteResultado { coe: string, ajusteCredito?, ajusteDebito?, totalesUnificados?, eventos }`
 - `lsgAsociarAContrato(AsociarAContratoParams)` → `LsgConsultaResultado`

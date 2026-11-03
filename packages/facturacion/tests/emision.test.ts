@@ -115,8 +115,11 @@ describe('emisiones: nunca se reintentan', () => {
   });
 
   it.each([
-    [600, 'ValidacionDeToken: No aparecio CUIT en lista de relaciones'],
-    [601, 'CUIT representada no incluida en token'],
+    [600, 'ValidacionDeToken: No aparecio CUIT en lista de relaciones: 20111111112'],
+    [600, 'ValidacionDeToken: No valido Id Sistema: wsfe(Id Sistema de token es: wsfex)'],
+    [600, 'ValidacionDeToken: Error al verificar hash: '],
+    [600, 'ValidacionDeToken: Parametro nulo o vacio (token)'],
+    [601, 'CUIT representada no incluida en Token'],
   ])('error de autenticación %i → ArcaAuthError no reintentable, sin borrar el ticket', async (code, msg) => {
     const arca = await arcaDePrueba();
     const clear = vi.spyOn(arca.wsaa, 'clearTicket');

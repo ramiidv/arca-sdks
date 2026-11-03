@@ -1085,7 +1085,6 @@ export class WsfeClient extends SoapServiceClient {
         fchCotiz?: string;
     }): Promise<CotizacionResult>;
     getMonedas(auth: WsfeAuth, opts?: CallOptions): Promise<MonedaItem[]>;
-    // (undocumented)
     getPuntosVenta(auth: WsfeAuth, opts?: CallOptions): Promise<PtoVentaItem[]>;
     // (undocumented)
     getTiposComprobante(auth: WsfeAuth, opts?: CallOptions): Promise<ParamItem[]>;

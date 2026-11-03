@@ -34,10 +34,12 @@ const CANCELA_MISMA_MONEDA = new Set([1, 6, 51, 201, 206]);
 /**
  * Facturas que no admiten período de comprobantes asociados (162 / 780). El
  * manual lista "1, 2, 51, 201 ó 206 correspondientes a Facturas": el 2 (ND A)
- * contradice la 160, que le admite período, así que se toman solo las facturas
- * A; la B (6) no figura.
+ * contradice la 160, que le admite período (y ARCA lo acepta), así que se
+ * toman todas las facturas que admite WSMTXCA: A (1), B (6), A con leyenda
+ * (51) y FCE A y B (201, 206). ARCA rechaza con 162 el período también en la
+ * Factura B, aunque el manual no la nombre.
  */
-const FACTURA_SIN_PERIODO = new Set([1, 51, 201, 206]);
+const FACTURA_SIN_PERIODO = new Set([1, 6, 51, 201, 206]);
 /** Tipos que admiten el dato adicional 5 (337 / 935): A y FCE A. */
 const TIPOS_MOTIVO_EXCEPCION = union(new Set([1, 2, 3]), FCE_A);
 
@@ -55,8 +57,8 @@ const CONCEPTOS = new Set([1, 2, 3]);
 /** Condiciones de IVA sin IVA (no gravado, exento, 0%): importeIVA 0 (521). */
 const CONDICION_SIN_IVA = new Set([1, 2, 3]);
 /** Condiciones de IVA gravadas (110) y las que llevan subtotal de IVA (127, 400). */
-const GRAVADAS = new Set([3, 4, 5, 6]);
-const CON_SUBTOTAL = new Set([4, 5, 6]);
+const GRAVADAS = new Set([3, 4, 5, 6, 8, 9]);
+const CON_SUBTOTAL = new Set([4, 5, 6, 8, 9]);
 const DOC_CUIT = 80;
 /** Tipos de documento de los compradores: CUIT, CUIL o CDI (422). */
 const DOC_COMPRADOR = new Set([80, 86, 87]);
@@ -413,8 +415,8 @@ function esAnulacionFCE(c: MtxcaComprobanteBase): boolean {
 /**
  * Comprobantes asociados y período en FCE y facturas (CAE 159, 162, 208, 209,
  * 210, 212, 214; CAEA 777, 780, 808, 809, 810, 812, 814):
- * - Las notas FCE no llevan período (159 / 777), y tampoco las facturas 1, 51,
- *   201 y 206 (162 / 780).
+ * - Las notas FCE no llevan período (159 / 777), y tampoco las facturas 1, 6,
+ *   51, 201 y 206 (162 / 780).
  * - Las facturas FCE solo asocian 88, 91, 990 o 995 (208 / 808).
  * - Las notas FCE llevan exactamente un asociado FCE: 201 o 206, o en una
  *   anulación (dato adicional 22 = "S") cualquier FCE (212 / 812), y ese
@@ -487,7 +489,10 @@ function reglasAsociadosFCE(
  * Sujeto No Categorizado (23000000000):
  * - 342 / 889: solo con comprobantes clase B (6, 7, 8) y `condicionIVAReceptor` 7.
  * - 145 (solo CAE; en CAEA, 749, solo observa): con importe gravado + IVA > 0
- *   hay que informar el tributo 13 con importe > 0.
+ *   hay que informar el tributo 13: ARCA rechaza con 145 solo si no hay
+ *   ningún tributo; si hay otros tributos pero no el 13, lo autoriza con la
+ *   observación 150, así que localmente solo se exige algún tributo con
+ *   importe > 0.
  */
 function reglasNoCategorizado(
   c: MtxcaComprobanteBase,
@@ -505,13 +510,10 @@ function reglasNoCategorizado(
   }
   if (codigos.percepcion === undefined || !claseB) return;
   const gravado = imp(c.importeGravado) + sum(arr(c.subtotalesIVA).map((s) => imp(s?.importe)));
-  const percepcion = arr(c.otrosTributos).some(
-    (t) => t?.codigo === TRIBUTO_PERCEPCION_NO_CATEGORIZADO && imp(t.importe) > 0,
-  );
-  if (gravado > 0 && !percepcion) {
+  if (gravado > 0 && !arr(c.otrosTributos).some((t) => imp(t?.importe) > 0)) {
     errors.push({
       field: 'otrosTributos',
-      message: `al Sujeto No Categorizado con importe gravado hay que informar el tributo ${TRIBUTO_PERCEPCION_NO_CATEGORIZADO} con importe > 0 (${codigos.percepcion})`,
+      message: `al Sujeto No Categorizado con importe gravado hay que informar el tributo ${TRIBUTO_PERCEPCION_NO_CATEGORIZADO} (o al menos otro tributo con importe > 0) en otrosTributos (${codigos.percepcion})`,
     });
   }
 }

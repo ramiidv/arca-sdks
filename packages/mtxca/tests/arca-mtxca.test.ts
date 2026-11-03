@@ -117,6 +117,33 @@ describe('ArcaMtxca', () => {
     expect(m.fn).toHaveBeenCalledTimes(1);
   });
 
+  it('autorizar con condición de IVA 8 (5%): pasa la validación local y devuelve el CAE (respuesta de homologación)', async () => {
+    const m = mockFetch(
+      soapResponse(
+        'autorizarComprobanteResponse',
+        '<resultado>O</resultado><comprobanteResponse><cuit>20123456786</cuit><codigoTipoComprobante>1</codigoTipoComprobante>' +
+          '<numeroPuntoVenta>3</numeroPuntoVenta><numeroComprobante>2</numeroComprobante><fechaEmision>2026-11-03</fechaEmision>' +
+          '<CAE>86441046318277</CAE><fechaVencimientoCAE>2026-11-13</fechaVencimientoCAE></comprobanteResponse>' +
+          '<arrayObservaciones><codigoDescripcion><codigo>504</codigo><descripcion>Ítem 1: El campo Código de Producto/Servicio' +
+          ' no es un código GS1 válido (GTIN-8, GTIN-12 o GTIN-13)</descripcion></codigoDescripcion></arrayObservaciones>',
+      ),
+    );
+    const base = facturaA();
+    const res = await mtxca(m.fetch).autorizar({
+      ...base,
+      numeroPuntoVenta: 3,
+      numeroComprobante: 2,
+      importeOtrosTributos: 0,
+      importeTotal: 105,
+      otrosTributos: undefined,
+      items: [{ ...base.items[0], codigoCondicionIVA: 8, importeIVA: 5, importeItem: 105 }],
+      subtotalesIVA: [{ codigo: 8, importe: 5 }],
+    });
+    expect(res.resultado).toBe('O');
+    expect(res.comprobante?.cae).toBe('86441046318277');
+    expect(m.calls[0].body).toContain('<codigoCondicionIVA>8</codigoCondicionIVA>');
+  });
+
   it('autorizar: un rechazo de ARCA lanza ArcaRechazoError (no devuelve resultado R)', async () => {
     const m = mockFetch(
       soapResponse(

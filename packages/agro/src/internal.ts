@@ -31,10 +31,13 @@ export const CODIGOS_ADMITIDOS: Readonly<Record<AgroServiceName, readonly number
  * los parámetros de búsqueda. En una consulta de lista no es un error: la lista
  * vuelve vacía (ver `soloSinRegistros`).
  *
+ * - WSCPE 800: "No existen solicitudes para los parámetros indicados" (lo
+ *   responde homologación en las consultas de CPE y en las paramétricas sin
+ *   resultados, ej: `consultarPlantas` de un CUIT sin plantas).
  * - WSLPG 600: "No existen datos en las bases de la Administración según los
  *   parámetros de búsqueda informados" (manual WSLPG §1.7, para todos los métodos).
  */
-export const CODIGO_SIN_REGISTROS: Readonly<Partial<Record<AgroServiceName, number>>> = { WSLPG: 600 };
+export const CODIGO_SIN_REGISTROS: Readonly<Record<AgroServiceName, number>> = { WSCPE: 800, WSLPG: 600 };
 
 /** Un error que cancela la operación: código no numérico o no admitido (ver `CODIGOS_ADMITIDOS`). */
 const esFatal = (e: ServiceErrorDetail, service: AgroServiceName): boolean =>
@@ -42,14 +45,14 @@ const esFatal = (e: ServiceErrorDetail, service: AgroServiceName): boolean =>
 
 /**
  * `true` si el único error que cancela la operación es "sin registros" (ver
- * `CODIGO_SIN_REGISTROS`); un error admitido junto al 600 no cambia el
+ * `CODIGO_SIN_REGISTROS`); un error admitido junto a ese código no cambia el
  * resultado. Solo para consultas de lista: en una emisión o en una consulta
  * de un único registro el código sigue siendo un error.
  */
 export function soloSinRegistros(node: Record<string, unknown>, service: AgroServiceName): boolean {
   const codigo = CODIGO_SIN_REGISTROS[service];
   const fatales = extractErrors(node).filter((e) => esFatal(e, service));
-  return codigo !== undefined && fatales.length > 0 && fatales.every((e) => e.code === codigo);
+  return fatales.length > 0 && fatales.every((e) => e.code === codigo);
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);

@@ -79,7 +79,9 @@ export class ArcaCdc extends ArcaSdkBase<'wscdc'> {
 
   /**
    * Modalidades de autorización habilitadas (`ComprobantesModalidadConsultar`).
-   * Como en todas las tablas, los `Events` de ARCA (si vinieron) quedan en `lista.eventos`.
+   * Como en todas las tablas, los `Events` de ARCA (si vinieron, sin los de
+   * código 0) quedan en `lista.eventos`, y si ARCA responde el error 503 "Sin
+   * Resultados" la tabla es `[]` (cualquier otro error lanza `ArcaServiceError`).
    */
   async getModalidades(opts?: CallOptions): Promise<ListaCdc<ModalidadItem>> {
     return this.client.getModalidades(await this.auth(opts), this.callOptions(opts));
@@ -95,7 +97,10 @@ export class ArcaCdc extends ArcaSdkBase<'wscdc'> {
     return this.client.getDocTipos(await this.auth(opts), this.callOptions(opts));
   }
 
-  /** Identificadores válidos para `Opcionales` (`OpcionalesTipoConsultar`). */
+  /**
+   * Identificadores válidos para `Opcionales` (`OpcionalesTipoConsultar`). Si
+   * ARCA no tiene ninguno (503 "Sin Resultados", como en homologación), devuelve `[]`.
+   */
   async getTiposOpcionales(opts?: CallOptions): Promise<ListaCdc<OpcionalTipoItem>> {
     return this.client.getTiposOpcionales(await this.auth(opts), this.callOptions(opts));
   }

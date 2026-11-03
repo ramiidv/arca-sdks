@@ -11,6 +11,7 @@ import {
   validateAutorizarAnticipo,
   validateCgAutorizar,
   validateCgInformarCalidad,
+  validateLiquidacion,
   validateLsgAjustarXCoe,
   validateLsgAjustarXContrato,
   validateLsgAutorizar,
@@ -54,6 +55,9 @@ function liquidacion(): LiquidacionAutorizarParams {
       liquidaCorredor: 'N',
       fechaPrecioOperacion: '2026-10-30',
       precioRefTn: 250000.12345,
+      codGradoEnt: 'G2',
+      valGradoEnt: 1,
+      factorEnt: 100,
       precioFleteTn: 1000,
       alicIvaOperacion: 10.5,
       campaniaPPal: 2526,
@@ -131,6 +135,9 @@ describe('WSLPG: liquidacionAutorizar', () => {
       'liquidaCorredor',
       'fechaPrecioOperacion',
       'precioRefTn',
+      'codGradoEnt',
+      'valGradoEnt',
+      'factorEnt',
       'precioFleteTn',
       'alicIvaOperacion',
       'campaniaPPal',
@@ -1596,6 +1603,71 @@ describe('WSLPG: validaciones del manual', () => {
     expect(await run({ valorGrado: undefined })).toEqual(['calidad.valorGrado']); // 3015
     expect(await run({ codGrado: undefined })).toEqual(['calidad.codGrado', 'calidad.valorGrado']); // 3018, 3017
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('liquidacionAutorizar: validaciones de negocio locales (manual §2.4.2.3: 1609, 1617, 1631, 1634, 1644, 1646)', async () => {
+    const { agro, fetchMock } = setup(() => lpgResp('liquidacionResp', 'liqReturn', AUTORIZACION));
+    // Campos rechazados localmente ([] si la liquidación llega a ARCA).
+    const run = async (cambios: Record<string, unknown>) => {
+      const p = liquidacion();
+      Object.assign(p.liquidacion, cambios);
+      const r = await agro.lpg.liquidacionAutorizar(p).catch((e: unknown) => e);
+      return r instanceof ArcaValidationError ? r.details.map((d) => d.field) : [];
+    };
+    // 1609: liquida el comprador una compraventa sin esLiquidacionPropia.
+    expect(await run({ esLiquidacionPropia: undefined })).toEqual(['liquidacion.esLiquidacionPropia']);
+    expect(await run({ esLiquidacionPropia: undefined, codTipoOperacion: '01' })).toEqual([
+      'liquidacion.esLiquidacionPropia',
+    ]);
+    // Consignación (2) o liquida el corredor: no aplica.
+    expect(await run({ esLiquidacionPropia: undefined, codTipoOperacion: '2' })).toEqual([]);
+    expect(
+      await run({
+        esLiquidacionPropia: undefined,
+        actuaCorredor: undefined,
+        liquidaCorredor: 'S',
+        cuitCorredor: '20111111112',
+        comisionCorredor: 1,
+        nroIngBrutoCorredor: 1,
+      }),
+    ).toEqual([]);
+    // 1617: no es propia producción y no informa actuaCorredor.
+    expect(await run({ actuaCorredor: undefined })).toEqual(['liquidacion.actuaCorredor']);
+    expect(await run({ actuaCorredor: undefined, esLiquidacionPropia: 'S' })).toEqual([]);
+    // 1631 / 1634: grado o factor; valGradoEnt solo con codGradoEnt.
+    expect(await run({ codGradoEnt: undefined, valGradoEnt: undefined, factorEnt: undefined })).toEqual([
+      'liquidacion.codGradoEnt',
+    ]);
+    expect(await run({ codGradoEnt: undefined })).toEqual(['liquidacion.valGradoEnt']);
+    expect(await run({ codGradoEnt: undefined, valGradoEnt: undefined })).toEqual([]);
+    // 1644 / 1646: con certificados no van el peso ni la procedencia sin certificado.
+    expect(
+      await run({
+        pesoNetoSinCertificado: 30000,
+        codLocalidadProcedenciaSinCertificado: 3,
+        codProvProcedenciaSinCertificado: 1,
+      }),
+    ).toEqual([
+      'liquidacion.pesoNetoSinCertificado',
+      'liquidacion.codLocalidadProcedenciaSinCertificado',
+      'liquidacion.codProvProcedenciaSinCertificado',
+    ]);
+    // 1646: sin certificados, pesoNetoSinCertificado exige la procedencia sin certificado.
+    expect(await run({ certificados: undefined, pesoNetoSinCertificado: 30000 })).toEqual([
+      'liquidacion.codLocalidadProcedenciaSinCertificado',
+    ]);
+    expect(
+      await run({
+        certificados: undefined,
+        pesoNetoSinCertificado: 30000,
+        codLocalidadProcedenciaSinCertificado: 3,
+        codProvProcedenciaSinCertificado: 1,
+      }),
+    ).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(5); // solo los casos válidos llegan a ARCA
+    expect(() =>
+      validateLiquidacion({ liquidacion: { ...liquidacion().liquidacion, esLiquidacionPropia: undefined } }),
+    ).toThrow(/1609/);
   });
 
   it('códigos de grado (G1-G3, FG, F1-F3) y tipo de certificado de depósito ("332") según el manual §3.1', async () => {

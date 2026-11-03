@@ -113,10 +113,10 @@ PKCS#1 y PKCS#8, encriptadas con `keyPassphrase`. El nombre del servicio se vali
 `getAccessTicket` (3 a 32 letras, dígitos, `_` o `-`, empezando con una letra).
 
 `tokenTTLMinutes` (1 a 1440, default 720) es la **vigencia del TRA** (el pedido firmado), no la del
-Ticket de Acceso: WSAA emite cada TA con su propio vencimiento (12 horas, según el manual). Si la
-respuesta no trae `expirationTime`, se asume 12 horas. WSAA rechaza un TRA que vence más de 24 horas
-después de su `generationTime` (que el SDK fija 2 minutos antes de la hora actual), así que con 1440 el
-`expirationTime` queda 1438 minutos adelante. Un TA cuyo `expirationTime` ya pasó se
+Ticket de Acceso: WSAA emite cada TA con su propio vencimiento, 12 horas desde su propia hora (sea cual
+sea la del TRA). Si la respuesta no trae `expirationTime`, se asume 12 horas. WSAA rechaza un
+`expirationTime` a más de 24 horas de su propia hora (`xml.expirationTime.invalid`), así que con 1440 el
+SDK lo deja 1438 minutos adelante: 2 minutos de margen para un reloj local adelantado. Un TA cuyo `expirationTime` ya pasó se
 rechaza con `ArcaAuthError`.
 
 ### Datos del certificado

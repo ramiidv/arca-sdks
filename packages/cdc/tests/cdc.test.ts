@@ -680,3 +680,91 @@ describe('Validación del input y de Auth', () => {
     validar.mockRestore();
   });
 });
+
+/** Respuestas reales de WSCDC en homologación. */
+describe('comportamiento de ARCA en homologación', () => {
+  const SIN_EVENTOS = '<Events><Evt><Code>0</Code></Evt></Events>';
+  const sinResultados = (method: string) =>
+    asmxResponse(
+      method,
+      `<Errors><Err><Code>503</Code><Msg>Sin Resultados: - Metodo ${method}</Msg></Err></Errors>${SIN_EVENTOS}`,
+    );
+
+  it('tablas: 503 "Sin Resultados" devuelve [] (OpcionalesTipoConsultar en homologación)', async () => {
+    const fetch = mockFetch(
+      sinResultados('OpcionalesTipoConsultar'),
+      sinResultados('DocumentosTipoConsultar'),
+      asmxResponse(
+        'ComprobantesModalidadConsultar',
+        '<Errors><Err><Code>503</Code><Msg>Sin Resultados: - Metodo ComprobantesModalidadConsultar</Msg></Err></Errors>' +
+          '<Events><Evt><Code>10</Code><Msg>Mantenimiento programado</Msg></Evt></Events>',
+      ),
+    );
+    const cdc = makeCdc(fetch);
+    const opcionales = await cdc.getTiposOpcionales();
+    expect(opcionales).toEqual([]);
+    expect(opcionales.eventos).toBeUndefined();
+    expect(await cdc.getDocTipos()).toEqual([]);
+    const modalidades = await cdc.getModalidades();
+    expect(modalidades).toEqual([]);
+    expect(modalidades.eventos).toEqual([{ code: 10, msg: 'Mantenimiento programado' }]);
+    expect(fetch.calls).toHaveLength(3);
+  });
+
+  it('tablas: otros 503, o 503 "Sin Resultados" junto a otro error, siguen lanzando ArcaServiceError', async () => {
+    const fetch = mockFetch(
+      asmxResponse(
+        'OpcionalesTipoConsultar',
+        '<Errors><Err><Code>503</Code><Msg>No existen datos en nuestros registros.</Msg></Err></Errors>',
+      ),
+      asmxResponse(
+        'OpcionalesTipoConsultar',
+        '<Errors><Err><Code>503</Code><Msg>Sin Resultados</Msg></Err><Err><Code>600</Code><Msg>Token invalido</Msg></Err></Errors>',
+      ),
+      asmxResponse('OpcionalesTipoConsultar', '<Errors><Err><Code>502</Code><Msg>Sin Resultados</Msg></Err></Errors>'),
+    );
+    const cdc = makeCdc(fetch);
+    await expect(cdc.getTiposOpcionales()).rejects.toMatchObject({ name: 'ArcaServiceError', errors: [{ code: 503 }] });
+    await expect(cdc.getTiposOpcionales()).rejects.toBeInstanceOf(ArcaServiceError);
+    await expect(cdc.getTiposOpcionales()).rejects.toMatchObject({ errors: [{ code: 502 }] });
+  });
+
+  it('constatar: 503 "Sin Resultados" lanza (solo las tablas lo toman como vacío)', async () => {
+    const fetch = mockFetch(
+      asmxResponse(
+        'ComprobanteConstatar',
+        '<Resultado>R</Resultado><Errors><Err><Code>503</Code><Msg>Sin Resultados</Msg></Err></Errors>',
+      ),
+    );
+    await expect(makeCdc(fetch).constatar(input)).rejects.toBeInstanceOf(ArcaServiceError);
+  });
+
+  it('Events con código 0 (sin Msg) no son eventos: tablas sin lista.eventos y constatar con eventos []', async () => {
+    const fetch = mockFetch(
+      asmxResponse(
+        'DocumentosTipoConsultar',
+        `<ResultGet><DocTipo><Id>80</Id><Desc>CUIT</Desc></DocTipo><DocTipo><Id>96</Id><Desc>DNI</Desc></DocTipo></ResultGet>${SIN_EVENTOS}`,
+      ),
+      asmxResponse(
+        'ComprobanteConstatar',
+        `${CMP_RESP}<Resultado>A</Resultado><FchProceso>20261103181118</FchProceso>${SIN_EVENTOS}`,
+      ),
+      asmxResponse(
+        'ComprobanteConstatar',
+        `${CMP_RESP}<Resultado>A</Resultado><FchProceso>20261103181118</FchProceso>` +
+          '<Events><Evt><Code>0</Code></Evt><Evt><Code>7</Code><Msg>Aviso</Msg></Evt></Events>',
+      ),
+    );
+    const cdc = makeCdc(fetch);
+    const docs = await cdc.getDocTipos();
+    expect(docs).toEqual([
+      { id: '80', desc: 'CUIT' },
+      { id: '96', desc: 'DNI' },
+    ]);
+    expect(docs.eventos).toBeUndefined();
+    const r = await cdc.constatar(input);
+    expect(r.resultado).toBe('A');
+    expect(r.eventos).toEqual([]);
+    expect((await cdc.constatar(input)).eventos).toEqual([{ code: 7, msg: 'Aviso' }]);
+  });
+});

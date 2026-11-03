@@ -256,7 +256,7 @@ describe('validateComprobanteCAE', () => {
 
   it('condición de IVA desconocida se informa (no se adivina la alícuota)', () => {
     const a = facturaA();
-    expect(fields(() => validateComprobanteCAE({ ...a, items: [{ ...a.items[0], codigoCondicionIVA: 9 }] }))).toContain(
+    expect(fields(() => validateComprobanteCAE({ ...a, items: [{ ...a.items[0], codigoCondicionIVA: 7 }] }))).toContain(
       'items[0].codigoCondicionIVA',
     );
   });
@@ -565,7 +565,10 @@ describe('reglas del manual v0.25.8: CAEA, No Categorizado, datos adicionales, a
 
   it('No Categorizado: solo en B con condición 7 (342) y con el tributo 13 si hay gravado (145)', () => {
     const b = { ...facturaB(), codigoTipoDocumento: 80, numeroDocumento: '23000000000', condicionIVAReceptor: 7 };
-    expect(messages(() => validateComprobanteCAE(b))).toEqual([expect.stringMatching(/^otrosTributos: .*\(145\)$/)]);
+    const sinTributos = { ...b, importeOtrosTributos: 0, importeTotal: 221, otrosTributos: undefined };
+    expect(messages(() => validateComprobanteCAE(sinTributos))).toEqual([
+      expect.stringMatching(/^otrosTributos: .*\(145\)$/),
+    ]);
     const conPercepcion = {
       ...b,
       importeOtrosTributos: 1.01,
@@ -777,5 +780,108 @@ describe('reglas del manual v0.25.8: casos borde', () => {
     expect(messages(() => validateComprobanteCAEA(caea({ ...b, condicionIVAReceptor: 5 })))).toEqual([
       expect.stringMatching(/^numeroDocumento: .*\(889\)$/),
     ]);
+  });
+});
+
+/** Casos contrastados con respuestas reales de ARCA en homologación. */
+describe('comportamiento de ARCA en homologación', () => {
+  /** Factura A con un ítem gravado en `condicion`, como el request autorizado por ARCA. */
+  function facturaAlicuota(condicion: number, iva: number): MtxcaComprobanteBase {
+    return facturaA({
+      importeOtrosTributos: 0,
+      importeTotal: 100 + iva,
+      otrosTributos: undefined,
+      items: [
+        {
+          ...mtx,
+          descripcion: 'Producto prueba',
+          cantidad: 1,
+          codigoUnidadMedida: 7,
+          precioUnitario: 100,
+          codigoCondicionIVA: condicion,
+          importeIVA: iva,
+          importeItem: 100 + iva,
+        },
+      ],
+      subtotalesIVA: [{ codigo: condicion, importe: iva }],
+    });
+  }
+
+  it('condiciones de IVA 8 (5%) y 9 (2,5%): ARCA las autoriza en clase A y B', () => {
+    expect(fields(() => validateComprobanteCAE(facturaAlicuota(8, 5)))).toEqual([]);
+    expect(fields(() => validateComprobanteCAE(facturaAlicuota(9, 2.5)))).toEqual([]);
+    expect(fields(() => validateComprobanteCAEA(caea(facturaAlicuota(8, 5))))).toEqual([]);
+    const b = facturaB();
+    const facturaB5: MtxcaComprobanteBase = {
+      ...b,
+      importeTotal: 205.01,
+      items: [{ ...b.items[0], precioUnitario: 105, codigoCondicionIVA: 8, importeItem: 105 }, b.items[1]],
+      subtotalesIVA: [{ codigo: 8, importe: 5 }],
+    };
+    expect(fields(() => validateComprobanteCAE(facturaB5))).toEqual([]);
+  });
+
+  it('condiciones de IVA 8 y 9: alícuota, subtotal (403) e importe gravado (110) se validan igual que las demás', () => {
+    expect(messages(() => validateComprobanteCAE(facturaAlicuota(8, 10)))).toContainEqual(
+      expect.stringMatching(/^items\[0\]\.importeIVA: /),
+    );
+    expect(
+      messages(() =>
+        validateComprobanteCAE({ ...facturaAlicuota(9, 2.5), subtotalesIVA: [{ codigo: 8, importe: 2.5 }] }),
+      ),
+    ).toEqual([
+      expect.stringMatching(/^subtotalesIVA\[0\]\.codigo: .*\(403\)$/),
+      expect.stringMatching(/^subtotalesIVA: falta el subtotal de IVA para la condición 9 \(403\)$/),
+    ]);
+    expect(messages(() => validateComprobanteCAE({ ...facturaAlicuota(8, 5), importeGravado: 0 }))).toContainEqual(
+      expect.stringMatching(/^importeGravado: .*\(110\)$/),
+    );
+  });
+
+  it('subtotal de IVA de una condición que no lleva subtotal (400) cita 4, 5, 6, 8 o 9', () => {
+    expect(
+      messages(() => validateComprobanteCAE({ ...facturaAlicuota(8, 5), subtotalesIVA: [{ codigo: 3, importe: 5 }] })),
+    ).toContainEqual('subtotalesIVA[0].codigo: debe ser 4, 5, 6, 8 o 9 (400)');
+  });
+
+  it('No Categorizado: sin otrosTributos rechaza (145); con otro tributo y sin el 13, ARCA observa (150) y no es error', () => {
+    const b: MtxcaComprobanteBase = {
+      ...facturaB(),
+      codigoTipoDocumento: 80,
+      numeroDocumento: '23000000000',
+      condicionIVAReceptor: 7,
+    };
+    expect(fields(() => validateComprobanteCAE(b))).toEqual([]);
+    expect(
+      messages(() => validateComprobanteCAE({ ...b, otrosTributos: [], importeOtrosTributos: 0, importeTotal: 221 })),
+    ).toEqual([expect.stringMatching(/^otrosTributos: .*tributo 13.*\(145\)$/)]);
+    // Un tributo sin importe no cuenta.
+    expect(
+      messages(() =>
+        validateComprobanteCAE({
+          ...b,
+          otrosTributos: [{ codigo: 13, baseImponible: 100, importe: 0 }],
+          importeOtrosTributos: 0,
+          importeTotal: 221,
+        }),
+      ),
+    ).toEqual(expect.arrayContaining([expect.stringMatching(/^otrosTributos: .*tributo 13.*\(145\)$/)]));
+  });
+
+  it('período de asociados: ARCA lo rechaza en Factura A y B (162) y lo acepta en ND A', () => {
+    const periodo = { fechaDesde: '2026-10-01', fechaHasta: '2026-10-31' };
+    for (const c of [facturaA(), facturaB()]) {
+      expect(messages(() => validateComprobanteCAE({ ...c, periodoComprobantesAsociados: periodo }))).toEqual([
+        expect.stringMatching(/^periodoComprobantesAsociados: .*\(162\)$/),
+      ]);
+    }
+    expect(
+      messages(() => validateComprobanteCAEA(caea({ ...facturaB(), periodoComprobantesAsociados: periodo }))),
+    ).toEqual([expect.stringMatching(/\(780\)$/)]);
+    expect(
+      fields(() =>
+        validateComprobanteCAE(facturaA({ codigoTipoComprobante: 2, periodoComprobantesAsociados: periodo })),
+      ),
+    ).toEqual([]);
   });
 });

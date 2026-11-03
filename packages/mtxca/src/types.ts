@@ -87,7 +87,7 @@ export interface MtxcaItem {
   importeItem: number;
 }
 
-/** `SubtotalIVAType`: total de IVA de una alícuota (códigos 4, 5, 6). */
+/** `SubtotalIVAType`: total de IVA de una alícuota (códigos 4, 5, 6, 8, 9). */
 export interface MtxcaSubtotalIVA {
   codigo: number;
   importe: number;

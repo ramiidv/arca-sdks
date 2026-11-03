@@ -70,7 +70,9 @@ const r = await cdc.constatar({
 - `getTiposOpcionales(): Promise<ListaCdc<{ id: string; desc: string }>>`: OpcionalesTipoConsultar.
 - `clearAuthCache(): Promise<void>`.
 
-`ListaCdc<T> = T[] & { eventos?: CdcMensaje[] }`: array común; `desc` es '' si ARCA no la informa; los `Events` de ARCA, si vinieron, en `lista.eventos` (propiedad no enumerable).
+`ListaCdc<T> = T[] & { eventos?: CdcMensaje[] }`: array común; `desc` es '' si ARCA no la informa; los `Events` de ARCA, si vinieron, en `lista.eventos` (propiedad no enumerable). Si ARCA responde el error 503 "Sin Resultados" (ej. `OpcionalesTipoConsultar` en homologación), la tabla es `[]`; cualquier otro error lanza `ArcaServiceError`.
+
+`Events` con código 0 (ARCA manda `<Evt><Code>0</Code></Evt>` cuando no hay eventos) se descartan: no aparecen en `eventos` de las tablas ni de `constatar`.
 
 ```typescript
 interface ConstatarInput {           // CmpReq (CmpDatos), se envía en el orden del WSDL
@@ -94,7 +96,7 @@ interface ConstatarResult {
               cbteFch: string; impTotal: number; codAutorizacion: string; docTipoReceptor?: string;
               docNroReceptor?: string; opcionales?: { id: string; valor: string }[] };
   observaciones: { code: number; msg: string }[];
-  eventos: { code: number; msg: string }[]; // Events de ARCA
+  eventos: { code: number; msg: string }[]; // Events de ARCA (sin los de código 0)
 }
 ```
 

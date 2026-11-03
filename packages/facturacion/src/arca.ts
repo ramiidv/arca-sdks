@@ -741,7 +741,11 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     return result as CaeaSinMovResult & { resultado: 'A' };
   }
 
-  /** Consulta los puntos de venta informados "sin movimiento" para un CAEA. */
+  /**
+   * Consulta los puntos de venta informados "sin movimiento" para un CAEA.
+   * Devuelve `[]` si no hay ninguno (incluye los errores 10102 y 602 de ARCA,
+   * que indican que el CAEA no tiene informes "sin movimiento").
+   */
   async consultarSinMovimientoCAEA(caea: string, ptoVta: number, call?: CallOptions): Promise<CaeaSinMovItem[]> {
     const callOpts = this.opts(call);
     const auth = await this.getAuth('wsfe', callOpts);
@@ -842,8 +846,9 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
   }
 
   /**
-   * Puntos de venta habilitados. No se cachea: un punto de venta dado de alta
-   * o bloqueado tiene que verse enseguida.
+   * Puntos de venta del emisor. No se cachea: un punto de venta dado de alta
+   * o bloqueado tiene que verse enseguida. Devuelve `[]` si no tiene ninguno
+   * (ARCA responde el error 602 "Sin Resultados").
    */
   async getPuntosVenta(call?: CallOptions): Promise<PtoVentaItem[]> {
     const callOpts = this.opts(call);

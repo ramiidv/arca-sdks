@@ -501,6 +501,42 @@ describe('parámetros', () => {
     expect(mock.count('FEParamGetTiposIva')).toBe(2);
   });
 
+  it('getPuntosVenta sin puntos de venta (602 "Sin Resultados") → [], también en WsfeClient', async () => {
+    const arca = await arcaDePrueba();
+    const sinResultados = () =>
+      wsfeErrores('FEParamGetPtosVenta', [{ code: 602, msg: 'Sin Resultados: - Metodo FEParamGetPtosVenta' }]);
+    const mock = mockArcaFetch({ FEParamGetPtosVenta: sinResultados() });
+    expect(await arca.getPuntosVenta()).toEqual([]);
+    expect(mock.count('FEParamGetPtosVenta')).toBe(1);
+
+    const wsfe = new WsfeClient({
+      endpoint: ENDPOINTS.wsfe.testing,
+      transport: { fetch: (async () => sinResultados()) as unknown as typeof fetch },
+    });
+    expect(await wsfe.getPuntosVenta({ token: 't', sign: 's', cuit: 20123456786 })).toEqual([]);
+  });
+
+  it('getPuntosVenta con otro error lanza (602 junto a otro código, o 600 de autenticación)', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FEParamGetPtosVenta: [
+        wsfeErrores('FEParamGetPtosVenta', [
+          { code: 602, msg: 'Sin Resultados' },
+          { code: 10000, msg: 'Otro error' },
+        ]),
+        wsfeErrores('FEParamGetPtosVenta', [{ code: 600, msg: 'ValidacionDeToken: Error al verificar hash: ' }]),
+      ],
+    });
+    await expect(arca.getPuntosVenta()).rejects.toBeInstanceOf(ArcaWSFEError);
+    await expect(arca.getPuntosVenta()).rejects.toMatchObject({ code: 'ARCA_AUTH_ERROR', faultCode: '600' });
+  });
+
+  it('las tablas fijas de ARCA no convierten el 602 en []: lanzan ArcaWSFEError', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({ FEParamGetTiposIva: wsfeErrores('FEParamGetTiposIva', [{ code: 602, msg: 'Sin Resultados' }]) });
+    await expect(arca.getTiposIva()).rejects.toBeInstanceOf(ArcaWSFEError);
+  });
+
   it('consultas concurrentes iguales comparten un solo request; un error no queda cacheado', async () => {
     const arca = await arcaDePrueba({ retries: 0 });
     const tabla = wsfeResponse(
