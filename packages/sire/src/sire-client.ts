@@ -40,11 +40,20 @@ export type SireClientConfig = ServiceClientConfig;
 const REJECTION_FAULT_PATTERNS = [/^XML invalido/i, /no cumple el schema/i, /^Request mal formado/i];
 
 /**
- * Faults de token/sign faltante o inválido (ej: `MISSING_AUTHENTICATION_TOKEN`,
- * observado en homologación; el manual no publica la lista). Se lanzan como
- * `ArcaAuthError` (el ticket cacheado no se borra: ver `ArcaSire.emitirCertificado`).
+ * Faults de token/sign faltante o inválido. El manual no publica la lista; en
+ * homologación se observaron `MISSING_AUTHENTICATION_TOKEN`, `CANT_PARSE_TOKEN`,
+ * `CANT_VERIFY_SIGN` (cubiertos por el patrón `XXX_TOKEN`/`XXX_SIGN`),
+ * `BAD_SERVICE` (ticket de otro servicio) y `CANT_VERIFY_DATA` (token y sign que
+ * no se corresponden). Todos con `soapenv:Server` y `faultstring` igual al
+ * código. Se lanzan como `ArcaAuthError` (el ticket cacheado no se borra: ver
+ * `ArcaSire.emitirCertificado`).
  */
 const AUTH_FAULT_PATTERN = /^[A-Z_]*(TOKEN|SIGN)[A-Z_]*$/;
+const AUTH_FAULT_CODES: ReadonlySet<string> = new Set(['BAD_SERVICE', 'CANT_VERIFY_DATA']);
+
+function isAuthFault(message: string): boolean {
+  return AUTH_FAULT_PATTERN.test(message) || AUTH_FAULT_CODES.has(message);
+}
 
 /** El servidor de SIRE escapa dos veces las entidades del faultstring (`&amp;apos;`). */
 function decodeEntities(text: string): string {
@@ -218,7 +227,8 @@ function faultMessage(err: ArcaSoapError): string {
  * error de sistema. En la práctica el servidor también usa `soapenv:Server`
  * para rechazos previos al procesamiento (`REJECTION_FAULT_PATTERNS`).
  *
- * - Token/sign faltante o inválido → `ArcaAuthError` (no se emitió/anuló nada).
+ * - Token/sign faltante, inválido o de otro servicio → `ArcaAuthError` (no se
+ *   emitió/anuló nada).
  * - Rechazo (cualquier `soapenv:Client`, aunque no traiga `faultstring`) →
  *   `ArcaSireServiceError` con `operacion` = `method` (determinístico: no se
  *   emitió/anuló nada).
@@ -232,8 +242,12 @@ function toRejection(err: unknown, method: SireOperacion): ArcaSireServiceError 
   if (!(err instanceof ArcaSoapError)) return undefined;
   if (err.faultCode === undefined && err.faultString === undefined) return undefined; // no es un Fault
   const message = faultMessage(err);
-  if (AUTH_FAULT_PATTERN.test(message)) {
-    return new ArcaAuthError(`SIRE ${method}: ${message}`, { cause: err, faultCode: err.faultCode?.trim() });
+  if (isAuthFault(message)) {
+    // El `detail` explica el código (ej: BAD_SERVICE → "El service (wsfecred) no es igual ...").
+    const detail = text(err.faultDetail);
+    const extra = detail === undefined ? '' : decodeEntities(detail);
+    const full = extra === '' || extra === message ? message : `${message} (${extra})`;
+    return new ArcaAuthError(`SIRE ${method}: ${full}`, { cause: err, faultCode: err.faultCode?.trim() });
   }
   const isClient = faultCodeName(err.faultCode) === 'Client';
   if (!isClient && !REJECTION_FAULT_PATTERNS.some((re) => re.test(message))) return undefined;
