@@ -9,33 +9,35 @@ Versiones publicadas (2026-11-03, con trusted publishing y provenance):
 
 | Paquete | Versión | Notas |
 |---|---|---|
-| `@ramiidv/arca-common` | 0.9.0 | `ArcaSdkBase`, `SoapServiceClient`, `/schema` (DSL del XSD), `/testing`, QR, certificados, `ArcaRechazoError` |
-| `@ramiidv/arca-facturacion` | 7.0.0 | WSFEv1, WSFEX, CAEA y QR sobre el DSL |
+| `@ramiidv/arca-common` | 0.9.1 | `ArcaSdkBase`, `SoapServiceClient`, `/schema` (DSL del XSD), `/testing`, QR, certificados, `ArcaRechazoError` |
+| `@ramiidv/arca-facturacion` | 7.0.1 | WSFEv1, WSFEX, CAEA y QR sobre el DSL |
 | `@ramiidv/arca-padron` | 0.9.0 | Constancia, A4, A10, A13, A100 |
-| `@ramiidv/arca-agro` | 0.8.0 | WSCPE (con derivados granarios), WSLPG (liquidación primaria y secundaria) |
-| `@ramiidv/arca-cdc` | 0.8.0 | WSCDC |
+| `@ramiidv/arca-agro` | 0.8.1 | WSCPE (con derivados granarios), WSLPG (liquidación primaria y secundaria) |
+| `@ramiidv/arca-cdc` | 0.8.1 | WSCDC |
 | `@ramiidv/arca-fecred` | 0.8.0 | WSFECRED |
-| `@ramiidv/arca-mtxca` | 0.8.0 | WSMTXCA |
-| `@ramiidv/arca-sire` | 0.7.0 | SIRE C2005 |
+| `@ramiidv/arca-mtxca` | 0.8.1 | WSMTXCA |
+| `@ramiidv/arca-sire` | 0.7.1 | SIRE C2005 |
 | `@ramiidv/arca-empleados` | 0.6.0 | Genera un TXT, no usa SOAP |
 
 Todos los SDKs con web service extienden `ArcaSdkBase`, así que comparten
 configuración, `wsaa`, `cuit`, `production`, `on`/`off`, `config.wsaa`,
 `config.signal` y `clearAuthCache()`. Todos dependen de `@ramiidv/arca-common`
-^0.9.0: para compartir el `WsaaClient` hay que actualizarlos juntos.
+^0.9 (los que cambiaron en la última release, de ^0.9.1): para compartir el
+`WsaaClient` hay que actualizarlos juntos.
 
-La última release (PR #16) unificó la API entre los paquetes: Node >= 22.12;
+La última release (PR #19) corrigió lo que ARCA homologación contradijo:
+alícuotas 5% y 2,5% y reglas 145/162 en mtxca, tablas vacías y eventos de
+código 0 en cdc, faults de autenticación de SIRE, consultas sin resultados en
+facturacion (602/10102) y agro (800), reglas de `liquidacionAutorizar`, y el
+extracto del body en el error de una respuesta 2xx sin SOAP Envelope.
+
+La anterior (PR #16) unificó la API entre los paquetes: Node >= 22.12;
 los rechazos de ARCA (`resultado` R) lanzan `ArcaRechazoError`; clientes de bajo
 nivel con `{ endpoint, transport? }`; `ENDPOINTS` con la misma forma en todos los
 paquetes; `ArcaResponseError` ante una respuesta inválida; `formatServiceErrors`
 para los mensajes de error de ARCA; sin los alias ni las operaciones deprecadas.
-La anterior (PR #15) salió de una revisión contra los manuales vigentes de cada
+Antes, la PR #15 salió de una revisión contra los manuales vigentes de cada
 servicio.
-
-## Pendientes operativos
-
-- [ ] Mergear la adaptación de arca-server (ramiidv/arca-server#5) y de la
-      landing (ramiidv/arca-sdk-web#5) a la release de API uniforme.
 
 ## Próximos pasos técnicos
 
