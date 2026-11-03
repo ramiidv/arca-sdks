@@ -590,6 +590,18 @@ describe('WSCPE: consultas', () => {
     expect(keys(calls[0].req.solicitud)).toEqual(['sucursal', 'tipoCPE']);
   });
 
+  it('consultarUltNroOrden sin CPE previas: <nroOrden>0</nroOrden> → 0 y siguienteNroOrden 1', async () => {
+    // Respuesta real de homologación para una sucursal sin CPE emitidas.
+    const { agro } = setup(() =>
+      cpeResp(
+        'ConsultarUltNroOrdenResp',
+        '<nroOrden>0</nroOrden><errores/><metadata><servidor>cpea-ws-deployment-7ccd9f4f47-l82gv</servidor><fechaHora>2026-11-03T18:09:59</fechaHora></metadata>',
+      ),
+    );
+    expect(await agro.cpe.consultarUltNroOrden(1, TIPO_CPE.AUTOMOTOR)).toBe(0);
+    expect(await agro.cpe.siguienteNroOrden(1, TIPO_CPE.AUTOMOTOR)).toBe(1);
+  });
+
   it('consultarUltNroOrden sin nroOrden → error (no 0)', async () => {
     const { agro } = setup(() => cpeResp('ConsultarUltNroOrdenResp', METADATA));
     await expect(agro.cpe.consultarUltNroOrden(1, TIPO_CPE.AUTOMOTOR)).rejects.toBeInstanceOf(ArcaAgroResponseError);
@@ -798,6 +810,7 @@ describe('WSCPE: validación local (no llama a ARCA)', () => {
   });
 
   it('consultarCPEPorDestino: rango de hasta 3 días (2152)', async () => {
+    // Homologación: 01→04 se acepta, 01→05 responde 2152 ("como máximo de 3 días").
     const { agro, fetchMock } = setup(() => '');
     const e = await agro.cpe
       .consultarCPEPorDestino({ planta: 1, fechaPartidaDesde: '2026-11-01', fechaPartidaHasta: '2026-11-05' })
@@ -824,6 +837,30 @@ describe('WSCPE: validación local (no llama a ARCA)', () => {
       fechaPartidaHasta: '2026-11-04',
     });
     expect(calls[0].req.solicitud.fechaPartidaHasta).toBe('2026-11-04');
+    await agro.cpe.consultarCPEPorDestino({
+      planta: 1,
+      fechaPartidaDesde: '2026-11-01',
+      fechaPartidaHasta: '2026-11-04',
+    });
+    expect(calls[1].req.solicitud).toEqual({
+      planta: 1,
+      fechaPartidaDesde: '2026-11-01',
+      fechaPartidaHasta: '2026-11-04',
+    });
+  });
+
+  it('consultarCPEPorDestino: el 2152 de ARCA lanza ArcaAgroServiceError', async () => {
+    const { agro } = setup(() =>
+      cpeResp(
+        'ConsultarCPEPorDestinoResp',
+        '<errores><error><codigo>2152</codigo><descripcion>El rango de fechas debe ser como máximo de 3 días.</descripcion></error></errores>',
+      ),
+    );
+    const e: any = await agro.cpe
+      .consultarCPEPorDestino({ planta: 1, fechaPartidaDesde: '2026-11-01', fechaPartidaHasta: '2026-11-02' })
+      .catch((x) => x);
+    expect(e).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e.errors[0].code).toBe(2152);
   });
 
   it('contingencia sin cartaPorte.tipoCPE: solo el error del schema', async () => {
@@ -1073,6 +1110,78 @@ describe('WSCPE: errores sin código', () => {
       ),
     );
     expect(await agro.cpe.consultarProvincias()).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Error 800 (sin resultados): respuestas reales de homologación
+// ---------------------------------------------------------------------------
+
+const ERROR_800 =
+  '<errores><error><codigo>800</codigo><descripcion>No existen solicitudes para los parámetros indicados.</descripcion></error></errores>';
+
+/** Respuesta de homologación a `consultarCPEPorDestino` sin resultados (con header y prefijo `soap:`). */
+const HOMO_POR_DESTINO_800 =
+  '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Header><serverTime>03/11/2026 18:10:21 GMT-03:00</serverTime>' +
+  '<serverName>cpea-ws-deployment-7ccd9f4f47-l82gv</serverName></soap:Header><soap:Body>' +
+  `<ns2:ConsultarCPEPorDestinoResp xmlns:ns2="${CPE_NS}"><respuesta>${ERROR_800}` +
+  '<metadata><servidor>cpea-ws-deployment-7ccd9f4f47-l82gv</servidor><fechaHora>2026-11-03T18:10:21</fechaHora></metadata>' +
+  '</respuesta></ns2:ConsultarCPEPorDestinoResp></soap:Body></soap:Envelope>';
+
+describe('WSCPE: error 800 (sin resultados)', () => {
+  it('consultarCPEPorDestino: respuesta real de homologación → []', async () => {
+    const { agro } = setup(() => HOMO_POR_DESTINO_800);
+    expect(
+      await agro.cpe.consultarCPEPorDestino({
+        planta: 1938,
+        fechaPartidaDesde: '2026-11-01',
+        fechaPartidaHasta: '2026-11-04',
+      }),
+    ).toEqual([]);
+  });
+
+  it.each([
+    [
+      'consultarCPEPPendientesDeResolucion',
+      (a: ArcaAgro) => a.cpe.consultarCPEPPendientesDeResolucion({ perfil: 'S' }),
+    ],
+    ['consultarPlantas', (a: ArcaAgro) => a.cpe.consultarPlantas(CUIT)],
+    ['consultarPlantasDG', (a: ArcaAgro) => a.cpe.consultarPlantasDG(CUIT)],
+    ['consultarCPEDGPendienteActivacion', (a: ArcaAgro) => a.cpe.consultarCPEDGPendienteActivacion(500)],
+  ] as const)('%s: 800 → []', async (method, run) => {
+    const { agro } = setup(() => cpeResp(`${capital(method)}Resp`, ERROR_800 + METADATA));
+    expect(await run(agro)).toEqual([]);
+  });
+
+  it('800 junto con un error admitido (550) → []', async () => {
+    const { agro } = setup(() =>
+      cpeResp('ConsultarPlantasResp', ERROR_800.replace('</errores>', ERROR_550.replace('<errores>', ''))),
+    );
+    expect(await agro.cpe.consultarPlantas(CUIT)).toEqual([]);
+  });
+
+  it('800 junto con otro error → lanza con los dos', async () => {
+    const { agro } = setup(() =>
+      cpeResp(
+        'ConsultarCPEPPendientesDeResolucionResp',
+        ERROR_800.replace(
+          '</errores>',
+          '<error><codigo>2001</codigo><descripcion>Planta</descripcion></error></errores>',
+        ),
+      ),
+    );
+    const e: any = await agro.cpe.consultarCPEPPendientesDeResolucion({ perfil: 'D', planta: 1 }).catch((x) => x);
+    expect(e).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e.errors.map((x: { code: number }) => x.code)).toEqual([800, 2001]);
+  });
+
+  it('fuera de las listas el 800 sigue siendo un error (consulta de una CPE y emisión)', async () => {
+    const cons = setup(() => cpeResp('ConsultarCPEAutomotorResp', ERROR_800));
+    await expect(cons.agro.cpe.consultarCPEAutomotor({ nroCTG: '010100012345' })).rejects.toBeInstanceOf(
+      ArcaAgroServiceError,
+    );
+    const aut = setup(() => cpeResp('AutorizarCPEAutomotorResp', ERROR_800));
+    await expect(aut.agro.cpe.autorizarCPEAutomotor(autorizarAutomotor())).rejects.toBeInstanceOf(ArcaAgroServiceError);
   });
 });
 

@@ -147,7 +147,11 @@ export function checkCargaDG(input: Record<string, unknown>, errors: ValidationE
 /** Rango máximo de fechas de `consultarCPEPorDestino` (error 2152). */
 const MAX_DIAS_CONSULTA_DESTINO = 3;
 
-/** @internal `fechaPartidaHasta` no anterior a `fechaPartidaDesde` y a lo sumo 3 días después (error 2152). */
+/**
+ * @internal `fechaPartidaHasta` no anterior a `fechaPartidaDesde` y a lo sumo 3 días después (error 2152).
+ * Homologación acepta del 01 al 04 y rechaza del 01 al 05 con 2152. Un rango
+ * invertido ARCA no lo rechaza (responde sin resultados); acá se rechaza igual.
+ */
 export function checkRangoConsultaDestino(input: Record<string, unknown>, errors: ValidationErrorDetail[]): void {
   let dias: number;
   try {
@@ -232,6 +236,62 @@ export function checkCalidadCg(input: Record<string, unknown>, errors: Validatio
   }
 }
 
+/**
+ * @internal Validaciones de negocio de `liquidacionAutorizar` que no dependen
+ * de los padrones de ARCA (manual WSLPG §2.4.2.3):
+ *
+ * - 1609: si liquida el comprador una compraventa (`codTipoOperacion` 1),
+ *   informar `esLiquidacionPropia`.
+ * - 1617: si liquida el comprador y no es propia producción, informar
+ *   `actuaCorredor`.
+ * - 1631 / 1634: informar `codGradoEnt` y/o `factorEnt`; `valGradoEnt` solo
+ *   con `codGradoEnt`.
+ * - 1644 / 1646: con `certificados` no se informan `pesoNetoSinCertificado` ni
+ *   la procedencia sin certificado. Sin `certificados`, homologación rechaza
+ *   con 1646 un `pesoNetoSinCertificado` sin procedencia: se exige al menos
+ *   uno de `codLocalidadProcedenciaSinCertificado` y
+ *   `codProvProcedenciaSinCertificado` (si falta uno de los dos, la
+ *   combinación la valida ARCA, error 1529).
+ */
+export function checkLiquidacion(input: Record<string, unknown>, errors: ValidationErrorDetail[]): void {
+  const liq = input['liquidacion'];
+  if (liq === null || typeof liq !== 'object') return;
+  const l = liq as Record<string, unknown>;
+  const add = (field: string, message: string) => errors.push({ field: `liquidacion.${field}`, message });
+  if (l['liquidaCorredor'] === 'N') {
+    if (Number(l['codTipoOperacion']) === 1 && l['esLiquidacionPropia'] == null) {
+      add(
+        'esLiquidacionPropia',
+        'liquidacion.esLiquidacionPropia: obligatorio si liquida el comprador una compraventa (error 1609)',
+      );
+    }
+    if (l['esLiquidacionPropia'] === 'N' && l['actuaCorredor'] == null) {
+      add('actuaCorredor', 'liquidacion.actuaCorredor: obligatorio si no es liquidación propia (error 1617)');
+    }
+  }
+  if (l['codGradoEnt'] == null && l['factorEnt'] == null) {
+    add('codGradoEnt', 'liquidacion: se debe informar codGradoEnt y/o factorEnt (error 1631)');
+  }
+  if (l['valGradoEnt'] != null && l['codGradoEnt'] == null) {
+    add('valGradoEnt', 'liquidacion.valGradoEnt: requiere codGradoEnt (error 1634)');
+  }
+  const procedencia = ['codLocalidadProcedenciaSinCertificado', 'codProvProcedenciaSinCertificado'] as const;
+  const certificados = l['certificados'];
+  if (Array.isArray(certificados) && certificados.length > 0) {
+    if (l['pesoNetoSinCertificado'] != null) {
+      add('pesoNetoSinCertificado', 'liquidacion.pesoNetoSinCertificado: no se informa con certificados (error 1644)');
+    }
+    for (const k of procedencia.filter((k) => l[k] != null)) {
+      add(k, `liquidacion.${k}: no se informa con certificados (error 1646)`);
+    }
+  } else if (l['pesoNetoSinCertificado'] != null && procedencia.every((k) => l[k] == null)) {
+    add(
+      procedencia[0],
+      `liquidacion: sin certificados, pesoNetoSinCertificado va con ${procedencia.join(' y ')} (error 1646)`,
+    );
+  }
+}
+
 /** Valida una solicitud de `autorizarCPEAutomotor`. @throws ArcaValidationError */
 export function validateAutorizarCPEAutomotor(params: AutorizarCPEAutomotorParams): void {
   encodeRequest(params, AUTORIZAR_AUTOMOTOR, 'autorizarCPEAutomotor', requireOrigen);
@@ -287,7 +347,7 @@ export function validateAutorizarCPEEmisionDestinoDG(params: AutorizarCPEEmision
 
 /** Valida una solicitud de `liquidacionAutorizar`. @throws ArcaValidationError */
 export function validateLiquidacion(params: LiquidacionAutorizarParams): void {
-  encodeRequest(params, LIQUIDACION_AUTORIZAR, 'liquidacionAutorizar');
+  encodeRequest(params, LIQUIDACION_AUTORIZAR, 'liquidacionAutorizar', checkLiquidacion);
 }
 
 /** Valida una solicitud de `liquidacionAjustarUnificado`. @throws ArcaValidationError */

@@ -46,7 +46,7 @@ import type {
   LsgAutorizarResultado,
   LsgConsultaResultado,
 } from './lpg-types.js';
-import { checkBloqueCertificado, checkCalidadCg, requireAjuste } from './validation.js';
+import { checkBloqueCertificado, checkCalidadCg, checkLiquidacion, requireAjuste } from './validation.js';
 
 const SERVICE = 'WSLPG';
 
@@ -297,7 +297,7 @@ export class LpgClient extends SoapServiceClient {
    */
   async liquidacionAutorizar(params: LiquidacionAutorizarParams, opts?: CallOptions): Promise<LiquidacionResultado> {
     const o = OPS.liquidacionAutorizar;
-    const body = encodeRequest(params, S.LIQUIDACION_AUTORIZAR, o.method);
+    const body = encodeRequest(params, S.LIQUIDACION_AUTORIZAR, o.method, checkLiquidacion);
     return this.#conCoe(o, body, S.R_LIQ_RETURN, COE_AUTORIZACION, 'emision', opts);
   }
 
