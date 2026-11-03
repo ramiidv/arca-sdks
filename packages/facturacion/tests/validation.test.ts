@@ -90,21 +90,43 @@ describe('validateFacturarExpoOpts', () => {
     ptoVta: 1,
     cbteTipo: CbteTipo.FACTURA_E,
     tipoExpo: 1,
-    pais: 203,
+    pais: 212,
     cliente: {
       nombre: 'ACME',
-      cuitPais: 50000000016,
+      cuitPais: 55000002126,
       domicilio: '123 Main St',
       idImpositivo: 'XX',
     },
     moneda: 'DOL',
     cotizacion: 1200,
     formaPago: 'Wire',
+    incoterms: 'FOB',
     items: [{ codigo: 'X', descripcion: 'Y', cantidad: 1, unidad: 7, precioUnitario: 10 }],
   };
 
   it('acepta opts válidos', () => {
     expect(() => validateFacturarExpoOpts(validOpts)).not.toThrow();
+  });
+
+  it('incoterms es obligatorio solo en Factura E de bienes (1640)', () => {
+    expect(() => validateFacturarExpoOpts({ ...validOpts, incoterms: undefined })).toThrow(
+      expect.objectContaining({ field: 'incoterms', message: expect.stringContaining('1640') }),
+    );
+    expect(() => validateFacturarExpoOpts({ ...validOpts, tipoExpo: 2, incoterms: undefined })).not.toThrow();
+    expect(() =>
+      validateFacturarExpoOpts({
+        ...validOpts,
+        cbteTipo: CbteTipo.NOTA_CREDITO_E,
+        formaPago: undefined,
+        incoterms: undefined,
+      }),
+    ).not.toThrow();
+  });
+
+  it('incotermsDes sin incoterms → 1641', () => {
+    expect(() =>
+      validateFacturarExpoOpts({ ...validOpts, tipoExpo: 2, incoterms: undefined, incotermsDes: 'Free on board' }),
+    ).toThrow(expect.objectContaining({ field: 'incoterms', message: expect.stringContaining('1641') }));
   });
 
   it('rechaza sin tipoExpo', () => {
@@ -256,7 +278,10 @@ describe('validateFacturarOpts: vtoPago y FCE MiPyME', () => {
     condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
     fecha: '20261030',
     items: [{ neto: 100, iva: IvaTipo.IVA_21 }],
-    opcionales: [{ id: '2101', valor: '0110599500000041817221' }],
+    opcionales: [
+      { id: '2101', valor: '0110599500000041817221' },
+      { id: '27', valor: 'SCA' },
+    ],
   };
   const asociada = [{ tipo: CbteTipo.FCE_FACTURA_A, ptoVta: 1, nro: 10, cuit: 20123456786, fecha: '20261020' }];
 
@@ -275,7 +300,12 @@ describe('validateFacturarOpts: vtoPago y FCE MiPyME', () => {
   });
 
   it('NC FCE concepto 1 con vtoPago solo si es de anulación (10175)', () => {
-    const nc = { ...fce, cbteTipo: CbteTipo.FCE_NOTA_CREDITO_A, cbtesAsoc: asociada, opcionales: [] };
+    const nc = {
+      ...fce,
+      cbteTipo: CbteTipo.FCE_NOTA_CREDITO_A,
+      cbtesAsoc: asociada,
+      opcionales: [{ id: '22', valor: 'N' }],
+    };
     expect(() => validateFacturarOpts({ ...nc, vtoPago: '20261130' })).toThrow('10175');
     expect(() =>
       validateFacturarOpts({ ...nc, vtoPago: '20261130', opcionales: [{ id: '22', valor: 'S' }] }),
@@ -320,6 +350,83 @@ describe('validateFacturarOpts: vtoPago y FCE MiPyME', () => {
     expect(() => validateFacturarOpts({ ...fce, cbteTipo: CbteTipo.FCE_NOTA_DEBITO_A, opcionales: [] })).toThrow(
       '10153',
     );
+  });
+});
+
+describe('validateFacturarOpts: opcionales FCE MiPyME (10165-10173, 10214-10216)', () => {
+  const CBU = { id: '2101', valor: '0110599500000041817221' };
+  const SCA = { id: '27', valor: 'SCA' };
+  const factura = {
+    ptoVta: 1,
+    cbteTipo: CbteTipo.FCE_FACTURA_A,
+    docTipo: DocTipo.CUIT,
+    docNro: 30712345671,
+    condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
+    fecha: '20261030',
+    vtoPago: '20261130',
+    items: [{ neto: 100, iva: IvaTipo.IVA_21 }],
+    opcionales: [CBU, SCA],
+  };
+  const nc = {
+    ...factura,
+    cbteTipo: CbteTipo.FCE_NOTA_CREDITO_A,
+    vtoPago: undefined,
+    cbtesAsoc: [{ tipo: CbteTipo.FCE_FACTURA_A, ptoVta: 1, nro: 10, cuit: 20123456786, fecha: '20261020' }],
+    opcionales: [{ id: '22', valor: 'N' }],
+  };
+
+  it('factura y NC FCE con sus opcionales son válidas', () => {
+    expect(() => validateFacturarOpts(factura)).not.toThrow();
+    expect(() => validateFacturarOpts({ ...factura, opcionales: [CBU, { id: '27', valor: 'ADC' }] })).not.toThrow();
+    expect(() => validateFacturarOpts(nc)).not.toThrow();
+  });
+
+  it('factura FCE sin CBU → 10168', () => {
+    expect(() => validateFacturarOpts({ ...factura, opcionales: [SCA] })).toThrow('10168');
+  });
+
+  it('factura FCE sin 27 → 10216; con otro valor → 10214/10215', () => {
+    expect(() => validateFacturarOpts({ ...factura, opcionales: [CBU] })).toThrow('10216');
+    expect(() => validateFacturarOpts({ ...factura, opcionales: [CBU, { id: '27', valor: 'XXX' }] })).toThrow(
+      expect.objectContaining({ field: 'opcionales[1].valor', message: expect.stringContaining('10214/10215') }),
+    );
+  });
+
+  it('factura FCE con 22 → 10171', () => {
+    expect(() => validateFacturarOpts({ ...factura, opcionales: [CBU, SCA, { id: '22', valor: 'N' }] })).toThrow(
+      '10171',
+    );
+  });
+
+  it('CBU de 22 dígitos (10165) y alias de 6 a 20 caracteres (10166)', () => {
+    expect(() => validateFacturarOpts({ ...factura, opcionales: [{ id: '2101', valor: '123' }, SCA] })).toThrow(
+      '10165',
+    );
+    expect(() =>
+      validateFacturarOpts({ ...factura, opcionales: [CBU, SCA, { id: '2102', valor: 'mi.alias.mp' }] }),
+    ).not.toThrow();
+    expect(() => validateFacturarOpts({ ...factura, opcionales: [CBU, SCA, { id: '2102', valor: 'abc' }] })).toThrow(
+      '10166',
+    );
+  });
+
+  it('NC/ND FCE sin 22 → 10173; con otro valor → 10167', () => {
+    expect(() => validateFacturarOpts({ ...nc, opcionales: [] })).toThrow('10173');
+    expect(() => validateFacturarOpts({ ...nc, opcionales: [{ id: '22', valor: 'X' }] })).toThrow('10167');
+  });
+
+  it('NC/ND FCE con CBU, alias o 27 → 10172', () => {
+    for (const extra of [CBU, { id: '2102', valor: 'mi.alias.mp' }, SCA])
+      expect(() => validateFacturarOpts({ ...nc, opcionales: [{ id: '22', valor: 'N' }, extra] })).toThrow('10172');
+  });
+
+  it('comprobantes que no son FCE no llevan 2101, 2102, 22 ni 27 → 10169', () => {
+    const b = { ptoVta: 1, cbteTipo: CbteTipo.FACTURA_B, items: [{ neto: 1 }] };
+    for (const op of [CBU, { id: '2102', valor: 'mi.alias.mp' }, { id: '22', valor: 'N' }, SCA])
+      expect(() => validateFacturarOpts({ ...b, opcionales: [op] })).toThrow(
+        expect.objectContaining({ field: 'opcionales[0].id', message: expect.stringContaining('10169') }),
+      );
+    expect(() => validateFacturarOpts({ ...b, opcionales: [{ id: '5', valor: '12345678' }] })).not.toThrow();
   });
 });
 

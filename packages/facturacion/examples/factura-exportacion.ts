@@ -14,7 +14,13 @@
  */
 
 import fs from 'node:fs';
-import { ArcaConflictoExpo, ArcaFacturacion, ArcaResultadoInciertoExpo, CbteTipo } from '@ramiidv/arca-facturacion';
+import {
+  ArcaConflictoExpo,
+  ArcaFacturacion,
+  ArcaResultadoInciertoExpo,
+  CbteTipo,
+  FileTicketStorage,
+} from '@ramiidv/arca-facturacion';
 import type { FacturarExpoOpts } from '@ramiidv/arca-facturacion';
 
 async function main() {
@@ -23,16 +29,17 @@ async function main() {
     cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
     key: fs.readFileSync('./certs/clave.key', 'utf-8'),
     production: false,
+    ticketStorage: new FileTicketStorage('./.arca-tickets'), // persiste el ticket entre reinicios
   });
 
   const opts: FacturarExpoOpts = {
     ptoVta: 1,
     cbteTipo: CbteTipo.FACTURA_E,
     tipoExpo: 1, // 1=Bienes, 2=Servicios, 4=Otros
-    pais: 203, // País destino (203 = Estados Unidos)
+    pais: 212, // País destino (212 = Estados Unidos, ver getPaisesExpo)
     cliente: {
       nombre: 'ACME Corp',
-      cuitPais: 50000000016,
+      cuitPais: 55000002126, // CUIT país de EE.UU. para personas jurídicas (getCuitsPaisExpo)
       domicilio: '123 Main St, New York, NY 10001',
       idImpositivo: '12-3456789',
     },

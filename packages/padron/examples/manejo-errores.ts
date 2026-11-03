@@ -16,8 +16,8 @@ import {
 } from '@ramiidv/arca-padron';
 
 const client = new ArcaPadron({
-  cert: readFileSync('./cert.pem', 'utf-8'),
-  key: readFileSync('./key.pem', 'utf-8'),
+  cert: readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: readFileSync('./certs/clave.key', 'utf-8'),
   cuit: '20123456786',
   production: false,
   // Monitorear eventos

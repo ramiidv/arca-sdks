@@ -17,8 +17,8 @@ type AgroService = keyof typeof WSAA_SERVICES;
  * ```ts
  * const agro = new ArcaAgro({
  *   cuit: '20-12345678-6',
- *   cert: fs.readFileSync('cert.pem', 'utf-8'),
- *   key: fs.readFileSync('key.pem', 'utf-8'),
+ *   cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+ *   key: fs.readFileSync('./certs/clave.key', 'utf-8'),
  * });
  * const nroOrden = await agro.cpe.siguienteNroOrden(1, TIPO_CPE.AUTOMOTOR);
  * const cpe = await agro.cpe.autorizarCPEAutomotor({ ... });

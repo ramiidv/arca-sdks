@@ -86,7 +86,7 @@ console.log(isValidCBU('1234567890123456789012')); // false
 
 // Error detallado
 try {
-  validateCBU('0000000000000000000000');
+  validateCBU('0110599500000041817222'); // dígito verificador incorrecto
 } catch (e) {
   if (e instanceof ArcaValidationError) {
     console.log('Error CBU:', e.details[0].message);

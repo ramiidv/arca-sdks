@@ -17,7 +17,7 @@
  */
 
 import fs from 'node:fs';
-import { ArcaFacturacion, CbteTipo, IvaTipo, requiereRecuperacion } from '@ramiidv/arca-facturacion';
+import { ArcaFacturacion, CbteTipo, FileTicketStorage, IvaTipo, requiereRecuperacion } from '@ramiidv/arca-facturacion';
 
 async function main() {
   const arca = new ArcaFacturacion({
@@ -25,6 +25,7 @@ async function main() {
     cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
     key: fs.readFileSync('./certs/clave.key', 'utf-8'),
     production: false,
+    ticketStorage: new FileTicketStorage('./.arca-tickets'), // persiste el ticket entre reinicios
   });
 
   // 1. Solicitar CAEA para noviembre 2026, primera quincena

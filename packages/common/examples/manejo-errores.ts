@@ -14,7 +14,9 @@ import {
   ArcaServiceError,
   ArcaTicketVigenteError,
   ArcaValidationError,
+  arcaSoapCall,
   certificateInfo,
+  checkServiceErrors,
   validateCuit,
 } from '@ramiidv/arca-common';
 
@@ -44,13 +46,13 @@ async function ejemploErroresWsaa() {
   const wsaa = new WsaaClient({
     // El constructor valida el certificado y la clave (y que se correspondan):
     // si no, lanza ArcaValidationError sin llamar a WSAA.
-    cert: fs.readFileSync('./cert.pem', 'utf-8'),
-    key: fs.readFileSync('./key.pem', 'utf-8'),
+    cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+    key: fs.readFileSync('./certs/clave.key', 'utf-8'),
     production: false,
   });
 
   // Vigencia del certificado y CUIT del titular, sin llamar a ARCA.
-  const info = certificateInfo(fs.readFileSync('./cert.pem', 'utf-8'));
+  const info = certificateInfo(fs.readFileSync('./certs/certificado.crt', 'utf-8'));
   console.log(`Certificado de ${info.cuit ?? info.subject}, vence el ${info.notAfter.toISOString()}`);
 
   try {
@@ -117,7 +119,46 @@ function describirErrorDeServicio(e: unknown) {
     for (const err of e.errors) {
       console.log(`  [${err.code}] ${err.msg}`);
     }
+  } else {
+    throw e;
   }
 }
 
-ejemploErroresWsaa().catch(describirErrorDeServicio);
+async function ejemploErroresDeServicio() {
+  // Transporte: una llamada SOAP (FEDummy de WSFEv1 en homologación, sin autenticación)
+  // lanza ArcaSoapError si falla la red, hay timeout, HTTP no-2xx o SOAP Fault.
+  try {
+    const estado = await arcaSoapCall(
+      'https://wswhomo.afip.gov.ar/wsfev1/service.asmx',
+      'http://ar.gov.afip.dif.FEV1/',
+      'FEDummy',
+      {},
+      { qualified: true, soapActionFromMethod: true, timeout: 10_000 },
+    );
+    console.log('FEDummy:', estado);
+  } catch (e) {
+    describirErrorDeServicio(e);
+  }
+
+  // Negocio: los errores funcionales vienen dentro de la respuesta. checkServiceErrors
+  // los lanza como ArcaServiceError (formato de WSFEv1: Errors.Err[]).
+  try {
+    checkServiceErrors({ Errors: { Err: [{ Code: 10016, Msg: 'Mensaje de error de ARCA' }] } }, 'WSFE');
+  } catch (e) {
+    describirErrorDeServicio(e);
+  }
+}
+
+async function main() {
+  try {
+    await ejemploErroresWsaa();
+  } catch (e) {
+    // getAccessTicket ya se maneja adentro: acá llegan los errores del constructor
+    // (certificado o clave inválidos) o de lectura de los archivos.
+    if (e instanceof ArcaValidationError) console.log('Certificado o clave inválidos:', e.message);
+    else console.error(e);
+  }
+  await ejemploErroresDeServicio();
+}
+
+main().catch(console.error);

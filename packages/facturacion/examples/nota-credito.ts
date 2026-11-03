@@ -8,7 +8,7 @@
  */
 
 import fs from 'node:fs';
-import { ArcaFacturacion, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
+import { ArcaFacturacion, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {
   const arca = new ArcaFacturacion({
@@ -16,6 +16,7 @@ async function main() {
     cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
     key: fs.readFileSync('./certs/clave.key', 'utf-8'),
     production: false,
+    ticketStorage: new FileTicketStorage('./.arca-tickets'), // persiste el ticket entre reinicios
   });
 
   // Nota de crédito B asociada a la factura B #150

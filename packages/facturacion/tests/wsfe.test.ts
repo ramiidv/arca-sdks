@@ -20,7 +20,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const AUTH = { Token: 'TOKEN', Sign: 'SIGN', Cuit: 20123456786 };
 const RI = { docTipo: DocTipo.CUIT, docNro: 30712345671, condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO };
 
 const detResp = (cbteTipo: number, nro: number, resultado: string, extra = '') =>
@@ -46,7 +45,7 @@ describe('FECAESolicitar: XML enviado', () => {
       servicio: { desde: '20261001', hasta: '20261031', vtoPago: '20261110' },
       items: [{ neto: 100, iva: IvaTipo.IVA_21 }],
       tributos: [{ id: TributoTipo.PERCEP_IIBB, desc: 'Percepción IIBB', baseImp: 100.004, alic: 3, importe: 3.0049 }],
-      opcionales: [{ id: '2101', valor: '0000003100012345678901' }],
+      opcionales: [{ id: '5', valor: '12345678' }],
       actividades: [620100],
       comprobanteOriginal: { tipo: CbteTipo.FACTURA_A, ptoVta: 2, nro: 7, cuit: '20-12345678-6', fecha: '20261029' },
     });
@@ -93,7 +92,7 @@ describe('FECAESolicitar: XML enviado', () => {
     expect(det.ImpTrib).toBe(3);
     expect(det.ImpTotal).toBe(124);
     expect(det.CbtesAsoc.CbteAsoc).toEqual({ Tipo: 1, PtoVta: 2, Nro: 7, Cuit: '20123456786', CbteFch: '20261029' });
-    expect(det.Opcionales.Opcional).toEqual({ Id: 2101, Valor: '0000003100012345678901' });
+    expect(det.Opcionales.Opcional).toEqual({ Id: 5, Valor: '12345678' });
     expect(det.Actividades.Actividad).toEqual({ Id: 620100 });
   });
 

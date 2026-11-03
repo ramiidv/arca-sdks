@@ -4,7 +4,8 @@ import type { ServiceErrorDetail } from '@ramiidv/arca-common';
 /**
  * Rechazo de SIRE: el servicio respondió con un SOAP Fault que indica que el
  * request no se procesó (error de negocio `soapenv:Client`, XML que no cumple
- * el schema, request mal formado o token/sign inválido).
+ * el schema o request mal formado). Los Faults de token/sign faltante o inválido
+ * se lanzan como `ArcaAuthError`.
  *
  * Es determinístico: el certificado **no** se emitió/anuló. `message` y
  * `errors[0].msg` tienen el texto de ARCA; `cause` es el `ArcaSoapError` original.

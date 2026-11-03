@@ -94,7 +94,7 @@ function enRango(
   }
 }
 
-/** Días de anticipación máxima con que se puede comunicar un alta (manual pág. 18). */
+/** Días de anticipación máxima con que se puede comunicar un alta (manual pág. 19). */
 const MAX_DIAS_ANTICIPACION_ALTA = 90;
 
 /** Suma días a una fecha `AAAA/MM/DD` (aritmética de calendario, sin zona horaria). */

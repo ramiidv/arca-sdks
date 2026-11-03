@@ -4,3 +4,5 @@ dist/
 .env
 coverage/
 .arca-test-tickets/
+certs/
+.arca-tickets/

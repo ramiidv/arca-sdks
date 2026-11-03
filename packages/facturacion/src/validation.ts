@@ -199,6 +199,7 @@ export function validateFacturarOpts(opts: FacturarOpts): void {
       fail('cbtesAsoc', 'las notas de crédito/débito requieren cbtesAsoc o periodoAsoc (validación 10197)');
   }
 
+  checkOpcionalesFCE(opts);
   checkPercepcionNoCategorizado(opts, docTipo);
   checkCompradores(opts, docTipo);
 
@@ -216,9 +217,89 @@ export function validateFacturarOpts(opts: FacturarOpts): void {
   opts.actividades?.forEach((a, i) => checkEntero(`actividades[${i}]`, a, 1));
 }
 
+/** Ids de los opcionales propios de FCE MiPyME (`getTiposOpcional`). */
+const OPCIONAL_FCE = { CBU: '2101', ALIAS: '2102', ANULACION: '22', TRANSFERENCIA: '27' } as const;
+
 /** `true` si el comprobante es de anulación (opcional 22 = "S", FCE). */
 function esAnulacion(opts: FacturarOpts): boolean {
-  return opts.opcionales?.some((o) => String(o.id) === '22' && o.valor === 'S') ?? false;
+  return opts.opcionales?.some((o) => String(o.id) === OPCIONAL_FCE.ANULACION && o.valor === 'S') ?? false;
+}
+
+/**
+ * Opcionales de los comprobantes FCE MiPyME:
+ * - 10169: los comprobantes que no son FCE no llevan 2101, 2102, 22 ni 27.
+ * - 10165: el 2101 (CBU) son 22 dígitos; 10166: el 2102 (alias) son de 6 a
+ *   20 caracteres (letras, números, punto o guion).
+ * - Facturas (201, 206, 211): llevan el 2101 (10168) y el 27 (10216), con
+ *   "SCA" (transferencia al sistema de circulación abierta) o "ADC" (agente de
+ *   depósito colectivo) (10214/10215), y no llevan el 22 (10171).
+ * - NC/ND: llevan el 22 (10173), con "S" o "N" (10167), y no llevan 2101,
+ *   2102 ni 27 (10172).
+ */
+function checkOpcionalesFCE(opts: FacturarOpts): void {
+  const opcionales = opts.opcionales ?? [];
+  const indice = (id: string) => opcionales.findIndex((o) => String(o.id) === id);
+  const prohibir = (ids: readonly string[], msg: (id: string) => string) => {
+    const i = opcionales.findIndex((o) => ids.includes(String(o.id)));
+    if (i >= 0) fail(`opcionales[${i}].id`, msg(String(opcionales[i].id)), opcionales[i].id);
+  };
+  /** Exige el opcional y, si se pasan `valores`, que su valor sea uno de ellos. */
+  const exigir = (id: string, faltante: string, valores?: { permitidos: readonly string[]; msg: string }) => {
+    const i = indice(id);
+    if (i < 0) fail('opcionales', faltante);
+    if (valores && !valores.permitidos.includes(String(opcionales[i].valor)))
+      fail(`opcionales[${i}].valor`, valores.msg, opcionales[i].valor);
+  };
+  const formato = (id: string, re: RegExp, msg: string) => {
+    const i = indice(id);
+    if (i >= 0 && !re.test(String(opcionales[i].valor))) fail(`opcionales[${i}].valor`, msg, opcionales[i].valor);
+  };
+  const { CBU, ALIAS, ANULACION, TRANSFERENCIA } = OPCIONAL_FCE;
+
+  if (!isFCE(opts.cbteTipo)) {
+    prohibir(
+      Object.values(OPCIONAL_FCE),
+      (id) =>
+        `el opcional ${id} es solo para FCE MiPyME (201 a 213); no se informa en otros comprobantes (validación 10169)`,
+    );
+    return;
+  }
+
+  formato(CBU, /^\d{22}$/, 'el opcional 2101 (CBU) debe tener 22 dígitos (validación 10165)');
+  formato(
+    ALIAS,
+    /^[A-Za-z0-9.-]{6,20}$/,
+    'el opcional 2102 (alias) debe tener de 6 a 20 caracteres: letras, números, punto o guion (validación 10166)',
+  );
+
+  if (isNotaCreditoODebito(opts.cbteTipo)) {
+    prohibir(
+      [CBU, ALIAS, TRANSFERENCIA],
+      () =>
+        'las notas de crédito/débito FCE MiPyME no llevan CBU (2101), alias (2102) ni transferencia (27) (validación 10172)',
+    );
+    exigir(
+      ANULACION,
+      'las notas de crédito/débito FCE MiPyME requieren el opcional 22 (anulación "S" o "N", validación 10173)',
+      { permitidos: ['S', 'N'], msg: 'el opcional 22 de FCE MiPyME debe ser "S" o "N" (validación 10167)' },
+    );
+    return;
+  }
+
+  // Facturas FCE (201, 206, 211)
+  prohibir([ANULACION], () => 'las facturas FCE MiPyME no llevan el opcional 22 (anulación) (validación 10171)');
+  exigir(
+    CBU,
+    'las facturas FCE MiPyME (201, 206, 211) requieren el opcional 2101 con el CBU del emisor (validación 10168)',
+  );
+  exigir(
+    TRANSFERENCIA,
+    'las facturas FCE MiPyME (201, 206, 211) requieren el opcional 27 con "SCA" o "ADC" (validación 10216)',
+    {
+      permitidos: ['SCA', 'ADC'],
+      msg: 'el opcional 27 de FCE MiPyME debe ser "SCA" o "ADC" (validaciones 10214/10215)',
+    },
+  );
 }
 
 /**
@@ -380,6 +461,9 @@ export function validateFacturarExpoOpts(opts: FacturarExpoOpts): void {
     fail('canMisMonExt', 'canMisMonExt debe ser "S" o "N"', opts.canMisMonExt);
   if (opts.cbteTipo === CbteTipo.FACTURA_E && !opts.formaPago)
     fail('formaPago', 'formaPago es requerido en Factura E (19) (validación 1620)');
+  if (opts.cbteTipo === CbteTipo.FACTURA_E && opts.tipoExpo === TipoExpo.BIENES && !opts.incoterms)
+    fail('incoterms', 'incoterms es requerido en Factura E (19) de bienes (tipoExpo 1) (validación 1640)');
+  if (opts.incotermsDes && !opts.incoterms) fail('incoterms', 'incotermsDes requiere incoterms (validación 1641)');
   if (!opts.pais) fail('pais', 'pais (código de país destino) es requerido');
   if (opts.id !== undefined) checkEntero('id', opts.id, 1);
   if (opts.cbteNro !== undefined) checkEntero('cbteNro', opts.cbteNro, 1);

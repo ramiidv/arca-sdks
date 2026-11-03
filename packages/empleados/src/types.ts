@@ -30,13 +30,13 @@ export interface DatosRelacionLaboral {
   /**
    * [20-29] Fecha de inicio de la relación laboral (AAAA/MM/DD). Obligatoria para todos
    * los movimientos (nota de la pantalla de ingreso masivo, manual pág. 23). En un alta,
-   * puede ser como máximo 90 días posterior a la fecha de la novedad (manual pág. 18).
+   * puede ser como máximo 90 días posterior a la fecha de la novedad (manual pág. 19).
    */
   fechaInicio?: FechaInput;
   /**
    * [30-39] Fecha de fin de la relación laboral (AAAA/MM/DD). En un alta, obligatoria si
    * el contrato es a plazo fijo; ARCA la rechaza en contratos por tiempo indeterminado
-   * (manual pág. 18; el SDK no lo verifica porque no conoce la tabla de modalidades).
+   * (manual pág. 19; el SDK no lo verifica porque no conoce la tabla de modalidades).
    */
   fechaFin?: FechaInput;
   /** [40-45] Código de obra social (RNOS, numérico, 6). */
@@ -47,9 +47,8 @@ export interface DatosRelacionLaboral {
   fechaTelegramaRenuncia?: FechaInput;
   /**
    * [58-72] Retribución pactada en pesos (numérico, 15). Se escribe con 2 decimales
-   * implícitos: el manual dice "con indicación de centavos" pero no publica el formato,
-   * así que **no está verificado con ARCA** (ver README). Debe ser finita, ≥ 0 y tener
-   * como máximo 2 decimales.
+   * implícitos (el manual indica "con indicación de centavos"). Debe ser finita, ≥ 0 y
+   * tener como máximo 2 decimales.
    */
   retribucion?: number;
   /** [73] Código de modalidad de liquidación (numérico, 1). */

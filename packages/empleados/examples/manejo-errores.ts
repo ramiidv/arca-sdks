@@ -1,10 +1,12 @@
 /**
  * Ejemplo: manejo de errores.
  *
- * - ArcaValidationError: reglas de negocio (modo strict) o datos que no son un objeto.
- *   `details` trae un error por campo.
- * - ArcaSerializationError: un valor no entra en el formato de 130 posiciones
- *   (excede el largo, tipo incorrecto, NaN, caracter no representable...). Nunca se trunca.
+ * - ArcaValidationError: propiedades desconocidas, movimiento inválido, datos que no son
+ *   un objeto, generar() sin registros y, en modo strict (default), reglas de negocio y
+ *   errores de formato. `details` trae un error por campo.
+ * - ArcaSerializationError: con strict: false o con serializarRegistro/serializarArchivo,
+ *   un valor no entra en el formato de 130 posiciones (excede el largo, tipo incorrecto,
+ *   NaN, caracter no representable...). Nunca se trunca.
  */
 import {
   ArcaEmpleados,

@@ -7,7 +7,15 @@
  */
 
 import fs from 'node:fs';
-import { ArcaMtxca, ArcaSoapError, CbteTipo, CodigoCondicionIVA, Concepto, Moneda } from '@ramiidv/arca-mtxca';
+import {
+  ArcaMtxca,
+  ArcaSoapError,
+  CbteTipo,
+  CodigoCondicionIVA,
+  Concepto,
+  FileTicketStorage,
+  Moneda,
+} from '@ramiidv/arca-mtxca';
 import type { AutorizarRequest } from '@ramiidv/arca-mtxca';
 
 async function main() {
@@ -16,6 +24,7 @@ async function main() {
     key: fs.readFileSync('./certs/clave.key', 'utf-8'),
     cuit: '20123456786',
     production: false,
+    ticketStorage: new FileTicketStorage('./.arca-tickets'), // persiste el ticket entre reinicios
   });
 
   const ptoVta = 4000;

@@ -3,7 +3,7 @@
  */
 
 import fs from 'node:fs';
-import { ArcaMtxca, ArcaServiceError, CbteTipo, Moneda } from '@ramiidv/arca-mtxca';
+import { ArcaMtxca, ArcaServiceError, CbteTipo, FileTicketStorage, Moneda } from '@ramiidv/arca-mtxca';
 
 async function main() {
   const mtxca = new ArcaMtxca({
@@ -11,6 +11,7 @@ async function main() {
     key: fs.readFileSync('./certs/clave.key', 'utf-8'),
     cuit: '20123456786',
     production: false,
+    ticketStorage: new FileTicketStorage('./.arca-tickets'), // persiste el ticket entre reinicios
   });
 
   console.log('Estado:', await mtxca.status());
@@ -43,24 +44,20 @@ async function main() {
     );
   }
 
-  // CAEA de la quincena actual
+  // CAEA otorgados en el mes. Es una consulta: solicitarCAEA, en cambio, pide un CAEA nuevo que
+  // después hay que informar (comprobantes con informarComprobanteCAEA o sin movimiento con
+  // informarCAEANoUtilizado / informarCAEANoUtilizadoPtoVta).
   const hoy = new Date();
-  const periodo = hoy.getFullYear() * 100 + hoy.getMonth() + 1;
-  const orden = hoy.getDate() <= 15 ? 1 : 2;
   try {
-    const caea = await mtxca.solicitarCAEA(periodo, orden);
-    console.log(`CAEA ${caea.caea}: ${caea.fechaDesde} a ${caea.fechaHasta}, informar hasta ${caea.fechaTopeInforme}`);
-  } catch (e) {
-    if (e instanceof ArcaServiceError) {
-      console.error('CAEA rechazado:', e.errors);
-      const otorgados = await mtxca.consultarCAEAEntreFechas(new Date(hoy.getFullYear(), hoy.getMonth(), 1), hoy);
+    const otorgados = await mtxca.consultarCAEAEntreFechas(new Date(hoy.getFullYear(), hoy.getMonth(), 1), hoy);
+    for (const caea of otorgados) {
       console.log(
-        'CAEAs ya otorgados:',
-        otorgados.map((c) => c.caea),
+        `CAEA ${caea.caea}: ${caea.fechaDesde} a ${caea.fechaHasta}, informar hasta ${caea.fechaTopeInforme}`,
       );
-    } else {
-      throw e;
     }
+  } catch (e) {
+    if (!(e instanceof ArcaServiceError)) throw e;
+    console.error('Consulta de CAEA rechazada:', e.errors);
   }
 }
 

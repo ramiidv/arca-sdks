@@ -9,8 +9,8 @@ import { readFileSync } from 'node:fs';
 import { ArcaPadron } from '@ramiidv/arca-padron';
 
 const client = new ArcaPadron({
-  cert: readFileSync('./cert.pem', 'utf-8'),
-  key: readFileSync('./key.pem', 'utf-8'),
+  cert: readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: readFileSync('./certs/clave.key', 'utf-8'),
   cuit: '20123456786', // Tu CUIT representada
   production: false, // false = homologación, true = producción
 });

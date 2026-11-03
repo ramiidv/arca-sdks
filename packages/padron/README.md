@@ -18,8 +18,21 @@ pide la factura electrónica (`CondicionIVAReceptorId`, RG 5616).
 - Validación local de CUIT (dígito verificador) antes de llamar a ARCA.
 
 Fuentes: WSDL oficiales (`wsdl/`), manual de
-[`ws_sr_constancia_inscripcion` v4.1](https://www.afip.gob.ar/ws/WSCI/manual_ws_sr_ws_constancia_inscripcion.pdf),
-manuales de A4 v1.3, A13 v1.4 y A100 v2.1.
+[`ws_sr_constancia_inscripcion` v4.1](https://www.afip.gob.ar/ws/WSCI/manual_ws_sr_ws_constancia_inscripcion.pdf)
+y manuales de [A4 v1.3](https://www.arca.gob.ar/ws/ws_sr_padron_a4/manual_ws_sr_padron_a4_v1.3.pdf),
+[A10 v1.2](https://www.arca.gob.ar/ws/ws_sr_padron_a10/manual_ws_sr_padron_a10_v1.2.pdf),
+[A13 v1.4](https://www.arca.gob.ar/ws/ws-padron-a13/manual-ws-sr-padron-a13-v1.4.pdf) y
+[A100 v2.1](https://www.arca.gob.ar/ws/ws_sr_padron_a100/manual_ws_sr_padron_a100_v2.1.pdf).
+
+## Glosario
+
+- **Constancia de inscripción** (`ws_sr_constancia_inscripcion`, ex A5): los datos de la constancia
+  de inscripción de un contribuyente (domicilio fiscal, impuestos, actividades, monotributo).
+- **A4, A10, A13, A100**: "Alcance" de cada servicio de consulta al padrón de ARCA. A4: datos
+  completos (impuestos, regímenes, relaciones); A10: versión mínima (datos básicos y domicilios);
+  A13: datos básicos y búsqueda de CUIT por documento; A100: tablas de parámetros del padrón.
+- **CUIT representada**: la CUIT en nombre de la que se consulta (`cuit` de la config); la que se
+  consulta es otra (`idPersona`).
 
 ## Instalación
 
@@ -30,11 +43,15 @@ npm install @ramiidv/arca-padron
 ## Requisitos
 
 - Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
-- Certificado digital X.509 y clave privada de ARCA, con cada servicio asociado por separado:
-  `ws_sr_constancia_inscripcion`, `ws_sr_padron_a4`, `ws_sr_padron_a10`, `ws_sr_padron_a13`,
-  `ws_sr_padron_a100`.
-  - **Homologación**: [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx)
-  - **Producción**: [Administración de Certificados Digitales](https://www.afip.gob.ar/ws/documentacion/certificados.asp)
+- Certificado digital X.509 y clave privada de ARCA, con cada servicio que uses asociado por
+  separado: `ws_sr_constancia_inscripcion`, `ws_sr_padron_a4`, `ws_sr_padron_a10`,
+  `ws_sr_padron_a13`, `ws_sr_padron_a100`. En homologación se asocian en
+  [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx) (creando una autorización por
+  servicio); en producción, con el "Administrador de Relaciones de Clave Fiscal". Sin la
+  asociación, WSAA responde `coe.notAuthorized` (`ArcaAuthError`). Paso a paso en
+  [arca-common: Primeros pasos](../common/README.md#primeros-pasos).
+- Según el [catálogo de web services de ARCA](https://www.arca.gob.ar/ws/documentacion/catalogo.asp),
+  algunos servicios requieren autorizaciones y acuerdos especiales con ARCA para usarlos.
 
 ## Inicio rápido
 
@@ -43,8 +60,8 @@ import { readFileSync } from 'node:fs';
 import { ArcaPadron, CollectionName, FileTicketStorage, condicionIvaDesdePadron } from '@ramiidv/arca-padron';
 
 const padron = new ArcaPadron({
-  cert: readFileSync('./cert.pem', 'utf-8'),
-  key: readFileSync('./key.pem', 'utf-8'),
+  cert: readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: readFileSync('./certs/clave.key', 'utf-8'),
   cuit: '20123456786', // CUIT representada (quien consulta)
   production: false, // false = homologación
   ticketStorage: new FileTicketStorage('./.arca-tickets'), // recomendado
@@ -103,8 +120,8 @@ import { readFileSync } from 'node:fs';
 import { ArcaFacturacion } from '@ramiidv/arca-facturacion';
 import { ArcaPadron, FileTicketStorage } from '@ramiidv/arca-padron';
 
-const cert = readFileSync('./cert.pem', 'utf-8');
-const key = readFileSync('./key.pem', 'utf-8');
+const cert = readFileSync('./certs/certificado.crt', 'utf-8');
+const key = readFileSync('./certs/clave.key', 'utf-8');
 const cuit = '20123456786';
 
 const facturacion = new ArcaFacturacion({ cuit, cert, key, ticketStorage: new FileTicketStorage('./.arca-tickets') });
@@ -129,7 +146,13 @@ ARCA (salvo en `getConstanciasInscripcion`, ver abajo).
 | `getIdPersonaListByDocumento(documento)` | `ws_sr_padron_a13` `getIdPersonaListByDocumento`   | `ListaPadron<string>`          |
 | `getParametros(collection)`              | `ws_sr_padron_a100` `getParameterCollectionByName` | `ListaPadron<ParameterRecord>` |
 | `status()`                               | `dummy` de los cinco servicios (sin auth)          | `PadronStatus`                 |
-| `clearAuthCache()`                       | —                                                  | `Promise<void>`                |
+| `clearAuthCache()`                       | — (ver abajo)                                      | `Promise<void>`                |
+
+`clearAuthCache()` es async y borra los tickets de los cinco servicios (memoria y `ticketStorage`).
+**Ojo:** WSAA no emite un ticket nuevo mientras el anterior siga vigente, así que borrar un TA
+vigente te deja sin acceso hasta que venza (hasta 12 horas). Ante un error de autorización
+(`ArcaAuthError`, o `reason: 'no_autorizado'`) no lo uses: corregí la causa en ARCA. Es solo para un ticket dañado
+(ej: cambiaste de certificado).
 
 ### `getConstanciaInscripcion(cuit): Promise<PersonaA5>`
 
@@ -153,9 +176,9 @@ constancia.metadata; // { fechaHora, servidor } de la respuesta, si ARCA lo info
 
 ### `getConstanciasInscripcion(cuits): Promise<ListaPadron<PersonaA5>>`
 
-Hasta 250 CUITs en una llamada (`getPersonaList_v2`), en el orden de `cuits`. Los problemas de una
-CUIT no hacen fallar la consulta (ARCA informa por clave, manual v4.1 §3.3.3): vuelven en el
-`errorConstancia` de su persona.
+Hasta 250 CUITs (`MAX_PERSONA_LIST`) en una llamada (`getPersonaList_v2`), en el orden de
+`cuits`. Los problemas de una CUIT no hacen fallar la consulta (ARCA informa por clave, manual v4.1
+§3.3.3): vuelven en el `errorConstancia` de su persona.
 
 - CUIT inexistente: `errorConstancia.error = ['No existe persona con ese Id']` (lo informa ARCA).
 - CUIT inválida (formato o dígito verificador): **no se envía a ARCA**; vuelve con `idPersona` igual al
@@ -164,7 +187,7 @@ CUIT no hacen fallar la consulta (ARCA informa por clave, manual v4.1 §3.3.3): 
 - Persona que ARCA devuelve con datos inválidos: vuelve con el detalle en `errorConstancia` (si trae
   alguna CUIT; si no, se omite).
 
-Una lista vacía o de más de 250 elementos lanza `ArcaValidationError`.
+Una lista vacía o de más de `MAX_PERSONA_LIST` (250) elementos lanza `ArcaValidationError`.
 
 ```typescript
 const constancias = await padron.getConstanciasInscripcion(['20224107030', '27015942210']);
@@ -210,7 +233,8 @@ inactiva; `getPersonaV2` (manual A13 v1.4) devuelve los datos igual (con `estado
 ### `getIdPersonaListByDocumento(documento): Promise<ListaPadron<string>>`
 
 CUIT/CUIL asociados a un número de documento (A13). Acepta puntos, espacios y guiones
-(`'11.709.676'`); más de 11 dígitos lanza `ArcaValidationError`. Devuelve `[]` si ARCA no informa claves.
+(`'11.709.676'`) y de 1 a 11 dígitos; vacío, no numérico o más largo lanza `ArcaValidationError`.
+Devuelve `[]` si ARCA no informa claves.
 
 ### `getPersona(cuit): Promise<PersonaA4>` y `getPersonaBasic(cuit): Promise<PersonaA10>`
 
@@ -276,8 +300,8 @@ import { ArcaPadron, ENDPOINTS } from '@ramiidv/arca-padron';
 import type { WsAuth } from '@ramiidv/arca-padron';
 
 const padron = new ArcaPadron({
-  cert: readFileSync('./cert.pem', 'utf-8'),
-  key: readFileSync('./key.pem', 'utf-8'),
+  cert: readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: readFileSync('./certs/clave.key', 'utf-8'),
   cuit: '20123456786',
 });
 
@@ -468,10 +492,10 @@ original queda en `cause`). No se reintentan.
 | `inactiva`      | "La clave (CUIT/CUIL) consultada se encuentra INACTIVA" (A13: usar `getPersonaA13V2`)                                                                                      |
 | `id_invalido`   | "El Id de la persona no es valido"                                                                                                                                         |
 | `no_autorizado` | "No autorizado, par token/sign invalido.", "Falta token y/o sign.", "Debe enviar la CUIT representada", "Este token no le permite actuar en representacion de la CUIT ..." |
-| `otro`          | Cualquier otro error de negocio                                                                                                                                            |
 
-Un SOAP Fault con otro texto queda como `ArcaSoapError` (con `faultString`). En la constancia de
-inscripción, los motivos por los que ARCA no emite la constancia (CUIT limitada, domicilio
+Un SOAP Fault con otro texto queda como `ArcaSoapError` (con `faultString`): el SDK no emite
+`reason: 'otro'`, que es solo el default del constructor de `ArcaPadronServiceError`. En la
+constancia de inscripción, los motivos por los que ARCA no emite la constancia (CUIT limitada, domicilio
 incompleto, etc.) no son excepciones: vienen en `errorConstancia`, `errorRegimenGeneral` y
 `errorMonotributo`.
 
@@ -486,8 +510,8 @@ import {
 } from '@ramiidv/arca-padron';
 
 const padron = new ArcaPadron({
-  cert: readFileSync('./cert.pem', 'utf-8'),
-  key: readFileSync('./key.pem', 'utf-8'),
+  cert: readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: readFileSync('./certs/clave.key', 'utf-8'),
   cuit: '20123456786',
 });
 
@@ -519,8 +543,8 @@ import { readFileSync } from 'node:fs';
 import { ArcaPadron } from '@ramiidv/arca-padron';
 
 const padron = new ArcaPadron({
-  cert: readFileSync('./cert.pem', 'utf-8'),
-  key: readFileSync('./key.pem', 'utf-8'),
+  cert: readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: readFileSync('./certs/clave.key', 'utf-8'),
   cuit: '20123456786',
   onEvent: (evento) => {
     if (evento.type === 'request:end') console.log(`${evento.method}: ${evento.durationMs}ms`);

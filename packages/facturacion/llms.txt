@@ -8,7 +8,7 @@ npm install @ramiidv/arca-facturacion
 
 ## Requisitos
 
-Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)). Depende de `@ramiidv/arca-common` (WSAA, transporte SOAP, validadores, QR). Certificado de ARCA asociado a `wsfe` (y `wsfex` para exportación).
+Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (Node >= 20.19 permite cargar módulos ESM con `require()`). Depende de `@ramiidv/arca-common` (WSAA, transporte SOAP, validadores, QR). Certificado de ARCA asociado a `wsfe` (y `wsfex` para exportación).
 
 ## Inicio rápido
 
@@ -18,8 +18,8 @@ import { ArcaFacturacion, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/
 
 const arca = new ArcaFacturacion({
   cuit: 20123456786,
-  cert: readFileSync('./cert.crt', 'utf-8'),
-  key: readFileSync('./key.key', 'utf-8'),
+  cert: readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: readFileSync('./certs/clave.key', 'utf-8'),
   production: false,
   ticketStorage: new FileTicketStorage('./.arca-tickets'),
 });
@@ -43,12 +43,15 @@ new ArcaFacturacion({
   cert: string, key: string,    // PEM; keyPassphrase?: string
   production?: boolean,         // default false (homologación)
   ticketStorage?: TicketStorage,// recomendado: sin él, un reinicio deja sin ticket hasta 12 h (ArcaTicketVigenteError)
-  wsaa?: WsaaClient,            // WsaaClient compartido con otros SDKs del mismo certificado
+  wsaa?: WsaaClient,            // WsaaClient compartido con otros SDKs del mismo certificado; con él se ignoran
+                                // cert, key, keyPassphrase, ticketStorage, tokenTTLMinutes, clockOffsetMs,
+                                // autoClockSkew, loginErrorCooldownMs, permanentErrorCooldownMs y endpoints.wsaa
   signal?: AbortSignal,         // cancela todas las llamadas
   timeout?: number,             // 30000 ms
   retries?: number,             // 1: solo consultas; las emisiones nunca se reintentan
   retryDelayMs?: number,        // 1000 (backoff exponencial)
   tokenTTLMinutes?: number, clockOffsetMs?: number, autoClockSkew?: boolean, loginErrorCooldownMs?: number,
+  permanentErrorCooldownMs?: number, // default Infinity: espera tras un error de WSAA no reintentable; 0 la desactiva
   paramCacheTTLMs?: number,     // 24 h; 0 sin cache. Puntos de venta y cotizaciones no se cachean
   endpoints?: { wsaa?: string, wsfe?: string, wsfex?: string },
   legacyTls?: 'auto' | 'never' | 'always', // default 'auto' (ver Entornos)
@@ -75,7 +78,7 @@ Todos los métodos aceptan como último parámetro `{ signal }`. Campos en camel
 {
   ptoVta: number,
   cbteTipo: number,                 // CbteTipo
-  items: ({ neto: number } | { total: number }) & { iva?: IvaTipo, exento?: boolean }[], // sin iva ni exento: no gravado
+  items: Array<({ neto: number } | { total: number }) & { iva?: IvaTipo, exento?: boolean }>, // sin iva ni exento: no gravado
   cbteNro?: number,                 // default último + 1, sin lock (serializar por ptoVta y cbteTipo)
   fecha?: Date | string,            // YYYYMMDD o YYYY-MM-DD; default hoy en Argentina (reloj de ARCA)
   docTipo?: number, docNro?: number,// default 99 / 0
@@ -88,7 +91,7 @@ Todos los métodos aceptan como último parámetro `{ signal }`. Campos en camel
   tributos?: { id, desc?, baseImp, alic, importe }[],
   cbtesAsoc?: { tipo, ptoVta, nro, cuit?, fecha? }[],
   periodoAsoc?: { desde, hasta },   // NC/ND no FCE
-  opcionales?: { id: string, valor: string }[],
+  opcionales?: { id: string, valor: string }[], // FCE: 2101 CBU, 27 SCA/ADC (facturas), 22 anulación S/N (NC/ND)
   actividades?: number[],
   compradores?: { docTipo, docNro, porcentaje }[],
 }
@@ -100,7 +103,7 @@ Reglas validadas localmente (el mensaje cita el código del manual WSFEv1 v4.7):
 
 - Clase A y M (1-5, 34, 39, 51-54, 60, 63, 201-203): `docTipo` 80 y condición RI/monotributo (10013, 10243).
 - Concepto 2 y 3: `servicio` y vencimiento de pago (10032, 10049). Concepto 1 fuera de FCE no admite `vtoPago` (10031/10033).
-- Facturas FCE 201, 206, 211: `vtoPago` obligatorio con cualquier concepto (10163). NC/ND FCE de concepto 1: `vtoPago` solo si son de anulación, opcional 22 = 'S' (10175). FCE: receptor con CUIT; NC/ND FCE con `cbtesAsoc` (10153), sin `periodoAsoc` (10196).
+- Facturas FCE 201, 206, 211: `vtoPago` obligatorio con cualquier concepto (10163). NC/ND FCE de concepto 1: `vtoPago` solo si son de anulación, opcional 22 = 'S' (10175). Facturas FCE: opcionales 2101 (CBU, 22 dígitos) y 27 'SCA'/'ADC' obligatorios, sin 22 (10168, 10165, 10216, 10215, 10171). NC/ND FCE: opcional 22 'S'/'N' obligatorio, sin 2101, 2102 ni 27 (10173, 10167, 10172). FCE: 2102 (alias) de 6 a 20 caracteres (10166). Fuera de FCE no se informan 2101, 2102, 22 ni 27 (10169). FCE: receptor con CUIT (10176); NC/ND FCE con `cbtesAsoc` (10153), sin `periodoAsoc` (10196).
 - NC/ND: `cbtesAsoc` o `periodoAsoc` (10197).
 - B (6, 7, 8) a 23000000000 (No Categorizado) con importes gravados: tributo 13 `TributoTipo.PERCEP_IVA_NO_CATEGORIZADO` (10067, 10283).
 - Moneda: PES con cotización 1 (10039); extranjera con cotización salvo `canMisMonExt: 'S'` (10038, 10241).
@@ -123,14 +126,16 @@ Reglas validadas localmente (el mensaje cita el código del manual WSFEv1 v4.7):
 ```typescript
 await arca.facturarExpo({
   ptoVta: 3, cbteTipo: CbteTipo.FACTURA_E, tipoExpo: TipoExpo.BIENES, pais: 212,
-  cliente: { nombre: 'ACME', domicilio: 'Main St 1', cuitPais?: 50000000016, idImpositivo?: '12-3456789' }, // al menos uno (1580)
+  cliente: { nombre: 'ACME', domicilio: 'Main St 1', cuitPais?: 55000002126, idImpositivo?: '12-3456789' }, // al menos uno (1580)
   moneda: 'DOL', cotizacion: 1200,
   formaPago: 'Transferencia',        // obligatoria solo en Factura E (1620)
   items: [
     { codigo: 'A1', descripcion: 'Widget', cantidad: 100, unidad: 7, precioUnitario: 10, bonificacion?: 0 },
     { codigo: 'B', descripcion: 'Bonificación', cantidad: 0, unidad: 99, precioUnitario: 0, total: -50 }, // unidades 0/97/99: total explícito (1775, 1810)
   ],
-  incoterms?, incotermsDes?, idioma?: 1 | 2 | 3, permisoExistente?: 'S' | 'N', permisos?, cbtesAsoc?,
+  incoterms?,                        // obligatorio en Factura E de bienes (tipoExpo 1) (1640)
+  incotermsDes?,                     // requiere incoterms (1641)
+  idioma?: 1 | 2 | 3, permisoExistente?: 'S' | 'N', permisos?, cbtesAsoc?,
   fecha?, fechaPago?, obs?, obsComerciales?, canMisMonExt?, opcionales?, actividades?, id?, cbteNro?,
 });
 ```
@@ -146,7 +151,7 @@ await arca.facturarExpo({
 
 ### Parámetros y estado (WSFEv1)
 
-`status()` (`{ wsfe, wsfex }`), `getTiposComprobante`, `getTiposConcepto`, `getTiposDocumento`, `getCondicionesIva({ claseCmp? })`, `getTiposIva`, `getMonedas`, `getTiposTributo`, `getTiposOpcional`, `getActividades`, `getTiposPaises` (cacheados; consultas simultáneas comparten un request), `getPuntosVenta`, `getCotizacion(monId, { fecha? })` (`{ monId, monCotiz, fchCotiz }`), `getCantMaxRegistros`, `clearParamCache()`, `clearAuthCache()`.
+`status()` (`{ wsfe, wsfex }`), `getTiposComprobante`, `getTiposConcepto`, `getTiposDocumento`, `getCondicionesIva({ claseCmp? })`, `getTiposIva`, `getMonedas`, `getTiposTributo`, `getTiposOpcional`, `getActividades`, `getTiposPaises` (cacheados; consultas simultáneas comparten un request), `getPuntosVenta`, `getCotizacion(monId, { fecha? })` (`{ monId, monCotiz, fchCotiz }`), `getCantMaxRegistros`, `clearParamCache()`, `clearAuthCache(): Promise<void>`.
 
 ### Funciones y constantes
 

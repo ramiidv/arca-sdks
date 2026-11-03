@@ -23,12 +23,14 @@ npm install @ramiidv/arca-agro
 
 ## Requisitos
 
-- Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
-- Certificado digital X.509 y clave privada de ARCA, con los servicios **`wscpe`** y/o **`wslpg`** asociados
+- Node >= 20.19. Solo ESM; también funciona desde CommonJS porque Node ≥ 20.19 permite cargar módulos ESM con `require()`.
+- Certificado digital X.509 y clave privada de ARCA, con los servicios **`wscpe`** y/o **`wslpg`** asociados (los ids de WSAA están en `WSAA_SERVICES`: `{ cpe: 'wscpe', lpg: 'wslpg' }`)
   - **Homologación**: [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx)
   - **Producción**: [Administración de Certificados Digitales](https://www.afip.gob.ar/ws/documentacion/certificados.asp)
 
 ## Inicio rápido
+
+Los códigos del ejemplo (provincias, localidades, `planta`, granos, `codPuerto`, actividad, conceptos `'CO'` y `'RG'`) son ilustrativos: los válidos se obtienen con las [paramétricas](#glosario) de cada servicio.
 
 ```ts
 import fs from 'node:fs';
@@ -36,8 +38,8 @@ import { ArcaAgro, FileTicketStorage, TIPO_CPE } from '@ramiidv/arca-agro';
 
 const agro = new ArcaAgro({
   cuit: '20-12345678-6', // CUIT representada (se valida el dígito verificador)
-  cert: fs.readFileSync('cert.pem', 'utf-8'),
-  key: fs.readFileSync('key.pem', 'utf-8'),
+  cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: fs.readFileSync('./certs/clave.key', 'utf-8'),
   production: false,
   ticketStorage: new FileTicketStorage('.arca-tickets'), // recomendado: persiste el TA entre reinicios
 });
@@ -98,6 +100,16 @@ console.log(autorizacion.coe, autorizacion.totalNetoAPagar); // '330100012345' 8
 
 > **`siguienteNroOrden` no es atómico.** Hace `consultarUltNroOrden + 1`: dos procesos que lo llamen a la vez obtienen el mismo número y ARCA rechaza la segunda autorización. Si emitís en paralelo para la misma sucursal y tipo, serializá las emisiones o llevá tu propio contador. Lo mismo vale para el número de orden de WSLPG.
 
+## Glosario
+
+- **CTG** (Código de Trazabilidad de Granos): número que WSCPE asigna al autorizar una carta de porte (`cabecera.nroCTG`).
+- **COE** (Código de Operación Electrónico): número que WSLPG asigna a una liquidación, ajuste o certificación autorizada (`autorizacion.coe`).
+- **TA / TRA**: el TRA (Ticket de Requerimiento de Acceso) es el pedido que el SDK firma y envía a WSAA; el TA (Ticket de Acceso) es el token y sign que WSAA devuelve y que se reutiliza mientras está vigente (`ticketStorage`).
+- **Paramétricas**: consultas de las tablas de códigos de cada servicio (provincias, localidades, granos, plantas, puertos, actividades, conceptos de deducción y retención, campañas).
+- **Sucursal**: número de sucursal del solicitante que emite la carta de porte; junto con el tipo de CPE y el número de orden identifica la carta de porte (`cartaPorte: { tipoCPE, sucursal, nroOrden }`).
+- **Planta**: código de la planta (establecimiento) de un operador; las de una CUIT salen de `consultarPlantas(cuit)`.
+- **Cosecha / campaña** (`cosecha`, `campaniaPPal`): cuatro dígitos con los dos últimos de cada año: `2526` es la campaña 2025/26. `campaniasConsultar()` devuelve los códigos válidos.
+
 ## Configuración
 
 `ArcaAgroConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`:
@@ -130,12 +142,19 @@ Tipos de carta de porte (`TIPO_CPE`): `74` automotor, `75` ferroviaria, `274` au
 
 **Emisiones** (nunca se reintentan). `autorizar*` devuelve el detalle de la CPE (`cabecera.nroCTG` siempre presente); el resto devuelve `CPEResultado` (`{ cabecera?, pdf?, metadata?, advertencias? }`).
 
-| Circuito    | Métodos                                                                                                                                                                                                                                                                                                                                  |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Automotor   | `autorizarCPEAutomotor`, `editarCPEAutomotor`, `editarCPEConfirmadaAutomotor`, `confirmarArriboCPE`, `confirmacionDefinitivaCPEAutomotor`, `descargadoDestinoCPE`, `rechazoCPE`, `anularCPE`, `nuevoDestinoDestinatarioCPEAutomotor`, `regresoOrigenCPEAutomotor`, `desvioCPEAutomotor`, `informarContingencia`, `cerrarContingenciaCPE` |
-| Ferroviario | `autorizarCPEFerroviaria`, `editarCPEFerroviaria`, `editarCPEConfirmadaFerroviaria`, `confirmacionDefinitivaCPEFerroviaria`, `nuevoDestinoDestinatarioCPEFerroviaria`, `regresoOrigenCPEFerroviaria`, `desvioCPEFerroviaria`                                                                                                             |
+| Circuito    | Métodos                                                                                                                                                                                                                      |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Automotor   | `autorizarCPEAutomotor`, `editarCPEAutomotor`, `editarCPEConfirmadaAutomotor`, `confirmacionDefinitivaCPEAutomotor`, `nuevoDestinoDestinatarioCPEAutomotor`, `regresoOrigenCPEAutomotor`, `desvioCPEAutomotor`               |
+| Ferroviario | `autorizarCPEFerroviaria`, `editarCPEFerroviaria`, `editarCPEConfirmadaFerroviaria`, `confirmacionDefinitivaCPEFerroviaria`, `nuevoDestinoDestinatarioCPEFerroviaria`, `regresoOrigenCPEFerroviaria`, `desvioCPEFerroviaria` |
+| Comunes     | `confirmarArriboCPE`, `descargadoDestinoCPE`, `rechazoCPE`, `anularCPE`, `informarContingencia`, `cerrarContingenciaCPE` (automotor y ferroviaria, según `cartaPorte.tipoCPE`; manual §2.8)                                  |
 
 ```ts
+import { ArcaAgro, TIPO_CPE } from '@ramiidv/arca-agro';
+
+declare const agro: ArcaAgro; // la del inicio rápido
+declare const agroDestino: ArcaAgro; // la del destino (ver examples/carta-de-porte.ts)
+declare const cuitDestino: string;
+
 const cartaPorte = { tipoCPE: TIPO_CPE.AUTOMOTOR, sucursal: 1, nroOrden: 15 };
 
 // Las informa el destino (con su propia instancia de ArcaAgro: su CUIT y su certificado).
@@ -152,23 +171,23 @@ await agro.cpe.informarContingencia({ cartaPorte, contingencia: { concepto: 'C',
 
 **Consultas** (se reintentan ante errores transitorios). Las listas sin resultados devuelven `[]`; si ARCA devuelve errores se lanza `ArcaAgroServiceError`, nunca una lista vacía.
 
-| Método                                                                                | Devuelve                                         |
-| ------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `consultarCPEAutomotor({ cartaPorte } \| { nroCTG })`                                 | `CPEAutomotorDetalle`                            |
-| `consultarCPEFerroviaria({ cartaPorte } \| { nroCTG })`                               | `CPEFerroviariaDetalle`                          |
-| `consultaCPEFerroviariaPorNroOperativo(nroOperativo)`                                 | `OperativoFerroviarioCPE`                        |
-| `consultarCPEPorDestino({ planta, fechaPartidaDesde, fechaPartidaHasta })`            | `CPEResumen[]`                                   |
-| `consultarCPEPPendientesDeResolucion({ perfil, planta? })`                            | `CPEResumen[]`                                   |
-| `consultarUltNroOrden(sucursal, tipoCPE)` / `siguienteNroOrden(...)`                  | `number` (si ARCA no devuelve `nroOrden`, lanza) |
-| `consultarProvincias()`, `consultarLocalidadesPorProvincia(codProvincia)`             | `CodigoDescripcion[]`                            |
-| `consultarTiposGrano()`, `consultarCategoriasSemillas()`, `consultarUnidadesMedida()` | `CodigoDescripcion[]`                            |
-| `consultarVariedadesSemillas(codGrano?)`                                              | `VariedadSemillaCPE[]`                           |
-| `consultarTiposEmbalaje()`                                                            | `TipoEmbalajeCPE[]` (con sus unidades de medida) |
-| `consultarPlantas(cuit)`                                                              | `PlantaCPE[]`                                    |
-| `consultarLocalidadesProductor(cuit)`                                                 | `LocalidadProductorCPE[]`                        |
-| `consultarRenspa(cuit, codProvincia)`                                                 | `RenspaCPE[]`                                    |
-| `consultarDomiciliosPorCUIT(cuit)`                                                    | `DomicilioCPE[]`                                 |
-| `dummy()`                                                                             | `ServerStatus` (sin autenticación)               |
+| Método                                                                                      | Devuelve                                         |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `consultarCPEAutomotor({ cartaPorte \| nroCTG, cuitSolicitante? })`                         | `CPEAutomotorDetalle`                            |
+| `consultarCPEFerroviaria({ cartaPorte \| nroCTG, cuitSolicitante? })`                       | `CPEFerroviariaDetalle`                          |
+| `consultaCPEFerroviariaPorNroOperativo(nroOperativo)`                                       | `OperativoFerroviarioCPE`                        |
+| `consultarCPEPorDestino({ planta, fechaPartidaDesde, fechaPartidaHasta, tipoCartaPorte? })` | `CPEResumen[]`                                   |
+| `consultarCPEPPendientesDeResolucion({ perfil, planta? })`                                  | `CPEResumen[]`                                   |
+| `consultarUltNroOrden(sucursal, tipoCPE)` / `siguienteNroOrden(...)`                        | `number` (si ARCA no devuelve `nroOrden`, lanza) |
+| `consultarProvincias()`, `consultarLocalidadesPorProvincia(codProvincia)`                   | `CodigoDescripcion[]`                            |
+| `consultarTiposGrano()`, `consultarCategoriasSemillas()`, `consultarUnidadesMedida()`       | `CodigoDescripcion[]`                            |
+| `consultarVariedadesSemillas(codGrano?)`                                                    | `VariedadSemillaCPE[]`                           |
+| `consultarTiposEmbalaje()`                                                                  | `TipoEmbalajeCPE[]` (con sus unidades de medida) |
+| `consultarPlantas(cuit)`                                                                    | `PlantaCPE[]`                                    |
+| `consultarLocalidadesProductor(cuit)`                                                       | `LocalidadProductorCPE[]`                        |
+| `consultarRenspa(cuit, codProvincia)`                                                       | `RenspaCPE[]`                                    |
+| `consultarDomiciliosPorCUIT(cuit)`                                                          | `DomicilioCPE[]`                                 |
+| `dummy()`                                                                                   | `ServerStatus` (sin autenticación)               |
 
 **No implementado en WSCPE:** el circuito de **derivados granarios** (CPE DG): `autorizarCPEAutomotorDG`, `autorizarCPEFerroviariaDG`, `autorizarCPEDuctosDG`, `autorizarCPEEmisionDestinoDG`, `aceptarEmisionDG`, `aceptarEmisionDestinoDG`, `rechazarEmisionDG`, `rechazarEmisionDestinoDG`, las variantes `*DG` / `*Ductos` / `*EmisionDestinoDG` de editar, confirmar, desviar, regresar, nuevo destino, anular, contingencia y descarga, y las consultas `consultarCPEAutomotorDG`, `consultarCPEFerroviariaDG`, `consultarCPEDuctos`, `consultarCPEEmisionDestinoDG`, `consultarCPEDGPendienteActivacion`, `consultarCPEEmitidasDestinoDGPendientesActivacion`, `consultarDerivadosGranarios` y `consultarPlantasDG`.
 
@@ -176,12 +195,12 @@ await agro.cpe.informarContingencia({ cartaPorte, contingencia: { concepto: 'C',
 
 `liquidacion` sigue `LpgLiquidacionBaseType` del XSD; `deducciones`, `retenciones` y `percepciones` van como hermanos (arrays). Los códigos de actividad, operación, puerto, grano, deducción y retención salen de las paramétricas.
 
-| Grupo                 | Emisiones (nunca se reintentan)                               | Consultas                                                                                                                                                                                                                                                                                                                                                                                              |
-| --------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Liquidación primaria  | `liquidacionAutorizar`, `liquidacionAnular`                   | `liquidacionXCoeConsultar(coe, { pdf? })`, `liquidacionXNroOrdenConsultar(ptoEmision, nroOrden)`, `liquidacionUltimoNroOrdenConsultar(ptoEmision)`, `liquidacionPorContratoConsultar(params)` (COEs)                                                                                                                                                                                                   |
-| Ajustes               | `liquidacionAjustarUnificado`                                 | `ajusteXCoeConsultar(coe, { pdf? })`, `ajusteXNroOrdenConsultar(ptoEmision, nroOrden)`, `ajustePorContratoConsultar(nroContrato)`                                                                                                                                                                                                                                                                      |
-| Certificación (`cg*`) | `cgAutorizar`, `cgSolicitarAnulacion`, `cgConfirmarAnulacion` | `cgConsultarXCoe(coe, { pdf? })`, `cgConsultarXNroOrden(ptoEmision, nroOrden)`, `cgConsultarUltimoNroOrden(ptoEmision)`, `cgBuscarCtg(params)`, `cgBuscarCertConSaldoDisponible(params)`                                                                                                                                                                                                               |
-| Paramétricas          |                                                               | `provinciasConsultar`, `localidadXProvinciaConsultar`, `tipoGranoConsultar`, `puertoConsultar`, `tipoActividadConsultar`, `tipoActividadRepresentadoConsultar`, `tipoOperacionXActividadConsultar`, `tipoDeduccionConsultar`, `tipoRetencionConsultar`, `tipoCertificadoDepositoConsultar`, `codigoGradoReferenciaConsultar`, `codigoGradoEntregadoXTipoGranoConsultar`, `campaniasConsultar`, `dummy` |
+| Grupo                 | Emisiones (nunca se reintentan)                               | Consultas                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Liquidación primaria  | `liquidacionAutorizar`, `liquidacionAnular`                   | `liquidacionXCoeConsultar(coe, { pdf? })`, `liquidacionXNroOrdenConsultar(ptoEmision, nroOrden)`, `liquidacionUltimoNroOrdenConsultar(ptoEmision)`, `liquidacionPorContratoConsultar(params)` (COEs)                                                                                                                                                                                                                                          |
+| Ajustes               | `liquidacionAjustarUnificado`                                 | `ajusteXCoeConsultar(coe, { pdf? })`, `ajusteXNroOrdenConsultar(ptoEmision, nroOrden)`, `ajustePorContratoConsultar(nroContrato)`                                                                                                                                                                                                                                                                                                             |
+| Certificación (`cg*`) | `cgAutorizar`, `cgSolicitarAnulacion`, `cgConfirmarAnulacion` | `cgConsultarXCoe(coe, { pdf? })`, `cgConsultarXNroOrden(ptoEmision, nroOrden)`, `cgConsultarUltimoNroOrden(ptoEmision)`, `cgBuscarCtg(params)`, `cgBuscarCertConSaldoDisponible(params)`                                                                                                                                                                                                                                                      |
+| Paramétricas          |                                                               | `provinciasConsultar`, `localidadXProvinciaConsultar(codProvincia)`, `tipoGranoConsultar`, `puertoConsultar`, `tipoActividadConsultar`, `tipoActividadRepresentadoConsultar`, `tipoOperacionXActividadConsultar(nroActLiquida)`, `tipoDeduccionConsultar`, `tipoRetencionConsultar`, `tipoCertificadoDepositoConsultar`, `codigoGradoReferenciaConsultar`, `codigoGradoEntregadoXTipoGranoConsultar(codGrano)`, `campaniasConsultar`, `dummy` |
 
 ```ts
 await agro.lpg.liquidacionXCoeConsultar(coe, { pdf: true }); // { liquidacion?, autorizacion, pdf?, eventos, advertencias? }
@@ -342,7 +361,7 @@ agro.on('request:retry', (e) => console.warn('Reintento', e));
 | WSCPE    | `https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap` | `https://cpea-ws.afip.gob.ar/wscpe/services/soap`    |
 | WSLPG    | `https://fwshomo.afip.gov.ar/wslpg/LpgService`          | `https://serviciosjava.afip.gob.ar/wslpg/LpgService` |
 
-Los endpoints están en `CPE_ENDPOINTS` y `LPG_ENDPOINTS`; los namespaces en `CPE_NAMESPACE` (`https://serviciosjava.afip.gob.ar/wscpe/`) y `LPG_NAMESPACE` (`http://serviciosjava.afip.gob.ar/wslpg/`). Los de WSAA están en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
+Los endpoints están en `CPE_ENDPOINTS` y `LPG_ENDPOINTS`, y los ids de servicio de WSAA en `WSAA_SERVICES` (`wscpe`, `wslpg`); los namespaces en `CPE_NAMESPACE` (`https://serviciosjava.afip.gob.ar/wscpe/`) y `LPG_NAMESPACE` (`http://serviciosjava.afip.gob.ar/wslpg/`). Los de WSAA están en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
 
 ## Ejemplos
 

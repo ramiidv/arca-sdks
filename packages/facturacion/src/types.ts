@@ -666,9 +666,9 @@ export interface FacturarExpoOpts {
   formaPago?: string;
   /** Idioma: 1=Español, 2=Inglés, 3=Portugués. Default: 1 */
   idioma?: number;
-  /** Código Incoterms */
+  /** Código Incoterms (`getIncotermsExpo`). Obligatorio en Factura E (19) de bienes (tipoExpo 1) (validación 1640). */
   incoterms?: string;
-  /** Descripción Incoterms */
+  /** Descripción Incoterms. Requiere `incoterms` (validación 1641). */
   incotermsDes?: string;
   /**
    * Permiso de embarque existente: "S" o "N". Solo aplica a Factura E (19) de
@@ -843,7 +843,13 @@ export interface FacturarOpts {
   cotizacion?: number;
   /** Tributos adicionales (Importe y BaseImp >= 0, se redondean a 2 decimales) */
   tributos?: Tributo[];
-  /** Datos opcionales (ej: CBU para FCE) */
+  /**
+   * Datos opcionales (`getTiposOpcional`). Solo en FCE MiPyME (validación
+   * 10169): 2101 (CBU, obligatorio en facturas: 10168), 2102 (alias), 27
+   * ("SCA" o "ADC", obligatorio en facturas: 10216) y 22 (anulación "S" o
+   * "N", obligatorio en NC/ND: 10173). Las NC/ND FCE no llevan 2101, 2102 ni
+   * 27 (10172) y las facturas FCE no llevan 22 (10171).
+   */
   opcionales?: Opcional[];
   /**
    * Condición de IVA del receptor (usar enum CondicionIva). Obligatoria si el

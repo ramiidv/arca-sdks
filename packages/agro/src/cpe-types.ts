@@ -339,7 +339,8 @@ export interface InformarContingenciaParams {
 }
 
 /**
- * `CerrarContingenciaFerroviariaSolicitud` (cerrarContingenciaCPE).
+ * `CerrarContingenciaFerroviariaSolicitud` (cerrarContingenciaCPE). Pese al nombre del
+ * tipo en el XSD, el método es común a automotor y ferroviaria (manual WSCPE §2.8).
  * Conceptos: A Reactivación para descarga en destino, B Extensión cierre contingencia,
  * C Desactivar definitivamente la CP. Motivos de desactivación: A Destrucción
  * vagón/vehículo, B Destrucción carga, C Otro.

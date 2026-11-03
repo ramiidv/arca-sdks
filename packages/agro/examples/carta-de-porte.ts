@@ -14,8 +14,8 @@ const CUIT_DESTINO = '30500011129'; // planta de destino: otra empresa, con su p
 
 const agro = new ArcaAgro({
   cuit: CUIT,
-  cert: fs.readFileSync('cert.pem', 'utf-8'),
-  key: fs.readFileSync('key.pem', 'utf-8'),
+  cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: fs.readFileSync('./certs/clave.key', 'utf-8'),
   production: false, // homologación
   ticketStorage: new FileTicketStorage('.arca-tickets'), // persiste el TA entre reinicios
   onEvent: (event) => console.log(`[${event.type}]`, 'method' in event ? event.method : ''),
