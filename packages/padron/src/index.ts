@@ -14,12 +14,13 @@ export {
   ArcaTicketVigenteError,
   ArcaSoapError,
   ArcaServiceError,
+  ArcaResponseError,
   ArcaValidationError,
 } from '@ramiidv/arca-common';
 export { ArcaPadronError, ArcaPadronServiceError, type PadronErrorReason } from './errors.js';
 
 // Base class
-export { BasePadronClient, type PadronClientConfig, type PadronSoapOptions } from './base-client.js';
+export { BasePadronClient, type PadronClientConfig } from './base-client.js';
 
 // Low-level clients
 export { WsaaClient } from '@ramiidv/arca-common';
@@ -39,8 +40,10 @@ export type {
   TicketStorage,
   CallOptions,
   WsAuth,
-  SoapCallOptions,
   ServerStatus,
+  ServiceClientConfig,
+  ServiceEndpoints,
+  ServiceTransport,
   ArcaEvent,
   PersonaA4,
   DependenciaA4,
@@ -81,6 +84,8 @@ export type {
 // Constants and enums
 export {
   ENDPOINTS,
+  NAMESPACES,
+  SERVICE_IDS,
   Provincia,
   DocTipo,
   CondicionIva,
@@ -90,16 +95,3 @@ export {
   EstadoClave,
   CollectionName,
 } from './constants.js';
-
-// Utilidades (de arca-common), deprecadas en este paquete
-import {
-  buildXml as commonBuildXml,
-  ensureArray as commonEnsureArray,
-  parseXml as commonParseXml,
-} from '@ramiidv/arca-common';
-/** @deprecated Importar de `@ramiidv/arca-common`. Se va a quitar de este paquete en una versión mayor. */
-export const ensureArray: typeof commonEnsureArray = commonEnsureArray;
-/** @deprecated Importar de `@ramiidv/arca-common`. Se va a quitar de este paquete en una versión mayor. */
-export const parseXml: typeof commonParseXml = commonParseXml;
-/** @deprecated Importar de `@ramiidv/arca-common`. Se va a quitar de este paquete en una versión mayor. */
-export const buildXml: typeof commonBuildXml = commonBuildXml;

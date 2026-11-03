@@ -4,7 +4,7 @@ import { ArcaSoapError, MemoryTicketStorage, CondicionIva } from '@ramiidv/arca-
 import { ArcaPadron } from '../src/arca-padron.js';
 import { mockFetch, padron, respuesta } from './helpers.js';
 import { condicionIvaDesdePadron } from '../src/condicion-iva.js';
-import { ENDPOINTS, TipoDomicilio } from '../src/constants.js';
+import { NAMESPACES, TipoDomicilio } from '../src/constants.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -50,7 +50,7 @@ const CONSTANCIA_MONO = `<personaReturn>
 describe('constancia de inscripción (ex A5)', () => {
   it('usa getPersona_v2, parámetros sin namespace y en orden del WSDL', async () => {
     const client = await padron();
-    const { bodies } = mockFetch(respuesta(ENDPOINTS.a5.namespace, 'getPersona_v2', CONSTANCIA_RI));
+    const { bodies } = mockFetch(respuesta(NAMESPACES.a5, 'getPersona_v2', CONSTANCIA_RI));
     await client.getConstanciaInscripcion('30712345671');
     expect(bodies[0]).toContain('<ser:getPersona_v2 xmlns:ser="http://a5.soap.ws.server.puc.sr/">');
     expect(bodies[0]).toMatch(
@@ -60,7 +60,7 @@ describe('constancia de inscripción (ex A5)', () => {
 
   it('mapea datos generales, domicilio fiscal, impuestos y actividades', async () => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a5.namespace, 'getPersona_v2', CONSTANCIA_RI));
+    mockFetch(respuesta(NAMESPACES.a5, 'getPersona_v2', CONSTANCIA_RI));
     const p = await client.getConstanciaInscripcion('30712345671');
     expect(p).toMatchObject({
       idPersona: '30712345671',
@@ -77,7 +77,7 @@ describe('constancia de inscripción (ex A5)', () => {
 
   it('mapea monotributo: categoría e impuesto', async () => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a5.namespace, 'getPersona_v2', CONSTANCIA_MONO));
+    mockFetch(respuesta(NAMESPACES.a5, 'getPersona_v2', CONSTANCIA_MONO));
     const p = await client.getConstanciaInscripcion('20111111112');
     expect(p.monotributo?.categoria).toEqual({
       idCategoria: 36,
@@ -101,7 +101,7 @@ describe('constancia de inscripción (ex A5)', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a5.namespace,
+        NAMESPACES.a5,
         'getPersona_v2',
         '<personaReturn><errorConstancia><apellido>PEREZ</apellido><error>Tu Constancia se encuentra bloqueada.</error>' +
           '<idPersona>20111111112</idPersona><nombre>JUAN</nombre></errorConstancia></personaReturn>',
@@ -118,7 +118,7 @@ describe('constancia de inscripción (ex A5)', () => {
 
   it('pide el ticket de ws_sr_constancia_inscripcion', async () => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a5.namespace, 'getPersona_v2', CONSTANCIA_RI));
+    mockFetch(respuesta(NAMESPACES.a5, 'getPersona_v2', CONSTANCIA_RI));
     const spy = vi.spyOn(client.wsaa, 'getAccessTicket');
     await client.getConstanciaInscripcion('30712345671');
     expect(spy).toHaveBeenCalledWith('ws_sr_constancia_inscripcion', expect.anything());
@@ -130,7 +130,7 @@ describe('A4, A10, A13 y A100 con respuestas reales (personaReturn)', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a4.namespace,
+        NAMESPACES.a4,
         'getPersona',
         '<personaReturn><metadata><servidor>x</servidor></metadata><persona>' +
           '<estadoClave>ACTIVO</estadoClave><idPersona>30712345671</idPersona><razonSocial>RESTO SA</razonSocial>' +
@@ -156,7 +156,7 @@ describe('A4, A10, A13 y A100 con respuestas reales (personaReturn)', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a10.namespace,
+        NAMESPACES.a10,
         'getPersona',
         '<personaReturn><persona><apellido>PEREZ</apellido><idPersona>20111111112</idPersona><nombre>JUAN</nombre>' +
           '<tipoPersona>FISICA</tipoPersona></persona></personaReturn>',
@@ -170,7 +170,7 @@ describe('A4, A10, A13 y A100 con respuestas reales (personaReturn)', () => {
     const client = await padron();
     const { bodies } = mockFetch(
       respuesta(
-        ENDPOINTS.a13.namespace,
+        NAMESPACES.a13,
         'getPersona',
         '<personaReturn><persona><apellido>PEREZ</apellido>' +
           '<domicilio><codigoPostal>1414</codigoPostal><direccion>AV SCALABRINI ORTIZ 500</direccion><idProvincia>0</idProvincia>' +
@@ -191,7 +191,7 @@ describe('A4, A10, A13 y A100 con respuestas reales (personaReturn)', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a13.namespace,
+        NAMESPACES.a13,
         'getIdPersonaListByDocumento',
         '<idPersonaListReturn><idPersona>20111111112</idPersona><idPersona>27111111117</idPersona>' +
           '<metadata><servidor>x</servidor></metadata></idPersonaListReturn>',
@@ -204,7 +204,7 @@ describe('A4, A10, A13 y A100 con respuestas reales (personaReturn)', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a100.namespace,
+        NAMESPACES.a100,
         'getParameterCollectionByName',
         '<parameterCollectionReturn><metadata><servidor>x</servidor></metadata><parameterCollection>' +
           '<name>SUPA.E_PROVINCIA</name>' +
@@ -234,7 +234,7 @@ describe('A4, A10, A13 y A100 con respuestas reales (personaReturn)', () => {
       sign: 'S',
       expirationTime: new Date(Date.now() + 3_600_000).toISOString(),
     });
-    const { fn } = mockFetch(respuesta(ENDPOINTS.a13.namespace, 'getPersona', '<personaReturn/>'));
+    const { fn } = mockFetch(respuesta(NAMESPACES.a13, 'getPersona', '<personaReturn/>'));
     controller.abort();
     const err = await client.getPersonaA13('20111111112').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ArcaSoapError);

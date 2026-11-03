@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@ramiidv/arca-padron)](https://www.npmjs.com/package/@ramiidv/arca-padron)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Node >= 20.19](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen)](https://nodejs.org)
+[![Node >= 22.12](https://img.shields.io/badge/node-%3E%3D22.12-brightgreen)](https://nodejs.org)
 
 SDK en TypeScript para los web services de **Padrón** de **ARCA** (ex AFIP): Constancia de Inscripción
 (`ws_sr_constancia_inscripcion`, ex A5), A4 (datos completos), A10 y A13 (datos básicos) y A100
@@ -42,7 +42,7 @@ npm install @ramiidv/arca-padron
 
 ## Requisitos
 
-- Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
+- Node.js >= 22.12. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
 - Certificado digital X.509 y clave privada de ARCA, con cada servicio que uses asociado por
   separado: `ws_sr_constancia_inscripcion`, `ws_sr_padron_a4`, `ws_sr_padron_a10`,
   `ws_sr_padron_a13`, `ws_sr_padron_a100`. En homologación se asocian en
@@ -296,7 +296,7 @@ Para casos avanzados, se pueden usar los clientes de cada servicio directamente:
 
 ```typescript
 import { readFileSync } from 'node:fs';
-import { ArcaPadron, ENDPOINTS } from '@ramiidv/arca-padron';
+import { ArcaPadron, SERVICE_IDS } from '@ramiidv/arca-padron';
 import type { WsAuth } from '@ramiidv/arca-padron';
 
 const padron = new ArcaPadron({
@@ -305,11 +305,25 @@ const padron = new ArcaPadron({
   cuit: '20123456786',
 });
 
-const ticket = await padron.wsaa.getAccessTicket(ENDPOINTS.a4.serviceId);
+const ticket = await padron.wsaa.getAccessTicket(SERVICE_IDS.a4);
 const credenciales: WsAuth = { token: ticket.token, sign: ticket.sign, cuitRepresentada: '20123456786' };
 
 const contribuyente = await padron.a4.getPersona(credenciales, '20111111112');
 console.log(contribuyente.idPersona);
+```
+
+También se pueden crear sueltos, con la misma configuración que los clientes de bajo nivel de todos
+los SDKs (`ServiceClientConfig` de `@ramiidv/arca-common`, reexportado junto con `ServiceTransport` y
+`ServiceEndpoints`): `{ endpoint, transport? }`. El namespace lo fija cada cliente (ver `NAMESPACES`):
+
+```typescript
+import { ENDPOINTS, PadronA4Client } from '@ramiidv/arca-padron';
+
+const a4 = new PadronA4Client({
+  endpoint: ENDPOINTS.a4.testing,
+  transport: { timeout: 10_000, retries: 2, onEvent: (e) => console.log(e.type) },
+});
+const estado = await a4.dummy();
 ```
 
 ### Tipos de respuesta
@@ -472,7 +486,8 @@ type ListaPadron<T> = T[] & { metadata?: PadronMetadata };
 ```text
 Error
   └── ArcaError (base, de @ramiidv/arca-common)
-        ├── ArcaPadronError (respuesta de ARCA sin un dato obligatorio, ej: personaReturn sin persona)
+        ├── ArcaResponseError (respuesta inválida de ARCA)
+        │     └── ArcaPadronError (respuesta sin un dato obligatorio, ej: personaReturn sin persona)
         ├── ArcaAuthError (errores de WSAA)
         │     └── ArcaTicketVigenteError (TA vigente que no está en memoria ni en el storage)
         ├── ArcaValidationError (CUIT o documento inválido: no se llamó a ARCA)
@@ -566,8 +581,15 @@ const padron = new ArcaPadron({
 El manual de la constancia de inscripción (v4.1) publica los hosts `awshomo.arca.gob.ar` /
 `aws.arca.gob.ar`. El SDK usa `awshomo.afip.gov.ar` / `aws.afip.gov.ar`: son los `soap:address` de
 los WSDL oficiales de los cinco servicios y los que publica el manual de A13 (v1.4), y responden
-igual. Para usar otro host, pasá `endpoints`. Las URLs, namespaces e ids de servicio están en
-`ENDPOINTS`; los de WSAA, en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
+igual. Para usar otro host, pasá `endpoints` (con las mismas claves que `ENDPOINTS`).
+
+Constantes exportadas, con las claves `a5`, `a4`, `a10`, `a13` y `a100`:
+
+- `ENDPOINTS`: URLs por entorno (`{ testing, production }`, `ServiceEndpoints` de arca-common).
+- `NAMESPACES`: namespace del WSDL de cada servicio.
+- `SERVICE_IDS`: id de WSAA de cada servicio (`ws_sr_constancia_inscripcion`, `ws_sr_padron_a4`...).
+
+Las URLs de WSAA están en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
 
 ### Enums útiles
 
@@ -575,14 +597,11 @@ igual. Para usar otro host, pasá `endpoints`. Las URLs, namespaces e ids de ser
   `EMPLEADOR` (301), `AUTONOMOS` (308)... (manuales de ARCA). `IVA_EXENTO` (32),
   `IVA_RESPONSABLE_NO_INSCRIPTO` (33) e `IVA_NO_ALCANZADO` (34) no figuran en los manuales del padrón.
 - `TipoDomicilio`: `FISCAL`, `LEGAL_REAL` (`'LEGAL/REAL'`) y `LOCALES_Y_ESTABLECIMIENTOS` (solo A4), los
-  valores de los manuales. `LEGAL` y `REAL` están deprecados: los manuales informan `'LEGAL/REAL'`.
-- `EstadoClave`: `ACTIVO`, `INACTIVO`. `LIMITADO` está deprecado: no figura en los manuales ("limitada"
-  aparece en el texto de `errorConstancia`, no en `estadoClave`).
+  valores de los manuales.
+- `EstadoClave`: `ACTIVO`, `INACTIVO`, los únicos que documentan los manuales ("limitada" aparece en
+  el texto de `errorConstancia`, no en `estadoClave`).
 - `TipoPersona`, `CollectionName`, `Provincia`, `CondicionIva`.
 - `DocTipo` son los códigos numéricos de WSFEv1, no el `tipoDocumento` string del padrón ("DNI", "LC"...).
-
-`ensureArray`, `parseXml` y `buildXml` siguen exportados por compatibilidad, pero están deprecados:
-importalos de `@ramiidv/arca-common`.
 
 ## Ejemplos
 

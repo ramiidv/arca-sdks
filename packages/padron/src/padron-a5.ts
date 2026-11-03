@@ -17,6 +17,7 @@ import {
   type Schema,
 } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
+import { NAMESPACES } from './constants.js';
 import type {
   ActividadA5,
   CaracterizacionA5,
@@ -33,6 +34,7 @@ import type {
   WsAuth,
 } from './types.js';
 
+/** Configuración de `PadronA5Client`: `{ endpoint, transport? }` (ver `ENDPOINTS.a5`). */
 export type PadronA5ClientConfig = PadronClientConfig;
 
 /** Máximo de claves por `getPersonaList_v2` (manual de constancia v4.1, §3.3). */
@@ -47,6 +49,10 @@ export const MAX_PERSONA_LIST = 250;
  * manual del servicio (v4.1).
  */
 export class PadronA5Client extends BasePadronClient {
+  constructor(config: PadronA5ClientConfig) {
+    super(config, NAMESPACES.a5);
+  }
+
   /**
    * Constancia de inscripción de un contribuyente (`getPersona_v2`).
    *

@@ -8,25 +8,25 @@ import { AccessTicket } from '@ramiidv/arca-common';
 import { ArcaAuthError } from '@ramiidv/arca-common';
 import { ArcaError } from '@ramiidv/arca-common';
 import { ArcaEvent } from '@ramiidv/arca-common';
+import { ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { ArcaSdkConfig } from '@ramiidv/arca-common';
 import { ArcaServiceError } from '@ramiidv/arca-common';
 import { ArcaSoapError } from '@ramiidv/arca-common';
 import { ArcaTicketVigenteError } from '@ramiidv/arca-common';
 import { ArcaValidationError } from '@ramiidv/arca-common';
-import { buildXml as buildXml_2 } from '@ramiidv/arca-common';
 import { CallOptions } from '@ramiidv/arca-common';
 import { CondicionIva } from '@ramiidv/arca-common';
 import { DocTipo } from '@ramiidv/arca-common';
-import { ensureArray as ensureArray_2 } from '@ramiidv/arca-common';
 import { FileTicketStorage } from '@ramiidv/arca-common';
 import { MemoryTicketStorage } from '@ramiidv/arca-common';
-import { parseXml as parseXml_2 } from '@ramiidv/arca-common';
 import { Provincia } from '@ramiidv/arca-common';
 import { ServerStatus } from '@ramiidv/arca-common';
+import { ServiceClientConfig } from '@ramiidv/arca-common';
+import { ServiceEndpoints } from '@ramiidv/arca-common';
 import type { ServiceErrorDetail } from '@ramiidv/arca-common';
 import type { ServiceStatus } from '@ramiidv/arca-common';
-import { SoapCallOptions } from '@ramiidv/arca-common';
+import { ServiceTransport } from '@ramiidv/arca-common';
 import { SoapServiceClient } from '@ramiidv/arca-common';
 import { TicketStorage } from '@ramiidv/arca-common';
 import { WsaaClient } from '@ramiidv/arca-common';
@@ -89,11 +89,18 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
 
 // @public
 export interface ArcaPadronConfig extends ArcaSdkConfig {
-    endpoints?: Partial<Record<PadronServicio | 'wsaa', string>>;
+    endpoints?: {
+        a5?: string;
+        a4?: string;
+        a10?: string;
+        a13?: string;
+        a100?: string;
+        wsaa?: string;
+    };
 }
 
 // @public
-export class ArcaPadronError extends ArcaError {
+export class ArcaPadronError extends ArcaResponseError {
     constructor(message: string, options?: {
         cause?: unknown;
     });
@@ -113,6 +120,8 @@ export class ArcaPadronServiceError extends ArcaServiceError {
     readonly reason: PadronErrorReason;
 }
 
+export { ArcaResponseError }
+
 export { ArcaServiceError }
 
 export { ArcaSoapError }
@@ -123,18 +132,11 @@ export { ArcaValidationError }
 
 // @public
 export abstract class BasePadronClient extends SoapServiceClient {
-    constructor(config: PadronClientConfig);
+    protected constructor(config: PadronClientConfig, namespace: string);
     protected authParams(auth: WsAuth): Record<string, unknown>;
     protected call(method: string, params: Record<string, unknown>, opts?: CallOptions): Promise<Record<string, unknown>>;
     dummy(opts?: CallOptions): Promise<ServerStatus>;
-    // @deprecated (undocumented)
-    protected readonly onEvent?: (event: ArcaEvent) => void;
-    // @deprecated (undocumented)
-    protected readonly soapOptions?: PadronSoapOptions;
 }
-
-// @public @deprecated (undocumented)
-export const buildXml: typeof buildXml_2;
 
 export { CallOptions }
 
@@ -379,44 +381,27 @@ export interface EmailA4 {
 
 // @public
 export const ENDPOINTS: {
-    readonly wsaa: {
-        readonly testing: 'https://wsaahomo.afip.gov.ar/ws/services/LoginCms';
-        readonly production: 'https://wsaa.afip.gov.ar/ws/services/LoginCms';
-    };
     readonly a5: {
         readonly testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5';
         readonly production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5';
-        readonly namespace: 'http://a5.soap.ws.server.puc.sr/';
-        readonly serviceId: 'ws_sr_constancia_inscripcion';
     };
     readonly a13: {
         readonly testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13';
         readonly production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13';
-        readonly namespace: 'http://a13.soap.ws.server.puc.sr/';
-        readonly serviceId: 'ws_sr_padron_a13';
     };
     readonly a4: {
         readonly testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA4';
         readonly production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA4';
-        readonly namespace: 'http://a4.soap.ws.server.puc.sr/';
-        readonly serviceId: 'ws_sr_padron_a4';
     };
     readonly a10: {
         readonly testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA10';
         readonly production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA10';
-        readonly namespace: 'http://a10.soap.ws.server.puc.sr/';
-        readonly serviceId: 'ws_sr_padron_a10';
     };
     readonly a100: {
         readonly testing: 'https://awshomo.afip.gov.ar/sr-parametros/webservices/parameterServiceA100';
         readonly production: 'https://aws.afip.gov.ar/sr-parametros/webservices/parameterServiceA100';
-        readonly namespace: 'http://a100.soap.ws.server.pucParam.sr/';
-        readonly serviceId: 'ws_sr_padron_a100';
     };
 };
-
-// @public @deprecated (undocumented)
-export const ensureArray: typeof ensureArray_2;
 
 // @public (undocumented)
 export interface ErrorConstanciaA5 {
@@ -442,9 +427,7 @@ export enum EstadoClave {
     // (undocumented)
     ACTIVO = "ACTIVO",
     // (undocumented)
-    INACTIVO = "INACTIVO",
-    // @deprecated (undocumented)
-    LIMITADO = "LIMITADO"
+    INACTIVO = "INACTIVO"
 }
 
 export { FileTicketStorage }
@@ -515,55 +498,64 @@ export interface MonotributoA5 {
 }
 
 // @public
+export const NAMESPACES: {
+    readonly a5: 'http://a5.soap.ws.server.puc.sr/';
+    readonly a13: 'http://a13.soap.ws.server.puc.sr/';
+    readonly a4: 'http://a4.soap.ws.server.puc.sr/';
+    readonly a10: 'http://a10.soap.ws.server.puc.sr/';
+    readonly a100: 'http://a100.soap.ws.server.pucParam.sr/';
+};
+
+// @public
 export class PadronA100Client extends BasePadronClient {
+    constructor(config: PadronA100ClientConfig);
     getParameterCollectionByName(auth: WsAuth, collectionName: string, opts?: CallOptions): Promise<ListaPadron<ParameterRecord>>;
 }
 
-// @public (undocumented)
+// @public
 export type PadronA100ClientConfig = PadronClientConfig;
 
 // @public
 export class PadronA10Client extends BasePadronClient {
+    constructor(config: PadronA10ClientConfig);
     getPersona(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA10>;
 }
 
-// @public (undocumented)
+// @public
 export type PadronA10ClientConfig = PadronClientConfig;
 
 // @public
 export class PadronA13Client extends BasePadronClient {
+    constructor(config: PadronA13ClientConfig);
     getIdPersonaListByDocumento(auth: WsAuth, documento: string | number, opts?: CallOptions): Promise<ListaPadron<string>>;
     getPersona(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA13>;
     getPersonaV2(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA13>;
 }
 
-// @public (undocumented)
+// @public
 export type PadronA13ClientConfig = PadronClientConfig;
 
 // @public
 export class PadronA4Client extends BasePadronClient {
+    constructor(config: PadronA4ClientConfig);
     getPersona(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA4>;
 }
 
-// @public (undocumented)
+// @public
 export type PadronA4ClientConfig = PadronClientConfig;
 
 // @public
 export class PadronA5Client extends BasePadronClient {
+    constructor(config: PadronA5ClientConfig);
     getPersona(auth: WsAuth, cuit: string | number, opts?: CallOptions): Promise<PersonaA5>;
     getPersonaList(auth: WsAuth, cuits: Array<string | number>, opts?: CallOptions): Promise<ListaPadron<PersonaA5>>;
 }
 
-// @public (undocumented)
+// @public
 export type PadronA5ClientConfig = PadronClientConfig;
 
 // @public
-export interface PadronClientConfig {
-    endpoint: string;
-    namespace: string;
-    onEvent?: (event: ArcaEvent) => void;
-    soapOptions?: PadronSoapOptions;
-}
+export type PadronClientConfig = ServiceClientConfig;
 
 // @public
 export type PadronErrorReason = 'inexistente' | 'inactiva' | 'id_invalido' | 'no_autorizado' | 'otro';
@@ -575,10 +567,7 @@ export interface PadronMetadata {
 }
 
 // @public
-export type PadronServicio = 'a5' | 'a4' | 'a10' | 'a13' | 'a100';
-
-// @public
-export type PadronSoapOptions = Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs' | 'fetch' | 'legacyTls'>;
+export type PadronServicio = keyof typeof ENDPOINTS;
 
 // @public
 export type PadronStatus = Record<PadronServicio, ServiceStatus>;
@@ -599,9 +588,6 @@ export interface ParameterRecord {
     // (undocumented)
     id: string;
 }
-
-// @public @deprecated (undocumented)
-export const parseXml: typeof parseXml_2;
 
 // @public (undocumented)
 export interface PersonaA10 {
@@ -853,7 +839,20 @@ export interface RelacionA4 {
 
 export { ServerStatus }
 
-export { SoapCallOptions }
+// @public
+export const SERVICE_IDS: {
+    readonly a5: 'ws_sr_constancia_inscripcion';
+    readonly a13: 'ws_sr_padron_a13';
+    readonly a4: 'ws_sr_padron_a4';
+    readonly a10: 'ws_sr_padron_a10';
+    readonly a100: 'ws_sr_padron_a100';
+};
+
+export { ServiceClientConfig }
+
+export { ServiceEndpoints }
+
+export { ServiceTransport }
 
 // @public (undocumented)
 export interface TelefonoA4 {
@@ -871,13 +870,9 @@ export { TicketStorage }
 export enum TipoDomicilio {
     // (undocumented)
     FISCAL = "FISCAL",
-    // @deprecated (undocumented)
-    LEGAL = "LEGAL",
     // (undocumented)
     LEGAL_REAL = "LEGAL/REAL",
-    LOCALES_Y_ESTABLECIMIENTOS = "LOCALES Y ESTABLECIMIENTOS",
-    // @deprecated (undocumented)
-    REAL = "REAL"
+    LOCALES_Y_ESTABLECIMIENTOS = "LOCALES Y ESTABLECIMIENTOS"
 }
 
 // @public

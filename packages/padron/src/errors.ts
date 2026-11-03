@@ -1,16 +1,18 @@
-import { ArcaError, ArcaServiceError, ArcaSoapError } from '@ramiidv/arca-common';
+import { ArcaResponseError, ArcaServiceError, ArcaSoapError } from '@ramiidv/arca-common';
 import type { ServiceErrorDetail } from '@ramiidv/arca-common';
 
 /**
- * Error propio del SDK de Padrón que no es de negocio ni de transporte: la
- * respuesta de ARCA no tiene un dato obligatorio (ej: `personaReturn` sin
- * `persona`) o tiene una forma inesperada.
+ * Respuesta inválida de un servicio de Padrón: no tiene un dato obligatorio
+ * (ej: `personaReturn` sin `persona`) o tiene una forma inesperada. Es un
+ * `ArcaResponseError` de arca-common (como en el resto de los SDKs), así que
+ * se puede capturar con `instanceof ArcaResponseError`. Padrón solo tiene
+ * consultas: `uncertain` es siempre `false`.
  */
-export class ArcaPadronError extends ArcaError {
+export class ArcaPadronError extends ArcaResponseError {
   static override readonly code: string = 'ARCA_PADRON_ERROR';
 
   constructor(message: string, options?: { cause?: unknown }) {
-    super(message, options);
+    super(message, false, options);
     this.name = 'ArcaPadronError';
   }
 }

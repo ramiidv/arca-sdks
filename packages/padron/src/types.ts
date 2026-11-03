@@ -3,18 +3,21 @@ export type {
   AccessTicket,
   ArcaEvent,
   ServerStatus,
-  SoapCallOptions,
+  ServiceClientConfig,
+  ServiceEndpoints,
+  ServiceTransport,
   TicketStorage,
   CallOptions,
 } from '@ramiidv/arca-common';
 import type { ArcaSdkConfig, CondicionIva, ServiceStatus } from '@ramiidv/arca-common';
+import type { ENDPOINTS } from './constants.js';
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
-/** Servicios de Padrón con endpoint propio. */
-export type PadronServicio = 'a5' | 'a4' | 'a10' | 'a13' | 'a100';
+/** Servicios de Padrón con endpoint propio (las claves de `ENDPOINTS`). */
+export type PadronServicio = keyof typeof ENDPOINTS;
 
 /**
  * Configuración de `ArcaPadron`. Extiende la configuración común de los SDKs
@@ -24,10 +27,19 @@ export type PadronServicio = 'a5' | 'a4' | 'a10' | 'a13' | 'a100';
  */
 export interface ArcaPadronConfig extends ArcaSdkConfig {
   /**
-   * Endpoints propios (proxy, mock, etc.). Los que no se indiquen usan los
-   * oficiales según `production` (ver `ENDPOINTS`).
+   * Endpoints propios (proxy, mock, etc.), con las mismas claves que
+   * `ENDPOINTS`. Los que no se indiquen usan los oficiales según `production`.
    */
-  endpoints?: Partial<Record<PadronServicio | 'wsaa', string>>;
+  endpoints?: {
+    /** Constancia de inscripción (ex A5). */
+    a5?: string;
+    a4?: string;
+    a10?: string;
+    a13?: string;
+    a100?: string;
+    /** URL del WSAA (`.../ws/services/LoginCms`, ver `WSAA_ENDPOINTS` de arca-common). Se ignora si se pasa `wsaa`. */
+    wsaa?: string;
+  };
 }
 
 /** Resultado de `status()`: el de cada servicio por separado (uno caído no oculta a los demás). */

@@ -4,16 +4,16 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
-import { ENDPOINTS } from '../src/constants.js';
+import { ENDPOINTS, NAMESPACES } from '../src/constants.js';
 import { ArcaPadronError, ArcaPadronServiceError } from '../src/errors.js';
 import { normalizarDocumento } from '../src/padron-a13.js';
-import { fault, mockFetch, padron, requestBody, respuesta } from './helpers.js';
+import { fault, mockFetch, namespaceDe, padron, requestBody, respuesta } from './helpers.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const A5 = ENDPOINTS.a5.namespace;
+const A5 = NAMESPACES.a5;
 const METADATA = '<metadata><fechaHora>2026-02-26T15:52:37.653-03:00</fechaHora><servidor>qa</servidor></metadata>';
 const persona = (cuit: string) =>
   `<persona><datosGenerales><idPersona>${cuit}</idPersona><tipoPersona>FISICA</tipoPersona></datosGenerales></persona>`;
@@ -129,7 +129,7 @@ describe('metadata de las respuestas', () => {
 
     mockFetch(
       respuesta(
-        ENDPOINTS.a4.namespace,
+        NAMESPACES.a4,
         'getPersona',
         `<personaReturn>${METADATA}<persona><idPersona>20111111112</idPersona><tipoPersona>FISICA</tipoPersona></persona></personaReturn>`,
       ),
@@ -141,7 +141,7 @@ describe('metadata de las respuestas', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a10.namespace,
+        NAMESPACES.a10,
         'getPersona',
         '<personaReturn><persona><idPersona>20111111112</idPersona><tipoPersona>FISICA</tipoPersona></persona></personaReturn>',
       ),
@@ -161,7 +161,7 @@ describe('metadata de las respuestas', () => {
 
     mockFetch(
       respuesta(
-        ENDPOINTS.a13.namespace,
+        NAMESPACES.a13,
         'getIdPersonaListByDocumento',
         `<idPersonaListReturn><idPersona>20111111112</idPersona>${METADATA}</idPersonaListReturn>`,
       ),
@@ -172,7 +172,7 @@ describe('metadata de las respuestas', () => {
 
     mockFetch(
       respuesta(
-        ENDPOINTS.a100.namespace,
+        NAMESPACES.a100,
         'getParameterCollectionByName',
         `<parameterCollectionReturn>${METADATA}<parameterCollection><parameterList><description>X</description><id>1</id>` +
           '</parameterList></parameterCollection></parameterCollectionReturn>',
@@ -221,7 +221,7 @@ describe('validaciones locales', () => {
 
   it('getParametros con collectionName vacío no llama a ARCA', async () => {
     const client = await padron();
-    const cap = mockFetch(respuesta(ENDPOINTS.a100.namespace, 'getParameterCollectionByName', ''));
+    const cap = mockFetch(respuesta(NAMESPACES.a100, 'getParameterCollectionByName', ''));
     await expect(client.getParametros('')).rejects.toBeInstanceOf(ArcaValidationError);
     await expect(client.getParametros('   ')).rejects.toBeInstanceOf(ArcaValidationError);
     expect(cap.fn).not.toHaveBeenCalled();
@@ -234,9 +234,7 @@ describe('status: un servidor en ERROR', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
-        const ns = (Object.values(ENDPOINTS) as Array<{ testing?: string; namespace?: string }>).find(
-          (e) => e.testing === url,
-        )?.namespace as string;
+        const ns = namespaceDe(url);
         const db = url === ENDPOINTS.a13.testing ? 'ERROR' : 'OK';
         return respuesta(
           ns,

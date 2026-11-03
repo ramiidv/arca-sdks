@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ArcaSoapError, ArcaValidationError, CondicionIva } from '@ramiidv/arca-common';
 import { ArcaPadron } from '../src/arca-padron.js';
 import { condicionIvaDesdePadron } from '../src/condicion-iva.js';
-import { ENDPOINTS, EstadoClave, TipoDomicilio } from '../src/constants.js';
+import { ENDPOINTS, EstadoClave, NAMESPACES, TipoDomicilio } from '../src/constants.js';
 import { ArcaPadronError, ArcaPadronServiceError } from '../src/errors.js';
-import { CUIT_REPRESENTADA, fault, mockFetch, padron, requestBody, respuesta } from './helpers.js';
+import { CUIT_REPRESENTADA, fault, mockFetch, namespaceDe, padron, requestBody, respuesta } from './helpers.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -24,7 +24,7 @@ const AUTH_KEYS = ['token', 'sign', 'cuitRepresentada'];
 describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => {
   const casos: Array<{
     nombre: string;
-    svc: keyof typeof ENDPOINTS & ('a4' | 'a5' | 'a10' | 'a13' | 'a100');
+    svc: keyof typeof ENDPOINTS;
     method: string;
     inner: string;
     run: (p: Awaited<ReturnType<typeof padron>>) => Promise<unknown>;
@@ -88,11 +88,11 @@ describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => 
   for (const c of casos) {
     it(c.nombre, async () => {
       const client = await padron();
-      const cap = mockFetch(respuesta(ENDPOINTS[c.svc].namespace, c.method, c.inner));
+      const cap = mockFetch(respuesta(NAMESPACES[c.svc], c.method, c.inner));
       await c.run(client);
       expect(cap.urls[0]).toBe(ENDPOINTS[c.svc].testing);
       expect(cap.headers[0]['soapaction']).toBe('""');
-      expect(cap.bodies[0]).toContain(`<ser:${c.method} xmlns:ser="${ENDPOINTS[c.svc].namespace}">`);
+      expect(cap.bodies[0]).toContain(`<ser:${c.method} xmlns:ser="${NAMESPACES[c.svc]}">`);
       const body = requestBody(cap.bodies[0], c.method);
       expect(Object.keys(body).filter((k) => !k.startsWith('@_'))).toEqual([...AUTH_KEYS, ...Object.keys(c.campos)]);
       expect(body).toMatchObject({ token: 'TOKEN', sign: 'SIGN', cuitRepresentada: CUIT_REPRESENTADA, ...c.campos });
@@ -101,7 +101,7 @@ describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => 
 
   it('getPersonaList_v2 repite idPersona por cada CUIT', async () => {
     const client = await padron();
-    const cap = mockFetch(respuesta(ENDPOINTS.a5.namespace, 'getPersonaList_v2', '<personaListReturn/>'));
+    const cap = mockFetch(respuesta(NAMESPACES.a5, 'getPersonaList_v2', '<personaListReturn/>'));
     await client.getConstanciasInscripcion(['20111111112', '27-11111111-7']);
     const body = requestBody(cap.bodies[0], 'getPersonaList_v2');
     expect(body['idPersona']).toEqual(['20111111112', '27111111117']);
@@ -111,7 +111,7 @@ describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => 
     const client = await padron();
     const cap = mockFetch(
       respuesta(
-        ENDPOINTS.a4.namespace,
+        NAMESPACES.a4,
         'dummy',
         '<return><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></return>',
       ),
@@ -124,7 +124,7 @@ describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => 
 
   it('valida la CUIT localmente (dígito verificador) sin llamar a ARCA', async () => {
     const client = await padron();
-    const cap = mockFetch(respuesta(ENDPOINTS.a4.namespace, 'getPersona', '<personaReturn/>'));
+    const cap = mockFetch(respuesta(NAMESPACES.a4, 'getPersona', '<personaReturn/>'));
     await expect(client.getPersona('20-11111111-3')).rejects.toBeInstanceOf(ArcaValidationError);
     await expect(client.getIdPersonaListByDocumento('ABC123')).rejects.toBeInstanceOf(ArcaValidationError);
     await expect(client.getConstanciasInscripcion([])).rejects.toBeInstanceOf(ArcaValidationError);
@@ -141,7 +141,7 @@ describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => 
   it('endpoints sobrescribibles y fetch de la config', async () => {
     const fetch = vi.fn(async () =>
       respuesta(
-        ENDPOINTS.a10.namespace,
+        NAMESPACES.a10,
         'getPersona',
         '<personaReturn><persona><idPersona>20111111112</idPersona><tipoPersona>FISICA</tipoPersona></persona></personaReturn>',
       ),
@@ -209,7 +209,7 @@ describe('Faults de negocio → ArcaPadronServiceError', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a4.namespace,
+        NAMESPACES.a4,
         'getPersona',
         '<personaReturn><metadata><servidor>x</servidor></metadata></personaReturn>',
       ),
@@ -223,7 +223,7 @@ describe('Faults de negocio → ArcaPadronServiceError', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a5.namespace,
+        NAMESPACES.a5,
         'getPersona_v2',
         '<personaReturn><metadata><servidor>x</servidor></metadata></personaReturn>',
       ),
@@ -273,7 +273,7 @@ const CONSTANCIA_COMPLETA = `<personaReturn>
 describe('constancia de inscripción: respuestas realistas', () => {
   it('caracterizaciones (con nil), dependencia, categoriaAutonomo, N actividades e impuestos', async () => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a5.namespace, 'getPersona_v2', CONSTANCIA_COMPLETA));
+    mockFetch(respuesta(NAMESPACES.a5, 'getPersona_v2', CONSTANCIA_COMPLETA));
     const p = await client.getConstanciaInscripcion('20164755100');
     expect(p.caracterizacion).toEqual([
       {
@@ -314,7 +314,7 @@ describe('constancia de inscripción: respuestas realistas', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a5.namespace,
+        NAMESPACES.a5,
         'getPersona_v2',
         `<personaReturn><datosGenerales><idPersona>30712345671</idPersona><razonSocial>SOC SH</razonSocial>
           <tipoPersona>JURIDICA</tipoPersona></datosGenerales>
@@ -347,7 +347,7 @@ describe('constancia de inscripción: respuestas realistas', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a5.namespace,
+        NAMESPACES.a5,
         'getPersona_v2',
         `<personaReturn><datosGenerales><estadoClave>ACTIVO</estadoClave><idPersona>20111111112</idPersona>
             <tipoPersona>FISICA</tipoPersona></datosGenerales>
@@ -375,7 +375,7 @@ describe('constancia de inscripción: respuestas realistas', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a5.namespace,
+        NAMESPACES.a5,
         'getPersonaList_v2',
         `<personaListReturn><metadata><servidor>x</servidor></metadata>
           <persona><datosGenerales><idPersona>20224107030</idPersona><tipoPersona>FISICA</tipoPersona></datosGenerales></persona>
@@ -412,7 +412,7 @@ const imp4 = (id: number, estado: string, desc = 'IVA') =>
 describe('A4: respuestas realistas', () => {
   it('campos xs:string numéricos quedan como string (codPostal, datoAdicional, localidad, numeroInscripcion)', async () => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a4.namespace, 'getPersona', personaA4(imp4(30, 'ACTIVO'))));
+    mockFetch(respuesta(NAMESPACES.a4, 'getPersona', personaA4(imp4(30, 'ACTIVO'))));
     const p = await client.getPersona('20000000516');
     expect(p.domicilio).toEqual([
       {
@@ -440,7 +440,7 @@ describe('A4: respuestas realistas', () => {
     )
       .replace('<datoAdicional>12</datoAdicional>', '<datoAdicional>1.50</datoAdicional>')
       .replace('<numeroInscripcion>12345</numeroInscripcion>', '<numeroInscripcion>1E3</numeroInscripcion>');
-    mockFetch(respuesta(ENDPOINTS.a4.namespace, 'getPersona', xml));
+    mockFetch(respuesta(NAMESPACES.a4, 'getPersona', xml));
     const p = await client.getPersona('20000000516');
     expect(p.domicilio?.[0]).toMatchObject({ datoAdicional: '1.50', idProvincia: 0, orden: 1, localidad: '0123' });
     expect(p.numeroInscripcion).toBe('1E3');
@@ -460,14 +460,14 @@ describe('A4: respuestas realistas', () => {
 
   it('IVA (30) EXENTO → Exento', async () => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a4.namespace, 'getPersona', personaA4(imp4(30, 'EXENTO'))));
+    mockFetch(respuesta(NAMESPACES.a4, 'getPersona', personaA4(imp4(30, 'EXENTO'))));
     const r = condicionIvaDesdePadron(await client.getPersona('20000000516'));
     expect(r.condicionIva).toBe(CondicionIva.EXENTO);
   });
 
   it('IVA (30) ACTIVO EN TRAMITE → Responsable Inscripto', async () => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a4.namespace, 'getPersona', personaA4(imp4(30, 'ACTIVO EN TRAMITE'))));
+    mockFetch(respuesta(NAMESPACES.a4, 'getPersona', personaA4(imp4(30, 'ACTIVO EN TRAMITE'))));
     expect(condicionIvaDesdePadron(await client.getPersona('20000000516')).condicionIva).toBe(
       CondicionIva.RESPONSABLE_INSCRIPTO,
     );
@@ -480,7 +480,7 @@ describe('A4: respuestas realistas', () => {
       '<idCategoria>36</idCategoria><idImpuesto>20</idImpuesto><periodo>200406</periodo></categoria>';
     mockFetch(
       respuesta(
-        ENDPOINTS.a4.namespace,
+        NAMESPACES.a4,
         'getPersona',
         personaA4(imp4(20, 'BAJA DEFINITIVA', 'MONOTRIBUTO') + imp4(30, 'BAJA DEFINITIVA'), '').replace(
           '<domicilio>',
@@ -497,7 +497,7 @@ describe('A4: respuestas realistas', () => {
 
   it('NO APORTANTE no se interpreta como IVA no alcanzado', async () => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a4.namespace, 'getPersona', personaA4(imp4(30, 'NO APORTANTE'))));
+    mockFetch(respuesta(NAMESPACES.a4, 'getPersona', personaA4(imp4(30, 'NO APORTANTE'))));
     expect(condicionIvaDesdePadron(await client.getPersona('20000000516')).condicionIva).toBeNull();
   });
 });
@@ -507,7 +507,7 @@ describe('A10: respuestas realistas', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a10.namespace,
+        NAMESPACES.a10,
         'getPersona',
         '<personaReturn><persona><apellido>PEREZ</apellido><claveInactivaAsociada>20999999996</claveInactivaAsociada>' +
           '<dependencia><descripcionDependencia>AGENCIA 10</descripcionDependencia><idDependencia>10</idDependencia></dependencia>' +
@@ -534,7 +534,7 @@ describe('A13', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a13.namespace,
+        NAMESPACES.a13,
         'getPersonaV2',
         '<personaReturn><metadata><servidor>127.0.0.1</servidor></metadata><persona><apellido>GEOFFREY WILLIAM</apellido>' +
           '<domicilio><calle>SAN RAMON</calle><codigoPostal>4600</codigoPostal><direccion>SAN RAMON 415</direccion>' +
@@ -555,7 +555,7 @@ describe('A13', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a13.namespace,
+        NAMESPACES.a13,
         'getPersona',
         '<personaReturn><persona><domicilio><datoAdicional>2.10</datoAdicional><idProvincia>6</idProvincia>' +
           '<numero>415</numero><piso>01</piso></domicilio><idPersona>20002444233</idPersona>' +
@@ -579,7 +579,7 @@ describe('A13', () => {
     ],
   ])('getIdPersonaListByDocumento con %s', async (_n, inner, esperado) => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a13.namespace, 'getIdPersonaListByDocumento', inner));
+    mockFetch(respuesta(NAMESPACES.a13, 'getIdPersonaListByDocumento', inner));
     expect(await client.getIdPersonaListByDocumento('11709676')).toEqual(esperado);
   });
 });
@@ -597,7 +597,7 @@ describe('A100', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a100.namespace,
+        NAMESPACES.a100,
         'getParameterCollectionByName',
         coleccion(
           '<parameterList><attributeList><name>ALICUOTA</name><value>10.50</value></attributeList>' +
@@ -614,7 +614,7 @@ describe('A100', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a100.namespace,
+        NAMESPACES.a100,
         'getParameterCollectionByName',
         coleccion(
           '<parameterList><attributeList><name>NOMBRE_PROVINCIA</name><value>MISIONES</value></attributeList>' +
@@ -638,9 +638,9 @@ describe('A100', () => {
 
   it('colección vacía → []; sin parameterCollection → ArcaPadronError', async () => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a100.namespace, 'getParameterCollectionByName', coleccion('')));
+    mockFetch(respuesta(NAMESPACES.a100, 'getParameterCollectionByName', coleccion('')));
     expect(await client.getParametros('SUPA.X')).toEqual([]);
-    mockFetch(respuesta(ENDPOINTS.a100.namespace, 'getParameterCollectionByName', '<parameterCollectionReturn/>'));
+    mockFetch(respuesta(NAMESPACES.a100, 'getParameterCollectionByName', '<parameterCollectionReturn/>'));
     await expect(client.getParametros('SUPA.X')).rejects.toBeInstanceOf(ArcaPadronError);
   });
 });
@@ -654,9 +654,8 @@ describe('status', () => {
     const client = await padron({ retries: 0 });
     const fn = vi.fn(async (url: string) => {
       if (url === ENDPOINTS.a10.testing) return new Response('Service Unavailable', { status: 503 });
-      const ns = Object.values(ENDPOINTS).find((e) => 'testing' in e && e.testing === url) as { namespace: string };
       return respuesta(
-        ns.namespace,
+        namespaceDe(url),
         'dummy',
         '<return><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></return>',
       );
@@ -682,7 +681,7 @@ describe('decodificación de respuestas (schemas)', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a10.namespace,
+        NAMESPACES.a10,
         'getPersona',
         personaA10(
           '<claveInactivaAsociada>00999999996</claveInactivaAsociada><domicilio><codPostal>0012</codPostal></domicilio>' +
@@ -701,7 +700,7 @@ describe('decodificación de respuestas (schemas)', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a10.namespace,
+        NAMESPACES.a10,
         'getPersona',
         personaA10(
           '<domicilio xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true"/><idPersona>20111111112</idPersona>',
@@ -716,7 +715,7 @@ describe('decodificación de respuestas (schemas)', () => {
 
   it('idPersona vacío → ArcaPadronError con la ruta del campo', async () => {
     const client = await padron();
-    mockFetch(respuesta(ENDPOINTS.a10.namespace, 'getPersona', personaA10('<idPersona></idPersona>')));
+    mockFetch(respuesta(NAMESPACES.a10, 'getPersona', personaA10('<idPersona></idPersona>')));
     const err = await client.getPersonaBasic('20111111112').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ArcaPadronError);
     expect((err as Error).message).toMatch(/getPersona\.personaReturn\.persona\.idPersona/);
@@ -726,7 +725,7 @@ describe('decodificación de respuestas (schemas)', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a13.namespace,
+        NAMESPACES.a13,
         'getPersona',
         personaA10('<domicilio><idProvincia>X</idProvincia></domicilio><idPersona>20111111112</idPersona>'),
       ),
@@ -740,7 +739,7 @@ describe('decodificación de respuestas (schemas)', () => {
     const client = await padron();
     mockFetch(
       respuesta(
-        ENDPOINTS.a5.namespace,
+        NAMESPACES.a5,
         'getPersonaList_v2',
         `<personaListReturn>
           <persona><datosGenerales><idPersona>20224107030</idPersona><tipoPersona>FISICA</tipoPersona></datosGenerales></persona>
@@ -758,19 +757,11 @@ describe('decodificación de respuestas (schemas)', () => {
     const coleccion = (p: string) =>
       `<parameterCollectionReturn><parameterCollection><parameterList>${p}</parameterList></parameterCollection></parameterCollectionReturn>`;
     mockFetch(
-      respuesta(
-        ENDPOINTS.a100.namespace,
-        'getParameterCollectionByName',
-        coleccion('<description></description><id>1</id>'),
-      ),
+      respuesta(NAMESPACES.a100, 'getParameterCollectionByName', coleccion('<description></description><id>1</id>')),
     );
     expect(await client.getParametros('SUPA.X')).toEqual([{ id: '1', descripcion: '' }]);
     mockFetch(
-      respuesta(
-        ENDPOINTS.a100.namespace,
-        'getParameterCollectionByName',
-        coleccion('<description>X</description><id></id>'),
-      ),
+      respuesta(NAMESPACES.a100, 'getParameterCollectionByName', coleccion('<description>X</description><id></id>')),
     );
     await expect(client.getParametros('SUPA.X')).rejects.toBeInstanceOf(ArcaPadronError);
   });

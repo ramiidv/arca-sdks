@@ -2,14 +2,20 @@ import { validateCuit } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
 import { Dependencia, Domicilio, decodePersona, id, list, must, obj, str, type Schema } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
+import { NAMESPACES } from './constants.js';
 import type { PersonaA10, WsAuth } from './types.js';
 
+/** Configuración de `PadronA10Client`: `{ endpoint, transport? }` (ver `ENDPOINTS.a10`). */
 export type PadronA10ClientConfig = PadronClientConfig;
 
 /**
  * Cliente de ws_sr_padron_a10: datos básicos de un contribuyente.
  */
 export class PadronA10Client extends BasePadronClient {
+  constructor(config: PadronA10ClientConfig) {
+    super(config, NAMESPACES.a10);
+  }
+
   /**
    * Datos básicos de un contribuyente.
    * @param auth - Credenciales: `token`, `sign` y `cuitRepresentada`
