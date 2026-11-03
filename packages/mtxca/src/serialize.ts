@@ -1,4 +1,4 @@
-import { ArcaValidationError, roundHalfEven, validateCuit } from '@ramiidv/arca-common';
+import { ArcaValidationError, validateCuit } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
 import { encodeRequest, formatDateTimeAR } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
@@ -21,28 +21,6 @@ function isObject(v: unknown): v is R {
 function digitos(v: unknown, guiones = false): unknown {
   if (typeof v === 'number' && Number.isSafeInteger(v)) return String(v);
   return guiones && typeof v === 'string' ? v.replace(/-/g, '') : v;
-}
-
-/**
- * Redondea los `dec()` del schema mitad al par (Round Half Even, nota 4 del
- * manual) antes de `encodeRequest`, cuyo redondeo es mitad hacia arriba
- * (8.565 → 8.57). Lo enviado coincide con `roundImporte`/`roundDecimal`.
- */
-function redondear(input: unknown, schema: Schema): unknown {
-  if (!isObject(input)) return input;
-  const out: R = { ...input };
-  for (const [key, f] of Object.entries(schema)) {
-    if (!Object.hasOwn(out, key)) continue;
-    const round = (v: unknown): unknown => {
-      if (f.schema) return redondear(v, f.schema);
-      return f.scalar?.kind === 'dec' && typeof v === 'number' && Number.isFinite(v)
-        ? roundHalfEven(v, f.scalar.digits)
-        : v;
-    };
-    const v = out[key];
-    out[key] = f.minItems !== undefined && Array.isArray(v) ? v.map(round) : round(v);
-  }
-  return out;
 }
 
 /**
@@ -114,7 +92,7 @@ export function buildComprobante(
     );
   }
   const schema = mode === 'cae' ? COMPROBANTE_CAE : COMPROBANTE_CAEA;
-  const c = redondear(normalizar(input), schema);
+  const c = normalizar(input);
   return encodeRequest(c, schema, 'comprobante', (i, errors) => {
     validarCuits(i, errors);
     if (!reglas || errors.length > 0) return;

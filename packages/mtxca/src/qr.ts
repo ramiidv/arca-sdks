@@ -1,4 +1,5 @@
 import { ArcaValidationError, generarUrlQR } from '@ramiidv/arca-common';
+import { Moneda } from './constants.js';
 import type { QROptions } from '@ramiidv/arca-common';
 import type {
   MtxcaAutorizarResult,
@@ -89,7 +90,7 @@ export function urlQR(
   if (datos.codAut === undefined) fail('codigoAutorizacion', 'es obligatorio (CAE o CAEA)', datos.codAut);
   if (datos.fecha === undefined) fail('fechaEmision', 'es obligatoria para el QR', datos.fecha);
 
-  const ctz = comprobante.cotizacionMoneda ?? (comprobante.codigoMoneda === 'PES' ? 1 : undefined);
+  const ctz = comprobante.cotizacionMoneda ?? (comprobante.codigoMoneda === Moneda.PESOS ? 1 : undefined);
   if (ctz === undefined) {
     fail('cotizacionMoneda', 'es obligatoria para el QR (consultala con consultarComprobante)', ctz);
   }

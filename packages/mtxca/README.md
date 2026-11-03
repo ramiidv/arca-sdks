@@ -8,7 +8,7 @@ SDK de TypeScript para el web service **WSMTXCA** de ARCA (ex AFIP): factura ele
 
 - Tipos fieles al WSDL/XSD de WSMTXCA y elementos en el orden de la secuencia (Axis2 valida el orden).
 - Redondeo según el manual (Round Half Even): 2 decimales en importes, 6 en cantidad, precio unitario, bonificación y cotización.
-- Validación local de las reglas excluyentes del manual (presencia de campos por unidad de medida, fórmulas por ítem, subtotales de IVA por alícuota, totales, FCE, condición de IVA del receptor).
+- Validación local de las reglas excluyentes del manual v0.25.8 (presencia de campos por unidad de medida, fórmulas por ítem, subtotales de IVA por alícuota, totales, FCE y sus datos adicionales, comprobantes asociados, compradores, Sujeto No Categorizado, condición de IVA del receptor).
 - URL del código QR (RG 4892) con `urlQR()`.
 - Las emisiones nunca se reintentan y los errores con resultado desconocido se marcan como `uncertain`.
 - Los errores de negocio de ARCA (`arrayErrores`) se lanzan como `ArcaServiceError` en las consultas.
@@ -105,21 +105,21 @@ if (res.resultado === 'R') {
 
 `ArcaMtxcaConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`:
 
-| Opción                                                                                                  | Descripción                                                                                                                                             |
-| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cert`, `key`                                                                                           | Certificado y clave privada PEM.                                                                                                                        |
-| `keyPassphrase`                                                                                         | Contraseña de la clave, si está encriptada.                                                                                                             |
-| `cuit`                                                                                                  | CUIT representada (número o string, con o sin guiones). Se valida el dígito verificador.                                                                |
-| `production`                                                                                            | `false` (default) = homologación.                                                                                                                       |
-| `endpoints`                                                                                             | `{ mtxca?, wsaa? }`: URLs propias (proxy, mock). Ignoran `production`.                                                                                  |
-| `wsaa`                                                                                                  | `WsaaClient` compartido con otros SDKs del mismo certificado. Con él se ignoran `cert`, `key`, `keyPassphrase`, `ticketStorage` y las opciones de WSAA. |
-| `signal`                                                                                                | `AbortSignal` global: cancela todas las llamadas de la instancia.                                                                                       |
-| `timeout`, `retries`, `retryDelayMs`                                                                    | Transporte. `retries` solo aplica a consultas.                                                                                                          |
-| `ticketStorage`                                                                                         | Storage persistente de tickets WSAA (recomendado en producción).                                                                                        |
-| `tokenTTLMinutes`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs` | Opciones de WSAA. `permanentErrorCooldownMs` (default `Infinity`): espera tras un error no reintentable; `0` la desactiva.                              |
-| `fetch`, `legacyTls`                                                                                    | `fetch` propio (proxy, tests) y transporte TLS legacy.                                                                                                  |
-| `onEvent`                                                                                               | Callback de eventos (`auth:*`, `request:*`).                                                                                                            |
-| `onEvento`                                                                                              | Recibe el `evento` (aviso de ARCA) de cualquier respuesta: `(evento, method) => void`.                                                                  |
+| Opción                                                                                                                                    | Descripción                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cert`, `key`                                                                                                                             | Certificado y clave privada PEM.                                                                                                                                                                                                                             |
+| `keyPassphrase`                                                                                                                           | Contraseña de la clave, si está encriptada.                                                                                                                                                                                                                  |
+| `cuit`                                                                                                                                    | CUIT representada (número o string, con o sin guiones). Se valida el dígito verificador.                                                                                                                                                                     |
+| `production`                                                                                                                              | `false` (default) = homologación.                                                                                                                                                                                                                            |
+| `endpoints`                                                                                                                               | `{ mtxca?, wsaa? }`: URLs propias (proxy, mock). Ignoran `production`.                                                                                                                                                                                       |
+| `wsaa`                                                                                                                                    | `WsaaClient` compartido con otros SDKs del mismo certificado. Con él se ignoran `cert`, `key`, `keyPassphrase`, `ticketStorage` y las opciones de WSAA.                                                                                                      |
+| `signal`                                                                                                                                  | `AbortSignal` global: cancela todas las llamadas de la instancia.                                                                                                                                                                                            |
+| `timeout`, `retries`, `retryDelayMs`                                                                                                      | Transporte. `retries` solo aplica a consultas.                                                                                                                                                                                                               |
+| `ticketStorage`                                                                                                                           | Storage persistente de tickets WSAA (recomendado en producción).                                                                                                                                                                                             |
+| `tokenTTLMinutes`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs`, `alreadyAuthenticatedCooldownMs` | Opciones de WSAA. `permanentErrorCooldownMs` (default `Infinity`): espera tras un error no reintentable; `alreadyAuthenticatedCooldownMs` (default: 2 minutos en producción, 10 en homologación): espera tras `coe.alreadyAuthenticated`; `0` las desactiva. |
+| `fetch`, `legacyTls`                                                                                                                      | `fetch` propio (proxy, tests) y transporte TLS legacy.                                                                                                                                                                                                       |
+| `onEvent`                                                                                                                                 | Callback de eventos (`auth:*`, `request:*`).                                                                                                                                                                                                                 |
+| `onEvento`                                                                                                                                | Recibe el `evento` (aviso de ARCA) de cualquier respuesta: `(evento, method) => void`.                                                                                                                                                                       |
 
 Todos los métodos aceptan un último parámetro `opts?: CallOptions` con `signal` para cancelar.
 
@@ -149,16 +149,16 @@ Lanza `ArcaValidationError` si el comprobante fue rechazado o falta un dato (ej.
 
 ### CAEA
 
-| Método                                               | Operación WSMTXCA                                    |
-| ---------------------------------------------------- | ---------------------------------------------------- |
-| `solicitarCAEA(periodo, orden, opts?)`               | `solicitarCAEA` (`periodo` AAAAMM, `orden` 1 o 2)    |
-| `consultarCAEA(caea, opts?)`                         | `consultarCAEA`                                      |
-| `consultarCAEAEntreFechas(desde, hasta, opts?)`      | `consultarCAEAEntreFechas`                           |
-| `informarComprobanteCAEA(comp, opts?)`               | `informarComprobanteCAEA` (`comp.caea` = CAEA usado) |
-| `informarAjusteIVACAEA(comp, opts?)`                 | `informarAjusteIVACAEA`                              |
-| `informarCAEANoUtilizado(caea, opts?)`               | `informarCAEANoUtilizado`                            |
-| `informarCAEANoUtilizadoPtoVta(caea, ptoVta, opts?)` | `informarCAEANoUtilizadoPtoVta`                      |
-| `consultarPtosVtaCAEANoInformados(caea, opts?)`      | `consultarPtosVtaCAEANoInformados`                   |
+| Método                                               | Operación WSMTXCA                                             |
+| ---------------------------------------------------- | ------------------------------------------------------------- |
+| `solicitarCAEA(periodo, orden, opts?)`               | `solicitarCAEA` (`periodo` AAAAMM, `orden` 1 o 2)             |
+| `consultarCAEA(caea, opts?)`                         | `consultarCAEA`                                               |
+| `consultarCAEAEntreFechas(desde, hasta, opts?)`      | `consultarCAEAEntreFechas`                                    |
+| `informarComprobanteCAEA(comp, opts?)`               | `informarComprobanteCAEA` (`comp.caea` = CAEA usado)          |
+| `informarAjusteIVACAEA(comp, opts?)`                 | `informarAjusteIVACAEA` (valida el XSD y `fechaHoraGen`, 754) |
+| `informarCAEANoUtilizado(caea, opts?)`               | `informarCAEANoUtilizado`                                     |
+| `informarCAEANoUtilizadoPtoVta(caea, ptoVta, opts?)` | `informarCAEANoUtilizadoPtoVta`                               |
+| `consultarPtosVtaCAEANoInformados(caea, opts?)`      | `consultarPtosVtaCAEANoInformados`                            |
 
 ### Parámetros y estado
 
@@ -184,7 +184,7 @@ Lanza `ArcaValidationError` si el comprobante fue rechazado o falta un dato (ej.
 
 ### Cliente de bajo nivel
 
-`mtxca.client` (`MtxcaClient`) expone una función por operación del WSDL (`autorizarComprobante`, `consultarCAEA`, ...) que recibe `MtxcaAuth` (`{ token, sign, cuitRepresentada }`) y `numeroComprobante` explícito. Valida contra el XSD y redondea, pero no valida la coherencia de importes. Se puede usar sin `ArcaMtxca`:
+`mtxca.client` (`MtxcaClient`) expone una función por operación del WSDL (`autorizarComprobante`, `consultarCAEA`, ...) que recibe `MtxcaAuth` (`{ token, sign, cuitRepresentada }`) y `numeroComprobante` explícito. Valida contra el XSD (y el dígito verificador de los CUIT) y redondea, pero no aplica las reglas de negocio del manual (para eso, `validateComprobanteCAE`/`validateComprobanteCAEA`). Se puede usar sin `ArcaMtxca`:
 
 ```typescript
 import { MtxcaClient, MTXCA_ENDPOINTS } from '@ramiidv/arca-mtxca';
@@ -205,23 +205,41 @@ Los campos del request se llaman igual que en el XSD (`ComprobanteType`, `ItemTy
 - `importeTotal` = `importeSubtotal` + `importeOtrosTributos` + Σ subtotales de IVA = `importeOtrosTributos` + Σ `importeItem`.
 - En una bonificación (99) de clase A, el IVA (en valor absoluto) no puede superar el IVA de los demás ítems de la misma condición (516).
 - Margen de error del manual: error relativo ≤ 0,01% o absoluto ≤ 0,01 × cantidad de elementos.
-- Redondeo: **Round Half Even** (mitad al par, nota 4 de "Aclaraciones y Definiciones" del manual) en todos los valores decimales: `8.565` → `8.56`, `8.575` → `8.58`, `1.005` → `1.00`. El SDK redondea así lo que envía y lo que valida; para calcular igual, usá `roundImporte()` (2 decimales) y `roundDecimal()` (6).
+- Redondeo: **Round Half Even** (mitad al par, nota 4 de "Aclaraciones y Definiciones" del manual) en todos los valores decimales: `8.565` → `8.56`, `8.575` → `8.58`, `1.005` → `1.00`. El SDK redondea así lo que envía (con `dec()` del DSL de common) y lo que valida; para calcular igual, usá `roundImporte()` (2 decimales) y `roundDecimal()` (6).
 
-`autorizar()` valida todo esto antes de enviar y lanza `ArcaValidationError` con el detalle (incluye el código de error de ARCA que se evita y el valor esperado). Si ARCA acepta un caso que la validación local rechaza, pasá `{ validarImportes: false }`.
+`autorizar()` valida todo esto antes de enviar y lanza `ArcaValidationError` con el detalle (incluye el código de error de ARCA que se evita y el valor esperado). Si ARCA acepta un caso que la validación local rechaza, pasá `{ validarImportes: false }`: a pesar del nombre, desactiva todas las reglas de negocio locales (las de esta sección y las de la tabla siguiente); solo quedan el XSD y el dígito verificador de los CUIT.
 
 ### Otras reglas del manual que se validan localmente
 
-| Regla                                                                                                          | CAE (`autorizar`) | CAEA (`informarComprobanteCAEA`) |
-| -------------------------------------------------------------------------------------------------------------- | ----------------- | -------------------------------- |
-| `condicionIVAReceptor` (RG 5616) obligatoria. ARCA hoy la **observa**; el SDK la exige para no emitir sin ella | 190               | 390                              |
-| `fechaServicioDesde`/`Hasta` y `fechaVencimientoPago` solo con concepto 2 o 3 (fuera de FCE)                   | 122-124           | — (ARCA solo observa)            |
-| FCE 201 y 206: `fechaVencimientoPago` obligatoria, cualquiera sea el concepto                                  | 148               | 764                              |
-| FCE 202, 203, 207 y 208: `fechaVencimientoPago` no corresponde, cualquiera sea el concepto                     | 149               | 765                              |
-| FCE: cada `otrosTributos[].descripcion` es obligatoria (en el resto, solo con `codigo` 99, regla 301)          | 302               | —                                |
-| ND/NC 2, 3, 7, 8, 52, 53: `comprobantesAsociados` o `periodoComprobantesAsociados`, no ambos                   | 160, 161          | 778, 779                         |
-| `cancelaEnMismaMonedaExtranjera: 'S'` solo en 1, 6, 51, 201 y 206                                              | 118               | — (ARCA solo observa)            |
-| `compradores` solo con concepto 1; en FCE, uno solo                                                            | 432, 433          | no se admiten (753)              |
-| `fechaHoraGen` obligatoria en todo comprobante CAEA (desde el 01/08/2026)                                      | —                 | 754                              |
+| Regla                                                                                                                                                                                                      | CAE (`autorizar`)       | CAEA (`informarComprobanteCAEA`) |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | -------------------------------- |
+| `condicionIVAReceptor` (RG 5616) obligatoria. ARCA hoy la **observa**; el SDK la exige para no emitir sin ella                                                                                             | 190                     | 390                              |
+| `fechaServicioDesde`/`Hasta` y `fechaVencimientoPago` solo con concepto 2 o 3 (fuera de FCE)                                                                                                               | 122-124                 | — (ARCA solo observa)            |
+| FCE 201 y 206: `fechaVencimientoPago` obligatoria, cualquiera sea el concepto                                                                                                                              | 148                     | 764                              |
+| FCE 202, 203, 207 y 208: `fechaVencimientoPago` no corresponde, cualquiera sea el concepto                                                                                                                 | 149                     | 765                              |
+| FCE: cada `otrosTributos[].descripcion` es obligatoria (en el resto, solo con `codigo` 99, regla 301)                                                                                                      | 302                     | —                                |
+| ND/NC 2, 3, 7, 8, 52, 53: `comprobantesAsociados` o `periodoComprobantesAsociados`, no ambos                                                                                                               | 160, 161                | 778, 779                         |
+| `cancelaEnMismaMonedaExtranjera: 'S'` solo en 1, 6, 51, 201 y 206                                                                                                                                          | 118                     | — (ARCA solo observa)            |
+| `compradores` solo con concepto 1 y no en FCE                                                                                                                                                              | 432, 433                | no se admiten (753)              |
+| `compradores`: más de uno, con receptor informado, CUIT/CUIL/CDI, sin repetir, porcentaje entre 0 y 100 (exclusivo), distintos del emisor, suman 100, el receptor está y es uno de los de mayor porcentaje | 420-429                 | —                                |
+| `codigoConcepto` 1, 2 o 3                                                                                                                                                                                  | 121                     | 713                              |
+| Clase A y FCE: receptor con CUIT (80)                                                                                                                                                                      | 128, 129                | 718, 733                         |
+| `subtotalesIVA` si hay ítems con condición 4, 5 o 6                                                                                                                                                        | 403                     | 715                              |
+| Sujeto No Categorizado (23000000000): solo en 6, 7, 8 con `condicionIVAReceptor` 7; con gravado, tributo 13                                                                                                | 342, 145                | 889 (749 solo observa)           |
+| Datos adicionales FCE: 21 (CBU) y 27 (`ADC`/`SCA`) en 201 y 206; 22 (`S`/`N`) en las notas; 21-23 solo en FCE y con `c1`                                                                                   | 326-336                 | 925-934 (923 solo observa)       |
+| Dato adicional 5: solo en 1, 2, 3, 201, 202, 203, con `c1` de 1 a 6 y sin `c2`-`c6`                                                                                                                        | 337-340                 | 935-938                          |
+| FCE: la factura asocia 88, 91, 990 o 995; la nota lleva un solo asociado FCE, con el `cuit` del emisor; en una anulación, la NC revierte 201/202/206/207 y la ND 203/208                                   | 208, 209, 210, 212, 214 | 808, 809, 810, 812, 814          |
+| Período de asociados: no en notas FCE ni en las facturas 1, 51, 201 y 206                                                                                                                                  | 159, 162                | 777, 780                         |
+| `fechaHoraGen` obligatoria en todo comprobante CAEA, también en `informarAjusteIVACAEA` (desde el 01/08/2026)                                                                                              | —                       | 754                              |
+
+En CAEA, la regla de `importeIVA` 0 en las condiciones 1 a 3 solo observa (1122): `informarComprobanteCAEA` no la
+valida localmente. Los mensajes de los ítems citan la numeración de cada método (CAE 500-521, CAEA 1100-1121).
+
+Las reglas también se pueden correr sin enviar nada: `validateComprobanteCAE(comprobante, ctx?)` (las de `autorizar()`)
+y `validateComprobanteCAEA(comprobante, ctx?)` (las de `informarComprobanteCAEA()`) lanzan `ArcaValidationError` con
+todos los errores. `ctx` (`ContextoReglas`) es `{ cuitEmisor? }`: con él se validan además que el emisor no sea
+comprador (426) y el `cuit` del asociado de una nota FCE (210 / 810). `ArcaMtxca` lo pasa solo con su `cuit`.
+No validan el XSD.
 
 En FCE (201-208) el ítem no exige `importeIVA` ni se valida su fórmula (514/515 aplican a 1, 2, 3, 51, 52, 53); el precio va sin IVA en FCE A y con IVA en FCE B, y los totales (110-116) se validan igual que en A y B.
 

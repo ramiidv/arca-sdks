@@ -5,7 +5,7 @@ import { MtxcaClient } from './mtxca-client.js';
 import { urlQR } from './qr.js';
 import type { ComprobanteQR } from './qr.js';
 import { buildComprobante } from './serialize.js';
-import { reglasComprobanteCAE, reglasComprobanteCAEA } from './validation.js';
+import { reglaFechaHoraGen, reglasComprobanteCAE, reglasComprobanteCAEA } from './validation.js';
 import type {
   ActividadVigente,
   ArcaMtxcaConfig,
@@ -99,7 +99,9 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
     buildComprobante(
       { ...request, numeroComprobante: request?.numeroComprobante ?? 1 },
       'cae',
-      opts?.validarImportes !== false ? reglasComprobanteCAE : undefined,
+      opts?.validarImportes !== false
+        ? (c, errors) => reglasComprobanteCAE(c, errors, { cuitEmisor: this.cuit })
+        : undefined,
     );
 
     const numeroComprobante =
@@ -197,21 +199,26 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
 
   /**
    * Informa un comprobante emitido con CAEA (`informarComprobanteCAEA`). Valida
-   * el XSD y las reglas excluyentes del manual (ítems, condición de IVA del
-   * receptor, FCE, comprobantes asociados, compradores). Un rechazo devuelve
+   * el XSD y las reglas excluyentes del manual (ítems, receptor, condición de
+   * IVA del receptor, FCE, comprobantes asociados, datos adicionales,
+   * compradores, `fechaHoraGen`; ver `validateComprobanteCAEA`). Un rechazo devuelve
    * `resultado: 'R'`. Ante `uncertain`, verificá con `consultarComprobante()`.
    */
   async informarComprobanteCAEA(
     comprobante: MtxcaComprobanteCAEA,
     opts?: CallOptions,
   ): Promise<MtxcaInformarCAEAResult> {
-    buildComprobante(comprobante, 'caea', reglasComprobanteCAEA);
+    buildComprobante(comprobante, 'caea', (c, errors) => reglasComprobanteCAEA(c, errors, { cuitEmisor: this.cuit }));
     const auth = await this.auth(opts);
     return this.client.informarComprobanteCAEA(auth, comprobante, this.callOptions(opts));
   }
 
-  /** Informa un ajuste de IVA emitido con CAEA (`informarAjusteIVACAEA`). Solo valida el XSD. */
+  /**
+   * Informa un ajuste de IVA emitido con CAEA (`informarAjusteIVACAEA`). Valida
+   * el XSD y `fechaHoraGen`, obligatoria en todo comprobante CAEA (754).
+   */
   async informarAjusteIVACAEA(comprobante: MtxcaComprobanteCAEA, opts?: CallOptions): Promise<MtxcaInformarCAEAResult> {
+    buildComprobante(comprobante, 'caea', reglaFechaHoraGen);
     const auth = await this.auth(opts);
     return this.client.informarAjusteIVACAEA(auth, comprobante, this.callOptions(opts));
   }

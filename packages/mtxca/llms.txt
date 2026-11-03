@@ -26,6 +26,7 @@ const mtxca = new ArcaMtxca({
   ticketStorage?: TicketStorage, tokenTTLMinutes?: number,
   clockOffsetMs?: number, autoClockSkew?: boolean, loginErrorCooldownMs?: number,
   permanentErrorCooldownMs?: number, // default Infinity: espera tras un error de WSAA no reintentable; 0 la desactiva
+  alreadyAuthenticatedCooldownMs?: number, // default 120000 prod / 600000 homo: espera tras coe.alreadyAuthenticated; 0 la desactiva
   fetch?: typeof fetch, legacyTls?: 'auto' | 'never' | 'always',
   onEvent?: (event: ArcaEvent) => void,
   onEvento?: (evento: { codigo, descripcion }, method: string) => void, // `evento` de ARCA de cualquier respuesta
@@ -69,7 +70,7 @@ const res = await mtxca.autorizar({
   subtotalesIVA: [{ codigo: 5, importe: 21 }],   // uno por condición 4/5/6 presente
   otrosTributos?: [{ codigo, descripcion?, baseImponible, importe }],
   comprobantesAsociados?, periodoComprobantesAsociados?, datosAdicionales?, compradores?, actividades?: number[],
-}, { validarImportes?: boolean /* default true */, signal? });
+}, { validarImportes?: boolean /* default true; false desactiva todas las reglas de negocio locales; solo quedan el XSD y el dígito verificador de los CUIT */, signal? });
 
 if (res.resultado === 'R') res.errores;                 // rechazo: NO lanza
 else res.comprobante.cae, res.comprobante.fechaVencimientoCAE; // 'A' u 'O' (con observaciones)
@@ -80,10 +81,17 @@ Reglas validadas localmente (manual WSMTXCA): importeItem = (precio*cantidad - b
 Otras reglas validadas (código CAE / CAEA):
 - condicionIVAReceptor obligatoria (190 / 390; ARCA hoy observa, el SDK la exige).
 - FCE 201/206: fechaVencimientoPago obligatoria cualquiera sea el concepto (148 / 764); FCE 202/203/207/208: no corresponde (149 / 765). Fuera de FCE: fechas de servicio y vencimiento solo con concepto 2/3 (122-124, solo CAE).
-- FCE: otrosTributos[].descripcion obligatoria (302); un solo comprador (433). compradores solo con concepto 1 (432); en informarComprobanteCAEA no se admiten (753).
+- FCE: otrosTributos[].descripcion obligatoria (302); no admite compradores (433). compradores solo con concepto 1 (432); en informarComprobanteCAEA no se admiten (753). compradores (CAE): más de uno (420), receptor informado (421), 80/86/87 (422), sin repetir (423), 0 < porcentaje < 100 (424/425), distintos del emisor (426), suman 100 (427), el receptor está (428) y es uno de los de mayor porcentaje (429).
+- codigoConcepto 1-3 (121 / 713); clase A y FCE con receptor CUIT 80 (128/129 / 718/733); subtotalesIVA si hay condición 4-6 (403 / 715).
+- 23000000000 (No Categorizado): solo en 6/7/8 con condicionIVAReceptor 7 (342 / 889); con gravado + IVA > 0, tributo 13 con importe > 0 (145, solo CAE; en CAEA 749 observa).
+- Datos adicionales: 21/22/23 solo FCE (326; CAEA 923 observa) y con c1 (333/931); 22 S/N (327/925), obligatorio en notas FCE (329/927), no en 201/206 (330/928); 21 obligatorio en 201/206 (331/929), no en notas (332/930); 27 ADC/SCA (334/932), obligatorio en 201/206 (335/933), no en notas (336/934); 5 solo en 1,2,3,201,202,203 con c1 1-6 y sin c2-c6 (337-340 / 935-938).
+- Asociados FCE: factura asocia 88/91/990/995 (208/808); nota con un solo asociado FCE: 201/206, o en anulación 201-203/206-208 (212/812), con cuit (209/809; los remitos asociados no lo exigen) igual al del emisor (210/810, si se pasa ctx.cuitEmisor; ArcaMtxca lo pasa solo); anulación: NC revierte 201/202/206/207, ND 203/208 (214/814). Período: no en notas FCE (159/777) ni en 1, 51, 201, 206 (162/780).
+- En CAEA, importeIVA 0 para condiciones 1-3 solo observa (1122), no se valida; los mensajes de ítems citan los códigos de CAEA (1100-1121).
 - ND/NC 2,3,7,8,52,53: comprobantesAsociados o periodoComprobantesAsociados, no ambos (160/161 / 778/779).
 - cancelaEnMismaMonedaExtranjera 'S' solo en 1, 6, 51, 201, 206 (118, solo CAE).
 - En FCE el ítem no exige importeIVA ni se valida su fórmula (514/515 aplican a 1,2,3,51,52,53).
+
+Validación sin request: `validateComprobanteCAE(c, ctx?)` (reglas de autorizar) y `validateComprobanteCAEA(c, ctx?)` (reglas de informarComprobanteCAEA) lanzan ArcaValidationError con todos los errores; no validan el XSD. `ctx: ContextoReglas = { cuitEmisor?: number | string }` habilita 426 y 210/810 (ArcaMtxca lo pasa solo con su cuit).
 
 ## Errores
 
@@ -106,7 +114,7 @@ Otras reglas validadas (código CAE / CAEA):
 - consultarCAEA(caea, opts?) -> MtxcaCAEA
 - consultarCAEAEntreFechas(desde, hasta, opts?) -> MtxcaCAEA[]
 - informarComprobanteCAEA({ ...comprobante, numeroComprobante, caea, fechaHoraGen }, opts?) -> MtxcaInformarCAEAResult. fechaHoraGen es obligatoria (754): Date (hora de Argentina) o 'YYYY-MM-DDTHH:MM:SS'.
-- informarAjusteIVACAEA(comp, opts?) -> MtxcaInformarCAEAResult
+- informarAjusteIVACAEA(comp, opts?) -> MtxcaInformarCAEAResult. Valida el XSD y fechaHoraGen (754).
 - informarCAEANoUtilizado(caea, opts?) / informarCAEANoUtilizadoPtoVta(caea, ptoVta, opts?) -> { resultado, fechaProceso?, caea?, errores }
 - consultarPtosVtaCAEANoInformados(caea, opts?) -> PuntoVenta[]
 - status() -> { appserver, dbserver, authserver } (dummy, sin auth)
@@ -118,7 +126,7 @@ Otras reglas validadas (código CAE / CAEA):
 - getPuntosVenta / getPuntosVentaCAE / getPuntosVentaCAEA -> { numeroPuntoVenta, bloqueado: 'S'|'N', fechaBaja? }[]
 - clearAuthCache(): Promise<void>
 
-Bajo nivel: `mtxca.client` / `new MtxcaClient({ endpoint })`, una función por operación del WSDL; recibe `MtxcaAuth { token, sign, cuitRepresentada }`.
+Bajo nivel: `mtxca.client` / `new MtxcaClient({ endpoint })`, una función por operación del WSDL; recibe `MtxcaAuth { token, sign, cuitRepresentada }`. Valida el XSD y redondea, sin las reglas de negocio.
 
 ## Enums
 
