@@ -14,7 +14,7 @@ const EXPIRY_MARGIN_MS = 2 * 60_000;
 const TRA_GENERATION_OFFSET_MS = 2 * 60_000;
 /** Vigencia por defecto del TRA (`expirationTime - now`), en minutos. */
 const DEFAULT_TOKEN_TTL_MINUTES = 720;
-/** Vigencia máxima del TRA que acepta WSAA (24 horas; más da `xml.expirationTime.invalid`). */
+/** Vigencia máxima del TRA que acepta WSAA (24 horas desde su propia hora; más da `xml.expirationTime.invalid`). */
 const MAX_TOKEN_TTL_MINUTES = 1440;
 /** Vida de un TA según el manual de WSAA (12 horas): se usa si la respuesta no trae `expirationTime`. */
 const DEFAULT_TA_LIFETIME_MS = 12 * 60 * 60_000;
@@ -51,9 +51,10 @@ export interface WsaaClientConfig {
   /**
    * Vigencia del TRA en minutos (`expirationTime` del pedido), de 1 a 1440
    * (default: 720). No es la vida del Ticket de Acceso: WSAA emite cada TA con
-   * su propio vencimiento (12 horas, según el manual). El TRA nunca vence más
-   * de 24 horas después de su `generationTime`, que es 2 minutos anterior a la
-   * hora actual: con 1440, `expirationTime` queda 1438 minutos adelante.
+   * su propio vencimiento, 12 horas desde su propia hora, sea cual sea la del
+   * TRA. WSAA rechaza un `expirationTime` a más de 24 horas de su propia hora
+   * (`xml.expirationTime.invalid`), así que el tope es 1438 minutos: deja 2
+   * minutos de margen para un reloj local adelantado.
    */
   tokenTTLMinutes?: number;
   /** Timeout en milisegundos (default: 30000) */
@@ -575,7 +576,8 @@ export class WsaaClient {
     // azar evita colisiones entre TRAs generados en el mismo segundo.
     const uniqueId = randomInt(1, 0x1_0000_0000);
     const generationTime = new Date(now.getTime() - TRA_GENERATION_OFFSET_MS).toISOString();
-    // WSAA rechaza un TRA que vence más de 24 horas después de su generationTime.
+    // WSAA rechaza un expirationTime a más de 24 horas de su propia hora (no la
+    // del generationTime): el margen cubre un reloj local levemente adelantado.
     const ttlMs = Math.min(this.tokenTTLMinutes * 60_000, MAX_TOKEN_TTL_MINUTES * 60_000 - TRA_GENERATION_OFFSET_MS);
     const expirationTime = new Date(now.getTime() + ttlMs).toISOString();
 

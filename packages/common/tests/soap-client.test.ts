@@ -254,6 +254,22 @@ describe('soapCall: SOAP Faults y respuestas no SOAP', () => {
     expect(err.faultString).toBeUndefined();
   });
 
+  it('un 200 no SOAP lleva el extracto del body en el mensaje y en responseBody (ej: el "BL... 500" de WSCPE)', async () => {
+    mockFetch(xmlResponse('BL6660112751023 2026-11-03 18:13:03 500'));
+    const err = await soapCall(URL, '<x/>', { kind: 'emision' }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err.message).toContain('sin SOAP Envelope (respuesta: BL6660112751023 2026-11-03 18:13:03 500)');
+    expect(err.responseBody).toBe('BL6660112751023 2026-11-03 18:13:03 500');
+  });
+
+  it('un 200 con body vacío lo dice en el mensaje (ej: WSCPE ante una operación que no existe)', async () => {
+    mockFetch(xmlResponse(''));
+    const err = await soapCall(URL, '<x/>', { retries: 0 }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err.message).toContain('sin SOAP Envelope (body vacío)');
+    expect(err.responseBody).toBeUndefined();
+  });
+
   it('usa el fetch inyectado en lugar del global', async () => {
     const global = mockFetch();
     const own = vi.fn(async () => xmlResponse(OK));

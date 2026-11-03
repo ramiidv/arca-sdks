@@ -573,13 +573,20 @@ export async function soapCallWith(
       }
 
       if (!parsed || !soapBody(parsed)) {
-        // 2xx sin Envelope SOAP (ej: página HTML de mantenimiento de un proxy):
-        // error de transporte, reintentable en consultas.
-        return new ArcaSoapError(`Respuesta inválida de ${methodName}: HTTP ${response.status} sin SOAP Envelope`, {
-          statusCode: response.status,
-          responseDate,
-          uncertain: true,
-        });
+        // 2xx sin Envelope SOAP (ej: página HTML de mantenimiento de un proxy, o
+        // el texto plano `BL<id> <fecha> 500` con que WSCPE responde un request
+        // que no cumple el XSD): error de transporte, reintentable en consultas.
+        // El extracto del body queda en el mensaje y en `responseBody`.
+        const excerpt = bodyExcerpt(responseText);
+        return new ArcaSoapError(
+          `Respuesta inválida de ${methodName}: HTTP ${response.status} sin SOAP Envelope (${excerpt ? `respuesta: ${excerpt}` : 'body vacío'})`,
+          {
+            statusCode: response.status,
+            responseDate,
+            uncertain: true,
+            responseBody: excerpt,
+          },
+        );
       }
 
       safeEmit(onEvent, { type: 'request:end', endpoint, method: methodName, durationMs: Date.now() - startTime });

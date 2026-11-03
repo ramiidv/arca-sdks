@@ -97,7 +97,7 @@ Comportamiento:
   - Error de red sin enviar o abort: sin espera.
   - Durante una espera, si hay un ticket por vencer todavía utilizable, se devuelve.
 - Secretos (cert/clave parseados y tickets en memoria) en campos privados `#`: no aparecen en `JSON.stringify` ni `util.inspect`.
-- `uniqueId` del TRA: entero aleatorio de 32 bits sin signo; `generationTime` = ahora − 2 min (con offset); `expirationTime` = ahora + `tokenTTLMinutes`, sin pasar de 24 h desde `generationTime` (con 1440 queda ahora + 1438 min).
+- `uniqueId` del TRA: entero aleatorio de 32 bits sin signo; `generationTime` = ahora − 2 min (con offset); `expirationTime` = ahora + `tokenTTLMinutes`, con tope 1438 min (WSAA rechaza más de 24 h desde su propia hora). El TA vence 12 h después de la hora de WSAA.
 - Nombre del servicio: debe empezar con una letra (XSD del TRA).
 
 `certificateInfo(pem)` → `{ subject, issuer, notBefore, notAfter, cuit? }` (`cuit` del `serialNumber` del sujeto, `"CUIT 20123456786"`). Lanza `ArcaValidationError` si el PEM es inválido.
