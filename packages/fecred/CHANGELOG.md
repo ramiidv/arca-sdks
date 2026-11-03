@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.1
+
+### Patch Changes
+
+- e763bcb: Los source maps publicados incluyen el código fuente embebido (`inlineSources`), así que se pueden depurar sin `src/`. El build borra `dist/` antes de compilar, para que no se publiquen archivos de módulos eliminados.
+- db3f62f: Un SOAP Fault se clasifica como `ArcaAuthError` solo si el código `wscommon_N` es el `faultcode` o aparece al inicio del `faultstring`. Antes bastaba con que se mencionara en cualquier parte del mensaje, y un Fault de negocio o de sistema que lo citara dejaba de ser incierto en las emisiones.
+- Updated dependencies [e763bcb]
+- Updated dependencies [8424364]
+  - @ramiidv/arca-common@0.10.0
+
 ## 0.8.0
 
 ### Minor Changes

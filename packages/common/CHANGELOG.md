@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.10.0
+
+### Minor Changes
+
+- 8424364: Endurecimiento de seguridad del transporte, de WSAA y del storage de tickets. Algunos cambios de comportamiento pueden requerir ajustes:
+  
+  - **Endpoints solo `https://`**: `WsaaClient` (`endpoint`), `ArcaSdkBase` (`endpoints.*`), `SoapServiceClient` / `ServiceClientConfig` (`endpoint`), `soapCall` y `arcaSoapCall` lanzan `ArcaValidationError` si la URL no es `https://` o lleva usuario o contraseña. `http://` se acepta solo en `localhost`, `127.0.0.0/8` y `::1`. Cómo adaptarse: un proxy o mock propio tiene que servir `https://`; un servidor de prueba local con `http://` tiene que escuchar en loopback (`http://127.0.0.1:8080/...`).
+  - **Redirecciones no seguidas**: `fetch` se llama con `redirect: 'manual'` (también un `fetch` propio) y un 3xx es un `ArcaSoapError` con `statusCode` y `uncertain: false`, que no se reintenta. El mensaje indica el host del `Location`. Antes, un 307/308 reenviaba el body (token y sign, o el TRA firmado) al host de destino, incluso de `https` a `http`. Cómo adaptarse: configurar la URL final del servicio.
+  - **`tokenTTLMinutes` por defecto 10** (antes 720): es la vigencia del TRA, no la del Ticket de Acceso (que sigue durando 12 horas). Una vigencia larga solo ampliaba el lapso en que un TRA firmado filtrado servía para pedir un TA. El rango sigue siendo 1 a 1440. Cómo adaptarse: nada, salvo con un reloj local muy desfasado sin `autoClockSkew`; en ese caso, corregir el reloj o `clockOffsetMs`.
+  - **TLS legacy acotado**: con `legacyTls: 'auto'`, el fallback a `SECLEVEL=1` ante `ERR_SSL_DH_KEY_TOO_SMALL` aplica solo a `servicios1.afip.gov.ar` (WSFEv1, WSFEX y WSCDC de producción). Con otro host el error se lanza. Nuevo evento `request:legacy-tls` (`{ endpoint, method }`) en cada request que va por ese transporte. `'always'` y `'never'` no cambian. Cómo adaptarse: para otro host que lo necesite, `legacyTls: 'always'`.
+  - **Respuestas con `<!DOCTYPE` rechazadas**: SOAP no admite DTDs y el parser expandía las entidades declaradas en ellas. Con HTTP 2xx, `soapCall` la trata como una respuesta sin SOAP Envelope (`ArcaSoapError`, `uncertain: true`, reintentable en consultas); con un no-2xx, el error HTTP de siempre. `parseXml` lanza `ArcaResponseError`.
+  - **Tamaño máximo de respuesta**: nueva opción `maxResponseBytes` (default 50 MB) en `ArcaBaseConfig`, `WsaaClientConfig`, `SoapCallOptions` y `ServiceTransport` (`transportOptions`). El body se lee por streaming (también en el transporte legacy) y, si supera el límite, se corta y se lanza `ArcaSoapError`, sin reintento y con `uncertain: true` en emisiones.
+  - **`buildXml` valida los nombres**: una key que no es un nombre XML (`nombre`, `prefijo:nombre`, `@_atributo` o `#text`) lanza `ArcaValidationError`. Antes se escribía tal cual y permitía inyectar elementos.
+  - **WSAA**: un TA que vence a más de 24 horas se rechaza (`ArcaAuthError`) si viene de WSAA y se descarta (se hace login) si viene del storage. `autoClockSkew` no aplica un offset calculado de más de ±24 horas: se lanza el error original.
+  - **Secretos fuera de `util.inspect`**: `WsaaClient` guarda el `ticketStorage` y los logins en curso, y `MemoryTicketStorage` sus tickets, en campos privados `#`: `console.log` de un cliente o un SDK ya no muestra token ni sign.
+  - **`FileTicketStorage`**: en POSIX rechaza un directorio que es un symlink o de otro usuario, y ajusta a 0700 uno propio con permisos para el grupo u otros (el directorio actual, el home y la raíz no se modifican: se rechazan si el grupo u otros pueden escribir). Abre los archivos sin seguir symlinks y sin bloquearse en un FIFO; un archivo que no es regular, es de otro usuario o pesa más de 1 MB se ignora y se informa por `onError`. El error de un JSON corrupto ya no cita parte del archivo. Con un directorio rechazado, `get`/`set` lanzan: `WsaaClient` lo emite como `auth:storage-error` y sigue con los tickets en memoria (cada proceso hace su propio login). Cómo adaptarse: usar la ruta real (no un symlink) de un directorio del usuario del proceso; por ejemplo, en Docker, un volumen con el mismo uid que el proceso.
+  - `testing`: `loginResponse` escapa el `token`.
+  - Dependencias: `fast-xml-parser` `^5.11.2` y `node-forge` `^1.4.2`.
+  - README y llms.txt: nueva sección "Seguridad".
+
+### Patch Changes
+
+- e763bcb: Los source maps publicados incluyen el código fuente embebido (`inlineSources`), así que se pueden depurar sin `src/`. El build borra `dist/` antes de compilar, para que no se publiquen archivos de módulos eliminados.
+
 ## 0.9.1
 
 ### Patch Changes

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.2
+
+### Patch Changes
+
+- e763bcb: Los source maps publicados incluyen el código fuente embebido (`inlineSources`), así que se pueden depurar sin `src/`. El build borra `dist/` antes de compilar, para que no se publiquen archivos de módulos eliminados.
+- db3f62f: Los Faults `soapenv:Server` solo se clasifican como rechazo (`ArcaSireServiceError`) cuando el mensaje empieza con `XML invalido` o `Request mal formado`. Antes bastaba con que contuviera "no cumple el schema" en cualquier posición, y un error de sistema con ese texto podía informarse como rechazo seguro en lugar de `ArcaSoapError` con `uncertain: true`. Los Faults `soapenv:Client` siguen siendo rechazos.
+- Updated dependencies [e763bcb]
+- Updated dependencies [8424364]
+  - @ramiidv/arca-common@0.10.0
+
 ## 0.7.1
 
 ### Patch Changes
