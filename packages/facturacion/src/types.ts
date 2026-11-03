@@ -10,7 +10,7 @@ import type { ArcaSdkConfig } from '@ramiidv/arca-common';
  * Configuración de `ArcaFacturacion`. Extiende `ArcaSdkConfig` de `@ramiidv/arca-common`
  * (cert, key, cuit, production, timeout, retries, retryDelayMs,
  * tokenTTLMinutes, onEvent, ticketStorage, clockOffsetMs, autoClockSkew,
- * loginErrorCooldownMs, fetch, legacyTls, wsaa, signal).
+ * loginErrorCooldownMs, fetch, legacyTls, maxResponseBytes, wsaa, signal).
  *
  * - `retries`: reintentos en consultas ante errores transitorios (default: 1).
  *   Las emisiones (FECAESolicitar, FECAEARegInformativo,

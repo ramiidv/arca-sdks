@@ -62,6 +62,7 @@ new ArcaFacturacion({
   paramCacheTTLMs?: number,     // 24 h; 0 sin cache. Puntos de venta y cotizaciones no se cachean
   endpoints?: { wsaa?: string, wsfe?: string, wsfex?: string },
   legacyTls?: 'auto' | 'never' | 'always', // default 'auto' (ver Entornos)
+  maxResponseBytes?: number,    // tamaño máximo del body de una respuesta, default 52428800 (50 MB)
   fetch?: typeof fetch,
   onEvent?: (e: ArcaEvent) => void,
 });
@@ -172,7 +173,7 @@ await arca.facturarExpo({
 - `Moneda`: PES, DOL, '060' euro, '012' real, '011' peso uruguayo, '033' peso chileno, '029' guaraní, '031' peso boliviano, '032' peso colombiano, '010' peso mexicano, '021' libra, '019' yen, '009' franco suizo, '018' dólar canadiense, '064' yuan. Tabla completa: `getMonedas()`.
 - Códigos: `WSFE_ERRORES_INTERNOS` [500, 501, 502], `WSFEX_ERRORES_INTERNOS` [500, 501, 502, 505], `WSFE_ERRORES_AUTH` [600, 601], `WSFEX_ERRORES_AUTH` [1000, 1001], `WSFE_NUMERO_NO_CORRESPONDE` 10016, `WSFE_CAEA_NUMERO_NO_CORRESPONDE` 703.
 - `ENDPOINTS`: `{ wsfe, wsfex }`, cada uno `{ testing, production }` (`ServiceEndpoints`); mismas claves que `config.endpoints`.
-- Clientes de bajo nivel: `WsfeClient`, `WsfexClient`, `WsaaClient`. `new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing, transport?: { timeout?, retries?, retryDelayMs?, onEvent?, fetch?, legacyTls? } })` (`ServiceClientConfig`; lo mismo `WsfexClient` con `ENDPOINTS.wsfex`). Devuelven las respuestas de ARCA tal cual (un 'R' no lanza).
+- Clientes de bajo nivel: `WsfeClient`, `WsfexClient`, `WsaaClient`. `new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing, transport?: { timeout?, retries?, retryDelayMs?, onEvent?, fetch?, legacyTls?, maxResponseBytes? } })` (`ServiceClientConfig`; lo mismo `WsfexClient` con `ENDPOINTS.wsfex`). Devuelven las respuestas de ARCA tal cual (un 'R' no lanza).
 
 ## Manejo de errores
 

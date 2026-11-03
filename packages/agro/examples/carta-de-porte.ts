@@ -24,8 +24,8 @@ const agro = new ArcaAgro({
 // El destino opera con su propia instancia (su CUIT y su certificado).
 const agroDestino = new ArcaAgro({
   cuit: CUIT_DESTINO,
-  cert: fs.readFileSync('cert-destino.pem', 'utf-8'),
-  key: fs.readFileSync('key-destino.pem', 'utf-8'),
+  cert: fs.readFileSync('./certs/destino.crt', 'utf-8'),
+  key: fs.readFileSync('./certs/destino.key', 'utf-8'),
   production: false,
   ticketStorage: new FileTicketStorage('.arca-tickets'),
 });

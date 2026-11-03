@@ -55,6 +55,8 @@ npm install @ramiidv/arca-padron
 
 ## Inicio rápido
 
+La carpeta `certs/` del ejemplo (certificado y clave privada) tiene que estar en el `.gitignore` del proyecto: la clave nunca se versiona.
+
 ```typescript
 import { readFileSync } from 'node:fs';
 import { ArcaPadron, CollectionName, FileTicketStorage, condicionIvaDesdePadron } from '@ramiidv/arca-padron';
@@ -98,11 +100,12 @@ console.log(provincias.length, 'provincias');
 | `production`                                                                                                           | `boolean`                                | `false`            | Homologación o producción                                                                                     |
 | `timeout`                                                                                                              | `number`                                 | `30000`            | Timeout HTTP (ms)                                                                                             |
 | `retries` / `retryDelayMs`                                                                                             | `number`                                 | `1` / `1000`       | Reintentos ante errores transitorios (nunca ante un SOAP Fault)                                               |
-| `tokenTTLMinutes`                                                                                                      | `number`                                 | `720`              | Vigencia del TRA pedida a WSAA                                                                                |
+| `tokenTTLMinutes`                                                                                                      | `number`                                 | `10`               | Vigencia del TRA pedida a WSAA                                                                                |
 | `ticketStorage`                                                                                                        | `TicketStorage`                          | —                  | Persistencia del TA (recomendado: `FileTicketStorage` o propio)                                               |
 | `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs`, `alreadyAuthenticatedCooldownMs` |                                          |                    | Opciones de WSAA (ver `@ramiidv/arca-common`)                                                                 |
 | `fetch`                                                                                                                | `typeof fetch`                           | `globalThis.fetch` | `fetch` propio (proxy, tests)                                                                                 |
 | `legacyTls`                                                                                                            | `'auto' \| 'never' \| 'always'`          | `'auto'`           | Transporte TLS legacy                                                                                         |
+| `maxResponseBytes`                                                                                                     | `number`                                 | `52428800`         | Tamaño máximo del body de una respuesta (50 MB)                                                               |
 | `onEvent`                                                                                                              | `(e: ArcaEvent) => void`                 | —                  | Eventos `auth:*` y `request:*`                                                                                |
 | `wsaa`                                                                                                                 | `WsaaClient`                             | —                  | `WsaaClient` compartido con otros SDKs (mismo certificado); tiene que ser del mismo entorno (`production`)    |
 | `signal`                                                                                                               | `AbortSignal`                            | —                  | Cancela todas las llamadas de la instancia (ej: al apagar la app); se combina con el `signal` de cada llamada |

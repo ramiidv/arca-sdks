@@ -39,6 +39,8 @@ Glosario:
 
 ## Inicio rápido
 
+La carpeta `certs/` del ejemplo (certificado y clave privada) tiene que estar en el `.gitignore` del proyecto: la clave nunca se versiona.
+
 ```typescript
 import fs from 'node:fs';
 import { ArcaCdc } from '@ramiidv/arca-cdc';
@@ -82,7 +84,7 @@ if (r.resultado === 'A') {
 | `timeout`                         | `number`                        | `30000`        | Timeout HTTP (ms)                                                                    |
 | `retries`                         | `number`                        | `1`            | Reintentos ante errores transitorios (todas las operaciones son consultas)           |
 | `retryDelayMs`                    | `number`                        | `1000`         | Delay inicial del backoff exponencial                                                |
-| `tokenTTLMinutes`                 | `number`                        | `720`          | Vigencia pedida a WSAA                                                               |
+| `tokenTTLMinutes`                 | `number`                        | `10`           | Vigencia pedida a WSAA                                                               |
 | `ticketStorage`                   | `TicketStorage`                 | memoria        | Persistencia del ticket WSAA (recomendado en producción; ver `FileTicketStorage`)    |
 | `keyPassphrase`                   | `string`                        | --             | Contraseña de la clave, si está encriptada                                           |
 | `clockOffsetMs` / `autoClockSkew` |                                 | `0` / `true`   | Ajuste de reloj para WSAA                                                            |
@@ -91,6 +93,7 @@ if (r.resultado === 'A') {
 | `alreadyAuthenticatedCooldownMs`  | `number`                        | 2 min / 10 min | Espera tras `coe.alreadyAuthenticated` (producción / homologación); `0` la desactiva |
 | `fetch`                           | `typeof fetch`                  | global         | `fetch` propio (proxy, tests)                                                        |
 | `legacyTls`                       | `'auto' \| 'never' \| 'always'` | `'auto'`       | Transporte TLS legacy (ver abajo)                                                    |
+| `maxResponseBytes`                | `number`                        | `52428800`     | Tamaño máximo del body de una respuesta (50 MB)                                      |
 | `endpoints`                       | `{ wscdc?, wsaa? }`             | --             | Sobrescribe las URLs                                                                 |
 | `onEvent`                         | `(e: ArcaEvent) => void`        | --             | Eventos (auth, requests, reintentos)                                                 |
 | `wsaa`                            | `WsaaClient`                    | --             | `WsaaClient` compartido con otros SDKs (mismo certificado y entorno)                 |
@@ -192,7 +195,7 @@ const cdc = new ArcaCdc({
   key: fs.readFileSync('./certs/clave.key', 'utf-8'),
 });
 
-// { endpoint, transport? }: transport son las opciones de red (timeout, retries, onEvent, fetch, legacyTls)
+// { endpoint, transport? }: transport son las opciones de red (timeout, retries, onEvent, fetch, legacyTls, maxResponseBytes)
 const client = new CdcClient({ endpoint: ENDPOINTS.wscdc.testing, transport: { timeout: 30_000 } });
 await client.dummy();
 

@@ -40,6 +40,8 @@ Glosario:
 
 ## Inicio rápido
 
+La carpeta `certs/` del ejemplo (certificado y clave privada) tiene que estar en el `.gitignore` del proyecto: la clave nunca se versiona.
+
 ```ts
 import { readFileSync } from 'node:fs';
 import { ArcaFacturacion, ArcaRechazoError, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/arca-facturacion';
@@ -100,7 +102,7 @@ El SDK completa el número (último autorizado + 1), la fecha (hora de Argentina
 | `timeout`                        | `number`                        | `30000`            | Timeout HTTP en ms                                                                                   |
 | `retries`                        | `number`                        | `1`                | Reintentos de las consultas ante errores transitorios. Las emisiones nunca se reintentan             |
 | `retryDelayMs`                   | `number`                        | `1000`             | Delay base del backoff exponencial                                                                   |
-| `tokenTTLMinutes`                | `number`                        | `720`              | Vigencia del pedido de ticket (TRA) enviado a WSAA                                                   |
+| `tokenTTLMinutes`                | `number`                        | `10`               | Vigencia del pedido de ticket (TRA) enviado a WSAA                                                   |
 | `clockOffsetMs`                  | `number`                        | `0`                | Desfase `relojARCA - relojLocal` en ms                                                               |
 | `autoClockSkew`                  | `boolean`                       | `true`             | Corrige el desfase si WSAA rechaza el login por el reloj                                             |
 | `loginErrorCooldownMs`           | `number`                        | `60000`            | Espera tras un login WSAA fallido                                                                    |
@@ -109,6 +111,7 @@ El SDK completa el número (último autorizado + 1), la fecha (hora de Argentina
 | `paramCacheTTLMs`                | `number`                        | `86400000`         | TTL del cache de tablas de parámetros (0 lo desactiva). Puntos de venta y cotizaciones no se cachean |
 | `endpoints`                      | `{ wsaa?, wsfe?, wsfex? }`      | —                  | URLs propias (proxy, mock)                                                                           |
 | `legacyTls`                      | `'auto' \| 'never' \| 'always'` | `'auto'`           | Transporte TLS para los hosts de producción con DH de 1024 bits (ver [Entornos](#entornos))          |
+| `maxResponseBytes`               | `number`                        | `52428800`         | Tamaño máximo del body de una respuesta (50 MB)                                                      |
 | `fetch`                          | `typeof fetch`                  | `globalThis.fetch` | `fetch` propio (proxy, mTLS, tests)                                                                  |
 | `onEvent`                        | `(e: ArcaEvent) => void`        | —                  | Callback de eventos (ver [Eventos](#eventos))                                                        |
 
@@ -530,19 +533,19 @@ boliviano, `032` peso colombiano, `010` peso mexicano, `021` libra, `019` yen, `
 
 ## Manejo de errores
 
-| Clase                       | `code`                         | Cuándo                                                                                                                                             |
-| --------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ArcaValidationError`       | `ARCA_VALIDATION_ERROR`        | Datos inválidos (no se envió nada). `field`, `details`; el mensaje cita la validación del manual                                                   |
+| Clase                       | `code`                         | Cuándo                                                                                                                                                                    |
+| --------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ArcaValidationError`       | `ARCA_VALIDATION_ERROR`        | Datos inválidos (no se envió nada). `field`, `details`; el mensaje cita la validación del manual                                                                          |
 | `ArcaRechazoError`          | `ARCA_RECHAZO`                 | ARCA procesó la emisión y rechazó el comprobante (`Resultado` "R"): no se emitió. `operacion`, `errors`, `observaciones` (`{ code, msg }[]`). Extiende `ArcaServiceError` |
-| `ArcaWSFEError`             | `ARCA_WSFE_ERROR`              | ARCA rechazó el request (`Errors`/`FEXErr`): no se emitió. `errors: { code, msg }[]`, `tieneCodigo(code)`. Extiende `ArcaServiceError`             |
-| `ArcaResultadoIncierto`     | `ARCA_RESULTADO_INCIERTO`      | Emisión WSFEv1 sin respuesta confiable (timeout, red, HTTP 5xx, error interno 500/501/502, respuesta ilegible). `intento`, `intentos`, `operacion` |
-| `ArcaResultadoInciertoExpo` | `ARCA_RESULTADO_INCIERTO_EXPO` | Lo mismo en `FEXAuthorize` (y errores 500/501/502/505). `intento` (`id`, `cbteNro`, `fecha`) y `request` para reenviar con el mismo `Id`           |
-| `ArcaConflictoExpo`         | `ARCA_CONFLICTO_EXPO`          | El `Id` de WSFEX ya lo usaba otra solicitud: WSFEX devolvió otro comprobante. El del request **no** se autorizó. `id`, `request`, `respuesta`      |
-| `ArcaAuthError`             | `ARCA_AUTH_ERROR`              | Login WSAA fallido, o ARCA rechazó el ticket (WSFEv1 600/601, WSFEX 1000/1001). `faultCode`, `retryable`, `cause`                                  |
-| `ArcaTicketVigenteError`    | `ARCA_TICKET_VIGENTE`          | WSAA ya emitió un ticket vigente que no está en memoria ni en el storage                                                                           |
-| `ArcaSoapError`             | `ARCA_SOAP_ERROR`              | HTTP, timeout o SOAP Fault. `statusCode`, `faultCode`, `faultString`, `uncertain`, `aborted`                                                       |
-| `ArcaResponseError`         | `ARCA_RESPONSE_ERROR`          | ARCA respondió con una forma inesperada (falta un campo obligatorio). `uncertain`                                                                  |
-| `ArcaError`                 | `ARCA_ERROR`                   | Base de todos                                                                                                                                      |
+| `ArcaWSFEError`             | `ARCA_WSFE_ERROR`              | ARCA rechazó el request (`Errors`/`FEXErr`): no se emitió. `errors: { code, msg }[]`, `tieneCodigo(code)`. Extiende `ArcaServiceError`                                    |
+| `ArcaResultadoIncierto`     | `ARCA_RESULTADO_INCIERTO`      | Emisión WSFEv1 sin respuesta confiable (timeout, red, HTTP 5xx, error interno 500/501/502, respuesta ilegible). `intento`, `intentos`, `operacion`                        |
+| `ArcaResultadoInciertoExpo` | `ARCA_RESULTADO_INCIERTO_EXPO` | Lo mismo en `FEXAuthorize` (y errores 500/501/502/505). `intento` (`id`, `cbteNro`, `fecha`) y `request` para reenviar con el mismo `Id`                                  |
+| `ArcaConflictoExpo`         | `ARCA_CONFLICTO_EXPO`          | El `Id` de WSFEX ya lo usaba otra solicitud: WSFEX devolvió otro comprobante. El del request **no** se autorizó. `id`, `request`, `respuesta`                             |
+| `ArcaAuthError`             | `ARCA_AUTH_ERROR`              | Login WSAA fallido, o ARCA rechazó el ticket (WSFEv1 600/601, WSFEX 1000/1001). `faultCode`, `retryable`, `cause`                                                         |
+| `ArcaTicketVigenteError`    | `ARCA_TICKET_VIGENTE`          | WSAA ya emitió un ticket vigente que no está en memoria ni en el storage                                                                                                  |
+| `ArcaSoapError`             | `ARCA_SOAP_ERROR`              | HTTP, timeout o SOAP Fault. `statusCode`, `faultCode`, `faultString`, `uncertain`, `aborted`                                                                              |
+| `ArcaResponseError`         | `ARCA_RESPONSE_ERROR`          | ARCA respondió con una forma inesperada (falta un campo obligatorio). `uncertain`                                                                                         |
+| `ArcaError`                 | `ARCA_ERROR`                   | Base de todos                                                                                                                                                             |
 
 `instanceof` funciona aunque haya más de una copia del paquete cargada; `code` sirve para comparar sin `instanceof`.
 

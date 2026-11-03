@@ -57,18 +57,33 @@ servicio.
    elegir el tipo de cambio.
 2. Al mergear a `main`, el workflow Release abre o actualiza el PR "chore:
    version packages", con versiones, CHANGELOGs y rangos internos.
-3. Al mergear ese PR, el workflow publica en npm con trusted publishing (OIDC),
-   en orden de dependencias, y crea los tags y los GitHub Releases.
+3. Al mergear ese PR, el workflow compila y empaqueta los paquetes en un job
+   sin permisos de escritura, y el job `publish` espera la aprobación del
+   environment `npm-publish`. Aprobado, publica esos tarballs en npm con
+   trusted publishing (OIDC), en orden de dependencias, y crea los tags y los
+   GitHub Releases.
 
 Notas:
 
 - Hace falta `changesets/action@v2` con `@changesets/cli` v3. Con la v1, la
-  publicación funciona pero no se crean los tags ni los releases.
+  publicación funciona pero no se crean los tags ni los releases. `release.yml`
+  usa sus sub-actions (`select-mode`, `version`, `pack`, `publish`) para que
+  solo el job que publica tenga `id-token: write`.
+- El environment `npm-publish` (Settings > Environments) requiere aprobación
+  manual y solo admite la rama `main`. Mientras no esté creado con esas
+  reglas, GitHub lo crea al vuelo sin protección y la publicación no espera.
+- Las actions están fijadas por SHA de commit, con la versión en un
+  comentario. Dependabot (`.github/dependabot.yml`) abre PRs semanales para
+  actualizarlas y para las dependencias de npm (minor y patch agrupadas).
+- Node 24.22 trae npm 11.19.1. Trusted publishing requiere npm >= 11.5.1:
+  revisarlo si se cambia `node-version` en `release.yml`.
 - El repo necesita el permiso "Allow GitHub Actions to create and approve pull
   requests".
 - El trusted publisher de cada paquete en npmjs.com apunta a este repo y a
-  `release.yml`. Un paquete nuevo hay que publicarlo una vez a mano (o
-  configurarle el trusted publisher antes) para que el workflow pueda.
+  `release.yml`; si además declara el environment `npm-publish`, npm rechaza
+  publicaciones que no pasen por la aprobación. Un paquete nuevo hay que
+  publicarlo una vez a mano (o configurarle el trusted publisher antes) para
+  que el workflow pueda.
 - Los PRs que abre Actions no disparan CI; su contenido es el de `main` más el
   versionado.
 
