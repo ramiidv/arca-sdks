@@ -1,21 +1,33 @@
+# Dependabot: como mucho un PR por ecosistema por mes.
+# - npm: minor y patch de todas las dependencias en un solo PR. Las major no se
+#   proponen (se hacen a mano). @types/node sigue además a la Node mínima de
+#   engines (scripts/check-types-node.mjs). Las actualizaciones de seguridad
+#   llegan agrupadas en un solo PR.
+# - GitHub Actions (fijadas por SHA, con la versión en el comentario): todas juntas.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
     groups:
-      # Minor y patch en un solo PR; las major llegan por separado.
-      minor-y-patch:
+      dependencias:
+        applies-to: version-updates
+        patterns: ["*"]
         update-types: [minor, patch]
+      seguridad:
+        applies-to: security-updates
+        patterns: ["*"]
     ignore:
-      # @types/node sigue a la Node mínima de engines (scripts/check-types-node.mjs):
-      # sus major se suben a mano junto con engines.node.
-      - dependency-name: "@types/node"
+      - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
-  # Actualiza los SHA de las actions fijadas (y el comentario con la versión).
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      actions:
+        patterns: ["*"]

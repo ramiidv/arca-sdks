@@ -76,8 +76,10 @@ Notas:
   manual y solo admite la rama `main`. Mientras no esté creado con esas
   reglas, GitHub lo crea al vuelo sin protección y la publicación no espera.
 - Las actions están fijadas por SHA de commit, con la versión en un
-  comentario. Dependabot (`.github/dependabot.yml`) abre PRs semanales para
-  actualizarlas y para las dependencias de npm (minor y patch agrupadas).
+  comentario. Dependabot (`.github/dependabot.yml`) abre como mucho un PR por
+  mes por ecosistema: las actions juntas, y npm con minor y patch de todas las
+  dependencias (las de seguridad, en otro PR agrupado). Las major no las
+  propone: se hacen a mano.
 - Node 24.22 trae npm 11.19.1. Trusted publishing requiere npm >= 11.5.1:
   revisarlo si se cambia `node-version` en `release.yml`.
 - El repo necesita el permiso "Allow GitHub Actions to create and approve pull
