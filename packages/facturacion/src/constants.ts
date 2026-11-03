@@ -75,8 +75,9 @@ export const WSFE_CAEA_NUMERO_NO_CORRESPONDE = 703;
  * y firma no se corresponden / usuario no autorizado (también "No apareció
  * CUIT en lista de relaciones"), 601 CUIT representada no incluida en el
  * token. Llegan como `ArcaAuthError` (no reintentable). El 602 ("No existen
- * datos en nuestros registros") no es de autenticación: lo devuelven las
- * consultas sin resultado, y sigue siendo `ArcaWSFEError`.
+ * datos en nuestros registros" / "Sin Resultados") no es de autenticación: lo
+ * devuelven las consultas sin resultado, y sigue siendo `ArcaWSFEError`, salvo
+ * en `getPuntosVenta` y `consultarSinMovimientoCAEA`, que devuelven `[]`.
  */
 export const WSFE_ERRORES_AUTH: readonly number[] = [600, 601];
 

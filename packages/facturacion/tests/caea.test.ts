@@ -328,6 +328,38 @@ describe('CAEA sin movimiento', () => {
     expect(orden(mock.last('FECAEASinMovimientoConsultar').params)).toEqual(['Auth', 'CAEA', 'PtoVta']);
     expect((await arca.consultarSinMovimientoCAEA(CAEA, 5)).map((i) => i.ptoVta)).toEqual([5, 6]);
   });
+
+  it('FECAEASinMovimientoConsultar sin informes (10102 o 602) → []', async () => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({
+      FECAEASinMovimientoConsultar: [
+        wsfeErrores('FECAEASinMovimientoConsultar', [
+          {
+            code: 10102,
+            msg: 'El CAEA informado no se encuentra registrado en las bases de la Administracion como sin movimientos.',
+          },
+        ]),
+        wsfeErrores('FECAEASinMovimientoConsultar', [{ code: 602, msg: 'Sin Resultados' }]),
+        wsfeResponse('FECAEASinMovimientoConsultar', ''),
+      ],
+    });
+    expect(await arca.consultarSinMovimientoCAEA(CAEA, 5)).toEqual([]);
+    expect(await arca.consultarSinMovimientoCAEA(CAEA, 5)).toEqual([]);
+    expect(await arca.consultarSinMovimientoCAEA(CAEA, 5)).toEqual([]);
+    expect(mock.count('FECAEASinMovimientoConsultar')).toBe(3);
+  });
+
+  it('FECAEASinMovimientoConsultar con otro error lanza ArcaWSFEError', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FECAEASinMovimientoConsultar: wsfeErrores('FECAEASinMovimientoConsultar', [
+        { code: 10100, msg: 'No ingreso el CAEA o el formato es invalido.' },
+      ]),
+    });
+    const err = await arca.consultarSinMovimientoCAEA(CAEA, 5).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaWSFEError);
+    expect(err.tieneCodigo(10100)).toBe(true);
+  });
 });
 
 describe('formatFechaHora', () => {

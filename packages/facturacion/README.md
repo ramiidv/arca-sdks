@@ -307,7 +307,7 @@ validación 10175).
 | Facturas FCE (201, 206, 211): `vtoPago` obligatorio con cualquier concepto                                                                                                                                              | 10163                             |
 | Facturas FCE: opcionales 2101 (CBU) y 27 (`SCA` o `ADC`) obligatorios; sin 22                                                                                                                                           | 10168, 10216, 10171               |
 | NC/ND FCE: opcional 22 (anulación `S` o `N`) obligatorio; sin 2101, 2102 ni 27                                                                                                                                          | 10173, 10167, 10172               |
-| FCE: 2101 de 22 dígitos; 2102 (alias) de 6 a 20 caracteres; 27 `SCA` o `ADC`                                                                                                                                            | 10165, 10166, 10215               |
+| FCE: 2101 de 22 dígitos; 2102 (alias) de 6 a 20 caracteres (letras, números, punto o guion); 27 `SCA` o `ADC`                                                                                                           | 10165, 10166, 10215               |
 | Fuera de FCE: sin opcionales 2101, 2102, 22 ni 27                                                                                                                                                                       | 10169                             |
 | NC/ND FCE de productos: `vtoPago` solo si son de anulación                                                                                                                                                              | 10175                             |
 | FCE: receptor con CUIT, distinto de 23000000000; NC/ND FCE con `cbtesAsoc` y sin `periodoAsoc`                                                                                                                          | 10176, 10178, 10153, 10196        |
@@ -433,7 +433,7 @@ hora en que se generó (`CbteFchHsGen`, obligatorio: validación 1440).
 | `registrarFacturaCAEA(caea, opts)`                     | Informa un comprobante (como `facturar` más `fechaHoraGeneracion`)       |
 | `registrarCAEA(request)`                               | API raw: cada comprobante con `caea` y `cbteFchHsGen` (`yyyymmddhhmmss`) |
 | `sinMovimientoCAEA(caea, ptoVta)`                      | Informa un punto de venta sin movimientos                                |
-| `consultarSinMovimientoCAEA(caea, ptoVta)`             | Consulta esos informes                                                   |
+| `consultarSinMovimientoCAEA(caea, ptoVta)`             | Consulta esos informes (`[]` si no hay ninguno)                          |
 
 ```ts
 import { ArcaFacturacion, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
@@ -463,7 +463,7 @@ Si ARCA rechaza el comprobante, `registrarFacturaCAEA` lanza `ArcaRechazoError`
 | `status()`                                                                                                                                                             | Estado de WSFEv1 y WSFEX (`{ wsfe, wsfex }`, `ServiceStatus`)                                                                 |
 | `getTiposComprobante`, `getTiposConcepto`, `getTiposDocumento`, `getTiposIva`, `getMonedas`, `getTiposTributo`, `getTiposOpcional`, `getActividades`, `getTiposPaises` | Tablas de parámetros (cacheadas; las consultas simultáneas comparten un request)                                              |
 | `getCondicionesIva({ claseCmp? })`                                                                                                                                     | Condiciones frente al IVA del receptor por clase                                                                              |
-| `getPuntosVenta()`                                                                                                                                                     | Puntos de venta (no se cachea)                                                                                                |
+| `getPuntosVenta()`                                                                                                                                                     | Puntos de venta (no se cachea; `[]` si no hay ninguno)                                                                        |
 | `getCotizacion(monedaId, { fecha? })`                                                                                                                                  | Cotización oficial: `{ monId, monCotiz, fchCotiz }` (no se cachea)                                                            |
 | `getCantMaxRegistros()`                                                                                                                                                | Máximo de comprobantes por request                                                                                            |
 | `clearParamCache()`                                                                                                                                                    | Vacía el cache de parámetros                                                                                                  |
@@ -546,10 +546,12 @@ boliviano, `032` peso colombiano, `010` peso mexicano, `021` libra, `019` yen, `
 
 `instanceof` funciona aunque haya más de una copia del paquete cargada; `code` sirve para comparar sin `instanceof`.
 
-Ante un `ArcaAuthError` de los códigos 600/601 (CUIT no relacionada con el certificado, servicio no
-autorizado) el SDK **no borra el ticket**: WSAA no emite otro mientras el actual siga vigente, y el
-mismo ticket puede servir para otras CUITs. Corregí la relación en ARCA. `clearAuthCache()` es solo
-para un ticket dañado (ej: cambiaste de certificado).
+WSFEv1 responde 600 cuando la CUIT de `Auth` no está relacionada con el certificado ("No aparecio
+CUIT en lista de relaciones"), el ticket es de otro servicio ("No valido Id Sistema") o el token o
+la firma están alterados o vacíos, y 601 cuando la CUIT no está incluida en el ticket (ej: CUIT 0).
+Ante un `ArcaAuthError` de los códigos 600/601 el SDK **no borra el ticket**: WSAA no emite otro
+mientras el actual siga vigente, y el mismo ticket puede servir para otras CUITs. Corregí la
+relación en ARCA. `clearAuthCache()` es solo para un ticket dañado (ej: cambiaste de certificado).
 
 ### Emisiones: rechazado, aprobado o incierto
 

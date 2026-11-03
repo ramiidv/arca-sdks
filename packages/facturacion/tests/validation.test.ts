@@ -406,9 +406,15 @@ describe('validateFacturarOpts: opcionales FCE MiPyME (10165-10173, 10214-10216)
     expect(() =>
       validateFacturarOpts({ ...factura, opcionales: [CBU, SCA, { id: '2102', valor: 'mi.alias.mp' }] }),
     ).not.toThrow();
+    expect(() =>
+      validateFacturarOpts({ ...factura, opcionales: [CBU, SCA, { id: '2102', valor: 'mi.alias-test' }] }),
+    ).not.toThrow();
     expect(() => validateFacturarOpts({ ...factura, opcionales: [CBU, SCA, { id: '2102', valor: 'abc' }] })).toThrow(
       '10166',
     );
+    expect(() =>
+      validateFacturarOpts({ ...factura, opcionales: [CBU, SCA, { id: '2102', valor: 'mi@alias' }] }),
+    ).toThrow('10166');
   });
 
   it('NC/ND FCE sin 22 → 10173; con otro valor → 10167', () => {
