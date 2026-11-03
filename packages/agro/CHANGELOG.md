@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.2
+
+### Patch Changes
+
+- e763bcb: Los source maps publicados incluyen el código fuente embebido (`inlineSources`), así que se pueden depurar sin `src/`. El build borra `dist/` antes de compilar, para que no se publiquen archivos de módulos eliminados.
+- Updated dependencies [e763bcb]
+- Updated dependencies [8424364]
+  - @ramiidv/arca-common@0.10.0
+
 ## 0.8.1
 
 ### Patch Changes
