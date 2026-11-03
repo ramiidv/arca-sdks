@@ -48,6 +48,9 @@ servicio.
   en cada minor de common. Revisar cuando common llegue a 1.0.
 - Cuando un manual discontinúe una operación que siga en el WSDL, marcarla
   `@deprecated` y quitarla en la major siguiente.
+- `@types/node` sigue la Node mínima de `engines.node` (hoy 22): `npm run lint`
+  falla si las majors no coinciden (`scripts/check-types-node.mjs`) y Dependabot
+  no propone sus majors. Al subir la Node mínima, subir los dos juntos.
 
 ## Cómo publicar
 
