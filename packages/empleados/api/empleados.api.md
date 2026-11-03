@@ -228,9 +228,6 @@ export function validateRegistro(registro: RegistroRelacionLaboral, opciones?: O
 
 export { ValidationErrorDetail }
 
-// @public @deprecated
-export const VALORES_MARCA_COVID_CCG: readonly number[];
-
 // @public
 export const VALORES_RECTIFICACION: readonly number[];
 

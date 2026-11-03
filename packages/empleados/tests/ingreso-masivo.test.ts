@@ -322,3 +322,10 @@ describe('ArcaEmpleados', () => {
     expect(sr.cantidad).toBe(0);
   });
 });
+
+describe('exports quitados', () => {
+  it('ya no exporta VALORES_MARCA_COVID_CCG (la posición 130 admite 0-9 por su formato N(1))', async () => {
+    const api = await import('../src/index.js');
+    expect('VALORES_MARCA_COVID_CCG' in api).toBe(false);
+  });
+});

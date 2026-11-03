@@ -29,7 +29,6 @@ export {
   CodigoMovimiento,
   CODIGOS_MOVIMIENTO,
   VALORES_RECTIFICACION,
-  VALORES_MARCA_COVID_CCG,
   PREFIJOS_CUIL_PERSONA_FISICA,
 } from './constants.js';
 

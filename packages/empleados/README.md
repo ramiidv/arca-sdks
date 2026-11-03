@@ -21,7 +21,7 @@ npm install @ramiidv/arca-empleados
 
 ## Requisitos
 
-- Node.js >= 20.19. Solo ESM; también funciona desde CommonJS porque Node ≥ 20.19 permite cargar módulos ESM con `require()`.
+- Node.js >= 22.12. Solo ESM; también funciona desde CommonJS porque Node ≥ 22.12 permite cargar módulos ESM con `require()`.
 - Clave fiscal con acceso al servicio **Simplificación Registral** para subir el archivo (el SDK no
   necesita certificado digital).
 - Los códigos (modalidad de contrato, obra social, situación de revista, sucursal, actividad, puesto,

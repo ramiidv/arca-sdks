@@ -49,17 +49,6 @@ export const CODIGOS_MOVIMIENTO: readonly CodigoMovimiento[] = Object.freeze(['A
 export const VALORES_RECTIFICACION: readonly number[] = Object.freeze([0, 1, 2, 3, 4, 5]);
 
 /**
- * Valores admitidos en "Marca de trabajador licenciado por COVID / Tipo de contrato CCG"
- * (posición 130), según el manual: `0` a `9`. El manual indica que por defecto se
- * informa `0` y que solo se completa para trabajadores del Programa Puente al Empleo
- * (Dto. 551/22) que aplican a Convenios de Corresponsabilidad Gremial.
- *
- * @deprecated Todos los valores que admite el campo N(1) son válidos, así que el SDK ya
- * no lo usa para validar. Se mantiene por compatibilidad.
- */
-export const VALORES_MARCA_COVID_CCG: readonly number[] = Object.freeze([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-
-/**
  * Prefijos de CUIL de persona física (20, 23, 24 y 27). Los prefijos 30, 33 y 34
  * corresponden a personas jurídicas y no pueden identificar a un trabajador.
  */
