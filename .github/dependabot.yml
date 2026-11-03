@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # Minor y patch en un solo PR; las major llegan por separado.
+      minor-y-patch:
+        update-types: [minor, patch]
+
+  # Actualiza los SHA de las actions fijadas (y el comentario con la versión).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
