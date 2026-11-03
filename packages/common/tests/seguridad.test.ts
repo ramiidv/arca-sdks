@@ -210,7 +210,11 @@ describe('maxResponseBytes', () => {
   });
 
   it('valida el valor', async () => {
-    await expect(soapCall(URL, '<x/>', { maxResponseBytes: 0 })).rejects.toBeInstanceOf(ArcaValidationError);
+    const fetch = mockFetch(xmlResponse(OK));
+    for (const value of [0, -1, Number.NaN, '1000' as unknown as number]) {
+      await expect(soapCall(URL, '<x/>', { maxResponseBytes: value })).rejects.toBeInstanceOf(ArcaValidationError);
+    }
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('transportOptions lo pasa a cada llamada', () => {
@@ -404,6 +408,44 @@ describe.skipIf(!posix)('FileTicketStorage: directorio y archivos', () => {
       await storage.set('k', ticket);
       expect((await stat(dir)).mode & 0o777).toBe(0o700);
       expect(await storage.get('k')).toEqual(ticket);
+    });
+  });
+
+  it('rechaza una ruta que no es un directorio', async () => {
+    await withTmp(async (base) => {
+      const file = join(base, 'archivo');
+      await writeFile(file, '');
+      await expect(new FileTicketStorage(file).get('k')).rejects.toThrow(/no es un directorio/);
+    });
+  });
+
+  it('no cambia los permisos del directorio actual: lo rechaza si otros pueden escribir', async () => {
+    await withTmp(async (base) => {
+      const dir = join(base, 'cwd');
+      await mkdir(dir);
+      await chmod(dir, 0o770);
+      vi.spyOn(process, 'cwd').mockReturnValue(dir);
+      await expect(new FileTicketStorage(dir).set('k', ticket)).rejects.toThrow(/pueden escribir/);
+      expect((await stat(dir)).mode & 0o777).toBe(0o770);
+
+      // Con permisos de solo lectura para el grupo se usa tal cual.
+      await chmod(dir, 0o750);
+      const storage = new FileTicketStorage(dir);
+      await storage.set('k', ticket);
+      expect((await stat(dir)).mode & 0o777).toBe(0o750);
+      expect(await storage.get('k')).toEqual(ticket);
+    });
+  });
+
+  it('ignora un archivo de ticket de más de 1 MB', async () => {
+    await withTmp(async (base) => {
+      const dir = join(base, 'tickets');
+      const storage = new FileTicketStorage(dir);
+      await storage.set('k', ticket);
+      await writeFile(join(dir, 'k.json'), JSON.stringify({ ...ticket, pad: 'x'.repeat(1024 * 1024) }));
+      const onError = vi.fn();
+      expect(await storage.get('k', { onError })).toBeNull();
+      expect(onError.mock.calls[0][0].message).toMatch(/hasta 1 MB/);
     });
   });
 

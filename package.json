@@ -11,7 +11,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "build": "node scripts/clean-dist.mjs --all && npm run build --workspaces",
+    "build": "npm run build --workspaces",
     "clean": "node scripts/clean-dist.mjs --all",
     "typecheck": "npm run typecheck --workspaces",
     "test": "vitest run --project unit",
@@ -21,7 +21,6 @@
     "lint:pkg": "npm run lint:pkg --workspaces",
     "changeset": "changeset",
     "version-packages": "changeset version && npm install --package-lock-only",
-    "release": "npm run build && changeset publish",
     "test:smoke": "node scripts/smoke-require.cjs",
     "wsdl:check": "node scripts/wsdl.mjs",
     "api:check": "node scripts/api-report.mjs",

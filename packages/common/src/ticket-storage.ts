@@ -60,6 +60,15 @@ export class MemoryTicketStorage implements TicketStorage {
 /** Tamaño máximo de un archivo de ticket (un TA real ocupa unos pocos KB). */
 const MAX_TICKET_FILE_BYTES = 1024 * 1024;
 
+/** Permisos de un archivo de ticket: solo el usuario lee y escribe. */
+const TICKET_FILE_MODE = 0o600;
+/** Permisos del directorio de tickets: solo el usuario. */
+const TICKET_DIR_MODE = 0o700;
+/** Bits de permisos del grupo y otros. */
+const GROUP_OTHER_BITS = 0o077;
+/** Bits de escritura del grupo y otros. */
+const GROUP_OTHER_WRITE_BITS = 0o022;
+
 /**
  * Flags para abrir un archivo de ticket: sin seguir symlinks (`O_NOFOLLOW`) y
  * sin bloquearse si es un FIFO (`O_NONBLOCK`), donde existan (no en Windows).
@@ -110,7 +119,9 @@ export class FileTicketStorage implements TicketStorage {
     const raw = await readTicketFile(path);
     if (raw === null) return null;
     if (raw === undefined) {
-      report(`Ticket en ${path} ignorado: no es un archivo regular del usuario actual de hasta 1 MB`);
+      report(
+        `Ticket en ${path} ignorado: no es un archivo regular del usuario actual de hasta ${MAX_TICKET_FILE_BYTES / (1024 * 1024)} MB`,
+      );
       return null;
     }
     try {
@@ -130,7 +141,7 @@ export class FileTicketStorage implements TicketStorage {
     const target = this.pathFor(key);
     const tmp = `${target}.${randomUUID()}.tmp`;
     try {
-      const handle = await open(tmp, 'wx', 0o600);
+      const handle = await open(tmp, 'wx', TICKET_FILE_MODE);
       try {
         await handle.writeFile(JSON.stringify(ticket), 'utf8');
         await handle.sync();
@@ -156,7 +167,7 @@ export class FileTicketStorage implements TicketStorage {
    */
   private async checkDirectory(create: boolean): Promise<boolean> {
     if (this.directoryReady) return true;
-    if (create) await mkdir(this.directory, { recursive: true, mode: 0o700 });
+    if (create) await mkdir(this.directory, { recursive: true, mode: TICKET_DIR_MODE });
     let info: Awaited<ReturnType<typeof lstat>>;
     try {
       info = await lstat(this.directory);
@@ -175,18 +186,18 @@ export class FileTicketStorage implements TicketStorage {
       if (info.uid !== uid) {
         throw new Error(`FileTicketStorage: ${dir} es de otro usuario (uid ${info.uid}); usá un directorio propio`);
       }
-      if ((info.mode & 0o077) !== 0) {
+      if ((info.mode & GROUP_OTHER_BITS) !== 0) {
         // Nunca se cambian los permisos del directorio actual, el home ni la raíz
         // (alguien pasó "." o "~"). Ahí, o si `chmod` falla (ej: un filesystem
         // montado que no lo admite), solo se rechaza si otros pueden escribir.
         const protectedDirs = [process.cwd(), homedir(), parse(dir).root].map((d) => resolve(d));
         const restricted =
           !protectedDirs.includes(dir) &&
-          (await chmod(this.directory, 0o700).then(
+          (await chmod(this.directory, TICKET_DIR_MODE).then(
             () => true,
             () => false,
           ));
-        if (!restricted && (info.mode & 0o022) !== 0) {
+        if (!restricted && (info.mode & GROUP_OTHER_WRITE_BITS) !== 0) {
           throw new Error(
             `FileTicketStorage: el grupo u otros usuarios pueden escribir en ${dir}; usá un subdirectorio propio`,
           );
@@ -224,7 +235,16 @@ async function readTicketFile(path: string): Promise<string | null | undefined> 
     if (!info.isFile() || info.size > MAX_TICKET_FILE_BYTES || (uid !== undefined && info.uid !== uid)) {
       return undefined;
     }
-    return await handle.readFile('utf8');
+    // Lectura acotada: si el archivo crece después del stat, no se lee más allá del tope.
+    const buffer = Buffer.alloc(MAX_TICKET_FILE_BYTES + 1);
+    let total = 0;
+    for (;;) {
+      const { bytesRead } = await handle.read(buffer, total, buffer.length - total, null);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+      if (total > MAX_TICKET_FILE_BYTES) return undefined;
+    }
+    return buffer.toString('utf8', 0, total);
   } finally {
     await handle.close();
   }

@@ -202,6 +202,18 @@ describe('soapCall: alcance del TLS legacy', () => {
     expect(legacy).toHaveBeenCalledTimes(1);
   });
 
+  it('una respuesta legacy cortada a mitad del body es incierta en emisiones', async () => {
+    const { LegacyTlsResponseError } = await import('../src/legacy-tls.js');
+    legacy.mockRejectedValueOnce(
+      new LegacyTlsResponseError('Respuesta cortada', 200, { date: 'Thu, 29 Oct 2026 15:00:00 GMT' }),
+    );
+    const err = await soapCall(URL, '<x/>', { legacyTls: 'always', kind: 'emision' }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err).toMatchObject({ statusCode: 200, uncertain: true });
+    expect(err.message).toContain('Respuesta cortada');
+    expect(err.responseDate).toEqual(new Date('2026-10-29T15:00:00Z'));
+  });
+
   it('pasa maxResponseBytes al transporte legacy y clasifica el corte', async () => {
     const { LegacyTlsResponseError, ResponseTooLargeError } = await import('../src/legacy-tls.js');
     legacy.mockRejectedValueOnce(

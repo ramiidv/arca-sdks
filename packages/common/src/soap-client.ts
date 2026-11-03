@@ -1,6 +1,6 @@
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import { formatDateTimeAR } from './dates.js';
-import { validateEndpoint } from './endpoint.js';
+import { originOf, validateEndpoint } from './endpoint.js';
 import { ArcaResponseError, ArcaSoapError, ArcaServiceError, ArcaValidationError } from './errors.js';
 import type { ServiceErrorDetail } from './errors.js';
 import { legacyTlsRequest, LegacyTlsResponseError, ResponseTooLargeError } from './legacy-tls.js';
@@ -353,22 +353,6 @@ const legacyTlsHosts = new Set<string>();
 /** Tamaño máximo por defecto del body de una respuesta: 50 MB (alcanza para los PDF en base64 de WSLPG/WSCPE). */
 const DEFAULT_MAX_RESPONSE_BYTES = 50 * 1024 * 1024;
 
-function hostOf(endpoint: string): string {
-  try {
-    return new URL(endpoint).host;
-  } catch {
-    return endpoint;
-  }
-}
-
-function hostnameOf(endpoint: string): string {
-  try {
-    return new URL(endpoint).hostname.toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
 /** Respuesta HTTP normalizada (de `fetch` o del transporte legacy). */
 interface TransportResponse {
   status: number;
@@ -394,6 +378,24 @@ function fromFetchResponse(response: Response, maxBytes: number): TransportRespo
     discard: () => {
       response.body?.cancel().catch(() => {});
     },
+  };
+}
+
+/** Respuesta del transporte legacy (el body ya se leyó entero, o falló: lo indica `text`). */
+function fromLegacyResponse(
+  status: number,
+  statusText: string,
+  headers: Record<string, string>,
+  text: () => Promise<string>,
+): TransportResponse {
+  return {
+    status,
+    statusText,
+    ok: status >= 200 && status < 300,
+    date: headers['date'] ?? null,
+    location: headers['location'] ?? null,
+    text,
+    discard: () => {},
   };
 }
 
@@ -483,7 +485,7 @@ export async function soapCallWith(
   const legacyTls = opts?.legacyTls ?? 'auto';
   const maxResponseBytes = opts?.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
   const responseParser = opts?.parseNumbers === false ? soapResponseTextParser : soapResponseParser;
-  validateEndpoint(endpoint, 'endpoint');
+  const url = validateEndpoint(endpoint, 'endpoint');
   if (typeof maxResponseBytes !== 'number' || !(maxResponseBytes > 0)) {
     throw new ArcaValidationError(
       `maxResponseBytes inválido: ${String(maxResponseBytes)}. Tiene que ser un número positivo.`,
@@ -491,7 +493,7 @@ export async function soapCallWith(
       'maxResponseBytes',
     );
   }
-  const host = hostOf(endpoint);
+  const host = url.host;
 
   const envelope =
     `<?xml version="1.0" encoding="UTF-8"?>` +
@@ -560,7 +562,7 @@ export async function soapCallWith(
         legacyTls === 'auto' &&
         !signal.aborted &&
         networkErrorCode(err) === 'ERR_SSL_DH_KEY_TOO_SMALL' &&
-        LEGACY_TLS_ALLOWED_HOSTS.has(hostnameOf(endpoint))
+        LEGACY_TLS_ALLOWED_HOSTS.has(url.hostname)
       ) {
         legacyTlsHosts.add(host);
         return sendLegacy(signal);
@@ -579,31 +581,13 @@ export async function soapCallWith(
         signal,
         maxResponseBytes,
       });
-      return {
-        status: res.status,
-        statusText: res.statusText,
-        ok: res.status >= 200 && res.status < 300,
-        date: res.headers['date'] ?? null,
-        location: res.headers['location'] ?? null,
-        text: async () => res.body,
-        discard: () => {},
-      };
+      return fromLegacyResponse(res.status, res.statusText, res.headers, async () => res.body);
     } catch (err) {
       if (err instanceof LegacyTlsResponseError) {
         // El servidor ya respondió y el body se cortó (o superó `maxResponseBytes`): se informa como error de lectura.
-        const status = err.status;
-        const date = err.headers['date'] ?? null;
-        return {
-          status,
-          statusText: '',
-          ok: status >= 200 && status < 300,
-          date,
-          location: err.headers['location'] ?? null,
-          text: async () => {
-            throw err.cause ?? err;
-          },
-          discard: () => {},
-        };
+        return fromLegacyResponse(err.status, '', err.headers, async () => {
+          throw err.cause ?? err;
+        });
       }
       throw err;
     }
@@ -759,8 +743,7 @@ export async function soapCallWith(
 function redirectTarget(location: string | null, base: string): string | undefined {
   if (!location) return undefined;
   try {
-    const url = new URL(location, base);
-    return `${url.protocol}//${url.host}`;
+    return originOf(new URL(location, base));
   } catch {
     return undefined;
   }
