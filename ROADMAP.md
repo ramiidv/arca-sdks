@@ -39,11 +39,6 @@ para los mensajes de error de ARCA; sin los alias ni las operaciones deprecadas.
 Antes, la PR #15 salió de una revisión contra los manuales vigentes de cada
 servicio.
 
-## Pendientes operativos
-
-- [ ] Mergear la actualización de arca-server (ramiidv/arca-server#6) y de la
-      landing (ramiidv/arca-sdk-web#6) a las versiones de la última release.
-
 ## Próximos pasos técnicos
 
 ### Mantenimiento
