@@ -117,7 +117,7 @@ export function formatSireDateTime(value: FechaHora, field = 'fecha'): string {
 
 /**
  * Valida un importe `xs:double` de SIRE (11 enteros + 2 decimales) y lo devuelve
- * redondeado a 2 decimales (`"2100.00"`). Valida como `importeRetencion`: no
+ * redondeado a 2 decimales, mitad al par (`"2100.00"`). Valida como `importeRetencion`: no
  * negativo (el manual no lo dice; es criterio del SDK).
  *
  * @throws ArcaValidationError si no es un número finito, es negativo o excede 11 enteros.

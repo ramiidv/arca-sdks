@@ -215,7 +215,8 @@ export interface CuentaCorriente {
 }
 
 export interface ConsultarCtaCteResult extends InfoRespuesta {
-  ctaCte: CuentaCorriente;
+  /** Opcional en el XSD: si ARCA no la devuelve, el motivo está en `evento` u `observaciones`. */
+  ctaCte?: CuentaCorriente;
 }
 
 export interface HistorialEstadosCtaCteResult {
@@ -411,7 +412,7 @@ export interface RetencionInput {
   /** Código de tipo de retención. */
   codTipo: number;
   importe: number;
-  /** 0 a 100. */
+  /** Mayor a 0 y menor a 100, 2 decimales (`PorcentajeSimpleType`). */
   porcentaje: number;
   /** 3 a 250 caracteres. */
   descMotivo?: string;

@@ -1,4 +1,5 @@
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
+import { formatDateTimeAR } from './dates.js';
 import { ArcaSoapError, ArcaServiceError } from './errors.js';
 import type { ServiceErrorDetail } from './errors.js';
 import { legacyTlsRequest, LegacyTlsResponseError } from './legacy-tls.js';
@@ -65,18 +66,22 @@ export function parseXml(xml: string, options?: ParseXmlOptions): Record<string,
 /**
  * Construye XML desde un objeto JS. Las propiedades (y elementos de arrays)
  * con valor `null`/`undefined` se omiten, en lugar de enviarse como `<x/>`.
+ * Un `Date` (también dentro de arrays u objetos anidados) se envía como
+ * `xsd:dateTime` en hora de Argentina (`AAAA-MM-DDTHH:mm:ss-03:00`).
+ * @throws ArcaValidationError si algún `Date` es inválido.
  */
 export function buildXml(obj: Record<string, unknown>): string {
-  return xmlBuilder.build(withoutNullish(obj)) as string;
+  return xmlBuilder.build(prepareForXml(obj)) as string;
 }
 
-/** Copia de `value` sin propiedades ni elementos `null`/`undefined` (recursivo). */
-function withoutNullish(value: unknown): unknown {
-  if (Array.isArray(value)) return value.filter((v) => v !== null && v !== undefined).map(withoutNullish);
-  if (value === null || typeof value !== 'object' || value instanceof Date) return value;
+/** Copia de `value` sin propiedades ni elementos `null`/`undefined`, con los `Date` formateados (recursivo). */
+function prepareForXml(value: unknown): unknown {
+  if (Array.isArray(value)) return value.filter((v) => v !== null && v !== undefined).map(prepareForXml);
+  if (value instanceof Date) return formatDateTimeAR(value);
+  if (value === null || typeof value !== 'object') return value;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value)) {
-    if (v !== null && v !== undefined) out[k] = withoutNullish(v);
+    if (v !== null && v !== undefined) out[k] = prepareForXml(v);
   }
   return out;
 }

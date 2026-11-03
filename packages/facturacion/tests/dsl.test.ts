@@ -201,7 +201,7 @@ describe('WSFEv1: requests con encodeRequest', () => {
       ],
     });
     const body = mock.last('FECAESolicitar').body;
-    expect(body).toContain('<ImpTotal>121.01</ImpTotal>');
+    expect(body).toContain('<ImpTotal>121.00</ImpTotal>'); // mitad al par
     expect(body).toContain('<ImpNeto>100.00</ImpNeto>');
     expect(body).toContain('<ImpIVA>21.00</ImpIVA>');
     expect(body).toContain('<MonCotiz>1015.123457</MonCotiz>');

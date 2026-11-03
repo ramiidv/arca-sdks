@@ -90,27 +90,27 @@ console.log(provincias.length, 'provincias');
 
 `ArcaPadronConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`:
 
-| Opción                                                                               | Tipo                                     | Default            | Descripción                                                                                                   |
-| ------------------------------------------------------------------------------------ | ---------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `cert`, `key`                                                                        | `string`                                 | —                  | Certificado y clave privada (PEM)                                                                             |
-| `keyPassphrase`                                                                      | `string`                                 | —                  | Contraseña de la clave, si está encriptada                                                                    |
-| `cuit`                                                                               | `number \| string`                       | —                  | CUIT representada; se valida el dígito verificador y se envía como 11 dígitos                                 |
-| `production`                                                                         | `boolean`                                | `false`            | Homologación o producción                                                                                     |
-| `timeout`                                                                            | `number`                                 | `30000`            | Timeout HTTP (ms)                                                                                             |
-| `retries` / `retryDelayMs`                                                           | `number`                                 | `1` / `1000`       | Reintentos ante errores transitorios (nunca ante un SOAP Fault)                                               |
-| `tokenTTLMinutes`                                                                    | `number`                                 | `720`              | Vigencia del TRA pedida a WSAA                                                                                |
-| `ticketStorage`                                                                      | `TicketStorage`                          | —                  | Persistencia del TA (recomendado: `FileTicketStorage` o propio)                                               |
-| `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs` |                                          |                    | Opciones de WSAA (ver `@ramiidv/arca-common`)                                                                 |
-| `fetch`                                                                              | `typeof fetch`                           | `globalThis.fetch` | `fetch` propio (proxy, tests)                                                                                 |
-| `legacyTls`                                                                          | `'auto' \| 'never' \| 'always'`          | `'auto'`           | Transporte TLS legacy                                                                                         |
-| `onEvent`                                                                            | `(e: ArcaEvent) => void`                 | —                  | Eventos `auth:*` y `request:*`                                                                                |
-| `wsaa`                                                                               | `WsaaClient`                             | —                  | `WsaaClient` compartido con otros SDKs (mismo certificado); tiene que ser del mismo entorno (`production`)    |
-| `signal`                                                                             | `AbortSignal`                            | —                  | Cancela todas las llamadas de la instancia (ej: al apagar la app); se combina con el `signal` de cada llamada |
-| `endpoints`                                                                          | `{ wsaa?, a5?, a4?, a10?, a13?, a100? }` | —                  | Sobrescribe las URLs                                                                                          |
+| Opción                                                                                                                 | Tipo                                     | Default            | Descripción                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `cert`, `key`                                                                                                          | `string`                                 | —                  | Certificado y clave privada (PEM)                                                                             |
+| `keyPassphrase`                                                                                                        | `string`                                 | —                  | Contraseña de la clave, si está encriptada                                                                    |
+| `cuit`                                                                                                                 | `number \| string`                       | —                  | CUIT representada; se valida el dígito verificador y se envía como 11 dígitos                                 |
+| `production`                                                                                                           | `boolean`                                | `false`            | Homologación o producción                                                                                     |
+| `timeout`                                                                                                              | `number`                                 | `30000`            | Timeout HTTP (ms)                                                                                             |
+| `retries` / `retryDelayMs`                                                                                             | `number`                                 | `1` / `1000`       | Reintentos ante errores transitorios (nunca ante un SOAP Fault)                                               |
+| `tokenTTLMinutes`                                                                                                      | `number`                                 | `720`              | Vigencia del TRA pedida a WSAA                                                                                |
+| `ticketStorage`                                                                                                        | `TicketStorage`                          | —                  | Persistencia del TA (recomendado: `FileTicketStorage` o propio)                                               |
+| `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs`, `alreadyAuthenticatedCooldownMs` |                                          |                    | Opciones de WSAA (ver `@ramiidv/arca-common`)                                                                 |
+| `fetch`                                                                                                                | `typeof fetch`                           | `globalThis.fetch` | `fetch` propio (proxy, tests)                                                                                 |
+| `legacyTls`                                                                                                            | `'auto' \| 'never' \| 'always'`          | `'auto'`           | Transporte TLS legacy                                                                                         |
+| `onEvent`                                                                                                              | `(e: ArcaEvent) => void`                 | —                  | Eventos `auth:*` y `request:*`                                                                                |
+| `wsaa`                                                                                                                 | `WsaaClient`                             | —                  | `WsaaClient` compartido con otros SDKs (mismo certificado); tiene que ser del mismo entorno (`production`)    |
+| `signal`                                                                                                               | `AbortSignal`                            | —                  | Cancela todas las llamadas de la instancia (ej: al apagar la app); se combina con el `signal` de cada llamada |
+| `endpoints`                                                                                                            | `{ wsaa?, a5?, a4?, a10?, a13?, a100? }` | —                  | Sobrescribe las URLs                                                                                          |
 
-> **Persistí el Ticket de Acceso.** WSAA rechaza el login si ya hay un TA vigente para el
-> certificado y servicio. Sin `ticketStorage`, un reinicio del proceso te deja sin poder consultar
-> hasta que venza (hasta 12 horas, `ArcaTicketVigenteError`). Ver `TicketStorage` en
+> **Persistí el Ticket de Acceso.** WSAA rechaza el login si ya emitió un TA para el certificado y
+> servicio dentro del lapso de retención. Sin `ticketStorage`, un reinicio del proceso te deja sin poder consultar
+> durante el lapso de retención de WSAA (minutos), con `ArcaTicketVigenteError`. Ver `TicketStorage` en
 > [`@ramiidv/arca-common`](https://github.com/ramiidv/arca-sdks/tree/main/packages/common).
 
 Si usás también `@ramiidv/arca-facturacion` con el mismo certificado, compartí el cliente WSAA:
@@ -149,8 +149,8 @@ ARCA (salvo en `getConstanciasInscripcion`, ver abajo).
 | `clearAuthCache()`                       | — (ver abajo)                                      | `Promise<void>`                |
 
 `clearAuthCache()` es async y borra los tickets de los cinco servicios (memoria y `ticketStorage`).
-**Ojo:** WSAA no emite un ticket nuevo mientras el anterior siga vigente, así que borrar un TA
-vigente te deja sin acceso hasta que venza (hasta 12 horas). Ante un error de autorización
+**Ojo:** WSAA rechaza los pedidos de un ticket nuevo durante un lapso de retención (minutos), así
+que borrar un TA vigente puede dejarte sin acceso durante ese lapso. Ante un error de autorización
 (`ArcaAuthError`, o `reason: 'no_autorizado'`) no lo uses: corregí la causa en ARCA. Es solo para un ticket dañado
 (ej: cambiaste de certificado).
 
@@ -574,7 +574,11 @@ igual. Para usar otro host, pasá `endpoints`. Las URLs, namespaces e ids de ser
 - `ImpuestoId`: `MONOTRIBUTO` (20), `IVA_RESPONSABLE_INSCRIPTO` (30), `BIENES_PERSONALES` (180),
   `EMPLEADOR` (301), `AUTONOMOS` (308)... (manuales de ARCA). `IVA_EXENTO` (32),
   `IVA_RESPONSABLE_NO_INSCRIPTO` (33) e `IVA_NO_ALCANZADO` (34) no figuran en los manuales del padrón.
-- `TipoDomicilio`, `TipoPersona`, `EstadoClave`, `CollectionName`, `Provincia`, `CondicionIva`.
+- `TipoDomicilio`: `FISCAL`, `LEGAL_REAL` (`'LEGAL/REAL'`) y `LOCALES_Y_ESTABLECIMIENTOS` (solo A4), los
+  valores de los manuales. `LEGAL` y `REAL` están deprecados: los manuales informan `'LEGAL/REAL'`.
+- `EstadoClave`: `ACTIVO`, `INACTIVO`. `LIMITADO` está deprecado: no figura en los manuales ("limitada"
+  aparece en el texto de `errorConstancia`, no en `estadoClave`).
+- `TipoPersona`, `CollectionName`, `Provincia`, `CondicionIva`.
 - `DocTipo` son los códigos numéricos de WSFEv1, no el `tipoDocumento` string del padrón ("DNI", "LC"...).
 
 `ensureArray`, `parseXml` y `buildXml` siguen exportados por compatibilidad, pero están deprecados:

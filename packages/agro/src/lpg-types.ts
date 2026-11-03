@@ -1,5 +1,5 @@
 /**
- * Tipos de WSLPG (Liquidación Primaria de Granos), fieles al XSD del WSDL
+ * Tipos de WSLPG (Liquidación Primaria y Secundaria de Granos), fieles al XSD del WSDL
  * oficial. Los contenedores con ítems repetidos del XSD (`certificados/certificado`,
  * `deducciones/deduccion`, `eventos/evento`, ...) se exponen como arrays.
  */
@@ -7,13 +7,17 @@ import type { CodigoDescripcion, ConAdvertencias, CuitInput, FechaInput } from '
 
 export type SiNo = 'S' | 'N';
 
+/** `LpgGradoCodigoType` (valores del manual WSLPG §3.1). */
+export type GradoLpg = 'G1' | 'G2' | 'G3' | 'FG' | 'F1' | 'F2' | 'F3';
+
 // ============================================================
 // Requests
 // ============================================================
 
 /** `LpgCertType`: certificado de depósito. */
 export interface CertificadoDepositoLpg {
-  tipoCertificadoDeposito: string;
+  /** `"332"`: certificado electrónico (único valor del manual WSLPG §3.1). */
+  tipoCertificadoDeposito: '332';
   nroCertificadoDeposito: number;
   pesoNeto: number;
   pesoNetoTotalCertificado?: number;
@@ -53,8 +57,8 @@ export interface LiquidacionLpg {
   fechaPrecioOperacion: FechaInput;
   /** Precio de referencia por tonelada (3 decimales). */
   precioRefTn: number;
-  codGradoRef?: string;
-  codGradoEnt?: string;
+  codGradoRef?: GradoLpg;
+  codGradoEnt?: GradoLpg;
   /** Valor del grado entregado (8 decimales, > 0 y <= 1.99999999). */
   valGradoEnt?: number;
   factorEnt?: number;
@@ -108,15 +112,8 @@ export interface LiquidacionAutorizarParams {
   percepciones?: PercepcionLpg[];
 }
 
-/** `LpgAjusteCreditoType` / `LpgAjusteDebitoType`. */
-export interface AjusteCreditoDebitoLpg {
-  certificados?: Array<{ coe: string | number; pesoAjustado: number }>;
-  diferenciaPesoNeto: number;
-  diferenciaPrecioOperacion: number;
-  codGrado?: string;
-  valGrado?: number;
-  factor?: number;
-  diferenciaPrecioFleteTn: number;
+/** `LpgAjustePorImporteType` (ajuste por contrato): también es la parte final de `AjusteCreditoDebitoLpg`. */
+export interface AjustePorImporteLpg {
   datosAdicionales?: string;
   opcionales?: CodigoDescripcion[];
   conceptoImporteIva0?: string;
@@ -129,6 +126,23 @@ export interface AjusteCreditoDebitoLpg {
   retenciones?: RetencionLpg[];
 }
 
+/** `LpgAjusteCreditoType` / `LpgAjusteDebitoType`. */
+export interface AjusteCreditoDebitoLpg extends AjustePorImporteLpg {
+  certificados?: Array<{ coe: string | number; pesoAjustado: number }>;
+  diferenciaPesoNeto: number;
+  diferenciaPrecioOperacion: number;
+  codGrado?: GradoLpg;
+  valGrado?: number;
+  factor?: number;
+  diferenciaPrecioFleteTn: number;
+}
+
+/** `LpgFusionType` / `LsgFusionType`: datos de la CUIT previa de una fusión. */
+export interface FusionLpg {
+  nroIngBrutos: number;
+  nroActividad: number;
+}
+
 /** `ajustarUnificadoReq` sin `auth`. */
 export interface AjusteUnificadoParams {
   ajusteBase: {
@@ -139,10 +153,102 @@ export interface AjusteUnificadoParams {
     certificados?: CertificadoDepositoLpg[];
     codLocalidad: number;
     codProv: number;
-    fusion?: { nroIngBrutos: number; nroActividad: number };
+    fusion?: FusionLpg;
   };
   ajusteCredito?: AjusteCreditoDebitoLpg;
   ajusteDebito?: AjusteCreditoDebitoLpg;
+}
+
+/** `ajustarContratoReq` sin `auth` (`LpgAjusteContratoReqType`). */
+export interface AjusteContratoParams {
+  ajusteBase: {
+    ptoEmision: number;
+    nroOrden: number;
+    nroContrato: number;
+    certificados?: CertificadoDepositoLpg[];
+    /** Actividad (`LpgActividadType`). */
+    actividad: number;
+    codGrano: number;
+    cuitVendedor: CuitInput;
+    cuitCorredor?: CuitInput;
+    cuitComprador: CuitInput;
+    precioRefTn: number;
+    codGradoEnt: GradoLpg;
+    valGradoEnt: number;
+    precioFleteTn: number;
+    codPuerto: number;
+    desPuertoLocalidad?: string;
+    codLocalidad: number;
+    codProv: number;
+  };
+  ajusteCredito?: AjustePorImporteLpg;
+  ajusteDebito?: AjustePorImporteLpg;
+}
+
+/** `LpgLiquidacionAnticipoBaseType`: comparte la mayoría de los campos con `LiquidacionLpg`, con otros nombres en algunos. */
+export interface LiquidacionAnticipoLpg
+  extends Pick<
+    LiquidacionLpg,
+    | 'ptoEmision'
+    | 'nroOrden'
+    | 'cuitComprador'
+    | 'nroActComprador'
+    | 'nroIngBrutoComprador'
+    | 'codTipoOperacion'
+    | 'codPuerto'
+    | 'codGrano'
+    | 'cuitVendedor'
+    | 'nroIngBrutoVendedor'
+    | 'actuaCorredor'
+    | 'liquidaCorredor'
+    | 'cuitCorredor'
+    | 'comisionCorredor'
+    | 'nroIngBrutoCorredor'
+    | 'fechaPrecioOperacion'
+    | 'precioRefTn'
+    | 'alicIvaOperacion'
+    | 'codProvProcedencia'
+    | 'datosAdicionales'
+    | 'opcionales'
+  > {
+  nroContrato?: number;
+  descPuertoLocalidad?: string;
+  pesoNetoSinCertificado: number;
+  /** Campaña principal (ej: 2526). */
+  campaniaPpal: number;
+  codLocProcedencia: number;
+}
+
+/** `LpgAutorizarAnticipoReq` sin `auth` (`LpgAutorizarAnticipoReqType`). */
+export interface AutorizarAnticipoParams {
+  anticipo: {
+    liquidacion: LiquidacionAnticipoLpg;
+    retenciones?: RetencionLpg[];
+    deducciones?: DeduccionLpg[];
+  };
+}
+
+/** `LpgCancelarAnticipoReq` sin `auth` (`LpgCancelarAnticipoReqType`). */
+export interface CancelarAnticipoParams {
+  /** COE de la liquidación anticipada. */
+  coe: string | number;
+  /** Punto de emisión y número de orden de la nueva liquidación. */
+  ptoEmision: number;
+  nroOrden: number;
+  /** Pedir la constancia en base64 (default `false`). */
+  pdf?: boolean;
+}
+
+/** `LpgAnularContraDocumentoReq` / `LsgAnularContraDocumentoReq` sin `auth` (`LpgAnularContraDocumentoReqType`). */
+export interface AnulacionContraDocumentoParams {
+  anulacionBase: {
+    /** Punto de emisión del contradocumento. */
+    puntoEmision: number;
+    /** Número de orden del contradocumento. */
+    nroOrden: number;
+    /** COE de la liquidación que se anula. */
+    coeAnular: string | number;
+  };
 }
 
 /** Mermas de un CTG / carta de porte ferroviaria en `cgAutorizar`. */
@@ -156,7 +262,35 @@ export interface MermasCg {
   tarifaZarandeo: number;
 }
 
-/** `cgAutorizarReq` sin `auth` (`CgAutorizarReqType`). */
+/** `CgCalidadType`: datos de calidad de una certificación primaria. */
+export interface CalidadCg {
+  analisisMuestra: number;
+  nroBoletin: number;
+  codGrado?: GradoLpg;
+  valorGrado?: number;
+  valorContProteico: number;
+  valorFactor?: number;
+  detalleMuestraAnalisis?: Array<{
+    descripcionRubro: string;
+    /** `B` bonificación, `R` rebaja. */
+    tipoRubro: 'B' | 'R';
+    porcentaje: number;
+    valor: number;
+  }>;
+}
+
+/** `CgInformarCalidadReq` sin `auth` (`CgInformarCalidadReqType`). */
+export interface CgInformarCalidadParams {
+  /** COE de la certificación primaria. */
+  coe: string | number;
+  calidad: CalidadCg;
+}
+
+/**
+ * `cgAutorizarReq` sin `auth` (`CgAutorizarReqType`). Según `cabecera.tipoCertificado`
+ * va un solo bloque (manual WSLPG §2.4.36.1): `primaria` (P), `retiroTransferencia`
+ * (R o T), `preexistente` o `preexistenteFusion` (E).
+ */
 export interface CgAutorizarParams {
   cabecera: {
     /** `P` primaria, `R` retiro, `T` transferencia, `E` preexistente. */
@@ -188,21 +322,7 @@ export interface CgAutorizarParams {
     montoSecado: number;
     montoPorCadaPuntoExceso: number;
     montoOtros: number;
-    calidad?: {
-      analisisMuestra: number;
-      nroBoletin: number;
-      codGrado?: string;
-      valorGrado?: number;
-      valorContProteico: number;
-      valorFactor?: number;
-      detalleMuestraAnalisis?: Array<{
-        descripcionRubro: string;
-        /** `B` bonificación, `R` rebaja. */
-        tipoRubro: 'B' | 'R';
-        porcentaje: number;
-        valor: number;
-      }>;
-    };
+    calidad?: CalidadCg;
     pesoNetoMermaVolatil: number;
     serviciosFormaDePago?: string;
     serviciosOtros?: number;
@@ -298,7 +418,7 @@ export interface LiquidacionAutorizadaLpg {
   estado?: string;
 }
 
-/** Resultado de `liquidacionAutorizar` (`LpgLiqReturnType`). */
+/** Resultado de `liquidacionAutorizar` y `lpgAutorizarAnticipo` (`LpgLiqReturnType`). */
 export interface LiquidacionResultado extends ConAdvertencias {
   autorizacion: LiquidacionAutorizadaLpg;
   /** Eventos informativos de ARCA (`eventos.evento[]`). */
@@ -355,18 +475,23 @@ export interface LiquidacionConsultadaLpg {
   opcionales: CodigoDescripcion[];
 }
 
-/** Resultado de `liquidacionXCoeConsultar` / `liquidacionXNroOrdenConsultar` (`LpgLiqConsReturnType`). */
+/**
+ * Resultado de `liquidacionXCoeConsultar` / `liquidacionXNroOrdenConsultar`
+ * (`LpgLiqConsReturnType`). También lo devuelven `lpgCancelarAnticipo`,
+ * `lpgAnularContraDocumento`, `lsgAnularContraDocumento` y
+ * `asociarLiquidacionAContrato`.
+ */
 export interface LiquidacionConsultaResultado extends ConAdvertencias {
   liquidacion?: LiquidacionConsultadaLpg;
   autorizacion: LiquidacionAutorizadaLpg;
-  /** PDF en base64 (si se pidió con `pdf: 'S'`). */
+  /** PDF en base64 (si se pidió con `pdf: true`). */
   pdf?: string;
   eventos: CodigoDescripcion[];
 }
 
 /**
- * Resultado de `liquidacionAnular` (`LpgAnulacionReturnType`). Si ARCA
- * responde `resultado: 'R'` (rechazada), el método lanza `ArcaAgroServiceError`.
+ * Resultado de `liquidacionAnular` y `lsgAnular` (`LpgAnulacionReturnType`). Si
+ * ARCA responde `resultado: 'R'` (rechazada), el método lanza `ArcaAgroServiceError`.
  */
 export interface AnulacionLiquidacionResultado extends ConAdvertencias {
   coe?: string;
@@ -374,6 +499,14 @@ export interface AnulacionLiquidacionResultado extends ConAdvertencias {
   resultado?: 'A' | 'R' | (string & {});
   pdf?: string;
   eventos: CodigoDescripcion[];
+}
+
+/** `LpgImportesNetoAjustadoType`: importe ajustado por alícuota. */
+export interface ImporteAjustadoLpg {
+  importe?: number;
+  concepto?: string;
+  alicuota?: number;
+  ivaCalculado?: number;
 }
 
 /** `LpgAjusteCreditoRespType` / `LpgAjusteDebitoRespType`. */
@@ -385,7 +518,7 @@ export interface AjusteCreditoDebitoResultadoLpg {
   importeIva?: number;
   operacionConIva?: number;
   totalPesoNeto?: number;
-  importes: Array<{ importe?: number; concepto?: string; alicuota?: number; ivaCalculado?: number }>;
+  importes: ImporteAjustadoLpg[];
   deducciones: DeduccionLiquidadaLpg[];
   totalDeduccion?: number;
   retenciones: RetencionLiquidadaLpg[];
@@ -427,6 +560,12 @@ export interface AjusteUnificadoLpg {
 /** Resultado de `liquidacionAjustarUnificado`. */
 export interface AjusteUnificadoResultado extends ConAdvertencias {
   ajusteUnificado: AjusteUnificadoLpg;
+  eventos: CodigoDescripcion[];
+}
+
+/** Resultado de `liquidacionAjustarContrato` (`LpgAjusteContratoReturnType`). */
+export interface AjusteContratoResultado extends ConAdvertencias {
+  ajusteContrato: AjusteUnificadoLpg;
   eventos: CodigoDescripcion[];
 }
 
@@ -484,13 +623,24 @@ export interface AjusteConsultaResultado extends ConAdvertencias {
   eventos: CodigoDescripcion[];
 }
 
-/** `liquidacionPorContratoConsultarReq` sin `auth` (`LpgLiqPorContratoConsReqType`). */
+/**
+ * `liquidacionPorContratoConsultarReq` / `lsgConsultarXContratoReq` sin `auth`
+ * (`LpgLiqPorContratoConsReqType`).
+ */
 export interface LiquidacionPorContratoParams {
   nroContrato: number;
   cuitComprador: CuitInput;
   cuitVendedor: CuitInput;
   cuitCorredor?: CuitInput;
   codGrano: number;
+}
+
+/**
+ * `asociarLiqAContratoReq` / `lsgAsociarAContratoReq` sin `auth`
+ * (`LpgAsociarLiqAContratoReqType`): el COE de la liquidación y los datos del contrato.
+ */
+export interface AsociarAContratoParams extends LiquidacionPorContratoParams {
+  coe: string | number;
 }
 
 /** Mermas de una CTG o carta de porte certificada, tal como las devuelve ARCA. */
@@ -504,7 +654,7 @@ export interface MermasCgRespuesta {
   tarifaZarandeo?: number;
 }
 
-/** Resultado de `cgConsultarXCoe` / `cgConsultarXNroOrden` (`CgConsultarReturnType`). */
+/** Resultado de `cgConsultarXCoe` / `cgConsultarXNroOrden` / `cgInformarCalidad` (`CgConsultarReturnType`). */
 export interface CertificacionConsultaResultado extends ConAdvertencias {
   autorizacion: CertificacionAutorizadaLpg;
   cabecera?: {
@@ -636,4 +786,248 @@ export interface CertificadoConSaldoLpg {
   nroPlanta?: number;
   kilosDisponibles?: number;
   codGrano?: number;
+}
+
+// ============================================================
+// Liquidación secundaria (lsg*)
+// ============================================================
+
+/** `LsgDeduccionType`. */
+export interface DeduccionLsg {
+  detalleAclaratoria: string;
+  baseCalculo: number;
+  alicuotaIVA: number;
+}
+
+/** `LsgPercepcionType`. */
+export interface PercepcionLsg {
+  detalleAclaratoria: string;
+  baseCalculo: number;
+  alicuota: number;
+}
+
+/** `LsgFacturaPapelBaseType`. */
+export interface FacturaPapelLsg {
+  nroCAI: number;
+  nroFacturaPapel: number;
+  fechaFactura: FechaInput;
+  /** `1` Factura A, `34` y `39` otros comprobantes A (RG 1415), `51` Factura M, `63` Liquidación A. */
+  tipoComprobante: '1' | '34' | '51' | '63' | '39';
+}
+
+/** `LsgLiqBaseType`: comparte campos con `LiquidacionLpg`. */
+export interface LiquidacionSecundariaLsg
+  extends Pick<
+    LiquidacionLpg,
+    | 'ptoEmision'
+    | 'nroOrden'
+    | 'numeroContrato'
+    | 'cuitComprador'
+    | 'nroIngBrutoComprador'
+    | 'codPuerto'
+    | 'desPuertoLocalidad'
+    | 'codGrano'
+    | 'cuitVendedor'
+    | 'nroIngBrutoVendedor'
+    | 'actuaCorredor'
+    | 'liquidaCorredor'
+    | 'cuitCorredor'
+    | 'nroIngBrutoCorredor'
+    | 'fechaPrecioOperacion'
+    | 'precioRefTn'
+    | 'alicIvaOperacion'
+    | 'campaniaPPal'
+    | 'opcionales'
+    | 'datosAdicionales'
+  > {
+  /** Cantidad en toneladas (3 decimales). */
+  cantidadTn: number;
+  nroActVendedor: number;
+  /** Precio de la operación (3 decimales). */
+  precioOperacion: number;
+  codLocalidad: number;
+  codProvincia: number;
+  deduccion?: DeduccionLsg[];
+  percepcion?: PercepcionLsg[];
+}
+
+/** `lsgAutorizarReq` sin `auth` (`LsgLiqReqType`). */
+export interface LsgAutorizarParams {
+  liqSecundariaBase: LiquidacionSecundariaLsg;
+  facturaPapel?: FacturaPapelLsg;
+}
+
+/** `LsgAjusteBaseReqType`: importes a ajustar por alícuota de IVA (0, 10.5 y 21). */
+export interface AjusteLsg {
+  conceptoIva0?: string;
+  importeAjustar0?: number;
+  conceptoIva10?: string;
+  importeAjustar10?: number;
+  conceptoIva21?: string;
+  importeAjustar21?: number;
+  percepcion?: PercepcionLsg[];
+  datosAdicionales?: string;
+}
+
+/** Datos comunes de `lsgAjustarXCoe` y `lsgAjustarXContrato`. */
+interface AjusteLsgParams {
+  ptoEmision: number;
+  nroOrden: number;
+  codLocalidad: number;
+  codProvincia: number;
+  ajusteCredito?: AjusteLsg;
+  ajusteDebito?: AjusteLsg;
+}
+
+/** `lsgAjustarXCoeReq` sin `auth` (`LsgAjustarXCoeReqType`). */
+export interface LsgAjustarXCoeParams extends AjusteLsgParams {
+  /** COE de la liquidación secundaria que se ajusta. */
+  coe: string | number;
+  fusion?: FusionLpg;
+}
+
+/** `lsgAjustarXContratoReq` sin `auth` (`LsgAjustarXContratoReqType`). */
+export interface LsgAjustarXContratoParams extends AjusteLsgParams {
+  nroContrato: number;
+  cuitComprador: CuitInput;
+  cuitVendedor: CuitInput;
+  /** CUIT del corredor, o `0` si no interviene (`LpgCuit0Type`). */
+  cuitCorredor?: CuitInput;
+  codGrano: number;
+}
+
+/** `LsgAutorizacionRespType`. `coe` siempre presente. */
+export interface LiquidacionSecundariaAutorizadaLsg {
+  ptoEmision?: number;
+  nroOrden?: number;
+  fechaLiquidacion?: string;
+  subTotal?: number;
+  importeIva?: number;
+  operacionConIva?: number;
+  coe: string;
+  totalDeducciones?: number;
+  totalPercepciones?: number;
+}
+
+/** Resultado de `lsgAutorizar` (`LsgReturnType`). */
+export interface LsgAutorizarResultado extends ConAdvertencias {
+  autorizacion: LiquidacionSecundariaAutorizadaLsg;
+  eventos: CodigoDescripcion[];
+}
+
+/** `LsgTotalesUnificadosType`. */
+export interface TotalesUnificadosLsg {
+  subtotalCredDeb?: number;
+  subtotalGeneral?: number;
+  iva105?: number;
+  iva21?: number;
+  totalBasePercepciones?: number;
+  importeNeto?: number;
+  pagoSegunCondicion?: number;
+}
+
+/** `LsgBaseType`: liquidación secundaria tal como la devuelven las consultas. */
+export interface LiquidacionSecundariaConsultadaLsg {
+  ptoEmision?: number;
+  nroOrden?: number;
+  cuitComprador?: number;
+  nroIngBrutoComprador?: number;
+  cuitVendedor?: number;
+  nroActVendedor?: number;
+  nroIngBrutoVendedor?: number;
+  actuaCorredor?: string;
+  liquidaCorredor?: string;
+  cuitCorredor?: number;
+  nroIngBrutoCorredor?: number;
+  codGrano?: number;
+  pesoNetoEnTn?: number;
+  campania?: number;
+  fechaPrecioOperacion?: string;
+  codPuerto?: number;
+  descripcionPuertoLocalidad?: string;
+  otraLocalidad?: string;
+  precioReferenciaTn?: number;
+  precioOperacionTn?: number;
+  alicuotaIvaOperacion?: number;
+  deduccion: Partial<DeduccionLsg>[];
+  percepcion: Partial<PercepcionLsg>[];
+  totalDeducciones?: number;
+  /** `todalPercepciones` en el XSD. */
+  totalPercepciones?: number;
+  codProvinciaOperacion?: number;
+  codLocalidadOperacion?: number;
+  localidadEmision?: string;
+  nroContrato?: number;
+  facturaPapel?: { nroCAI?: number; nroFacturaPapel?: number; fechaFactura?: string; tipoComprobante?: string };
+  estado?: string;
+  datosAdicionales?: string;
+}
+
+/** Un ítem de `liquidaciones` (`LsgLiquidacionesType`). */
+export interface LiquidacionesLsg {
+  liquidacion?: LiquidacionSecundariaConsultadaLsg;
+  /** `LsgResp2Type`. */
+  autorizacion?: {
+    ptoEmision?: number;
+    nroOrden?: number;
+    fechaLiquidacion?: string;
+    precioOperacion?: number;
+    subtotal?: number;
+    importeIva?: number;
+    operacionConIva?: number;
+    coe?: string;
+    coeAjustado?: string;
+    datosAdicionales?: string;
+  };
+  /** `LsgAjusteBaseRespType`. */
+  ajuste?: {
+    tipoAjuste?: string;
+    req?: Partial<Omit<AjusteLsg, 'percepcion'>> & { percepcion: Partial<PercepcionLsg>[] };
+    coeAjustado?: string;
+    codLocalidad?: number;
+    codProvincia?: number;
+    totalesUnificados?: TotalesUnificadosLsg;
+    estado?: string;
+  };
+}
+
+/**
+ * Resultado de `lsgConsultarXCoe`, `lsgConsultarXNroOrden` y `lsgAsociarAContrato`
+ * (`LsgConsultaReturnType`). Un ajuste con crédito y débito trae dos liquidaciones.
+ */
+export interface LsgConsultaResultado extends ConAdvertencias {
+  liquidaciones: LiquidacionesLsg[];
+  /** PDF en base64 (si se pidió con `pdf: true`). */
+  pdf?: string;
+  eventos: CodigoDescripcion[];
+}
+
+/** `LsgAjusteCredDebRespType`. */
+export interface AjusteCreditoDebitoResultadoLsg {
+  nroOpComercial?: number;
+  fechaLiquidacion?: string;
+  precioOperacion?: number;
+  subTotal?: number;
+  importeIVA?: number;
+  totalPesoNeto?: number;
+  importe: ImporteAjustadoLpg[];
+  percepcion: Partial<PercepcionLsg>[];
+  totalPercepcion?: number;
+  totalNetoAPagar?: number;
+  totalPagoSegunCondicion?: number;
+}
+
+/** Resultado de `lsgAjustarXCoe` / `lsgAjustarXContrato` (`LsgAjustarXCoeContratoReturnType`). `coe` siempre presente. */
+export interface LsgAjusteResultado extends ConAdvertencias {
+  eventos: CodigoDescripcion[];
+  ptoEmision?: number;
+  nroOrden?: number;
+  nroContrato?: number;
+  coeAjustado?: string;
+  /** COE del ajuste. */
+  coe: string;
+  ajusteCredito?: AjusteCreditoDebitoResultadoLsg;
+  ajusteDebito?: AjusteCreditoDebitoResultadoLsg;
+  totalesUnificados?: TotalesUnificadosLsg;
+  estado?: string;
 }

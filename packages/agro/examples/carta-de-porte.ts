@@ -84,10 +84,11 @@ async function main() {
   const detalle = await agro.cpe.consultarCPEAutomotor({ nroCTG: cpe.cabecera.nroCTG });
   console.log('Detalle:', detalle.cabecera, detalle.datosCarga);
 
+  // Rango de fechas de partida de hasta 3 días (error 2152).
   const recibidas = await agroDestino.cpe.consultarCPEPorDestino({
     planta: 1938,
     fechaPartidaDesde: '2026-11-01',
-    fechaPartidaHasta: '2026-11-07',
+    fechaPartidaHasta: '2026-11-03',
   });
   console.log('CPE con destino en la planta:', recibidas.length);
 }

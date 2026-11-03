@@ -29,7 +29,7 @@ export type FechaInput = Date | string;
 
 /**
  * `xsd:dateTime`: `Date` (se envía en hora de Argentina, `-03:00`) o string
- * ISO-8601 (ej: `2026-11-01T08:30:00-03:00`), que se envía tal cual.
+ * ISO-8601 con segundos (ej: `2026-11-01T08:30:00-03:00`), que se envía tal cual.
  */
 export type FechaHoraInput = Date | string;
 

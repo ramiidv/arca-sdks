@@ -24,7 +24,6 @@ import {
   must,
   obj,
   opt,
-  porcentaje,
   siNo,
   str,
   wrapped,
@@ -55,12 +54,43 @@ const as = xml;
 
 const isObj = (v: unknown): v is Obj => v !== null && typeof v === 'object' && !Array.isArray(v);
 
+/** Código de moneda de los pesos argentinos (tabla de monedas de ARCA). */
+const PESOS = 'PES';
+
+/** Listas cuyos códigos no se pueden repetir (manual WSFECRED v2.0.3): lista → campo del código, error. */
+const SIN_REPETIR = {
+  retenciones: ['codTipo', 2003],
+  ajustesOperacion: ['codigo', 2013],
+  motivos: ['codMotivo', 3001],
+  formasCancelacion: ['codigo', 4002],
+} as const;
+
 /**
- * Reglas que el DSL no expresa: rango de `fecha` y dígitos verificadores del CBU.
+ * Reglas que el DSL no expresa (manual WSFECRED v2.0.3):
+ * - rango de `fecha` y dígito verificador del CBU;
+ * - códigos repetidos en retenciones, ajustes, motivos y formas de
+ *   cancelación (2003, 2013, 3001, 4002);
+ * - `aceptarFECred`: `informaCBU` y `cbuComprador` van juntos (12013), sin
+ *   CBU con cancelación total (12012) ni con saldo aceptado 0 (2016);
+ *   retenciones con `importeTotalRetPesos` > 0 y viceversa (12007);
+ *   cancelación con importe > 0, formas y tipo, todos juntos (12008); con PES
+ *   la cotización es 1 (2007, 12000).
  */
-function checkRequest(input: Obj, errors: ValidationErrorDetail[]): void {
+function checkRequest(input: Obj, errors: ValidationErrorDetail[], schema: Schema): void {
   const push = (field: string, message: string, value: unknown) =>
     errors.push({ field, message: `${field}: ${message}`, value });
+  for (const [lista, [campo, codigo]] of Object.entries(SIN_REPETIR)) {
+    const items = input[lista];
+    if (!Array.isArray(items)) continue;
+    const vistos = new Set<unknown>();
+    items.forEach((item: unknown, i) => {
+      const v = isObj(item) ? item[campo] : undefined;
+      if (v === undefined) return;
+      if (vistos.has(v)) push(`${lista}[${i}].${campo}`, `código repetido (${codigo})`, v);
+      vistos.add(v);
+    });
+  }
+  if (schema === REQ.aceptarFECred) checkAceptar(input, push);
   const fecha = input['fecha'];
   if (isObj(fecha)) {
     try {
@@ -81,12 +111,76 @@ function checkRequest(input: Obj, errors: ValidationErrorDetail[]): void {
   }
 }
 
+/** Reglas de `aceptarFECred` que dependen de varios campos (ver `checkRequest`). */
+function checkAceptar(input: Obj, push: (field: string, message: string, value: unknown) => void): void {
+  const cbu = input['cbuComprador'];
+  if ((input['informaCBU'] === true) !== (cbu !== undefined && cbu !== null))
+    push('cbuComprador', 'informaCBU y cbuComprador van juntos (12013)', cbu);
+  if (cbu !== undefined && cbu !== null) {
+    if (input['tipoCancelacion'] === TipoCancelacion.TOTAL)
+      push('cbuComprador', 'no se informa con cancelación total (12012)', cbu);
+    if (input['saldoAceptado'] === 0) push('cbuComprador', 'no se informa si el saldo aceptado es 0 (2016)', cbu);
+  }
+  const hay = (v: unknown) => (Array.isArray(v) ? v.length > 0 : typeof v === 'number' ? v > 0 : v != null);
+  if (hay(input['retenciones']) !== hay(input['importeTotalRetPesos']))
+    push(
+      'importeTotalRetPesos',
+      'retenciones e importeTotalRetPesos > 0 van juntos (12007)',
+      input['importeTotalRetPesos'],
+    );
+  const cancelacion = [input['importeCancelado'], input['formasCancelacion'], input['tipoCancelacion']].map(hay);
+  if (cancelacion.some(Boolean) && !cancelacion.every(Boolean))
+    push(
+      'importeCancelado',
+      'una cancelación lleva importeCancelado > 0, formasCancelacion y tipoCancelacion (12008)',
+      input['importeCancelado'],
+    );
+  const cotizacion = input['cotizacionMonedaUlt'];
+  // Sin cotización numérica el error ya lo informa el schema.
+  if (input['codMoneda'] === PESOS && typeof cotizacion === 'number' && cotizacion !== 1)
+    push('cotizacionMonedaUlt', `con ${PESOS} la cotización es 1 (2007, 12000)`, cotizacion);
+}
+
 /**
  * Valida el request contra el schema (lanza `ArcaValidationError` con todos
  * los errores) y lo devuelve con los nombres y valores del XML, en orden XSD.
  */
 export function encode(input: unknown, schema: Schema, method: string): Obj {
-  return encodeRequest(input, schema, method, checkRequest);
+  return encodeRequest(input, schema, method, (i, errors) => checkRequest(i, errors, schema));
+}
+
+/**
+ * El manual y el XSD nombran distinto el array de observaciones de algunas
+ * operaciones (`arrayObservaciones` / `arrayObservacion`): si la respuesta trae
+ * el que el schema no lee, se toma como el otro (si trae los dos, se unen).
+ */
+const OBSERVACIONES_ALIAS = [
+  ['arrayObservaciones', 'arrayObservacion'],
+  ['arrayObservacion', 'arrayObservaciones'],
+] as const;
+
+/** Elemento de cada observación dentro del array (`codigosDescripciones()`). */
+const OBSERVACION_ITEM = 'codigoDescripcion';
+
+/** Los `codigoDescripcion` de un array de observaciones (vacío o ausente: ninguno). */
+const itemsObservacion = (v: unknown): unknown[] => {
+  const items = isObj(v) ? v[OBSERVACION_ITEM] : undefined;
+  return items === undefined ? [] : Array.isArray(items) ? items : [items];
+};
+
+function conObservaciones(node: unknown, schema: Schema): unknown {
+  if (!isObj(node)) return node;
+  const leidos = new Set(Object.entries(schema).map(([k, f]) => f.xml ?? k));
+  let out = node;
+  for (const [esperado, otro] of OBSERVACIONES_ALIAS) {
+    if (!leidos.has(esperado) || leidos.has(otro) || out[otro] === undefined) continue;
+    const valor =
+      out[esperado] === undefined
+        ? out[otro]
+        : { [OBSERVACION_ITEM]: [...itemsObservacion(out[esperado]), ...itemsObservacion(out[otro])] };
+    out = { ...out, [esperado]: valor };
+  }
+  return out;
 }
 
 /**
@@ -95,7 +189,7 @@ export function encode(input: unknown, schema: Schema, method: string): Obj {
  * emisiones (la operación pudo haberse registrado aunque no se pueda leer).
  */
 export function decode<T>(node: unknown, schema: Schema, path: string, kind: SoapOperationKind): T {
-  return decodeResponse<T>(node, schema, path, {
+  return decodeResponse<T>(conObservaciones(node, schema), schema, path, {
     error: (message) => new ArcaSoapError(`${SERVICE}: ${message}`, { uncertain: kind === 'emision' }),
   });
 }
@@ -118,8 +212,8 @@ export const short = () => int(0, 32767);
 export const importe = () => dec(2, -IMPORTE_MAX, IMPORTE_MAX);
 /** `ImporteSimpleType` no negativo (regla del SDK para los importes de los requests, salvo ajustes). */
 export const importePositivo = () => importeNoNegativo(IMPORTE_MAX);
-// `PorcentajeSimpleType` (0 a 100, 2 decimales): `porcentaje()` de common.
-export { porcentaje };
+/** `PorcentajeSimpleType`: mayor a 0 y menor a 100, 2 decimales (manual §3.1). */
+export const porcentaje = () => dec(2, 0, 99.99, true);
 /** Cotización (`xsd:decimal`): positiva, con hasta 6 decimales. */
 export const cotizacion = () => dec(6, 0, undefined, true);
 /** `Texto250SimpleType`. */
@@ -387,7 +481,7 @@ export const RESP = {
     hayMas: siNo(),
     ...INFO,
   },
-  consultarCtaCte: { ctaCte: must(obj(CUENTA_CORRIENTE)), ...INFO },
+  consultarCtaCte: { ctaCte: obj(CUENTA_CORRIENTE), ...INFO },
   consultarComprobantes: {
     comprobantes: as('arrayComprobantes', wrapped('comprobante', obj(COMPROBANTE))),
     nroPagina: int(),

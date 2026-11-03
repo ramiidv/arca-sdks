@@ -1,4 +1,4 @@
-import { formatDate, formatDateTimeAR, normalizeCuit, roundHalfUp } from '@ramiidv/arca-common';
+import { formatDate, formatDateTimeAR, normalizeCuit, roundHalfEven } from '@ramiidv/arca-common';
 import {
   IVA_RATES,
   Concepto,
@@ -29,11 +29,11 @@ import type {
 } from './types.js';
 
 /**
- * Pasa un importe a centavos enteros, redondeando mitad hacia arriba sobre el
- * valor decimal escrito (1.005 → 101, no 100).
+ * Pasa un importe a centavos enteros, redondeando mitad al par sobre el valor
+ * decimal escrito (1.005 → 100, 1.015 → 102).
  */
 function toCents(n: number): number {
-  return Math.round(roundHalfUp(n, 2) * 100);
+  return Math.round(roundHalfEven(n, 2) * 100);
 }
 
 const optString = (v: unknown): string | undefined =>
@@ -43,9 +43,12 @@ function fromCents(c: number): number {
   return c / 100;
 }
 
-/** Redondea un importe a 2 decimales (WSFEv1: Double (13+2) según el manual). */
+/**
+ * Redondea un importe a 2 decimales (WSFEv1: Double (13+2) según el manual),
+ * mitad al par: el criterio de redondeo del servicio es Round Half Even.
+ */
 export function redondear2(n: number): number {
-  return roundHalfUp(n, 2);
+  return roundHalfEven(n, 2);
 }
 
 /** Alícuota en puntos básicos (21% → 2100, 10,5% → 1050) para operar con enteros. */
@@ -385,7 +388,7 @@ export function buildInvoiceDetail(
  * ```
  */
 export function armarComprobante(opts: FacturarOpts & { cbteNro: number }, ctx?: { ahora?: Date }): ComprobanteArmado {
-  validateFacturarOpts(opts);
+  validateFacturarOpts(opts, { ahora: ctx?.ahora });
   const { detail, importes } = buildInvoiceDetail(opts, opts.cbteNro, ctx?.ahora);
   return {
     request: detail,

@@ -404,7 +404,7 @@ export const FEX_CMP_REQ: Schema = {
   domicilioCliente: xml('Domicilio_cliente', str()),
   idImpositivo: xml('Id_impositivo', opt(str())),
   monedaId: xml('Moneda_Id', str()),
-  monedaCtz: xml('Moneda_ctz', dec(6)),
+  monedaCtz: xml('Moneda_ctz', opt(dec(6))),
   canMisMonExt: xml('CanMisMonExt', opt(str())),
   obsComerciales: xml('Obs_comerciales', opt(str())),
   impTotal: xml('Imp_total', dec(2)),

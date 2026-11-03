@@ -306,8 +306,30 @@ const caea = (c: MtxcaComprobanteBase) => ({
 });
 
 describe('FCE MiPyME: fechaVencimientoPago (148, 149 / 764, 765)', () => {
+  /** FCE válida: datos adicionales de la factura (21, 27) o de la nota (22) y, en las notas, la factura asociada. */
   const fce = (tipo: number, overrides: Partial<MtxcaComprobanteBase> = {}) =>
-    facturaA({ codigoTipoComprobante: tipo, ...overrides });
+    facturaA({
+      codigoTipoComprobante: tipo,
+      ...([201, 206].includes(tipo)
+        ? {
+            datosAdicionales: [
+              { t: 21, c1: '0110599500000041817221' },
+              { t: 27, c1: 'SCA' },
+            ],
+          }
+        : {
+            datosAdicionales: [{ t: 22, c1: 'N' }],
+            comprobantesAsociados: [
+              {
+                codigoTipoComprobante: tipo < 205 ? 201 : 206,
+                numeroPuntoVenta: 1,
+                numeroComprobante: 1,
+                cuit: '30000000007',
+              },
+            ],
+          }),
+      ...overrides,
+    });
 
   for (const tipo of [201, 206]) {
     it(`${tipo}: obligatoria aunque el concepto sea 1`, () => {
@@ -361,11 +383,14 @@ describe('FCE MiPyME: fechaVencimientoPago (148, 149 / 764, 765)', () => {
       expect.stringMatching(/^otrosTributos\[0\]\.descripcion: .*\(302\)$/),
     ]);
     expect(fields(() => validateComprobanteCAE(facturaA({ otrosTributos: [tributo] })))).toEqual([]);
-    const comprador = { codigoTipoDocumento: 80, numeroDocumento: '30000000007', porcentaje: 50 };
-    expect(messages(() => validateComprobanteCAE(fce(202, { compradores: [comprador, comprador] })))).toEqual([
+    const compradores = [
+      { codigoTipoDocumento: 80, numeroDocumento: '30000000007', porcentaje: 60 },
+      { codigoTipoDocumento: 86, numeroDocumento: '20123456786', porcentaje: 40 },
+    ];
+    expect(messages(() => validateComprobanteCAE(fce(202, { compradores })))).toEqual([
       expect.stringMatching(/^compradores: .*\(433\)$/),
     ]);
-    expect(fields(() => validateComprobanteCAE(facturaA({ compradores: [comprador, comprador] })))).toEqual([]);
+    expect(fields(() => validateComprobanteCAE(facturaA({ compradores })))).toEqual([]);
   });
 });
 
@@ -443,7 +468,10 @@ describe('reglas del manual (190, 118, 160, 161, 432, 516)', () => {
   });
 
   it('compradores solo con concepto 1 (432); en CAEA no se admiten (753)', () => {
-    const compradores = [{ codigoTipoDocumento: 80, numeroDocumento: '30000000007', porcentaje: 100 }];
+    const compradores = [
+      { codigoTipoDocumento: 80, numeroDocumento: '30000000007', porcentaje: 50 },
+      { codigoTipoDocumento: 86, numeroDocumento: '20123456786', porcentaje: 50 },
+    ];
     expect(fields(() => validateComprobanteCAE(facturaA({ compradores })))).toEqual([]);
     expect(
       messages(() =>
@@ -477,5 +505,277 @@ describe('reglas del manual (190, 118, 160, 161, 432, 516)', () => {
     expect(messages(() => validateComprobanteCAE(c))).toContainEqual(
       expect.stringMatching(/^items\[1\]\.importeIVA: .*\(25\.20\).*21\.00 \(516\)$/),
     );
+  });
+});
+
+describe('reglas del manual v0.25.8: CAEA, No Categorizado, datos adicionales, asociados FCE y compradores', () => {
+  const nota = (tipo: number, datos: { t: number; c1?: string }[], asociado: number) =>
+    facturaA({
+      codigoTipoComprobante: tipo,
+      datosAdicionales: datos,
+      comprobantesAsociados: [
+        { codigoTipoComprobante: asociado, numeroPuntoVenta: 1, numeroComprobante: 1, cuit: '30000000007' },
+      ],
+    });
+
+  it('el asociado FCE de una nota lleva el CUIT del emisor (210 / 810)', () => {
+    const n = nota(203, [{ t: 22, c1: 'N' }], 201);
+    expect(fields(() => validateComprobanteCAE(n, { cuitEmisor: '30-00000000-7' }))).toEqual([]);
+    expect(messages(() => validateComprobanteCAE(n, { cuitEmisor: 20123456786 }))).toEqual([
+      expect.stringMatching(/^comprobantesAsociados\[0\]\.cuit: .*\(210\)$/),
+    ]);
+    expect(messages(() => validateComprobanteCAEA(caea(n), { cuitEmisor: 20123456786 }))).toEqual([
+      expect.stringMatching(/\(810\)$/),
+    ]);
+    // Sin el CUIT del emisor no se puede verificar.
+    expect(fields(() => validateComprobanteCAE(n))).toEqual([]);
+  });
+
+  it('CAEA: el IVA en 0 de las condiciones 1 a 3 solo observa (1122) y los mensajes citan códigos de CAEA', () => {
+    const exento = facturaA({
+      items: [{ ...facturaA().items[0], codigoCondicionIVA: 2, importeIVA: 0.01 }],
+      subtotalesIVA: undefined,
+    });
+    expect(messages(() => validateComprobanteCAE(exento))).toContainEqual(expect.stringMatching(/\(521\)$/));
+    expect(messages(() => validateComprobanteCAEA(caea(exento)))).not.toContainEqual(
+      expect.stringMatching(/\(52?1\)$/),
+    );
+    const sinMtx = caea(facturaA({ items: [{ ...facturaA().items[0], codigoMtx: undefined }] }));
+    expect(messages(() => validateComprobanteCAEA(sinMtx))).toEqual([
+      expect.stringMatching(/^items\[0\]\.codigoMtx: .*\(1103\)$/),
+    ]);
+  });
+
+  it('CAEA: concepto (713), receptor de clase A (718, 733) y subtotales de IVA (715)', () => {
+    expect(messages(() => validateComprobanteCAEA(caea(facturaA({ codigoConcepto: 4 }))))).toContainEqual(
+      expect.stringMatching(/\(713\)$/),
+    );
+    expect(
+      messages(() =>
+        validateComprobanteCAEA(caea(facturaA({ codigoTipoDocumento: undefined, numeroDocumento: undefined }))),
+      ),
+    ).toContainEqual(expect.stringMatching(/\(718\)$/));
+    expect(messages(() => validateComprobanteCAEA(caea(facturaA({ codigoTipoDocumento: 86 }))))).toContainEqual(
+      expect.stringMatching(/\(733\)$/),
+    );
+    expect(messages(() => validateComprobanteCAEA(caea(facturaA({ subtotalesIVA: [] }))))).toContainEqual(
+      expect.stringMatching(/^subtotalesIVA: .*\(715\)$/),
+    );
+  });
+
+  it('No Categorizado: solo en B con condición 7 (342) y con el tributo 13 si hay gravado (145)', () => {
+    const b = { ...facturaB(), codigoTipoDocumento: 80, numeroDocumento: '23000000000', condicionIVAReceptor: 7 };
+    expect(messages(() => validateComprobanteCAE(b))).toEqual([expect.stringMatching(/^otrosTributos: .*\(145\)$/)]);
+    const conPercepcion = {
+      ...b,
+      importeOtrosTributos: 1.01,
+      importeTotal: 222.01,
+      otrosTributos: [
+        ...(b.otrosTributos ?? []),
+        { codigo: 13, descripcion: 'Percepción', baseImponible: 100, importe: 1 },
+      ],
+    };
+    expect(fields(() => validateComprobanteCAE(conPercepcion))).toEqual([]);
+    expect(messages(() => validateComprobanteCAE(facturaA({ numeroDocumento: '23000000000' })))).toContainEqual(
+      expect.stringMatching(/\(342\)$/),
+    );
+  });
+
+  it('datos adicionales de FCE (326-336) y del dato 5 (337-340)', () => {
+    const factura = (datos: { t: number; c1?: string }[]) =>
+      facturaA({ codigoTipoComprobante: 201, datosAdicionales: datos, fechaVencimientoPago: '2026-11-30' });
+    expect(messages(() => validateComprobanteCAE(factura([{ t: 21, c1: 'CBU' }])))).toEqual([
+      expect.stringMatching(/\(335\)$/),
+    ]);
+    expect(messages(() => validateComprobanteCAE(factura([{ t: 27, c1: 'XXX' }])))).toEqual([
+      expect.stringMatching(/\(334\)$/),
+      expect.stringMatching(/\(331\)$/),
+    ]);
+    expect(
+      messages(() =>
+        validateComprobanteCAE(
+          factura([
+            { t: 21, c1: 'CBU' },
+            { t: 27, c1: 'ADC' },
+            { t: 22, c1: 'N' },
+          ]),
+        ),
+      ),
+    ).toEqual([expect.stringMatching(/\(330\)$/)]);
+    expect(messages(() => validateComprobanteCAE(nota(203, [{ t: 22, c1: 'X' }], 201)))).toEqual([
+      expect.stringMatching(/\(327\)$/),
+    ]);
+    expect(messages(() => validateComprobanteCAE(nota(203, [], 201)))).toEqual([expect.stringMatching(/\(329\)$/)]);
+    expect(messages(() => validateComprobanteCAE(facturaA({ datosAdicionales: [{ t: 22, c1: 'N' }] })))).toEqual([
+      expect.stringMatching(/\(326\)$/),
+    ]);
+    expect(messages(() => validateComprobanteCAE(facturaA({ datosAdicionales: [{ t: 5, c1: '7' }] })))).toEqual([
+      expect.stringMatching(/\(339\)$/),
+    ]);
+    expect(messages(() => validateComprobanteCAE({ ...facturaB(), datosAdicionales: [{ t: 5, c1: '1' }] }))).toEqual([
+      expect.stringMatching(/\(337\)$/),
+    ]);
+    // En CAEA los mismos datos citan su numeración (933).
+    expect(messages(() => validateComprobanteCAEA(caea(factura([{ t: 21, c1: 'CBU' }]))))).toEqual([
+      expect.stringMatching(/\(933\)$/),
+    ]);
+  });
+
+  it('asociados FCE: cuit (209), uno solo (212), anulación (214) y período (159, 162)', () => {
+    expect(fields(() => validateComprobanteCAE(nota(203, [{ t: 22, c1: 'N' }], 201)))).toEqual([]);
+    expect(
+      messages(() =>
+        validateComprobanteCAE({
+          ...nota(203, [{ t: 22, c1: 'N' }], 201),
+          comprobantesAsociados: [{ codigoTipoComprobante: 201, numeroPuntoVenta: 1, numeroComprobante: 1 }],
+        }),
+      ),
+    ).toEqual([expect.stringMatching(/\(209\)$/)]);
+    expect(messages(() => validateComprobanteCAE(nota(203, [{ t: 22, c1: 'N' }], 202)))).toEqual([
+      expect.stringMatching(/\(212\)$/),
+    ]);
+    expect(fields(() => validateComprobanteCAE(nota(203, [{ t: 22, c1: 'S' }], 202)))).toEqual([]);
+    expect(messages(() => validateComprobanteCAE(nota(202, [{ t: 22, c1: 'S' }], 201)))).toEqual([
+      expect.stringMatching(/\(214\)$/),
+    ]);
+    expect(
+      messages(() =>
+        validateComprobanteCAE(
+          facturaA({ periodoComprobantesAsociados: { fechaDesde: '2026-10-01', fechaHasta: '2026-10-31' } }),
+        ),
+      ),
+    ).toEqual([expect.stringMatching(/\(162\)$/)]);
+    expect(messages(() => validateComprobanteCAEA(caea(nota(203, [{ t: 22, c1: 'N' }], 202))))).toEqual([
+      expect.stringMatching(/\(812\)$/),
+    ]);
+  });
+
+  it('compradores (420-429)', () => {
+    const ok = [
+      { codigoTipoDocumento: 80, numeroDocumento: '30000000007', porcentaje: 60 },
+      { codigoTipoDocumento: 86, numeroDocumento: '20123456786', porcentaje: 40 },
+    ];
+    const con = (compradores: typeof ok) => facturaA({ compradores });
+    expect(fields(() => validateComprobanteCAE(con(ok)))).toEqual([]);
+    expect(messages(() => validateComprobanteCAE(con([{ ...ok[0], porcentaje: 99.99 }])))).toEqual([
+      expect.stringMatching(/\(420\)$/),
+      expect.stringMatching(/\(427\)$/),
+    ]);
+    expect(messages(() => validateComprobanteCAE(con([ok[0], { ...ok[1], codigoTipoDocumento: 96 }])))).toEqual([
+      expect.stringMatching(/\(422\)$/),
+    ]);
+    expect(
+      messages(() =>
+        validateComprobanteCAE(
+          con([
+            { ...ok[0], porcentaje: 50 },
+            { ...ok[0], porcentaje: 50 },
+          ]),
+        ),
+      ),
+    ).toContainEqual(expect.stringMatching(/\(423\)$/));
+    expect(
+      messages(() =>
+        validateComprobanteCAE(
+          con([
+            { ...ok[0], porcentaje: 40 },
+            { ...ok[1], porcentaje: 60 },
+          ]),
+        ),
+      ),
+    ).toEqual([expect.stringMatching(/\(429\)$/)]);
+    expect(
+      messages(() =>
+        validateComprobanteCAE(con([ok[1], { ...ok[1], numeroDocumento: '20111111112', porcentaje: 60 }])),
+      ),
+    ).toEqual([expect.stringMatching(/\(428\)$/)]);
+    expect(messages(() => validateComprobanteCAE(con(ok), { cuitEmisor: '20123456786' }))).toEqual([
+      expect.stringMatching(/\(426\)$/),
+    ]);
+  });
+});
+
+describe('reglas del manual v0.25.8: casos borde', () => {
+  const asociado = (codigoTipoComprobante: number, cuit?: string) => ({
+    codigoTipoComprobante,
+    numeroPuntoVenta: 1,
+    numeroComprobante: 1,
+    ...(cuit === undefined ? {} : { cuit }),
+  });
+  const notaFCE = (overrides: Partial<MtxcaComprobanteBase> = {}) =>
+    facturaA({
+      codigoTipoComprobante: 203,
+      datosAdicionales: [{ t: 22, c1: 'N' }],
+      comprobantesAsociados: [asociado(201, '30000000007')],
+      ...overrides,
+    });
+
+  it('nota FCE: sin comprobantesAsociados (212); el remito asociado no exige cuit (209 solo para FCE)', () => {
+    expect(messages(() => validateComprobanteCAE(notaFCE({ comprobantesAsociados: undefined })))).toEqual([
+      expect.stringMatching(/^comprobantesAsociados: .*201 o 206 \(212\)$/),
+    ]);
+    expect(
+      fields(() =>
+        validateComprobanteCAE(notaFCE({ comprobantesAsociados: [asociado(201, '30000000007'), asociado(91)] })),
+      ),
+    ).toEqual([]);
+    // En una anulación, cualquier FCE cuenta para 212; dos FCE no.
+    expect(
+      messages(() =>
+        validateComprobanteCAE(
+          notaFCE({
+            datosAdicionales: [{ t: 22, c1: 'S' }],
+            comprobantesAsociados: [asociado(201, '30000000007'), asociado(202, '30000000007')],
+          }),
+        ),
+      ),
+    ).toEqual([expect.stringMatching(/de anulación .*\(212\)$/)]);
+  });
+
+  it('datos adicionales: ítems no objeto se ignoran y el dato 5 en un tipo no admitido solo reporta 337', () => {
+    const conNull = { ...facturaA(), datosAdicionales: [null, { t: 5, c1: '1' }] } as unknown as MtxcaComprobanteBase;
+    expect(fields(() => validateComprobanteCAE(conNull))).toEqual([]);
+    expect(
+      messages(() => validateComprobanteCAE({ ...facturaB(), datosAdicionales: [{ t: 5, c1: '9', c2: 'x' }] })),
+    ).toEqual([expect.stringMatching(/1, 2, 3, 201, 202 y 203 \(337\)$/)]);
+  });
+
+  it('compradores: documentos con guiones, índices originales, 421, empate en 429 y suma con decimales', () => {
+    const ok = [
+      { codigoTipoDocumento: 80, numeroDocumento: '30-00000000-7', porcentaje: 50 },
+      { codigoTipoDocumento: 86, numeroDocumento: 20123456786, porcentaje: 50 },
+    ];
+    expect(fields(() => validateComprobanteCAE(facturaA({ compradores: ok })))).toEqual([]);
+    expect(fields(() => validateComprobanteCAE(facturaA({ compradores: ok, numeroDocumento: 30000000007 })))).toEqual(
+      [],
+    );
+    const tercios = [
+      { ...ok[0], porcentaje: 33.34 },
+      { ...ok[1], porcentaje: 33.33 },
+      { codigoTipoDocumento: 87, numeroDocumento: '20111111112', porcentaje: 33.33 },
+    ];
+    expect(fields(() => validateComprobanteCAE(facturaA({ compradores: tercios })))).toEqual([]);
+    const conBasura = [null, ok[0], { ...ok[1], codigoTipoDocumento: 96 }] as unknown as typeof ok;
+    expect(fields(() => validateComprobanteCAE(facturaA({ compradores: conBasura })))).toEqual([
+      'compradores[2].codigoTipoDocumento',
+    ]);
+    expect(messages(() => validateComprobanteCAE(facturaA({ compradores: ok }), { cuitEmisor: 20123456786 }))).toEqual([
+      expect.stringMatching(/^compradores\[1\]\.numeroDocumento: .*\(426\)$/),
+    ]);
+    const sinReceptor = { ...facturaB(), codigoTipoDocumento: undefined, numeroDocumento: undefined, compradores: ok };
+    expect(messages(() => validateComprobanteCAE(sinReceptor))).toEqual([
+      expect.stringMatching(/^codigoTipoDocumento: .*\(421\)$/),
+    ]);
+  });
+
+  it('No Categorizado: CUIT con guiones (342) y en CAEA (889, sin 145)', () => {
+    expect(messages(() => validateComprobanteCAE(facturaA({ numeroDocumento: '23-00000000-0' })))).toContainEqual(
+      expect.stringMatching(/\(342\)$/),
+    );
+    const b = { ...facturaB(), codigoTipoDocumento: 80, numeroDocumento: '23000000000', condicionIVAReceptor: 7 };
+    expect(fields(() => validateComprobanteCAEA(caea(b)))).toEqual([]);
+    expect(messages(() => validateComprobanteCAEA(caea({ ...b, condicionIVAReceptor: 5 })))).toEqual([
+      expect.stringMatching(/^numeroDocumento: .*\(889\)$/),
+    ]);
   });
 });

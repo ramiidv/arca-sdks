@@ -41,7 +41,8 @@ export interface ArcaSdkConfig extends ArcaBaseConfig {
    * `WsaaClient` compartido con otros SDKs que usan el mismo certificado (ej:
    * `facturacion.wsaa`). Si se pasa, se ignoran `cert`, `key`, `keyPassphrase`,
    * `tokenTTLMinutes`, `ticketStorage`, `clockOffsetMs`, `autoClockSkew`,
-   * `loginErrorCooldownMs`, `permanentErrorCooldownMs` y `endpoints.wsaa`, y
+   * `loginErrorCooldownMs`, `permanentErrorCooldownMs`,
+   * `alreadyAuthenticatedCooldownMs` y `endpoints.wsaa`, y
    * sus eventos los emite la instancia que lo creó. Su entorno
    * (`wsaa.production`) tiene que coincidir con `production`.
    */
@@ -73,6 +74,7 @@ export function createWsaaClient(
     autoClockSkew: config.autoClockSkew,
     loginErrorCooldownMs: config.loginErrorCooldownMs,
     permanentErrorCooldownMs: config.permanentErrorCooldownMs,
+    alreadyAuthenticatedCooldownMs: config.alreadyAuthenticatedCooldownMs,
     fetch: config.fetch,
     legacyTls: config.legacyTls,
   });

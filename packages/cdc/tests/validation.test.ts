@@ -7,7 +7,7 @@ const validInput: ConstatarInput = {
   cbteModo: 'CAE',
   cuitEmisor: 30712345671,
   ptoVta: 1,
-  cbteTipo: 1,
+  cbteTipo: 6,
   cbteNro: 150,
   cbteFch: '20260315',
   impTotal: 12100,
@@ -80,6 +80,60 @@ describe('validateConstatarInput', () => {
     expect(fieldsOf({ ...validInput, docTipoReceptor: undefined })).toEqual(['docTipoReceptor']);
   });
 
+  it('reglas del manual: fecha desde 2013 (101), receptor CUIT en A y MiPyME (113, 114), documentos T (118)', () => {
+    expect(fieldsOf({ ...validInput, cbteFch: '20121231' })).toEqual(['cbteFch']);
+    expect(fieldsOf({ ...validInput, cbteTipo: 1 })).toEqual([]);
+    const { docTipoReceptor: _t, docNroReceptor: _n, ...sinReceptor } = validInput;
+    expect(fieldsOf({ ...sinReceptor, cbteTipo: 1 })).toEqual(['docTipoReceptor']);
+    expect(fieldsOf({ ...sinReceptor, cbteTipo: 201 })).toEqual(['docTipoReceptor']);
+    expect(fieldsOf({ ...validInput, cbteTipo: 51, docTipoReceptor: 96, docNroReceptor: '12345678' })).toEqual([
+      'docTipoReceptor',
+    ]);
+    expect(fieldsOf({ ...validInput, cbteTipo: 195, docTipoReceptor: 96, docNroReceptor: '12345678' })).toEqual([]);
+    expect(fieldsOf({ ...validInput, cbteTipo: 195, docTipoReceptor: 86, docNroReceptor: 20123456786 })).toEqual([
+      'docTipoReceptor',
+    ]);
+  });
+
+  it('reglas del manual: casos borde (sin errores duplicados, códigos por tipo, Date)', () => {
+    const { docTipoReceptor: _t, docNroReceptor: _n, ...sinReceptor } = validInput;
+    // A sin docTipoReceptor pero con docNroReceptor: solo 113, no también 117.
+    expect(fieldsOf({ ...sinReceptor, cbteTipo: 1, docNroReceptor: 20123456786 })).toEqual(['docTipoReceptor']);
+    // Formato inválido: lo informa el schema, sin sumar 113 ni 118.
+    expect(fieldsOf({ ...validInput, cbteTipo: 1, docTipoReceptor: 'ab' })).toEqual(['docTipoReceptor']);
+    expect(fieldsOf({ ...validInput, cbteTipo: 195, docTipoReceptor: 1.5 })).toEqual(['docTipoReceptor']);
+    // A con docTipoReceptor 80 sin número: 117.
+    expect(fieldsOf({ ...validInput, cbteTipo: 1, docNroReceptor: undefined })).toEqual(['docNroReceptor']);
+    const mensaje = (input: ConstatarInput) => {
+      try {
+        validateConstatarInput(input);
+      } catch (e) {
+        return (e as ArcaValidationError).details.map((d) => d.message);
+      }
+      return [];
+    };
+    expect(mensaje({ ...sinReceptor, cbteTipo: 211 })).toEqual([expect.stringMatching(/\(113\)$/)]);
+    expect(mensaje({ ...sinReceptor, cbteTipo: 54 })).toEqual([expect.stringMatching(/\(113, 114\)$/)]);
+    expect(fieldsOf({ ...validInput, cbteFch: new Date('2012-12-31T15:00:00Z') })).toEqual(['cbteFch']);
+    expect(fieldsOf({ ...validInput, cbteFch: '2013-01-01' })).toEqual([]);
+    expect(fieldsOf({ ...validInput, cbteFch: 20130101 as never })).toEqual(['cbteFch']);
+  });
+
+  it('A sin número de documento cita 114; el resto, 117', () => {
+    const mensajes = (input: ConstatarInput) => {
+      try {
+        validateConstatarInput(input);
+        return [];
+      } catch (e) {
+        return (e as ArcaValidationError).details.map((d) => d.message);
+      }
+    };
+    expect(mensajes({ ...validInput, cbteTipo: 1, docNroReceptor: undefined })).toEqual([
+      expect.stringMatching(/\(114\)$/),
+    ]);
+    expect(mensajes({ ...validInput, docNroReceptor: undefined })).toEqual([expect.stringMatching(/\(117\)$/)]);
+  });
+
   it('valida el documento del receptor', () => {
     expect(fieldsOf({ ...validInput, docTipoReceptor: 123 })).toEqual(['docTipoReceptor']);
     expect(fieldsOf({ ...validInput, docTipoReceptor: 96, docNroReceptor: '12.345.678' })).toEqual(['docNroReceptor']);
@@ -147,7 +201,7 @@ describe('buildCmpReq', () => {
       CbteModo: 'CAE',
       CuitEmisor: '30712345671',
       PtoVta: 1,
-      CbteTipo: 1,
+      CbteTipo: 6,
       CbteNro: 150,
       CbteFch: '20260315',
       ImpTotal: '12100.46',

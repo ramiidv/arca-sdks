@@ -24,7 +24,7 @@ const sire = new ArcaSire({
   wsaa?: WsaaClient,         // compartido, del mismo entorno
   signal?: AbortSignal,      // cancela todas las llamadas de la instancia
   timeout?, retries?, retryDelayMs?, ticketStorage?, tokenTTLMinutes?, clockOffsetMs?,
-  autoClockSkew?, loginErrorCooldownMs?, permanentErrorCooldownMs?, fetch?, legacyTls?, onEvent?,
+  autoClockSkew?, loginErrorCooldownMs?, permanentErrorCooldownMs?, alreadyAuthenticatedCooldownMs?, fetch?, legacyTls?, onEvent?,
 });
 ```
 
@@ -42,14 +42,14 @@ Opcionales: codigoTrazabilidad (texto libre ≤36), coe (≤12), coeOriginal (�
 
 FechaHora = Date | "YYYY-MM-DD" | "YYYYMMDD" | "YYYY-MM-DDThh:mm[:ss[.SSS]]" (hora Argentina) | ISO con Z/±hh:mm. Se envía como "AAAA-MM-DDThh:mm:ss.SSS-03:00".
 Fechas (manual 3.2.2, se validan comparando fechas calendario de Argentina): fechaRetencion >= 2019-12-01; fechaComprobante <= fechaRetencion; tipos 3, 19 y 20: fechaComprobante = fechaRetencion.
-Importes: finitos, máximo 11 enteros, se envían con 2 decimales. El SDK exige >= 0 (criterio propio, el manual no lo dice) salvo importeComprobante de los tipos 19 y 20 ("con valor negativo"), que puede ser negativo.
+Importes: finitos, máximo 11 enteros, se envían con 2 decimales (redondeo mitad al par). El SDK exige >= 0 (criterio propio, el manual no lo dice) salvo importeComprobante de los tipos 19 y 20 ("con valor negativo"), que puede ser negativo.
 
 ## Errores
 
 - ArcaValidationError: validación local (antes de autenticar). `details[]` por campo.
 - ArcaSireServiceError (extends ArcaServiceError): ARCA rechazó (SOAP Fault soapenv:Client, aun sin faultstring; XML fuera de schema; request mal formado). Seguro: no se emitió. `message`, `errors[0].msg`, `faultCode`, `cause`.
 - ArcaSoapError con `uncertain: true`: timeout, red, 5xx, respuesta inválida o Fault soapenv:Server de sistema durante emitir/anular. El certificado PUDO emitirse. emitir/anular nunca se reintentan.
-- ArcaAuthError / ArcaTicketVigenteError: WSAA, o SIRE rechazó el token/sign (Fault tipo MISSING_AUTHENTICATION_TOKEN); en ese caso el SDK descarta el ticket cacheado. No se emitió.
+- ArcaAuthError / ArcaTicketVigenteError: WSAA, o SIRE rechazó el token/sign (Fault tipo MISSING_AUTHENTICATION_TOKEN). No se emitió. El SDK no borra el ticket cacheado (WSAA rechaza pedidos repetidos durante el lapso de retención); si está dañado, `clearAuthCache()`.
 
 Resultado incierto: SIRE no tiene consulta y no documenta deduplicación por codigoTrazabilidad. No reenvíes automáticamente: verificá en el micrositio SIRE (https://www.arca.gob.ar/sire/, clave fiscal); si quedó duplicado, anulalo con anularCertificado.
 

@@ -771,7 +771,7 @@ describe('schemas del XSD (DSL de common)', () => {
         AUTH,
         facturaA({
           numeroDocumento: '30000000008',
-          compradores: [{ codigoTipoDocumento: 80, numeroDocumento: 20123456780, porcentaje: 100 }],
+          compradores: [{ codigoTipoDocumento: 80, numeroDocumento: 20123456780, porcentaje: 60 }],
         }),
       )
       .catch((e) => e);

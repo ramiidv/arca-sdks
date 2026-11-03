@@ -75,7 +75,7 @@ Lo mismo para todos los SDKs (la documentación oficial está en
 | **SOAP client**       | `soapCall`, `arcaSoapCall`, `extractMethodResult`, `checkServiceErrors`, `extractServiceErrors` — timeout, `signal`, reintentos solo en consultas |
 | **XML**               | `parseXml`, `buildXml`, `ensureArray`, `getNestedValue` — vía fast-xml-parser                                                                     |
 | **Base de los SDKs**  | `ArcaSdkBase`, `SoapServiceClient`, `createWsaaClient`, `transportOptions`, `parseServerStatus`, `statusOf`                                       |
-| **Validadores**       | `validateCuit`, `isValidCuit`, `validateCBU`, `isValidCBU`, `formatDate`, `parseArcaDate`, `validateFecha`, `validateFechaRango`                  |
+| **Validadores**       | `validateCuit`, `isValidCuit`, `validateCBU`, `isValidCBU`, `formatDate`, `parseArcaDate`, `validateFecha`, `validateFechaRango`, `diasEntre`     |
 | **Fechas y redondeo** | `formatDateTimeAR`, `AR_TIMEZONE`, `roundHalfUp`, `roundHalfEven`                                                                                 |
 | **QR**                | `generarUrlQR` — URL del QR de los comprobantes electrónicos                                                                                      |
 | **Errores**           | `ArcaError`, `ArcaAuthError`, `ArcaTicketVigenteError`, `ArcaSoapError`, `ArcaServiceError`, `ArcaValidationError`, `ArcaResponseError`           |
@@ -110,11 +110,13 @@ wsaa.production; // false: entorno de WSAA de este cliente
 El constructor **valida el certificado y la clave** (PEM legibles, RSA, y que la clave corresponda
 al certificado) y lanza `ArcaValidationError` si algo no está bien, sin llamar a WSAA. Acepta claves
 PKCS#1 y PKCS#8, encriptadas con `keyPassphrase`. El nombre del servicio se valida en cada
-`getAccessTicket` (3 a 32 letras, dígitos, `_` o `-`).
+`getAccessTicket` (3 a 32 letras, dígitos, `_` o `-`, empezando con una letra).
 
 `tokenTTLMinutes` (1 a 1440, default 720) es la **vigencia del TRA** (el pedido firmado), no la del
 Ticket de Acceso: WSAA emite cada TA con su propio vencimiento (12 horas, según el manual). Si la
-respuesta no trae `expirationTime`, se asume 12 horas. Un TA cuyo `expirationTime` ya pasó se
+respuesta no trae `expirationTime`, se asume 12 horas. WSAA rechaza un TRA que vence más de 24 horas
+después de su `generationTime` (que el SDK fija 2 minutos antes de la hora actual), así que con 1440 el
+`expirationTime` queda 1438 minutos adelante. Un TA cuyo `expirationTime` ya pasó se
 rechaza con `ArcaAuthError`.
 
 ### Datos del certificado
@@ -130,19 +132,24 @@ if (info.notAfter.getTime() - Date.now() < 30 * 86_400_000) console.warn('El cer
 
 ### Persistencia del Ticket de Acceso
 
-WSAA **rechaza el login si ya existe un TA vigente** para el mismo certificado y servicio
-(`coe.alreadyAuthenticated`). Si tu proceso se reinicia y el TA solo estaba en memoria, no vas a
-poder loguearte hasta que venza (hasta 12 horas). Para evitarlo, configurá un `ticketStorage`:
+WSAA **rechaza el login si ya existe un TA vigente** para el mismo certificado y servicio y se lo
+pide de nuevo dentro de un lapso de retención (`coe.alreadyAuthenticated`). Según el manual del
+desarrollador de WSAA, ese lapso es de 2 minutos en producción y 10 en homologación, y ARCA puede
+cambiarlo sin aviso. Si tu proceso se reinicia y el TA solo estaba en memoria, no vas a poder
+loguearte durante ese lapso. Para evitarlo, configurá un `ticketStorage`:
 
 - Orden de lectura: memoria → storage → login. Después de un login exitoso, se persiste.
-- `clearTicket` también borra del storage. **Ojo:** WSAA no emite un ticket nuevo mientras el
-  anterior siga vigente, así que borrar uno vigente te deja sin acceso hasta que venza. Usalo solo
-  si el ticket es inválido.
+- `clearTicket` también borra del storage. **Ojo:** WSAA rechaza los pedidos repetidos durante el
+  lapso de retención, así que borrar un ticket vigente puede dejarte sin acceso durante ese lapso.
+  Usalo solo si el ticket es inválido.
 - En los 2 minutos previos al vencimiento el SDK intenta renovar; si WSAA todavía no lo permite,
   sigue usando el ticket actual hasta su vencimiento real.
 - Los logins concurrentes del mismo servicio se deduplican (incluida la lectura del storage).
 - Si WSAA responde "ya posee un TA válido" y el storage no tiene el ticket (después de releerlo,
-  por si otro proceso lo acaba de guardar), se lanza `ArcaTicketVigenteError`.
+  por si otro proceso lo acaba de guardar), se lanza `ArcaTicketVigenteError` (`retryable: true`,
+  `retryAfterMs`). Durante `alreadyAuthenticatedCooldownMs` (default: 2 minutos en producción, 10 en
+  homologación) se vuelve a lanzar sin llamar a WSAA, porque un pedido dentro del lapso de retención
+  vuelve a ser rechazado.
 - Si el storage falla, el SDK sigue funcionando con el ticket en memoria y emite `auth:storage-error`.
 
 `FileTicketStorage(directorio)` guarda un archivo JSON por ticket, con escritura atómica (archivo
@@ -183,7 +190,7 @@ const dbStorage: TicketStorage = {
 > El token y el sign dan acceso a los web services de ARCA con tu CUIT: guardalos como un secreto.
 
 > Si un login llega a WSAA pero la respuesta se pierde (timeout), ese TA no se puede recuperar:
-> el siguiente login falla con `ArcaTicketVigenteError` hasta que venza. Por eso el SDK nunca
+> el siguiente login falla con `ArcaTicketVigenteError` durante el lapso de retención. Por eso el SDK nunca
 > aborta un login en curso (aunque el caller cancele su `signal`) y solo reintenta un login si es
 > seguro que el request no se envió (DNS, conexión rechazada).
 
@@ -205,6 +212,9 @@ WSAA (si hubo) y `retryable`:
   `autoClockSkew` (default) el SDK ajusta el offset y reintenta una vez (ver abajo); si vuelve a
   fallar después de corregirlo, espera de `loginErrorCooldownMs`. Con `autoClockSkew: false` se
   lanza `ArcaAuthError` (`retryable: true`) sin espera: corregí el reloj o `clockOffsetMs`.
+- **TA vigente** (`coe.alreadyAuthenticated` sin ticket utilizable): `ArcaTicketVigenteError`
+  (`retryable: true`). Durante `alreadyAuthenticatedCooldownMs` (default: 2 minutos en producción
+  y 10 en homologación, el lapso de retención del manual de WSAA) se rechaza sin llamar a WSAA.
 - **Error de red sin enviar o abort**: sin espera.
 
 Durante una espera, si hay un ticket por vencer todavía utilizable, se devuelve ese ticket.
@@ -296,7 +306,8 @@ extractServiceErrors(data); // [{ code, msg, rawCode? }] sin lanzar
 
 - `afipSoapCall` / `AfipSoapCallOptions` siguen exportados como alias **deprecados** de
   `arcaSoapCall` / `ArcaSoapCallOptions`.
-- `buildXml` y `arcaSoapCall` **omiten** las propiedades `null`/`undefined` (no envían `<x/>`).
+- `buildXml` y `arcaSoapCall` **omiten** las propiedades `null`/`undefined` (no envían `<x/>`) y envían
+  un `Date` como `xsd:dateTime` en hora de Argentina (`2026-11-01T08:30:00-03:00`).
 - El parser decodifica referencias numéricas (`&#243;` → `ó`) y entidades HTML.
 - Por defecto el parser convierte a `number` el texto numérico de menos de 8 dígitos (CUIT, CAE y
   fechas `YYYYMMDD` quedan como string). `parseNumbers: false` deja todo como string.
@@ -350,6 +361,7 @@ import {
   parseArcaDate,
   formatDateTimeAR,
   validateFechaRango,
+  diasEntre,
   roundHalfEven,
   roundHalfUp,
   generarUrlQR,
@@ -362,8 +374,9 @@ parseArcaDate('20260331'); // 2026-03-31T15:00:00.000Z (mediodía de Argentina)
 formatDateTimeAR(new Date()); // "2026-03-31T14:05:09-03:00"
 formatDateTimeAR(new Date(), { millis: true }); // "2026-03-31T14:05:09.123-03:00"
 validateFechaRango('20260301', '20260301'); // OK: fin puede ser igual a inicio (no anterior)
+diasEntre('2026-03-01', '20260304'); // 3 (días de calendario de Argentina)
 
-roundHalfEven(8.565, 2); // 8.56 (Round Half Even, el del manual de WSMTXCA)
+roundHalfEven(8.565, 2); // 8.56 (Round Half Even, el de los manuales de ARCA)
 roundHalfUp(8.565, 2); // 8.57
 
 generarUrlQR({
@@ -374,7 +387,9 @@ generarUrlQR({
 
 `parseAfipDate` sigue exportado como alias deprecado de `parseArcaDate`. `generarUrlQR` sigue la
 [especificación del QR](https://arca.gob.ar/fe/qr/documentos/QRespecificaciones.pdf): importe a 2
-decimales, `ctz` a 6, punto de venta de hasta 5 dígitos y número de comprobante de hasta 8.
+decimales y `ctz` a 6 (mitad al par, hasta 13 enteros), punto de venta de hasta 5 dígitos, tipo de
+comprobante de hasta 3, número de comprobante de hasta 8, `moneda` de 3 caracteres, `tipoDocRec` de
+hasta 2 dígitos y `nroDocRec` de hasta 20 (como string si no entra en un `number`).
 
 ## Errores
 
@@ -382,21 +397,22 @@ decimales, `ctz` a 6, punto de venta de hasta 5 dígitos y número de comprobant
 | ------------------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `ArcaError`              | Clase base                                                           | `code`                                                                                                                |
 | `ArcaAuthError`          | Login WSAA fallido o en espera, respuesta de WSAA inválida           | `faultCode?`, `statusCode?`, `retryable`, `cause`                                                                     |
-| `ArcaTicketVigenteError` | WSAA ya emitió un TA vigente que no está en memoria ni en el storage | `service`; extiende `ArcaAuthError` (`retryable: false`)                                                              |
+| `ArcaTicketVigenteError` | WSAA ya emitió un TA vigente que no está en memoria ni en el storage | `service`, `retryAfterMs?`; extiende `ArcaAuthError` (`retryable: true`)                                              |
 | `ArcaSoapError`          | Error HTTP, timeout, SOAP Fault                                      | `statusCode?`, `faultCode?`, `faultString?`, `faultDetail?`, `responseBody?`, `responseDate?`, `uncertain`, `aborted` |
 | `ArcaServiceError`       | Error de negocio de ARCA (códigos funcionales)                       | `errors: { code, msg, rawCode? }[]`                                                                                   |
 | `ArcaValidationError`    | Datos de entrada inválidos (también cert/clave/config)               | `field?`, `details: ValidationErrorDetail[]`                                                                          |
 | `ArcaResponseError`      | Respuesta con forma inesperada                                       | `uncertain`                                                                                                           |
 
-`ArcaTicketVigenteError` extiende `ArcaAuthError` con `retryable: false`, pero no se corrige
-con `resetLoginCooldown`: chequealo **antes** que `ArcaAuthError`.
+`ArcaTicketVigenteError` extiende `ArcaAuthError` con `retryable: true`: se resuelve esperando.
+`retryAfterMs` es lo que falta para que el cliente vuelva a llamar a WSAA (no viene con
+`alreadyAuthenticatedCooldownMs: 0`). Chequealo **antes** que `ArcaAuthError`.
 
 ```typescript
 try {
   await wsaa.getAccessTicket('wsfe');
 } catch (e) {
   if (e instanceof ArcaTicketVigenteError) {
-    // Hay un TA vigente que no tenemos: esperar a que venza (hasta 12 h)
+    // Hay un TA vigente que no tenemos: reintentar después de e.retryAfterMs
   } else if (e instanceof ArcaAuthError) {
     console.error(e.faultCode, e.retryable, e.cause);
     if (!e.retryable) {
@@ -429,6 +445,13 @@ const resp = decodeResponse(result, { numero: must(int()) }, 'autorizarResponse'
 ```
 
 - `nonEmptyStr({ min?, max? })`: string que no puede estar vacío ni tener solo espacios.
+- `str()` rechaza los caracteres que XML 1.0 no admite (controles salvo tab, LF y CR; U+FFFE y
+  U+FFFF) y los surrogates UTF-16 sueltos.
+- `datetime()` acepta `Date` (se envía en hora de Argentina) o un string ISO-8601 con segundos.
+- `list(f, minItems?, maxItems?)` / `wrapped(item, f, minItems?, maxItems?)`: en requests se verifica la
+  cantidad de elementos.
+- `dec(digits, ...)` redondea a `digits` decimales mitad al par (Round Half Even, el método que
+  indican los manuales de ARCA): `8.565` → `8.56`, `8.575` → `8.58`.
 - `importe(max?)`: `dec(2, 0, max)`. `porcentaje()`: `dec(2, 0, 100)`.
 - `decodeResponse(..., { kind: 'emision' })`: el error por defecto es un `ArcaResponseError` con
   `uncertain: true`. `error` (fábrica propia) tiene prioridad.
@@ -440,29 +463,30 @@ contrato contra el WSDL oficial, además de `mockFetch`, `soapResponse`, `soapFa
 
 ## Configuración de `WsaaClient`
 
-| Parámetro                  | Tipo                            | Default            | Descripción                                                                           |
-| -------------------------- | ------------------------------- | ------------------ | ------------------------------------------------------------------------------------- |
-| `cert`                     | `string`                        | —                  | Certificado X.509 en PEM                                                              |
-| `key`                      | `string`                        | —                  | Clave privada RSA en PEM (PKCS#1 o PKCS#8), tiene que corresponder al certificado     |
-| `keyPassphrase`            | `string`                        | —                  | Contraseña de la clave, si está encriptada                                            |
-| `production`               | `boolean`                       | `false`            | Usar WSAA de producción                                                               |
-| `endpoint`                 | `string`                        | —                  | URL propia de WSAA (proxy, mock)                                                      |
-| `tokenTTLMinutes`          | `number`                        | `720`              | Vigencia del TRA (1 a 1440). No es la vida del TA                                     |
-| `timeout`                  | `number`                        | `30000`            | Timeout HTTP en ms                                                                    |
-| `retries`                  | `number`                        | `1`                | Reintentos del login, solo ante errores de red sin enviar                             |
-| `retryDelayMs`             | `number`                        | `1000`             | Delay base del backoff exponencial                                                    |
-| `onEvent`                  | `function`                      | —                  | Callback de eventos                                                                   |
-| `ticketStorage`            | `TicketStorage`                 | —                  | Persistencia de tickets entre reinicios (recomendado)                                 |
-| `clockOffsetMs`            | `number`                        | `0`                | Offset `relojARCA - relojLocal` en ms                                                 |
-| `autoClockSkew`            | `boolean`                       | `true`             | Ajustar el offset si WSAA rechaza el TRA por reloj                                    |
-| `loginErrorCooldownMs`     | `number`                        | `60000`            | Espera tras un error transitorio (`0` = sin espera)                                   |
-| `permanentErrorCooldownMs` | `number`                        | `Infinity`         | Espera tras un error no reintentable (`Infinity` = hasta limpiarla; `0` = sin espera) |
-| `fetch`                    | `typeof fetch`                  | `globalThis.fetch` | `fetch` propio (proxy, mTLS, tests)                                                   |
-| `legacyTls`                | `'auto' \| 'never' \| 'always'` | `'auto'`           | Transporte TLS legacy para hosts con DH de 1024 bits                                  |
+| Parámetro                        | Tipo                            | Default             | Descripción                                                                           |
+| -------------------------------- | ------------------------------- | ------------------- | ------------------------------------------------------------------------------------- |
+| `cert`                           | `string`                        | —                   | Certificado X.509 en PEM                                                              |
+| `key`                            | `string`                        | —                   | Clave privada RSA en PEM (PKCS#1 o PKCS#8), tiene que corresponder al certificado     |
+| `keyPassphrase`                  | `string`                        | —                   | Contraseña de la clave, si está encriptada                                            |
+| `production`                     | `boolean`                       | `false`             | Usar WSAA de producción                                                               |
+| `endpoint`                       | `string`                        | —                   | URL propia de WSAA (proxy, mock)                                                      |
+| `tokenTTLMinutes`                | `number`                        | `720`               | Vigencia del TRA (1 a 1440). No es la vida del TA                                     |
+| `timeout`                        | `number`                        | `30000`             | Timeout HTTP en ms                                                                    |
+| `retries`                        | `number`                        | `1`                 | Reintentos del login, solo ante errores de red sin enviar                             |
+| `retryDelayMs`                   | `number`                        | `1000`              | Delay base del backoff exponencial                                                    |
+| `onEvent`                        | `function`                      | —                   | Callback de eventos                                                                   |
+| `ticketStorage`                  | `TicketStorage`                 | —                   | Persistencia de tickets entre reinicios (recomendado)                                 |
+| `clockOffsetMs`                  | `number`                        | `0`                 | Offset `relojARCA - relojLocal` en ms                                                 |
+| `autoClockSkew`                  | `boolean`                       | `true`              | Ajustar el offset si WSAA rechaza el TRA por reloj                                    |
+| `loginErrorCooldownMs`           | `number`                        | `60000`             | Espera tras un error transitorio (`0` = sin espera)                                   |
+| `permanentErrorCooldownMs`       | `number`                        | `Infinity`          | Espera tras un error no reintentable (`Infinity` = hasta limpiarla; `0` = sin espera) |
+| `alreadyAuthenticatedCooldownMs` | `number`                        | `120000` / `600000` | Espera tras `coe.alreadyAuthenticated` (producción / homologación; `0` = sin espera)  |
+| `fetch`                          | `typeof fetch`                  | `globalThis.fetch`  | `fetch` propio (proxy, mTLS, tests)                                                   |
+| `legacyTls`                      | `'auto' \| 'never' \| 'always'` | `'auto'`            | Transporte TLS legacy para hosts con DH de 1024 bits                                  |
 
 `ArcaBaseConfig`, la config común de los SDKs, tiene los mismos campos que esta tabla (incluidos
-`loginErrorCooldownMs` y `permanentErrorCooldownMs`) salvo `endpoint` (en los SDKs es
-`endpoints.wsaa`), más `cuit` (CUIT representada, se valida el dígito verificador). En un SDK,
+`loginErrorCooldownMs`, `permanentErrorCooldownMs` y `alreadyAuthenticatedCooldownMs`) salvo
+`endpoint` (en los SDKs es `endpoints.wsaa`), más `cuit` (CUIT representada, se valida el dígito verificador). En un SDK,
 `timeout`, `retries`, `retryDelayMs`, `fetch` y `legacyTls` aplican también a las llamadas al web
 service: `retries` reintenta las consultas ante errores transitorios (las emisiones nunca).
 

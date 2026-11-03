@@ -200,6 +200,12 @@ export enum Concepto {
 }
 
 // @public
+export interface ContextoReglas {
+    // (undocumented)
+    cuitEmisor?: number | string;
+}
+
+// @public
 export interface CotizacionResult {
     // (undocumented)
     codigoMoneda: string;
@@ -362,7 +368,6 @@ export interface MtxcaComprador {
 export interface MtxcaComprobanteAsociado {
     // (undocumented)
     codigoTipoComprobante: number;
-    // (undocumented)
     cuit?: number | string;
     // (undocumented)
     fechaEmision?: FechaInput;
@@ -695,10 +700,10 @@ export enum UnidadMedidaEspecial {
 export function urlQR(cuit: number | string, comprobante: ComprobanteQR, resultado?: MtxcaAutorizarResult | MtxcaInformarCAEAResult, options?: QROptions): string;
 
 // @public
-export function validateComprobanteCAE(c: MtxcaComprobanteBase): void;
+export function validateComprobanteCAE(c: MtxcaComprobanteBase, ctx?: ContextoReglas): void;
 
 // @public
-export function validateComprobanteCAEA(c: MtxcaComprobanteBase): void;
+export function validateComprobanteCAEA(c: MtxcaComprobanteBase, ctx?: ContextoReglas): void;
 
 export { ValidationErrorDetail }
 

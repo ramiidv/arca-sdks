@@ -82,7 +82,7 @@ async function main() {
       if (e.uncertain)
         console.error('El comprobante pudo haberse autorizado: verificá con ultimoComprobante/consultarComprobante.');
     } else if (e instanceof ArcaTicketVigenteError) {
-      console.error('Hay un ticket WSAA vigente que no está en el storage; esperá a que venza.');
+      console.error('WSAA ya emitió un ticket que no está en el storage; reintentá en', e.retryAfterMs, 'ms.');
     } else if (e instanceof ArcaAuthError) {
       console.error('Error de autenticación WSAA:', e.message);
     } else {

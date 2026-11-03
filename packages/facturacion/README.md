@@ -9,7 +9,7 @@ SDK de TypeScript para la factura electrónica de **ARCA** (ex AFIP): WSFEv1 (me
 
 - Todos los comprobantes de WSFEv1 (A, B, C, M, FCE MiPyME, RG 1415, liquidaciones) y de WSFEX (Factura, NC y ND E).
 - API simplificada (`facturar`, `notaCredito`, `facturarExpo`...) que calcula IVA, totales, número y fecha, y API raw con los campos de ARCA.
-- Validación local de las reglas del [manual de WSFEv1 v4.7](https://www.afip.gob.ar/ws/documentacion/manuales/manual-desarrollador-ARCA-COMPG.pdf) y del manual de WSFEX: los errores llegan con el código de la validación (ej: `10163`) antes de tocar la red.
+- Validación local de las reglas del [manual de WSFEv1 v4.8](https://www.arca.gob.ar/fe/ayuda/documentos/wsfev1-RG-4291.pdf) y del [manual de WSFEX 3.1.1](https://www.arca.gob.ar/ws/documentacion/manuales/WSFEX-Manualparaeldesarrollador_V3.1.1_ARCA.pdf): los errores llegan con el código de la validación (ej: `10163`) antes de tocar la red.
 - Las emisiones nunca se reintentan; un resultado desconocido lanza un error específico con lo necesario para recuperarlo.
 
 ## Instalación
@@ -82,37 +82,38 @@ El SDK completa el número (último autorizado + 1), la fecha (hora de Argentina
 
 `ArcaConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`.
 
-| Parámetro                  | Tipo                            | Default            | Descripción                                                                                          |
-| -------------------------- | ------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------- |
-| `cuit`                     | `number \| string`              | —                  | CUIT representada (con o sin guiones; se valida el dígito verificador)                               |
-| `cert`                     | `string`                        | —                  | Certificado X.509 (PEM)                                                                              |
-| `key`                      | `string`                        | —                  | Clave privada (PEM, PKCS#1 o PKCS#8)                                                                 |
-| `keyPassphrase`            | `string`                        | —                  | Contraseña de la clave, si está encriptada                                                           |
-| `production`               | `boolean`                       | `false`            | `true` para producción                                                                               |
-| `ticketStorage`            | `TicketStorage`                 | —                  | Persistencia del Ticket de Acceso entre reinicios (recomendado)                                      |
-| `wsaa`                     | `WsaaClient`                    | —                  | Cliente WSAA compartido con otros SDKs del mismo certificado (ej: `padron.wsaa`)                     |
-| `signal`                   | `AbortSignal`                   | —                  | Cancela todas las llamadas de la instancia (ej: al apagar la app)                                    |
-| `timeout`                  | `number`                        | `30000`            | Timeout HTTP en ms                                                                                   |
-| `retries`                  | `number`                        | `1`                | Reintentos de las consultas ante errores transitorios. Las emisiones nunca se reintentan             |
-| `retryDelayMs`             | `number`                        | `1000`             | Delay base del backoff exponencial                                                                   |
-| `tokenTTLMinutes`          | `number`                        | `720`              | Vigencia del pedido de ticket (TRA) enviado a WSAA                                                   |
-| `clockOffsetMs`            | `number`                        | `0`                | Desfase `relojARCA - relojLocal` en ms                                                               |
-| `autoClockSkew`            | `boolean`                       | `true`             | Corrige el desfase si WSAA rechaza el login por el reloj                                             |
-| `loginErrorCooldownMs`     | `number`                        | `60000`            | Espera tras un login WSAA fallido                                                                    |
-| `permanentErrorCooldownMs` | `number`                        | `Infinity`         | Espera tras un error de WSAA no reintentable (certificado, servicio no autorizado); `0` la desactiva |
-| `paramCacheTTLMs`          | `number`                        | `86400000`         | TTL del cache de tablas de parámetros (0 lo desactiva). Puntos de venta y cotizaciones no se cachean |
-| `endpoints`                | `{ wsaa?, wsfe?, wsfex? }`      | —                  | URLs propias (proxy, mock)                                                                           |
-| `legacyTls`                | `'auto' \| 'never' \| 'always'` | `'auto'`           | Transporte TLS para los hosts de producción con DH de 1024 bits (ver [Entornos](#entornos))          |
-| `fetch`                    | `typeof fetch`                  | `globalThis.fetch` | `fetch` propio (proxy, mTLS, tests)                                                                  |
-| `onEvent`                  | `(e: ArcaEvent) => void`        | —                  | Callback de eventos (ver [Eventos](#eventos))                                                        |
+| Parámetro                        | Tipo                            | Default            | Descripción                                                                                          |
+| -------------------------------- | ------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------- |
+| `cuit`                           | `number \| string`              | —                  | CUIT representada (con o sin guiones; se valida el dígito verificador)                               |
+| `cert`                           | `string`                        | —                  | Certificado X.509 (PEM)                                                                              |
+| `key`                            | `string`                        | —                  | Clave privada (PEM, PKCS#1 o PKCS#8)                                                                 |
+| `keyPassphrase`                  | `string`                        | —                  | Contraseña de la clave, si está encriptada                                                           |
+| `production`                     | `boolean`                       | `false`            | `true` para producción                                                                               |
+| `ticketStorage`                  | `TicketStorage`                 | —                  | Persistencia del Ticket de Acceso entre reinicios (recomendado)                                      |
+| `wsaa`                           | `WsaaClient`                    | —                  | Cliente WSAA compartido con otros SDKs del mismo certificado (ej: `padron.wsaa`)                     |
+| `signal`                         | `AbortSignal`                   | —                  | Cancela todas las llamadas de la instancia (ej: al apagar la app)                                    |
+| `timeout`                        | `number`                        | `30000`            | Timeout HTTP en ms                                                                                   |
+| `retries`                        | `number`                        | `1`                | Reintentos de las consultas ante errores transitorios. Las emisiones nunca se reintentan             |
+| `retryDelayMs`                   | `number`                        | `1000`             | Delay base del backoff exponencial                                                                   |
+| `tokenTTLMinutes`                | `number`                        | `720`              | Vigencia del pedido de ticket (TRA) enviado a WSAA                                                   |
+| `clockOffsetMs`                  | `number`                        | `0`                | Desfase `relojARCA - relojLocal` en ms                                                               |
+| `autoClockSkew`                  | `boolean`                       | `true`             | Corrige el desfase si WSAA rechaza el login por el reloj                                             |
+| `loginErrorCooldownMs`           | `number`                        | `60000`            | Espera tras un login WSAA fallido                                                                    |
+| `permanentErrorCooldownMs`       | `number`                        | `Infinity`         | Espera tras un error de WSAA no reintentable (certificado, servicio no autorizado); `0` la desactiva |
+| `alreadyAuthenticatedCooldownMs` | `number`                        | 2 min / 10 min     | Espera tras `coe.alreadyAuthenticated` (producción / homologación); `0` la desactiva                 |
+| `paramCacheTTLMs`                | `number`                        | `86400000`         | TTL del cache de tablas de parámetros (0 lo desactiva). Puntos de venta y cotizaciones no se cachean |
+| `endpoints`                      | `{ wsaa?, wsfe?, wsfex? }`      | —                  | URLs propias (proxy, mock)                                                                           |
+| `legacyTls`                      | `'auto' \| 'never' \| 'always'` | `'auto'`           | Transporte TLS para los hosts de producción con DH de 1024 bits (ver [Entornos](#entornos))          |
+| `fetch`                          | `typeof fetch`                  | `globalThis.fetch` | `fetch` propio (proxy, mTLS, tests)                                                                  |
+| `onEvent`                        | `(e: ArcaEvent) => void`        | —                  | Callback de eventos (ver [Eventos](#eventos))                                                        |
 
 Con `wsaa` compartido se ignoran `cert`, `key`, `keyPassphrase`, `ticketStorage`, `tokenTTLMinutes`,
-`clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs` y `endpoints.wsaa`:
+`clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs`, `alreadyAuthenticatedCooldownMs` y `endpoints.wsaa`:
 valen los del cliente compartido.
 
 > **Persistí el Ticket de Acceso.** WSAA rechaza el login si ya existe un ticket vigente para el
 > certificado y el servicio. Sin `ticketStorage`, cada reinicio del proceso deja la instancia sin
-> poder facturar hasta que venza el ticket anterior (hasta 12 horas, `ArcaTicketVigenteError`).
+> poder facturar durante el lapso de retención de WSAA (minutos), con `ArcaTicketVigenteError`.
 > Usá `FileTicketStorage` o implementá `TicketStorage` sobre tu base de datos (ver `@ramiidv/arca-common`).
 
 ## API
@@ -124,17 +125,17 @@ arrays sin el contenedor del XML (`resultGet.iva` en lugar de `ResultGet.Iva.Ali
 
 ### Facturación (WSFEv1)
 
-| Método                                            | Descripción                                                                                 |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `facturar(opts)`                                  | Emite un comprobante calculando IVA y totales                                               |
-| `notaCredito(opts)` / `notaDebito(opts)`          | NC/ND asociada a `comprobanteOriginal` (el tipo se infiere: `FACTURA_B` → `NOTA_CREDITO_B`) |
-| `armarComprobante(opts)`                          | Valida y arma el detalle sin enviarlo: `request`, `importes` e `intento`                    |
-| `recuperarComprobante(intento)`                   | Resuelve un resultado incierto: `autorizado`, `no_emitido` o `conflicto`                    |
-| `urlQR(factura, datos?, options?)`                | URL del QR de un comprobante emitido, con el CUIT de la instancia                           |
-| `crearFactura(request)`                           | API raw: `FECAESolicitar` con uno o más comprobantes                                        |
-| `crearFacturaAuto(ptoVta, cbteTipo, invoice)`     | API raw con el número calculado                                                             |
-| `ultimoComprobante(ptoVta, cbteTipo)`             | Último número autorizado (`siguienteComprobante`: + 1)                                      |
-| `consultarComprobante(cbteTipo, ptoVta, cbteNro)` | Consulta un comprobante (`FECompConsultar`)                                                 |
+| Método                                            | Descripción                                                                                                                                                                                                                                       |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `facturar(opts)`                                  | Emite un comprobante calculando IVA y totales                                                                                                                                                                                                     |
+| `notaCredito(opts)` / `notaDebito(opts)`          | NC/ND asociada a `comprobanteOriginal` (el tipo se infiere de su clase: `FACTURA_B` o `RECIBO_B` → `NOTA_CREDITO_B`, `FCE_NOTA_DEBITO_A` → `FCE_NOTA_CREDITO_A` de anulación; una NC FCE no asocia otra NC FCE; validaciones 10040, 10157, 10183) |
+| `armarComprobante(opts)`                          | Valida y arma el detalle sin enviarlo: `request`, `importes` e `intento`                                                                                                                                                                          |
+| `recuperarComprobante(intento)`                   | Resuelve un resultado incierto: `autorizado`, `no_emitido` o `conflicto`                                                                                                                                                                          |
+| `urlQR(factura, datos?, options?)`                | URL del QR de un comprobante emitido, con el CUIT de la instancia                                                                                                                                                                                 |
+| `crearFactura(request)`                           | API raw: `FECAESolicitar` con uno o más comprobantes                                                                                                                                                                                              |
+| `crearFacturaAuto(ptoVta, cbteTipo, invoice)`     | API raw con el número calculado                                                                                                                                                                                                                   |
+| `ultimoComprobante(ptoVta, cbteTipo)`             | Último número autorizado (`siguienteComprobante`: + 1)                                                                                                                                                                                            |
+| `consultarComprobante(cbteTipo, ptoVta, cbteNro)` | Consulta un comprobante (`FECompConsultar`)                                                                                                                                                                                                       |
 
 `FacturaResult`: `aprobada`, `cae?`, `caeVencimiento?`, `cbteNro`, `ptoVta`, `cbteTipo`, `importes`
 (`total`, `neto`, `iva`, `exento`, `noGravado`, `tributos`, `descuento?`), `observaciones`,
@@ -157,7 +158,7 @@ arrays sin el contenedor del XML (`resultGet.iva` en lugar de `ResultGet.Iva.Ali
 | `canMisMonExt`              | `'S'` si se cancela en la misma moneda extranjera                                                                       |
 | `descuentoGlobal`           | Monto final (IVA incluido) que se prorratea entre alícuotas, exento y no gravado                                        |
 | `tributos`                  | `{ id, desc?, baseImp, alic, importe }[]` (`TributoTipo`)                                                               |
-| `cbtesAsoc`, `periodoAsoc`  | Comprobantes o período asociados (NC/ND)                                                                                |
+| `cbtesAsoc`, `periodoAsoc`  | Comprobantes o período asociados (NC/ND); `cbtesAsoc` solo con los tipos de `CBTES_ASOCIABLES` (validación 10040)       |
 | `opcionales`, `actividades` | Datos opcionales (`getTiposOpcional`) y actividades (`getActividades`)                                                  |
 | `compradores`               | `{ docTipo, docNro, porcentaje }[]` para comprobantes con varios receptores                                             |
 
@@ -253,6 +254,8 @@ import { ArcaFacturacion, CbteTipo, CondicionIva, DocTipo, IvaTipo } from '@rami
 declare const arca: ArcaFacturacion;
 
 // Factura FCE de productos (concepto 1): vtoPago es obligatorio igual (validación 10163)
+// y no puede ser anterior a hoy (10164)
+const vtoPago = new Date(Date.now() + 30 * 86_400_000);
 await arca.facturar({
   ptoVta: 1,
   cbteTipo: CbteTipo.FCE_FACTURA_A,
@@ -260,7 +263,7 @@ await arca.facturar({
   docNro: 30712345671,
   condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
   items: [{ neto: 100000, iva: IvaTipo.IVA_21 }],
-  vtoPago: '2026-12-15',
+  vtoPago,
   opcionales: [
     { id: '2101', valor: '0110599500000041817221' }, // CBU del emisor
     { id: '27', valor: 'SCA' }, // transferencia: SCA (circulación abierta) o ADC (agente de depósito colectivo)
@@ -284,25 +287,35 @@ validación 10175).
 
 #### Reglas del manual que se validan antes de enviar
 
-| Regla                                                                                                          | Validación          |
-| -------------------------------------------------------------------------------------------------------------- | ------------------- |
-| Clase A y M (1-5, 34, 39, 51-54, 60, 63, 201-203): receptor con CUIT y condición RI o monotributo              | 10013, 10243        |
-| Servicios (concepto 2 y 3): `servicio.desde`/`hasta` y vencimiento de pago                                     | 10032, 10049        |
-| Facturas FCE (201, 206, 211): `vtoPago` obligatorio con cualquier concepto                                     | 10163               |
-| Facturas FCE: opcionales 2101 (CBU) y 27 (`SCA` o `ADC`) obligatorios; sin 22                                 | 10168, 10216, 10171 |
-| NC/ND FCE: opcional 22 (anulación `S` o `N`) obligatorio; sin 2101, 2102 ni 27                                 | 10173, 10167, 10172 |
-| FCE: 2101 de 22 dígitos; 2102 (alias) de 6 a 20 caracteres; 27 `SCA` o `ADC`                                   | 10165, 10166, 10215 |
-| Fuera de FCE: sin opcionales 2101, 2102, 22 ni 27                                                              | 10169               |
-| NC/ND FCE de productos: `vtoPago` solo si son de anulación                                                     | 10175               |
-| FCE: receptor con CUIT; NC/ND FCE con `cbtesAsoc` y sin `periodoAsoc`                                          | 10176, 10153, 10196 |
-| NC/ND: `cbtesAsoc` o `periodoAsoc`                                                                             | 10197               |
-| Factura/NC/ND B al No Categorizado (23000000000) con importes gravados: tributo 13 (Percepción de IVA No Cat.) | 10067, 10283        |
-| Moneda: `PES` con cotización 1; moneda extranjera con cotización, salvo `canMisMonExt: 'S'`                    | 10038, 10039, 10241 |
-| Compradores: al menos 2, CUIT/CUIL/CDI, sin repetir, suman 100 y el receptor es el de mayor porcentaje         | 10136-10147         |
-| API raw: `ImpTotal` = suma de importes; `ImpIVA` y `ImpTrib` = suma de sus arrays (margen del manual)          | 10048, 10023, 10029 |
-| API raw: `CondicionIVAReceptorId` obligatorio, también con `DocTipo` 99                                        | 10246               |
+| Regla                                                                                                                                                                                                                   | Validación                        |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| Clase A y M (1-5, 34, 39, 51-54, 60, 63, 201-203): receptor con CUIT y condición RI o monotributo                                                                                                                       | 10013, 10243                      |
+| Clase B: receptor exento, consumidor final, no categorizado, exterior, IVA liberado o no alcanzado                                                                                                                      | 10243                             |
+| Tipo 49 (Bienes Usados): consumidor final, concepto 1 y opcionales 91 y 93                                                                                                                                              | 10243, 10085, 10078, 10084        |
+| `docTipo` 31 (FCI CNV): `docNro` de hasta 4 dígitos y condición 15; `docTipo` 99 con `docNro` 0; otro `docTipo` con `docNro`; tipo 49 sin `docTipo` 99                                                                  | 10271, 10272, 10015               |
+| El receptor y los compradores no son el emisor                                                                                                                                                                          | 10069, 10140                      |
+| Servicios (concepto 2 y 3): `servicio.desde`/`hasta` y vencimiento de pago                                                                                                                                              | 10032, 10049                      |
+| Facturas FCE (201, 206, 211): `vtoPago` obligatorio con cualquier concepto                                                                                                                                              | 10163                             |
+| Facturas FCE: opcionales 2101 (CBU) y 27 (`SCA` o `ADC`) obligatorios; sin 22                                                                                                                                           | 10168, 10216, 10171               |
+| NC/ND FCE: opcional 22 (anulación `S` o `N`) obligatorio; sin 2101, 2102 ni 27                                                                                                                                          | 10173, 10167, 10172               |
+| FCE: 2101 de 22 dígitos; 2102 (alias) de 6 a 20 caracteres; 27 `SCA` o `ADC`                                                                                                                                            | 10165, 10166, 10215               |
+| Fuera de FCE: sin opcionales 2101, 2102, 22 ni 27                                                                                                                                                                       | 10169                             |
+| NC/ND FCE de productos: `vtoPago` solo si son de anulación                                                                                                                                                              | 10175                             |
+| FCE: receptor con CUIT, distinto de 23000000000; NC/ND FCE con `cbtesAsoc` y sin `periodoAsoc`                                                                                                                          | 10176, 10178, 10153, 10196        |
+| NC/ND FCE: cada asociado con `cuit` y `fecha`; sin anulación asocian una sola factura FCE y, además, remitos; en una anulación, la ND asocia una NC y la NC una factura o ND                                            | 10151, 10158, 10156, 10157, 10183 |
+| FCE: `vtoPago` no anterior a la fecha de presentación                                                                                                                                                                   | 10164                             |
+| NC/ND: `cbtesAsoc` o `periodoAsoc`                                                                                                                                                                                      | 10197                             |
+| `cbtesAsoc`: solo en los tipos y con los asociados que admite la tabla del manual (`CBTES_ASOCIABLES`)                                                                                                                  | 10040                             |
+| `opcionales`: solo en los tipos que los admiten                                                                                                                                                                         | 10068                             |
+| Seguros de Caución: 2901/2902 en 1, 2, 3, 6, 7 y 8, de 1 a 30 caracteres, en igual cantidad, hasta 6000 opcionales                                                                                                      | 10273-10276, 10280, 10281         |
+| Factura/NC/ND B al No Categorizado (23000000000) con importes gravados y sin tributos: tributo 13 (con otros tributos, la 10283 solo observa)                                                                           | 10067                             |
+| Moneda: `PES` con cotización 1; extranjera con cotización (hasta 4 enteros), salvo `canMisMonExt: 'S'`                                                                                                                  | 10038, 10039, 10241               |
+| Compradores: solo A, B, C o M (no FCE) con concepto 1; al menos 2 (uno es el receptor), CUIT/CUIL/CDI de 11 dígitos, sin repetir, porcentajes con 2 decimales que suman 100 y el receptor entre los de mayor porcentaje | 10134-10147, 10150, 10194         |
+| API raw: `ImpTotal` = suma de importes; `ImpIVA` y `ImpTrib` = suma de sus arrays (margen del manual)                                                                                                                   | 10048, 10023, 10029               |
+| API raw: `CondicionIVAReceptorId` obligatorio, también con `DocTipo` 99                                                                                                                                                 | 10246                             |
 
-En la API raw los importes se redondean a 2 decimales y `MonCotiz` a 6 (Double 13+2 y 4+6 del manual).
+En la API raw los importes se redondean a 2 decimales y `MonCotiz` a 6 (Double 13+2 y 4+6 del manual),
+mitad al par (Round Half Even, el criterio de redondeo del manual), igual que los importes que calcula la API simplificada.
 
 #### Elegir el tipo de comprobante
 
@@ -373,6 +386,12 @@ const res = await arca.facturarExpo(opts); // Imp_total: 950
 
 Reglas de WSFEX que aplica el SDK:
 
+- Moneda: con `PES` la cotización es 1 (1601); en moneda extranjera es obligatoria (hasta 4 enteros,
+  1600), salvo `canMisMonExt: 'S'`: ahí se puede omitir y ARCA registra la cotización oficial
+  (1602). `canMisMonExt` solo se informa en la Factura E (19) en moneda extranjera, ni siquiera `'N'`
+  con `PES` (1605). Sin cotización, `Moneda_ctz` no se envía.
+- Asociados: la Factura E solo asocia remitos 88, 89, 91, 993 y 994 (1755); un solo asociado salvo
+  remitos 88/89 (1754); las NC/ND de servicios llevan asociados (2047).
 - Cliente: `cuitPais` (ver `getCuitsPaisExpo`), `idImpositivo` o los dos (validación 1580). Sin
   `cuitPais` se envía `Cuit_pais_cliente` 0 (el WSDL lo declara obligatorio).
 - `formaPago` es obligatoria solo en la Factura E (19) (validación 1620).
@@ -467,7 +486,8 @@ cotización enviada, pasá `datos.ctz` a `urlQR`.
   `intentoDesdeComprobante`, `coincideConIntento`, `facturaResultDesdeConsulta`, `generarUrlQR`,
   `urlQRDesdeFactura`, `formatFechaHora`.
 - Enums: `CbteTipo`, `Concepto`, `DocTipo`, `CondicionIva`, `IvaTipo` (`IVA_RATES`), `Moneda`,
-  `TributoTipo`, `TipoExpo`; `NOTA_CREDITO_MAP` y `NOTA_DEBITO_MAP`.
+  `TributoTipo`, `TipoExpo`; `NOTA_CREDITO_MAP` y `NOTA_DEBITO_MAP` (comprobante original → NC/ND que lo asocia) y
+  `CBTES_ASOCIABLES` (tipos que se pueden asociar a cada tipo, validación 10040).
 - Códigos: `WSFE_ERRORES_INTERNOS`, `WSFEX_ERRORES_INTERNOS`, `WSFE_ERRORES_AUTH`,
   `WSFEX_ERRORES_AUTH`, `WSFE_NUMERO_NO_CORRESPONDE` (10016), `WSFE_CAEA_NUMERO_NO_CORRESPONDE` (703).
 - Clientes de bajo nivel: `WsfeClient`, `WsfexClient`, `WsaaClient`.

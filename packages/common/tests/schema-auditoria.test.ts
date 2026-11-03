@@ -10,12 +10,16 @@ import {
   encodeRequest,
   formatDateTimeAR,
   importe,
+  int,
   nonEmptyStr,
+  opt,
   porcentaje,
   roundHalfEven,
   roundHalfUp,
+  list,
   siNo,
   str,
+  wrapped,
 } from '../src/schema.js';
 
 const encodeErrors = (input: unknown, schema: Parameters<typeof encodeRequest>[1]) => {
@@ -95,8 +99,8 @@ describe('nonEmptyStr / importe / porcentaje', () => {
   });
 
   it('importe: 2 decimales, no negativo, tope opcional', () => {
-    expect(encodeRequest({ a: 10.005, b: 0 }, { a: importe(), b: importe(100) }, 't')).toEqual({
-      a: '10.01',
+    expect(encodeRequest({ a: 10.015, b: 0 }, { a: importe(), b: importe(100) }, 't')).toEqual({
+      a: '10.02',
       b: '0.00',
     });
     expect(encodeErrors({ a: -1, b: 100.01 }, { a: importe(), b: importe(100) })).toEqual([
@@ -119,6 +123,22 @@ describe('encodeRequest: casos borde', () => {
     expect(encodeErrors({ d: '01/11/2026 10:00' }, { d: datetime() })).toHaveLength(1);
     // Sin zona horaria se envía tal cual (el servicio la interpreta como hora local de ARCA).
     expect(encodeRequest({ d: '2026-11-01T10:00:00' }, { d: datetime() }, 't')).toEqual({ d: '2026-11-01T10:00:00' });
+    // xsd:dateTime exige los segundos.
+    expect(encodeErrors({ d: '2026-11-01T08:30' }, { d: datetime() })).toHaveLength(1);
+    expect(encodeErrors({ d: '2026-11-01T08:30-03:00' }, { d: datetime() })).toHaveLength(1);
+  });
+
+  it('list/wrapped: maxItems en requests', () => {
+    expect(encodeErrors({ l: ['a', 'b', 'c'] }, { l: list(str(), 1, 2) })).toEqual([
+      'l debe tener como máximo 2 elemento(s)',
+    ]);
+    expect(encodeRequest({ l: ['a', 'b'] }, { l: wrapped('x', str(), 1, 2) }, 't')).toEqual({ l: { x: ['a', 'b'] } });
+  });
+
+  it('str rechaza caracteres de control que XML 1.0 no admite (tab, LF y CR sí)', () => {
+    expect(encodeErrors({ s: 'a\u0000b' }, { s: str() })).toEqual(['s: tiene caracteres de control que XML no admite']);
+    expect(encodeErrors({ s: 'a\u001Fb' }, { s: str() })).toHaveLength(1);
+    expect(encodeRequest({ s: 'a\tb\nc\rd' }, { s: str() }, 't')).toEqual({ s: 'a\tb\nc\rd' });
   });
 
   it('base64 tiene que ser string', () => {
@@ -187,5 +207,21 @@ describe('decodeResponse: casos borde', () => {
     expect(() => decodeResponse({ n: 'x' }, schema, 'r', { kind: 'emision', error: (m) => new Propio(m) })).toThrow(
       Propio,
     );
+  });
+});
+
+describe('str: texto que XML no admite', () => {
+  it('rechaza surrogates UTF-16 sueltos y acepta pares válidos (emoji)', () => {
+    expect(encodeErrors({ s: 'a\uD800b' }, { s: str() })).toHaveLength(1);
+    expect(encodeErrors({ s: 'a\uDC00' }, { s: str() })).toHaveLength(1);
+    expect(encodeRequest({ s: 'ok 😀' }, { s: str() }, 't')).toEqual({ s: 'ok 😀' });
+  });
+
+  it('maxItems también con opt() y sin tope', () => {
+    expect(encodeErrors({ l: [1, 2] }, { l: opt(list(int(), 1, 1)) })).toEqual([
+      'l debe tener como máximo 1 elemento(s)',
+    ]);
+    expect(encodeErrors({}, { l: opt(wrapped('x', int(), 1, 1)) })).toEqual([]);
+    expect(encodeRequest({ l: [1, 2, 3] }, { l: list(int()) }, 't')).toEqual({ l: [1, 2, 3] });
   });
 });

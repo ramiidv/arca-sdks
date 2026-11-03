@@ -81,4 +81,5 @@ export type { QROptions } from '@ramiidv/arca-common';
 
 // Validación y redondeo
 export { validateComprobanteCAE, validateComprobanteCAEA } from './validation.js';
+export type { ContextoReglas } from './validation.js';
 export { roundImporte, roundDecimal } from './format.js';

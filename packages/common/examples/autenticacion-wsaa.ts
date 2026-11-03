@@ -40,8 +40,9 @@ async function main() {
     console.log('Token padrón:', `${ticketPadron.token.slice(0, 40)}...`);
   } catch (e) {
     if (e instanceof ArcaTicketVigenteError) {
-      // Hay un TA vigente que no está en memoria ni en el storage: esperar a que venza.
-      console.error('TA vigente inaccesible para', e.service);
+      // Hay un TA vigente que no está en memoria ni en el storage: WSAA rechaza
+      // los pedidos repetidos durante un lapso de retención (minutos).
+      console.error('TA vigente inaccesible para', e.service, '- reintentar en', e.retryAfterMs, 'ms');
     } else if (e instanceof ArcaAuthError && !e.retryable) {
       // Error que no se resuelve reintentando (ej: coe.notAuthorized, el
       // certificado no está asociado al servicio): el cliente no vuelve a pedir
@@ -49,7 +50,7 @@ async function main() {
       console.error('Login rechazado:', e.faultCode, e.message);
       wsaa.resetLoginCooldown('ws_sr_padron_a13');
       // clearTicket/clearAllTickets borran además los tickets: no los uses con un
-      // TA vigente, porque WSAA no emite otro hasta que venza (hasta 12 horas).
+      // TA vigente, porque WSAA rechaza los pedidos repetidos durante un lapso de retención.
     } else {
       throw e;
     }

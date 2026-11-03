@@ -52,8 +52,8 @@ const IMPORTE_SUBTOTAL = dec(2, -IMPORTE_MAX, IMPORTE_MAX);
 const IMPORTE_TOTAL = dec(2, 0, IMPORTE_MAX);
 /** `DecimalSimpleType`: cantidad, precio unitario, bonificación. */
 const DECIMAL = dec(6, 0, DECIMAL_MAX);
-/** `PorcentajeSimpleType`. */
-const PORCENTAJE = dec(2, 0, 100);
+/** `PorcentajeSimpleType`: porcentaje de titularidad de un comprador: mayor a 0 y menor a 100 (424, 425). */
+const PORCENTAJE = dec(2, 0, 99.99, true);
 /** `xsd:long` de un número de documento (la API acepta number o string; ver `serialize.ts`). */
 const DOCUMENTO = str({ pattern: /^\d{1,18}$/ });
 /** CAE/CAEA (`xsd:long` de 14 dígitos). */
@@ -65,7 +65,7 @@ export const CAEA = str({ pattern: /^\d{14}$/ });
 
 const ITEM: Schema = {
   unidadesMtx: opt(int(1, 999999)),
-  codigoMtx: opt(nonEmptyStr()),
+  codigoMtx: opt(nonEmptyStr({ max: 13 })),
   codigo: opt(nonEmptyStr({ max: 50 })),
   descripcion: must(nonEmptyStr({ max: 4000 })),
   cantidad: opt(DECIMAL),
@@ -87,19 +87,19 @@ const COMPROBANTE_ASOCIADO: Schema = {
 
 const OTRO_TRIBUTO: Schema = {
   codigo: must(CODIGO),
-  descripcion: opt(nonEmptyStr()),
+  descripcion: opt(nonEmptyStr({ max: 25 })),
   baseImponible: must(IMPORTE_TOTAL),
   importe: must(IMPORTE_TOTAL),
 };
 
 const DATO_ADICIONAL: Schema = {
   t: must(CODIGO),
-  c1: opt(nonEmptyStr()),
-  c2: opt(nonEmptyStr()),
-  c3: opt(nonEmptyStr()),
-  c4: opt(nonEmptyStr()),
-  c5: opt(nonEmptyStr()),
-  c6: opt(nonEmptyStr()),
+  c1: opt(nonEmptyStr({ max: 50 })),
+  c2: opt(nonEmptyStr({ max: 50 })),
+  c3: opt(nonEmptyStr({ max: 50 })),
+  c4: opt(nonEmptyStr({ max: 50 })),
+  c5: opt(nonEmptyStr({ max: 50 })),
+  c6: opt(nonEmptyStr({ max: 50 })),
 };
 
 const COMPRADOR: Schema = {
@@ -154,7 +154,7 @@ const ARRAYS: Schema = {
   ),
   datosAdicionales: xml('arrayDatosAdicionales', lista('datoAdicional', obj(DATO_ADICIONAL))),
   compradores: xml('arrayCompradores', lista('comprador', obj(COMPRADOR))),
-  actividades: xml('arrayActividades', lista('actividad', obj({ codigo: must(int(1, Number.MAX_SAFE_INTEGER)) }))),
+  actividades: xml('arrayActividades', lista('actividad', obj({ codigo: must(int(1, 999999)) }))),
 };
 
 /** `ComprobanteType` de `autorizarComprobante` / `autorizarAjusteIVA` (sin datos de CAEA). */

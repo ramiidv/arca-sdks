@@ -92,7 +92,11 @@ function readComplexType(node: XmlNode): XsdComplexType {
   return { elements };
 }
 
-/** Lee los tipos de uno o más documentos (WSDL con `wsdl:types` o XSD sueltos). */
+/**
+ * Lee los tipos de uno o más documentos (WSDL con `wsdl:types` o XSD sueltos).
+ * Resuelve la herencia (`complexContent/extension`) en los tipos con nombre y
+ * en los anónimos (inline), en cualquier nivel.
+ */
 export function loadXsdTypes(...documents: string[]): XsdTypes {
   const types: XsdTypes = { complexTypes: new Map(), elements: new Map() };
   for (const doc of documents) {
@@ -114,7 +118,16 @@ export function loadXsdTypes(...documents: string[]): XsdTypes {
       return base ? resolve(base, seen) : [];
     });
   };
-  for (const t of types.complexTypes.values()) t.elements = resolve(t);
+  // También los tipos anónimos (inline), en cualquier nivel.
+  const resolved = new Set<XsdComplexType>();
+  const resolveAll = (t: XsdComplexType): void => {
+    if (resolved.has(t)) return;
+    resolved.add(t);
+    t.elements = resolve(t);
+    for (const e of t.elements) if (e.inline) resolveAll(e.inline);
+  };
+  for (const t of types.complexTypes.values()) resolveAll(t);
+  for (const el of types.elements.values()) if (el.inline) resolveAll(el.inline);
   return types;
 }
 

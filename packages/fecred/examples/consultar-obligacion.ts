@@ -27,9 +27,8 @@ async function main() {
     console.log('No obligada a recibir FCE');
   }
 
-  // Sin fecha: si está obligada y desde cuándo
-  const obligado = await fecred.consultarObligadoRecepcion('30712345671');
-  console.log(obligado.obligado, obligado.desde);
+  // `consultarObligadoRecepcion` (sin fecha) está deprecada por el manual (§2.4.13):
+  // su información es incompleta. Usá consultarMontoObligadoRecepcion.
 }
 
 main().catch(console.error);

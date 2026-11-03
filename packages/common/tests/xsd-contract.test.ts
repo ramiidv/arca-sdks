@@ -62,6 +62,22 @@ describe('checkSchemaAgainstXsd', () => {
     ).toEqual([]);
   });
 
+  it('resuelve la herencia en tipos anónimos (complexContent/extension inline)', () => {
+    const inline = loadXsdTypes(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:tns="urn:t">
+      <xs:complexType name="Base"><xs:sequence><xs:element name="ptoVta" type="xs:int"/></xs:sequence></xs:complexType>
+      <xs:element name="consultar"><xs:complexType><xs:sequence>
+        <xs:element name="filtro"><xs:complexType><xs:complexContent><xs:extension base="tns:Base"><xs:sequence>
+          <xs:element name="nro" type="xs:long"/>
+        </xs:sequence></xs:extension></xs:complexContent></xs:complexType></xs:element>
+      </xs:sequence></xs:complexType></xs:element>
+    </xs:schema>`);
+    expect(
+      checkSchemaAgainstXsd({ filtro: obj({ ptoVta: int(), nro: int() }) }, 'consultar', inline, {
+        direction: 'request',
+      }),
+    ).toEqual([]);
+  });
+
   it('detecta nombre inexistente, orden distinto y obligatorio faltante', () => {
     const problems = checkSchemaAgainstXsd({ sign: str(), token: str(), firma: opt(str()) }, 'Auth', types, {
       direction: 'request',

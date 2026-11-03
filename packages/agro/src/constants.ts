@@ -24,12 +24,20 @@ export const CPE_NAMESPACE = 'https://serviciosjava.afip.gob.ar/wscpe/';
 
 /**
  * Tipos de carta de porte (`TipoCPE`, manual WSCPE "Tipos de Datos Simples").
- * Los tipos 284-287 (derivados granarios) no están soportados por este SDK.
+ * Los terminados en `_DG` son de derivados granarios.
  */
 export const TIPO_CPE = {
   AUTOMOTOR: 74,
   FERROVIARIA: 75,
   AUTOMOTOR_FLETE_CORTO: 274,
+  /** CPEDG - Automotor. */
+  AUTOMOTOR_DG: 284,
+  /** CPEDG - Ferroviaria. */
+  FERROVIARIA_DG: 285,
+  /** CPEDG - Emisión Destino. */
+  EMISION_DESTINO_DG: 286,
+  /** CPEDG - Otros Medios Terrestres (ductos). */
+  DUCTOS_DG: 287,
 } as const;
 
 /** Estados de una carta de porte (manual WSCPE §2.7.1). */

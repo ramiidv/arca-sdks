@@ -222,8 +222,9 @@ describe('regresiones', () => {
     );
   });
 
-  it('los importes con 3 decimales se redondean bien (1.005 → 1.01)', () => {
-    expect(calcularTotales([{ total: 1.005, exento: true }]).importes.total).toBe(1.01);
+  it('los importes con 3 decimales se redondean mitad al par (1.005 → 1.00, 1.015 → 1.02)', () => {
+    expect(calcularTotales([{ total: 1.005, exento: true }]).importes.total).toBe(1);
+    expect(calcularTotales([{ total: 1.015, exento: true }]).importes.total).toBe(1.02);
   });
 
   it('calcularTotales standalone valida los items', () => {

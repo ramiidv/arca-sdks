@@ -192,12 +192,13 @@ describe('condicionIvaDesdePadron: errores de la constancia y casos especiales',
     expect(r.motivo).toContain('régimen general: No cumple con las condiciones');
   });
 
-  it('errorConstancia con impuestos que no definen la condición → null y advierte el error', () => {
+  it('errorConstancia con impuestos que no definen la condición → null, por la constancia (no "consumidor final")', () => {
     const r = condicionIvaDesdePadron(
       a5({ impuestos: [imp(11, 'GANANCIAS PERSONAS FISICAS')], errorConstancia: { error: [LIMITADA] } }),
     );
     expect(r.condicionIva).toBeNull();
-    expect(r.motivo).toMatch(/no alcanza para determinar/);
+    expect(r.motivo).toMatch(/ARCA no emitió la constancia/);
+    expect(r.motivo).not.toMatch(/consumidor final/);
     expect(r.motivo).toContain(LIMITADA);
   });
 

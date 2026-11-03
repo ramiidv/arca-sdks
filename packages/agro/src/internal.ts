@@ -26,6 +26,32 @@ export const CODIGOS_ADMITIDOS: Readonly<Record<AgroServiceName, readonly number
   WSLPG: [1021],
 };
 
+/**
+ * Código con el que el servicio informa en `errores` que no hay registros para
+ * los parámetros de búsqueda. En una consulta de lista no es un error: la lista
+ * vuelve vacía (ver `soloSinRegistros`).
+ *
+ * - WSLPG 600: "No existen datos en las bases de la Administración según los
+ *   parámetros de búsqueda informados" (manual WSLPG §1.7, para todos los métodos).
+ */
+export const CODIGO_SIN_REGISTROS: Readonly<Partial<Record<AgroServiceName, number>>> = { WSLPG: 600 };
+
+/** Un error que cancela la operación: código no numérico o no admitido (ver `CODIGOS_ADMITIDOS`). */
+const esFatal = (e: ServiceErrorDetail, service: AgroServiceName): boolean =>
+  e.rawCode !== undefined || !CODIGOS_ADMITIDOS[service].includes(e.code);
+
+/**
+ * `true` si el único error que cancela la operación es "sin registros" (ver
+ * `CODIGO_SIN_REGISTROS`); un error admitido junto al 600 no cambia el
+ * resultado. Solo para consultas de lista: en una emisión o en una consulta
+ * de un único registro el código sigue siendo un error.
+ */
+export function soloSinRegistros(node: Record<string, unknown>, service: AgroServiceName): boolean {
+  const codigo = CODIGO_SIN_REGISTROS[service];
+  const fatales = extractErrors(node).filter((e) => esFatal(e, service));
+  return codigo !== undefined && fatales.length > 0 && fatales.every((e) => e.code === codigo);
+}
+
 const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 const asArray = (v: unknown): unknown[] =>
@@ -79,9 +105,7 @@ export function checkErrors(
   conResultado?: (node: Record<string, unknown>) => boolean,
 ): ServiceErrorDetail[] {
   const errors = extractErrors(node);
-  const admitidos = CODIGOS_ADMITIDOS[service];
-  const fatales = errors.filter((e) => e.rawCode !== undefined || !admitidos.includes(e.code));
-  if (fatales.length > 0) {
+  if (errors.some((e) => esFatal(e, service))) {
     const uncertain = kind === 'emision' && conResultado !== undefined && conResultado(node);
     throw new ArcaAgroServiceError(
       `${service} ${method}: ${errors.map((e) => `[${e.rawCode ?? e.code}] ${e.msg}`).join(', ')}` +

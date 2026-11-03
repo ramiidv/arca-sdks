@@ -10,8 +10,8 @@ type AgroService = keyof typeof WSAA_SERVICES;
 
 /**
  * Cliente de los servicios agropecuarios de ARCA: WSCPE (Carta de Porte
- * Electrónica) y WSLPG (Liquidación Primaria de Granos), con autenticación
- * WSAA automática.
+ * Electrónica) y WSLPG (Liquidación Primaria y Secundaria de Granos y
+ * certificación primaria), con autenticación WSAA automática.
  *
  * @example
  * ```ts
@@ -26,9 +26,9 @@ type AgroService = keyof typeof WSAA_SERVICES;
  * ```
  */
 export class ArcaAgro extends ArcaSdkBase<AgroService> {
-  /** WSCPE: Carta de Porte Electrónica (automotor y ferroviaria). */
+  /** WSCPE: Carta de Porte Electrónica de granos (automotor y ferroviaria) y de derivados granarios (DG). */
   public readonly cpe: CpeClient;
-  /** WSLPG: Liquidación Primaria de Granos y certificaciones. */
+  /** WSLPG: Liquidación Primaria y Secundaria de Granos, ajustes, anticipos y certificaciones. */
   public readonly lpg: LpgClient;
 
   /** @throws ArcaValidationError si el CUIT es inválido. */

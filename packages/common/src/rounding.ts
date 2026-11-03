@@ -13,7 +13,7 @@ export function roundHalfUp(value: number, digits: number): number {
 
 /**
  * Redondea a `digits` decimales, mitad al par ("Round Half Even", el que
- * especifica el manual de WSMTXCA), sobre el valor decimal que se escribió:
+ * especifican los manuales de ARCA), sobre el valor decimal que se escribió:
  * `8.565` → `8.56`, `8.575` → `8.58`, `2.675` → `2.68` aunque en binario
  * sean `8.5649999…`/`8.57499999…`/`2.67499999…`. Simétrico para negativos.
  */

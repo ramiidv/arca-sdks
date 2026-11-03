@@ -42,24 +42,50 @@ export interface AjusteConsultaResultado extends ConAdvertencias {
 }
 
 // @public
-export interface AjusteCreditoDebitoLpg {
+export interface AjusteContratoParams {
+    // (undocumented)
+    ajusteBase: {
+        ptoEmision: number;
+        nroOrden: number;
+        nroContrato: number;
+        certificados?: CertificadoDepositoLpg[];
+        actividad: number;
+        codGrano: number;
+        cuitVendedor: CuitInput;
+        cuitCorredor?: CuitInput;
+        cuitComprador: CuitInput;
+        precioRefTn: number;
+        codGradoEnt: GradoLpg;
+        valGradoEnt: number;
+        precioFleteTn: number;
+        codPuerto: number;
+        desPuertoLocalidad?: string;
+        codLocalidad: number;
+        codProv: number;
+    };
+    // (undocumented)
+    ajusteCredito?: AjustePorImporteLpg;
+    // (undocumented)
+    ajusteDebito?: AjustePorImporteLpg;
+}
+
+// @public
+export interface AjusteContratoResultado extends ConAdvertencias {
+    // (undocumented)
+    ajusteContrato: AjusteUnificadoLpg;
+    // (undocumented)
+    eventos: CodigoDescripcion[];
+}
+
+// @public
+export interface AjusteCreditoDebitoLpg extends AjustePorImporteLpg {
     // (undocumented)
     certificados?: Array<{
         coe: string | number;
         pesoAjustado: number;
     }>;
     // (undocumented)
-    codGrado?: string;
-    // (undocumented)
-    conceptoImporteIva0?: string;
-    // (undocumented)
-    conceptoImporteIva105?: string;
-    // (undocumented)
-    conceptoImporteIva21?: string;
-    // (undocumented)
-    datosAdicionales?: string;
-    // (undocumented)
-    deducciones?: DeduccionLpg[];
+    codGrado?: GradoLpg;
     // (undocumented)
     diferenciaPesoNeto: number;
     // (undocumented)
@@ -68,16 +94,6 @@ export interface AjusteCreditoDebitoLpg {
     diferenciaPrecioOperacion: number;
     // (undocumented)
     factor?: number;
-    // (undocumented)
-    importeAjustarIva0?: number;
-    // (undocumented)
-    importeAjustarIva105?: number;
-    // (undocumented)
-    importeAjustarIva21?: number;
-    // (undocumented)
-    opcionales?: CodigoDescripcion[];
-    // (undocumented)
-    retenciones?: RetencionLpg[];
     // (undocumented)
     valGrado?: number;
 }
@@ -91,12 +107,7 @@ export interface AjusteCreditoDebitoResultadoLpg {
     // (undocumented)
     importeIva?: number;
     // (undocumented)
-    importes: Array<{
-        importe?: number;
-        concepto?: string;
-        alicuota?: number;
-        ivaCalculado?: number;
-    }>;
+    importes: ImporteAjustadoLpg[];
     // (undocumented)
     nroOpComercial?: number;
     // (undocumented)
@@ -123,6 +134,76 @@ export interface AjusteCreditoDebitoResultadoLpg {
     totalRetencion?: number;
     // (undocumented)
     totalRetencionAfip?: number;
+}
+
+// @public
+export interface AjusteCreditoDebitoResultadoLsg {
+    // (undocumented)
+    fechaLiquidacion?: string;
+    // (undocumented)
+    importe: ImporteAjustadoLpg[];
+    // (undocumented)
+    importeIVA?: number;
+    // (undocumented)
+    nroOpComercial?: number;
+    // (undocumented)
+    percepcion: Partial<PercepcionLsg>[];
+    // (undocumented)
+    precioOperacion?: number;
+    // (undocumented)
+    subTotal?: number;
+    // (undocumented)
+    totalNetoAPagar?: number;
+    // (undocumented)
+    totalPagoSegunCondicion?: number;
+    // (undocumented)
+    totalPercepcion?: number;
+    // (undocumented)
+    totalPesoNeto?: number;
+}
+
+// @public
+export interface AjusteLsg {
+    // (undocumented)
+    conceptoIva0?: string;
+    // (undocumented)
+    conceptoIva10?: string;
+    // (undocumented)
+    conceptoIva21?: string;
+    // (undocumented)
+    datosAdicionales?: string;
+    // (undocumented)
+    importeAjustar0?: number;
+    // (undocumented)
+    importeAjustar10?: number;
+    // (undocumented)
+    importeAjustar21?: number;
+    // (undocumented)
+    percepcion?: PercepcionLsg[];
+}
+
+// @public
+export interface AjustePorImporteLpg {
+    // (undocumented)
+    conceptoImporteIva0?: string;
+    // (undocumented)
+    conceptoImporteIva105?: string;
+    // (undocumented)
+    conceptoImporteIva21?: string;
+    // (undocumented)
+    datosAdicionales?: string;
+    // (undocumented)
+    deducciones?: DeduccionLpg[];
+    // (undocumented)
+    importeAjustarIva0?: number;
+    // (undocumented)
+    importeAjustarIva105?: number;
+    // (undocumented)
+    importeAjustarIva21?: number;
+    // (undocumented)
+    opcionales?: CodigoDescripcion[];
+    // (undocumented)
+    retenciones?: RetencionLpg[];
 }
 
 // @public
@@ -172,10 +253,7 @@ export interface AjusteUnificadoParams {
         certificados?: CertificadoDepositoLpg[];
         codLocalidad: number;
         codProv: number;
-        fusion?: {
-            nroIngBrutos: number;
-            nroActividad: number;
-        };
+        fusion?: FusionLpg;
     };
     // (undocumented)
     ajusteCredito?: AjusteCreditoDebitoLpg;
@@ -201,6 +279,16 @@ export interface AnulacionCertificacionResultado extends ConAdvertencias {
 }
 
 // @public
+export interface AnulacionContraDocumentoParams {
+    // (undocumented)
+    anulacionBase: {
+        puntoEmision: number;
+        nroOrden: number;
+        coeAnular: string | number;
+    };
+}
+
+// @public
 export interface AnulacionLiquidacionResultado extends ConAdvertencias {
     // (undocumented)
     coe?: string;
@@ -209,6 +297,10 @@ export interface AnulacionLiquidacionResultado extends ConAdvertencias {
     // (undocumented)
     pdf?: string;
     resultado?: 'A' | 'R' | (string & {});
+}
+
+// @public
+export interface AnularCPEEmisionDestinoDGParams extends AnularCPEParams, ConCuitDestino {
 }
 
 // @public
@@ -277,6 +369,45 @@ export { ArcaTicketVigenteError }
 export { ArcaValidationError }
 
 // @public
+export interface AsociarAContratoParams extends LiquidacionPorContratoParams {
+    // (undocumented)
+    coe: string | number;
+}
+
+// @public
+export interface AutorizarAnticipoParams {
+    // (undocumented)
+    anticipo: {
+        liquidacion: LiquidacionAnticipoLpg;
+        retenciones?: RetencionLpg[];
+        deducciones?: DeduccionLpg[];
+    };
+}
+
+// @public
+export interface AutorizarCPEAutomotorDGParams {
+    cabecera: {
+        tipoCP: number;
+        sucursal: number;
+        nroOrden: number;
+    };
+    // (undocumented)
+    datosCarga: DatosCargaCPEDG;
+    // (undocumented)
+    destinatario: DestinatarioCPE;
+    // (undocumented)
+    destino: DestinoCPEDG;
+    // (undocumented)
+    intervinientes?: IntervinientesCPEDG;
+    // (undocumented)
+    observaciones?: string;
+    // (undocumented)
+    origen: OrigenCPEDG;
+    // (undocumented)
+    transporte: TransporteAutomotorCPEDG;
+}
+
+// @public
 export interface AutorizarCPEAutomotorParams {
     // (undocumented)
     cabecera: {
@@ -322,6 +453,43 @@ export interface AutorizarCPEAutomotorParams {
         cuitIntermediarioFlete?: CuitInput;
         mercaderiaFumigada: boolean;
     };
+}
+
+// @public
+export interface AutorizarCPEEmisionDestinoDGParams extends Omit<AutorizarCPEAutomotorDGParams, 'origen' | 'destino'> {
+    // (undocumented)
+    destino: DestinoPlantaCPEDG;
+    // (undocumented)
+    origen: {
+        cuitOrigen: CuitInput;
+        planta: number;
+        domicilioOrigen: DomicilioPUCCPE;
+    };
+}
+
+// @public
+export interface AutorizarCPEFerroviariaDGParams {
+    // (undocumented)
+    cabecera: {
+        sucursal: number;
+        nroOrden: number;
+    };
+    // (undocumented)
+    datosCarga: DatosCargaCPEDG;
+    // (undocumented)
+    destinatario: DestinatarioCPE;
+    // (undocumented)
+    destino: DestinoPlantaCPEDG;
+    // (undocumented)
+    intervinientes?: IntervinientesCPEDG;
+    // (undocumented)
+    observaciones?: string;
+    // (undocumented)
+    origen: OrigenCPEDG & {
+        planta: number;
+    };
+    // (undocumented)
+    transporte: TransporteFerroviariaCPEDG;
 }
 
 // @public
@@ -390,13 +558,49 @@ export interface CabeceraCPE {
     tipoCartaPorte?: number;
 }
 
+// @public
+export interface CalidadCg {
+    // (undocumented)
+    analisisMuestra: number;
+    // (undocumented)
+    codGrado?: GradoLpg;
+    // (undocumented)
+    detalleMuestraAnalisis?: Array<{
+        descripcionRubro: string;
+        tipoRubro: 'B' | 'R';
+        porcentaje: number;
+        valor: number;
+    }>;
+    // (undocumented)
+    nroBoletin: number;
+    // (undocumented)
+    valorContProteico: number;
+    // (undocumented)
+    valorFactor?: number;
+    // (undocumented)
+    valorGrado?: number;
+}
+
 export { CallOptions }
+
+// @public
+export interface CancelarAnticipoParams {
+    coe: string | number;
+    // (undocumented)
+    nroOrden: number;
+    pdf?: boolean;
+    ptoEmision: number;
+}
 
 // @public
 export interface CartaPorteId {
     nroOrden: number;
     sucursal: number;
     tipoCPE: number;
+}
+
+// @public
+export interface CerrarContingenciaCPEEmisionDestinoDGParams extends CerrarContingenciaCPEParams, ConCuitDestino {
 }
 
 // @public
@@ -598,8 +802,7 @@ export interface CertificadoDepositoLpg {
     pesoNeto: number;
     // (undocumented)
     pesoNetoTotalCertificado?: number;
-    // (undocumented)
-    tipoCertificadoDeposito: string;
+    tipoCertificadoDeposito: '332';
 }
 
 // @public
@@ -656,20 +859,7 @@ export interface CgAutorizarParams {
         montoSecado: number;
         montoPorCadaPuntoExceso: number;
         montoOtros: number;
-        calidad?: {
-            analisisMuestra: number;
-            nroBoletin: number;
-            codGrado?: string;
-            valorGrado?: number;
-            valorContProteico: number;
-            valorFactor?: number;
-            detalleMuestraAnalisis?: Array<{
-                descripcionRubro: string;
-                tipoRubro: 'B' | 'R';
-                porcentaje: number;
-                valor: number;
-            }>;
-        };
+        calidad?: CalidadCg;
         pesoNetoMermaVolatil: number;
         serviciosFormaDePago?: string;
         serviciosOtros?: number;
@@ -731,6 +921,13 @@ export interface CgBuscarCtgParams {
 }
 
 // @public
+export interface CgInformarCalidadParams {
+    // (undocumented)
+    calidad: CalidadCg;
+    coe: string | number;
+}
+
+// @public
 export interface CodigoDescripcion {
     // (undocumented)
     codigo: string;
@@ -741,6 +938,20 @@ export interface CodigoDescripcion {
 // @public
 export interface ConAdvertencias {
     advertencias?: ServiceErrorDetail[];
+}
+
+// @public
+export interface ConCuitDestino {
+    // (undocumented)
+    cuitDestino: CuitInput;
+}
+
+// @public
+export interface ConfirmacionDefinitivaCPEAutomotorDGParams extends SolicitanteCartaPorteParams {
+    // (undocumented)
+    pesoBrutoDescarga: number;
+    // (undocumented)
+    pesoTaraDescarga: number;
 }
 
 // @public
@@ -757,6 +968,17 @@ export interface ConfirmacionDefinitivaCPEAutomotorParams {
     pesoBrutoDescarga: number;
     // (undocumented)
     pesoTaraDescarga: number;
+}
+
+// @public
+export interface ConfirmacionDefinitivaCPEDuctosDGParams extends SolicitanteCartaPorteParams {
+    pesoBrutoDescarga: number;
+}
+
+// @public
+export interface ConfirmacionDefinitivaCPEFerroviariaDGParams extends ConfirmacionDefinitivaCPEAutomotorDGParams {
+    // (undocumented)
+    ramalDescarga: RamalCPE;
 }
 
 // @public
@@ -782,6 +1004,12 @@ export interface ConfirmacionDefinitivaCPEFerroviariaParams {
     pesoTaraDescarga: number;
     // (undocumented)
     ramalDescarga: RamalCPE;
+}
+
+// @public
+export interface ConsultarCPEDGParams extends ConsultarCPEParams {
+    // (undocumented)
+    cuitTitularPlanta?: CuitInput;
 }
 
 // @public
@@ -939,26 +1167,101 @@ export interface CPEAutomotorDetalle extends ConAdvertencias {
 }
 
 // @public
+export interface CPEAutomotorDGDetalle extends ConAdvertencias {
+    // (undocumented)
+    cabecera: CabeceraCPE & {
+        nroCTG: string;
+    };
+    // (undocumented)
+    datosCarga?: {
+        codGrano?: number;
+        codDerivadoGranario?: number;
+        pesoBruto?: number;
+        pesoTara?: number;
+        pesoBrutoDescarga?: number;
+        pesoTaraDescarga?: number;
+        tipoEmbalaje?: number;
+        otroEmbalaje?: string;
+        unidadMedida?: number;
+        cantidadUnidades?: number;
+        kgLitroM3?: number;
+        lote?: string;
+        fechaLote?: string;
+    };
+    // (undocumented)
+    destinatario?: {
+        cuit?: number;
+    };
+    // (undocumented)
+    destino?: DestinoCPERespuesta;
+    // (undocumented)
+    intervinientes?: IntervinientesCPEDGRespuesta;
+    // (undocumented)
+    metadata?: MetadataCPE;
+    // (undocumented)
+    origen?: {
+        esUsuarioIndustria?: boolean;
+        planta?: number;
+        plantaObservaciones?: string;
+        cuitTitularPlanta?: number;
+        domicilioOrigen?: string;
+        cuitOrigen?: number;
+    };
+    // (undocumented)
+    pdf?: string;
+    // (undocumented)
+    transporte?: {
+        cuitTransportista?: number;
+        dominio: string[];
+        fechaHoraPartida?: string;
+        kmRecorrer?: number;
+        cuitChofer?: number;
+        tarifa?: number;
+        tarifaReferencia?: number;
+        cuitPagadorFlete?: number;
+        cuitIntermediarioFlete?: number;
+    };
+}
+
+// @public
 export class CpeClient extends SoapServiceClient {
     // @internal
     constructor(ctx: ServiceContext);
+    aceptarEmisionDestinoDG(params: SolicitanteDestinoCartaPorteParams, opts?: CallOptions): Promise<CPEResultado>;
+    aceptarEmisionDG(params: SolicitanteCartaPorteParams, opts?: CallOptions): Promise<CPEResultado>;
     anularCPE(params: AnularCPEParams, opts?: CallOptions): Promise<CPEResultado>;
+    anularCPEEmisionDestinoDG(params: AnularCPEEmisionDestinoDGParams, opts?: CallOptions): Promise<CPEResultado>;
     autorizarCPEAutomotor(params: AutorizarCPEAutomotorParams, opts?: CallOptions): Promise<CPEAutomotorDetalle>;
+    autorizarCPEAutomotorDG(params: AutorizarCPEAutomotorDGParams, opts?: CallOptions): Promise<CPEAutomotorDGDetalle>;
+    autorizarCPEEmisionDestinoDG(params: AutorizarCPEEmisionDestinoDGParams, opts?: CallOptions): Promise<CPEEmisionDestinoDGDetalle>;
     autorizarCPEFerroviaria(params: AutorizarCPEFerroviariaParams, opts?: CallOptions): Promise<CPEFerroviariaDetalle>;
+    autorizarCPEFerroviariaDG(params: AutorizarCPEFerroviariaDGParams, opts?: CallOptions): Promise<CPEFerroviariaDGDetalle>;
     cerrarContingenciaCPE(params: CerrarContingenciaCPEParams, opts?: CallOptions): Promise<CPEResultado>;
+    cerrarContingenciaCPEEmisionDestinoDG(params: CerrarContingenciaCPEEmisionDestinoDGParams, opts?: CallOptions): Promise<CPEResultado>;
     confirmacionDefinitivaCPEAutomotor(params: ConfirmacionDefinitivaCPEAutomotorParams, opts?: CallOptions): Promise<CPEResultado>;
+    confirmacionDefinitivaCPEAutomotorDG(params: ConfirmacionDefinitivaCPEAutomotorDGParams, opts?: CallOptions): Promise<CPEResultado>;
+    confirmacionDefinitivaCPEDuctosDG(params: ConfirmacionDefinitivaCPEDuctosDGParams, opts?: CallOptions): Promise<CPEResultado>;
     confirmacionDefinitivaCPEFerroviaria(params: ConfirmacionDefinitivaCPEFerroviariaParams, opts?: CallOptions): Promise<CPEResultado>;
+    confirmacionDefinitivaCPEFerroviariaDG(params: ConfirmacionDefinitivaCPEFerroviariaDGParams, opts?: CallOptions): Promise<CPEResultado>;
     confirmarArriboCPE(params: SolicitanteCartaPorteParams, opts?: CallOptions): Promise<CPEResultado>;
     consultaCPEFerroviariaPorNroOperativo(nroOperativo: number, opts?: CallOptions): Promise<OperativoFerroviarioCPE>;
     consultarCategoriasSemillas(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarCPEAutomotor(params: ConsultarCPEParams, opts?: CallOptions): Promise<CPEAutomotorDetalle>;
+    consultarCPEAutomotorDG(params: ConsultarCPEDGParams, opts?: CallOptions): Promise<CPEAutomotorDGDetalle>;
+    consultarCPEDGPendienteActivacion(planta: number, opts?: CallOptions): Promise<CPEDGPendiente[]>;
+    consultarCPEDuctos(params: ConsultarCPEParams, opts?: CallOptions): Promise<CPEDuctosDetalle>;
+    consultarCPEEmisionDestinoDG(params: ConsultarCPEDGParams, opts?: CallOptions): Promise<CPEEmisionDestinoDGDetalle>;
+    consultarCPEEmitidasDestinoDGPendientesActivacion(planta: number, opts?: CallOptions): Promise<CPEDGPendiente[]>;
     consultarCPEFerroviaria(params: ConsultarCPEParams, opts?: CallOptions): Promise<CPEFerroviariaDetalle>;
+    consultarCPEFerroviariaDG(params: ConsultarCPEDGParams, opts?: CallOptions): Promise<CPEFerroviariaDGDetalle>;
     consultarCPEPorDestino(params: ConsultarCPEPorDestinoParams, opts?: CallOptions): Promise<CPEResumen[]>;
     consultarCPEPPendientesDeResolucion(params: ConsultarCPEPendientesParams, opts?: CallOptions): Promise<CPEResumen[]>;
+    consultarDerivadosGranarios(opts?: CallOptions): Promise<DerivadoGranarioCPE[]>;
     consultarDomiciliosPorCUIT(cuit: CuitInput, opts?: CallOptions): Promise<DomicilioCPE[]>;
     consultarLocalidadesPorProvincia(codProvincia: number, opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarLocalidadesProductor(cuit: CuitInput, opts?: CallOptions): Promise<LocalidadProductorCPE[]>;
     consultarPlantas(cuit: CuitInput, opts?: CallOptions): Promise<PlantaCPE[]>;
+    consultarPlantasDG(cuit: CuitInput, opts?: CallOptions): Promise<PlantaDGCPE[]>;
     consultarProvincias(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarRenspa(cuit: CuitInput, codProvincia: number, opts?: CallOptions): Promise<RenspaCPE[]>;
     consultarTiposEmbalaje(opts?: CallOptions): Promise<TipoEmbalajeCPE[]>;
@@ -967,20 +1270,119 @@ export class CpeClient extends SoapServiceClient {
     consultarUnidadesMedida(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarVariedadesSemillas(codGrano?: number, opts?: CallOptions): Promise<VariedadSemillaCPE[]>;
     descargadoDestinoCPE(params: SolicitanteCartaPorteParams, opts?: CallOptions): Promise<CPEResultado>;
+    descargadoDestinoCPEEmisionDestinoDG(params: SolicitanteDestinoCartaPorteParams, opts?: CallOptions): Promise<CPEResultado>;
     desvioCPEAutomotor(params: DesvioCPEAutomotorParams, opts?: CallOptions): Promise<CPEResultado>;
+    desvioCPEAutomotorDG(params: DesvioCPEAutomotorDGParams, opts?: CallOptions): Promise<CPEResultado>;
     desvioCPEFerroviaria(params: DesvioCPEFerroviariaParams, opts?: CallOptions): Promise<CPEResultado>;
+    desvioCPEFerroviariaDG(params: DesvioCPEFerroviariaDGParams, opts?: CallOptions): Promise<CPEResultado>;
     dummy(opts?: CallOptions): Promise<ServerStatus>;
-    editarCPEAutomotor(params: EditarCPEAutomotorParams, opts?: CallOptions): Promise<CPEResultado>;
-    editarCPEConfirmadaAutomotor(params: EditarCPEConfirmadaParams, opts?: CallOptions): Promise<CPEResultado>;
-    editarCPEConfirmadaFerroviaria(params: EditarCPEConfirmadaParams, opts?: CallOptions): Promise<CPEResultado>;
-    editarCPEFerroviaria(params: EditarCPEFerroviariaParams, opts?: CallOptions): Promise<CPEResultado>;
+    editarCPEAutomotor(params: EditarCPEAutomotorParams, opts?: EditarCPEOptions): Promise<CPEResultado>;
+    editarCPEConfirmadaAutomotor(params: EditarCPEConfirmadaParams, opts?: EditarCPEOptions): Promise<CPEResultado>;
+    editarCPEConfirmadaDuctos(params: EditarCPEDGConfirmadaParams, opts?: CallOptions): Promise<CPEResultado>;
+    editarCPEConfirmadaFerroviaria(params: EditarCPEConfirmadaParams, opts?: EditarCPEOptions): Promise<CPEResultado>;
+    editarCPEDGAutomotor(params: EditarCPEDGAutomotorParams, opts?: CallOptions): Promise<CPEResultado>;
+    editarCPEDGConfirmadaAutomotor(params: EditarCPEDGConfirmadaParams, opts?: CallOptions): Promise<CPEResultado>;
+    editarCPEDGConfirmadaFerroviaria(params: EditarCPEDGConfirmadaParams, opts?: CallOptions): Promise<CPEResultado>;
+    editarCPEDGDuctos(params: EditarCPEDGDuctosParams, opts?: CallOptions): Promise<CPEResultado>;
+    editarCPEDGFerroviaria(params: EditarCPEDGFerroviariaParams, opts?: CallOptions): Promise<CPEResultado>;
+    editarCPEFerroviaria(params: EditarCPEFerroviariaParams, opts?: EditarCPEOptions): Promise<CPEResultado>;
     informarContingencia(params: InformarContingenciaParams, opts?: CallOptions): Promise<CPEResultado>;
+    informarContingenciaEmisionDestinoDG(params: InformarContingenciaEmisionDestinoDGParams, opts?: CallOptions): Promise<CPEResultado>;
     nuevoDestinoDestinatarioCPEAutomotor(params: NuevoDestinoDestinatarioCPEAutomotorParams, opts?: CallOptions): Promise<CPEResultado>;
+    nuevoDestinoDestinatarioCPEAutomotorDG(params: NuevoDestinoDestinatarioCPEAutomotorDGParams, opts?: CallOptions): Promise<CPEResultado>;
+    nuevoDestinoDestinatarioCPEEmisionDestinoDG(params: NuevoDestinoDestinatarioCPEEmisionDestinoDGParams, opts?: CallOptions): Promise<CPEResultado>;
     nuevoDestinoDestinatarioCPEFerroviaria(params: NuevoDestinoDestinatarioCPEFerroviariaParams, opts?: CallOptions): Promise<CPEResultado>;
+    nuevoDestinoDestinatarioCPEFerroviariaDG(params: NuevoDestinoDestinatarioCPEFerroviariaDGParams, opts?: CallOptions): Promise<CPEResultado>;
+    rechazarEmisionDestinoDG(params: SolicitanteDestinoCartaPorteParams, opts?: CallOptions): Promise<CPEResultado>;
+    rechazarEmisionDG(params: SolicitanteCartaPorteParams, opts?: CallOptions): Promise<CPEResultado>;
     rechazoCPE(params: RechazoCPEParams, opts?: CallOptions): Promise<CPEResultado>;
     regresoOrigenCPEAutomotor(params: RegresoOrigenCPEAutomotorParams, opts?: CallOptions): Promise<CPEResultado>;
+    regresoOrigenCPEAutomotorDG(params: RegresoOrigenCPEAutomotorDGParams, opts?: CallOptions): Promise<CPEResultado>;
+    regresoOrigenCPEEmisionDestinoDG(params: RegresoOrigenCPEEmisionDestinoDGParams, opts?: CallOptions): Promise<CPEResultado>;
     regresoOrigenCPEFerroviaria(params: RegresoOrigenCPEFerroviariaParams, opts?: CallOptions): Promise<CPEResultado>;
+    regresoOrigenCPEFerroviariaDG(params: RegresoOrigenCPEFerroviariaDGParams, opts?: CallOptions): Promise<CPEResultado>;
     siguienteNroOrden(sucursal: number, tipoCPE: number, opts?: CallOptions): Promise<number>;
+}
+
+// @public
+export interface CPEDGPendiente {
+    // (undocumented)
+    cuitSolicitante?: number;
+    // (undocumented)
+    fechaPartida?: string;
+    // (undocumented)
+    nroOrden?: number;
+    // (undocumented)
+    sucursal?: number;
+    // (undocumented)
+    tipoCartaPorte?: number;
+}
+
+// @public
+export interface CPEDuctosDetalle extends ConAdvertencias {
+    // (undocumented)
+    cabecera: CabeceraCPE & {
+        nroCTG: string;
+    };
+    // (undocumented)
+    datosCarga?: {
+        codGrano?: number;
+        codDerivadoGranario?: number;
+        cosecha?: number;
+        pesoBrutoDescarga?: number;
+        pesoTaraDescarga?: number;
+        tipoEmbalaje?: number;
+        otroEmbalaje?: string;
+        unidadMedida?: number;
+        pesoBruto?: number;
+        lote?: string;
+        fechaLote?: string;
+    };
+    // (undocumented)
+    destinatario?: {
+        cuit?: number;
+    };
+    // (undocumented)
+    destino?: {
+        cuit?: number;
+        codProvincia?: number;
+        codLocalidad?: number;
+        planta?: number;
+        domicilioDestino?: string;
+        fechaHoraInicioEnvio?: string;
+        fechaHoraFinEnvio?: string;
+    };
+    // (undocumented)
+    intervinientes?: IntervinientesCPEDGRespuesta;
+    // (undocumented)
+    metadata?: MetadataCPE;
+    // (undocumented)
+    origen?: {
+        esUsuarioIndustria?: boolean;
+        planta?: number;
+        cuitTitularPlanta?: number;
+        domicilioOrigen?: string;
+        cuitOrigen?: number;
+    };
+    // (undocumented)
+    pdf?: string;
+}
+
+// @public
+export interface CPEEmisionDestinoDGDetalle extends Omit<CPEAutomotorDGDetalle, 'origen' | 'destino'> {
+    // (undocumented)
+    destino?: {
+        cuit?: number;
+        planta?: number;
+        domicilioDestino?: string;
+        cuitTitularPlanta?: number;
+    };
+    // (undocumented)
+    origen?: {
+        planta?: number;
+        domicilioOrigen?: string;
+        cuitOrigen?: number;
+    };
 }
 
 // @public
@@ -1085,6 +1487,9 @@ export interface CPEFerroviariaDetalle extends ConAdvertencias {
 }
 
 // @public
+export type CPEFerroviariaDGDetalle = Omit<CPEFerroviariaDetalle, 'correspondeRetiroProductor' | 'retiroProductor'>;
+
+// @public
 export interface CPEResultado extends ConAdvertencias {
     // (undocumented)
     cabecera?: CabeceraCPE;
@@ -1137,6 +1542,22 @@ export interface CtgCertificableLpg {
 export type CuitInput = number | string;
 
 // @public
+export interface DatosCargaCPEDG {
+    cantidadUnidades?: number;
+    codDerivadoGranario: number;
+    // (undocumented)
+    codGrano: number;
+    fechaLote?: FechaHoraInput;
+    kgLitroM3?: number;
+    lote?: string;
+    otroEmbalaje?: string;
+    pesoBruto: number;
+    pesoTara: number;
+    tipoEmbalaje: number;
+    unidadMedida: number;
+}
+
+// @public
 export interface DeduccionLiquidadaLpg {
     // (undocumented)
     deduccion?: {
@@ -1173,6 +1594,27 @@ export interface DeduccionLpg {
 }
 
 // @public
+export interface DeduccionLsg {
+    // (undocumented)
+    alicuotaIVA: number;
+    // (undocumented)
+    baseCalculo: number;
+    // (undocumented)
+    detalleAclaratoria: string;
+}
+
+// @public
+export interface DerivadoGranarioCPE {
+    // (undocumented)
+    codigo: number;
+    // (undocumented)
+    descripcion: string;
+    granoPadre?: number;
+    // (undocumented)
+    granoPadreDescripcion?: string;
+}
+
+// @public
 export interface DestinatarioCPE {
     // (undocumented)
     cuit: CuitInput;
@@ -1188,6 +1630,16 @@ export interface DestinoCPE {
     cuit: CuitInput;
     // (undocumented)
     esDestinoCampo: boolean;
+    planta?: number;
+}
+
+// @public
+export interface DestinoCPEDG {
+    // (undocumented)
+    cuit: CuitInput;
+    // (undocumented)
+    domicilioDestino: DomicilioPUCCPE;
+    // (undocumented)
     planta?: number;
 }
 
@@ -1208,6 +1660,20 @@ export interface DestinoCPERespuesta {
 }
 
 // @public
+export interface DestinoPlantaCPEDG extends DestinoCPEDG {
+    // (undocumented)
+    planta: number;
+}
+
+// @public
+export interface DesvioCPEAutomotorDGParams extends SolicitanteCartaPorteParams {
+    // (undocumented)
+    destino: DestinoCPEDG;
+    // (undocumented)
+    transporte: TransporteAutomotorModificaCPEDG;
+}
+
+// @public
 export interface DesvioCPEAutomotorParams {
     // (undocumented)
     cartaPorte: CartaPorteId;
@@ -1223,6 +1689,14 @@ export interface DesvioCPEAutomotorParams {
     };
     // (undocumented)
     transporte: TransporteAutomotorModificaCPE;
+}
+
+// @public
+export interface DesvioCPEFerroviariaDGParams extends SolicitanteCartaPorteParams {
+    // (undocumented)
+    destino: DestinoPlantaCPEDG;
+    // (undocumented)
+    transporte: TransporteFerroviariaModificaCPE;
 }
 
 // @public
@@ -1253,6 +1727,31 @@ export interface DomicilioCPE {
 }
 
 // @public
+export interface DomicilioPUCCPE {
+    // (undocumented)
+    orden: number;
+    tipo: number;
+}
+
+// @public
+export interface EditarCargaCPEDG {
+    // (undocumented)
+    cantidadUnidades?: number;
+    // (undocumented)
+    codDerivadoGranario?: number;
+    // (undocumented)
+    codGrano?: number;
+    // (undocumented)
+    kgLitroM3?: number;
+    // (undocumented)
+    otroEmbalaje?: string;
+    // (undocumented)
+    tipoEmbalaje?: number;
+    // (undocumented)
+    unidadMedida?: number;
+}
+
+// @public
 export interface EditarCPEAutomotorParams {
     // (undocumented)
     codGrano: number;
@@ -1261,17 +1760,17 @@ export interface EditarCPEAutomotorParams {
     // (undocumented)
     cuitChofer: CuitInput;
     // (undocumented)
-    cuitCorredorVentaPrimaria?: CuitInput;
+    cuitCorredorVentaPrimaria?: CuitInput | null;
     // (undocumented)
-    cuitCorredorVentaSecundaria?: CuitInput;
+    cuitCorredorVentaSecundaria?: CuitInput | null;
     // (undocumented)
     cuitDestinatario: CuitInput;
     // (undocumented)
-    cuitRemitenteComercialVentaPrimaria?: CuitInput;
+    cuitRemitenteComercialVentaPrimaria?: CuitInput | null;
     // (undocumented)
-    cuitRemitenteComercialVentaSecundaria?: CuitInput;
+    cuitRemitenteComercialVentaSecundaria?: CuitInput | null;
     // (undocumented)
-    cuitRemitenteComercialVentaSecundaria2?: CuitInput;
+    cuitRemitenteComercialVentaSecundaria2?: CuitInput | null;
     // (undocumented)
     cuitTransportista: CuitInput;
     // (undocumented)
@@ -1293,14 +1792,84 @@ export interface EditarCPEAutomotorParams {
 export interface EditarCPEConfirmadaParams {
     // (undocumented)
     intervinientes: {
-        cuitCorredorVentaPrimaria?: CuitInput;
-        cuitCorredorVentaSecundaria?: CuitInput;
-        cuitRemitenteComercialVentaPrimaria?: CuitInput;
-        cuitRemitenteComercialVentaSecundaria?: CuitInput;
-        cuitRemitenteComercialProductor?: CuitInput;
+        cuitCorredorVentaPrimaria?: CuitInput | null;
+        cuitCorredorVentaSecundaria?: CuitInput | null;
+        cuitRemitenteComercialVentaPrimaria?: CuitInput | null;
+        cuitRemitenteComercialVentaSecundaria?: CuitInput | null;
+        cuitRemitenteComercialProductor?: CuitInput | null;
     };
     // (undocumented)
     nroCTG: string | number;
+}
+
+// @public
+export interface EditarCPEDGAutomotorParams extends EditarCargaCPEDG, EditarFleteCPEDG {
+    // (undocumented)
+    cuitChofer?: CuitInput;
+    // (undocumented)
+    cuitDestinatario?: CuitInput;
+    // (undocumented)
+    cuitTransportista?: CuitInput;
+    // (undocumented)
+    destino?: DestinoCPEDG;
+    dominio?: string[];
+    // (undocumented)
+    intervinientes?: IntervinientesCPEDG;
+    // (undocumented)
+    nroCTG: string | number;
+    // (undocumented)
+    observaciones?: string;
+}
+
+// @public
+export interface EditarCPEDGConfirmadaParams {
+    // (undocumented)
+    intervinientes?: Omit<IntervinientesCPEDG, 'cuitMercadoATermino'>;
+    // (undocumented)
+    nroCTG: string | number;
+    // (undocumented)
+    observaciones?: string;
+}
+
+// @public
+export interface EditarCPEDGDuctosParams extends Pick<EditarCargaCPEDG, 'codGrano' | 'codDerivadoGranario' | 'unidadMedida' | 'tipoEmbalaje'> {
+    // (undocumented)
+    cuitDestinatario?: CuitInput;
+    // (undocumented)
+    intervinientes?: IntervinientesCPEDG;
+    // (undocumented)
+    nroCTG: string | number;
+    // (undocumented)
+    observaciones?: string;
+}
+
+// @public
+export interface EditarCPEDGFerroviariaParams extends EditarCargaCPEDG, EditarFleteCPEDG {
+    // (undocumented)
+    cuitConductor?: CuitInput;
+    // (undocumented)
+    cuitConductorTramo2?: CuitInput;
+    // (undocumented)
+    cuitDestinatario?: CuitInput;
+    // (undocumented)
+    cuitTransportista?: CuitInput;
+    // (undocumented)
+    cuitTransportistaTramo2?: CuitInput;
+    // (undocumented)
+    destino?: DestinoPlantaCPEDG;
+    // (undocumented)
+    intervinientes?: IntervinientesCPEDG;
+    // (undocumented)
+    nroCTG: string | number;
+    // (undocumented)
+    nroOperativo: number;
+    nroPrecinto: string[];
+    // (undocumented)
+    nroVagon?: number;
+    // (undocumented)
+    observaciones?: string;
+    // (undocumented)
+    ramal: RamalCPE;
 }
 
 // @public
@@ -1308,19 +1877,19 @@ export interface EditarCPEFerroviariaParams {
     // (undocumented)
     codGrano: number;
     // (undocumented)
-    cuitCorredorVentaPrimaria?: CuitInput;
+    cuitCorredorVentaPrimaria?: CuitInput | null;
     // (undocumented)
-    cuitCorredorVentaSecundaria?: CuitInput;
+    cuitCorredorVentaSecundaria?: CuitInput | null;
     // (undocumented)
-    cuitDestinatario?: CuitInput;
+    cuitDestinatario?: CuitInput | null;
     // (undocumented)
-    cuitRemitenteComercialVentaPrimaria?: CuitInput;
+    cuitRemitenteComercialVentaPrimaria?: CuitInput | null;
     // (undocumented)
-    cuitRemitenteComercialVentaSecundaria?: CuitInput;
+    cuitRemitenteComercialVentaSecundaria?: CuitInput | null;
     // (undocumented)
-    cuitRemitenteComercialVentaSecundaria2?: CuitInput;
+    cuitRemitenteComercialVentaSecundaria2?: CuitInput | null;
     // (undocumented)
-    cuitTransportista?: CuitInput;
+    cuitTransportista?: CuitInput | null;
     // (undocumented)
     destino?: DestinoCPE;
     // (undocumented)
@@ -1329,6 +1898,25 @@ export interface EditarCPEFerroviariaParams {
     nroVagon?: number;
     // (undocumented)
     pesoBruto: number;
+}
+
+// @public
+export interface EditarCPEOptions extends CallOptions {
+    preservarIntervinientes?: boolean;
+}
+
+// @public
+export interface EditarFleteCPEDG {
+    // (undocumented)
+    cuitIntermediarioFlete?: CuitInput;
+    // (undocumented)
+    cuitPagadorFlete: CuitInput;
+    // (undocumented)
+    kmRecorrer: number;
+    // (undocumented)
+    pesoBruto?: number;
+    // (undocumented)
+    tarifa?: number;
 }
 
 // @public
@@ -1350,6 +1938,17 @@ export const ESTADOS_CPE: {
 };
 
 // @public
+export interface FacturaPapelLsg {
+    // (undocumented)
+    fechaFactura: FechaInput;
+    // (undocumented)
+    nroCAI: number;
+    // (undocumented)
+    nroFacturaPapel: number;
+    tipoComprobante: '1' | '34' | '51' | '63' | '39';
+}
+
+// @public
 export type FechaHoraInput = Date | string;
 
 // @public
@@ -1358,11 +1957,38 @@ export type FechaInput = Date | string;
 export { FileTicketStorage }
 
 // @public
+export interface FusionLpg {
+    // (undocumented)
+    nroActividad: number;
+    // (undocumented)
+    nroIngBrutos: number;
+}
+
+// @public
 export interface GradoEntregadoLpg {
     // (undocumented)
     codigoDescripcion: CodigoDescripcion;
     // (undocumented)
     valor: number;
+}
+
+// @public
+export type GradoLpg = 'G1' | 'G2' | 'G3' | 'FG' | 'F1' | 'F2' | 'F3';
+
+// @public
+export interface ImporteAjustadoLpg {
+    // (undocumented)
+    alicuota?: number;
+    // (undocumented)
+    concepto?: string;
+    // (undocumented)
+    importe?: number;
+    // (undocumented)
+    ivaCalculado?: number;
+}
+
+// @public
+export interface InformarContingenciaEmisionDestinoDGParams extends InformarContingenciaParams, ConCuitDestino {
 }
 
 // @public
@@ -1394,6 +2020,43 @@ export interface IntervinientesCPE {
     cuitRepresentanteEntregador?: CuitInput;
     // (undocumented)
     cuitRepresentanteRecibidor?: CuitInput;
+}
+
+// @public
+export interface IntervinientesCPEDG {
+    // (undocumented)
+    cuitComisionista?: CuitInput;
+    // (undocumented)
+    cuitCorredor?: CuitInput;
+    // (undocumented)
+    cuitMercadoATermino?: CuitInput;
+    // (undocumented)
+    cuitRemitenteComercial?: CuitInput;
+}
+
+// @public
+export interface IntervinientesCPEDGRespuesta {
+    // (undocumented)
+    cuitComisionista?: number;
+    // (undocumented)
+    cuitCorredor?: number;
+    // (undocumented)
+    cuitMercadoATermino?: number;
+    // (undocumented)
+    cuitRemitenteComercial?: number;
+}
+
+// @public
+export interface LiquidacionAnticipoLpg extends Pick<LiquidacionLpg, 'ptoEmision' | 'nroOrden' | 'cuitComprador' | 'nroActComprador' | 'nroIngBrutoComprador' | 'codTipoOperacion' | 'codPuerto' | 'codGrano' | 'cuitVendedor' | 'nroIngBrutoVendedor' | 'actuaCorredor' | 'liquidaCorredor' | 'cuitCorredor' | 'comisionCorredor' | 'nroIngBrutoCorredor' | 'fechaPrecioOperacion' | 'precioRefTn' | 'alicIvaOperacion' | 'codProvProcedencia' | 'datosAdicionales' | 'opcionales'> {
+    campaniaPpal: number;
+    // (undocumented)
+    codLocProcedencia: number;
+    // (undocumented)
+    descPuertoLocalidad?: string;
+    // (undocumented)
+    nroContrato?: number;
+    // (undocumented)
+    pesoNetoSinCertificado: number;
 }
 
 // @public
@@ -1567,6 +2230,35 @@ export interface LiquidacionConsultaResultado extends ConAdvertencias {
 }
 
 // @public
+export interface LiquidacionesLsg {
+    ajuste?: {
+        tipoAjuste?: string;
+        req?: Partial<Omit<AjusteLsg, 'percepcion'>> & {
+            percepcion: Partial<PercepcionLsg>[];
+        };
+        coeAjustado?: string;
+        codLocalidad?: number;
+        codProvincia?: number;
+        totalesUnificados?: TotalesUnificadosLsg;
+        estado?: string;
+    };
+    autorizacion?: {
+        ptoEmision?: number;
+        nroOrden?: number;
+        fechaLiquidacion?: string;
+        precioOperacion?: number;
+        subtotal?: number;
+        importeIva?: number;
+        operacionConIva?: number;
+        coe?: string;
+        coeAjustado?: string;
+        datosAdicionales?: string;
+    };
+    // (undocumented)
+    liquidacion?: LiquidacionSecundariaConsultadaLsg;
+}
+
+// @public
 export interface LiquidacionLpg {
     // (undocumented)
     actuaCorredor?: SiNo;
@@ -1575,9 +2267,9 @@ export interface LiquidacionLpg {
     // (undocumented)
     certificados?: CertificadoDepositoLpg[];
     // (undocumented)
-    codGradoEnt?: string;
+    codGradoEnt?: GradoLpg;
     // (undocumented)
-    codGradoRef?: string;
+    codGradoRef?: GradoLpg;
     // (undocumented)
     codGrano: number;
     // (undocumented)
@@ -1658,6 +2350,116 @@ export interface LiquidacionResultado extends ConAdvertencias {
 }
 
 // @public
+export interface LiquidacionSecundariaAutorizadaLsg {
+    // (undocumented)
+    coe: string;
+    // (undocumented)
+    fechaLiquidacion?: string;
+    // (undocumented)
+    importeIva?: number;
+    // (undocumented)
+    nroOrden?: number;
+    // (undocumented)
+    operacionConIva?: number;
+    // (undocumented)
+    ptoEmision?: number;
+    // (undocumented)
+    subTotal?: number;
+    // (undocumented)
+    totalDeducciones?: number;
+    // (undocumented)
+    totalPercepciones?: number;
+}
+
+// @public
+export interface LiquidacionSecundariaConsultadaLsg {
+    // (undocumented)
+    actuaCorredor?: string;
+    // (undocumented)
+    alicuotaIvaOperacion?: number;
+    // (undocumented)
+    campania?: number;
+    // (undocumented)
+    codGrano?: number;
+    // (undocumented)
+    codLocalidadOperacion?: number;
+    // (undocumented)
+    codProvinciaOperacion?: number;
+    // (undocumented)
+    codPuerto?: number;
+    // (undocumented)
+    cuitComprador?: number;
+    // (undocumented)
+    cuitCorredor?: number;
+    // (undocumented)
+    cuitVendedor?: number;
+    // (undocumented)
+    datosAdicionales?: string;
+    // (undocumented)
+    deduccion: Partial<DeduccionLsg>[];
+    // (undocumented)
+    descripcionPuertoLocalidad?: string;
+    // (undocumented)
+    estado?: string;
+    // (undocumented)
+    facturaPapel?: {
+        nroCAI?: number;
+        nroFacturaPapel?: number;
+        fechaFactura?: string;
+        tipoComprobante?: string;
+    };
+    // (undocumented)
+    fechaPrecioOperacion?: string;
+    // (undocumented)
+    liquidaCorredor?: string;
+    // (undocumented)
+    localidadEmision?: string;
+    // (undocumented)
+    nroActVendedor?: number;
+    // (undocumented)
+    nroContrato?: number;
+    // (undocumented)
+    nroIngBrutoComprador?: number;
+    // (undocumented)
+    nroIngBrutoCorredor?: number;
+    // (undocumented)
+    nroIngBrutoVendedor?: number;
+    // (undocumented)
+    nroOrden?: number;
+    // (undocumented)
+    otraLocalidad?: string;
+    // (undocumented)
+    percepcion: Partial<PercepcionLsg>[];
+    // (undocumented)
+    pesoNetoEnTn?: number;
+    // (undocumented)
+    precioOperacionTn?: number;
+    // (undocumented)
+    precioReferenciaTn?: number;
+    // (undocumented)
+    ptoEmision?: number;
+    // (undocumented)
+    totalDeducciones?: number;
+    totalPercepciones?: number;
+}
+
+// @public
+export interface LiquidacionSecundariaLsg extends Pick<LiquidacionLpg, 'ptoEmision' | 'nroOrden' | 'numeroContrato' | 'cuitComprador' | 'nroIngBrutoComprador' | 'codPuerto' | 'desPuertoLocalidad' | 'codGrano' | 'cuitVendedor' | 'nroIngBrutoVendedor' | 'actuaCorredor' | 'liquidaCorredor' | 'cuitCorredor' | 'nroIngBrutoCorredor' | 'fechaPrecioOperacion' | 'precioRefTn' | 'alicIvaOperacion' | 'campaniaPPal' | 'opcionales' | 'datosAdicionales'> {
+    cantidadTn: number;
+    // (undocumented)
+    codLocalidad: number;
+    // (undocumented)
+    codProvincia: number;
+    // (undocumented)
+    deduccion?: DeduccionLsg[];
+    // (undocumented)
+    nroActVendedor: number;
+    // (undocumented)
+    percepcion?: PercepcionLsg[];
+    precioOperacion: number;
+}
+
+// @public
 export interface LocalidadProductorCPE {
     // (undocumented)
     codigo?: string;
@@ -1689,6 +2491,7 @@ export class LpgClient extends SoapServiceClient {
         pdf?: boolean;
     }, opts?: CallOptions): Promise<AjusteConsultaResultado>;
     ajusteXNroOrdenConsultar(ptoEmision: number, nroOrden: number, opts?: CallOptions): Promise<AjusteConsultaResultado>;
+    asociarLiquidacionAContrato(params: AsociarAContratoParams, opts?: CallOptions): Promise<LiquidacionConsultaResultado>;
     // (undocumented)
     campaniasConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     cgAutorizar(params: CgAutorizarParams, opts?: CallOptions): Promise<CertificacionResultado>;
@@ -1702,6 +2505,7 @@ export class LpgClient extends SoapServiceClient {
         pdf?: boolean;
     }, opts?: CallOptions): Promise<CertificacionConsultaResultado>;
     cgConsultarXNroOrden(ptoEmision: number, nroOrden: number, opts?: CallOptions): Promise<CertificacionConsultaResultado>;
+    cgInformarCalidad(params: CgInformarCalidadParams, opts?: CallOptions): Promise<CertificacionConsultaResultado>;
     cgSolicitarAnulacion(coe: string | number, params?: {
         pdf?: boolean;
     }, opts?: CallOptions): Promise<AnulacionCertificacionResultado>;
@@ -1709,7 +2513,9 @@ export class LpgClient extends SoapServiceClient {
     // (undocumented)
     codigoGradoReferenciaConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     dummy(opts?: CallOptions): Promise<ServerStatus>;
+    liquidacionAjustarContrato(params: AjusteContratoParams, opts?: CallOptions): Promise<AjusteContratoResultado>;
     liquidacionAjustarUnificado(params: AjusteUnificadoParams, opts?: CallOptions): Promise<AjusteUnificadoResultado>;
+    // @deprecated
     liquidacionAnular(coe: string | number, opts?: CallOptions): Promise<AnulacionLiquidacionResultado>;
     liquidacionAutorizar(params: LiquidacionAutorizarParams, opts?: CallOptions): Promise<LiquidacionResultado>;
     liquidacionPorContratoConsultar(params: LiquidacionPorContratoParams, opts?: CallOptions): Promise<string[]>;
@@ -1719,6 +2525,24 @@ export class LpgClient extends SoapServiceClient {
     }, opts?: CallOptions): Promise<LiquidacionConsultaResultado>;
     liquidacionXNroOrdenConsultar(ptoEmision: number, nroOrden: number, opts?: CallOptions): Promise<LiquidacionConsultaResultado>;
     localidadXProvinciaConsultar(codProvincia: string | number, opts?: CallOptions): Promise<CodigoDescripcion[]>;
+    lpgAnularContraDocumento(params: AnulacionContraDocumentoParams, opts?: CallOptions): Promise<LiquidacionConsultaResultado>;
+    lpgAutorizarAnticipo(params: AutorizarAnticipoParams, opts?: CallOptions): Promise<LiquidacionResultado>;
+    lpgCancelarAnticipo(params: CancelarAnticipoParams, opts?: CallOptions): Promise<LiquidacionConsultaResultado>;
+    lsgAjustarXCoe(params: LsgAjustarXCoeParams, opts?: CallOptions): Promise<LsgAjusteResultado>;
+    lsgAjustarXContrato(params: LsgAjustarXContratoParams, opts?: CallOptions): Promise<LsgAjusteResultado>;
+    // @deprecated
+    lsgAnular(coe: string | number, params?: {
+        pdf?: boolean;
+    }, opts?: CallOptions): Promise<AnulacionLiquidacionResultado>;
+    lsgAnularContraDocumento(params: AnulacionContraDocumentoParams, opts?: CallOptions): Promise<LiquidacionConsultaResultado>;
+    lsgAsociarAContrato(params: AsociarAContratoParams, opts?: CallOptions): Promise<LsgConsultaResultado>;
+    lsgAutorizar(params: LsgAutorizarParams, opts?: CallOptions): Promise<LsgAutorizarResultado>;
+    lsgConsultarUltimoNroOrden(ptoEmision: number, opts?: CallOptions): Promise<number>;
+    lsgConsultarXCoe(coe: string | number, params?: {
+        pdf?: boolean;
+    }, opts?: CallOptions): Promise<LsgConsultaResultado>;
+    lsgConsultarXContrato(params: LiquidacionPorContratoParams, opts?: CallOptions): Promise<string[]>;
+    lsgConsultarXNroOrden(ptoEmision: number, nroOrden: number, opts?: CallOptions): Promise<LsgConsultaResultado>;
     // (undocumented)
     provinciasConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     // (undocumented)
@@ -1736,6 +2560,74 @@ export class LpgClient extends SoapServiceClient {
     tipoOperacionXActividadConsultar(nroActLiquida: number, opts?: CallOptions): Promise<CodigoDescripcion[]>;
     // (undocumented)
     tipoRetencionConsultar(opts?: CallOptions): Promise<CodigoDescripcion[]>;
+}
+
+// @public
+export interface LsgAjustarXCoeParams extends AjusteLsgParams {
+    coe: string | number;
+    // (undocumented)
+    fusion?: FusionLpg;
+}
+
+// @public
+export interface LsgAjustarXContratoParams extends AjusteLsgParams {
+    // (undocumented)
+    codGrano: number;
+    // (undocumented)
+    cuitComprador: CuitInput;
+    cuitCorredor?: CuitInput;
+    // (undocumented)
+    cuitVendedor: CuitInput;
+    // (undocumented)
+    nroContrato: number;
+}
+
+// @public
+export interface LsgAjusteResultado extends ConAdvertencias {
+    // (undocumented)
+    ajusteCredito?: AjusteCreditoDebitoResultadoLsg;
+    // (undocumented)
+    ajusteDebito?: AjusteCreditoDebitoResultadoLsg;
+    coe: string;
+    // (undocumented)
+    coeAjustado?: string;
+    // (undocumented)
+    estado?: string;
+    // (undocumented)
+    eventos: CodigoDescripcion[];
+    // (undocumented)
+    nroContrato?: number;
+    // (undocumented)
+    nroOrden?: number;
+    // (undocumented)
+    ptoEmision?: number;
+    // (undocumented)
+    totalesUnificados?: TotalesUnificadosLsg;
+}
+
+// @public
+export interface LsgAutorizarParams {
+    // (undocumented)
+    facturaPapel?: FacturaPapelLsg;
+    // (undocumented)
+    liqSecundariaBase: LiquidacionSecundariaLsg;
+}
+
+// @public
+export interface LsgAutorizarResultado extends ConAdvertencias {
+    // (undocumented)
+    autorizacion: LiquidacionSecundariaAutorizadaLsg;
+    // (undocumented)
+    eventos: CodigoDescripcion[];
+}
+
+// @public
+export interface LsgConsultaResultado extends ConAdvertencias {
+    // (undocumented)
+    eventos: CodigoDescripcion[];
+    // (undocumented)
+    liquidaciones: LiquidacionesLsg[];
+    pdf?: string;
 }
 
 export { MemoryTicketStorage }
@@ -1785,6 +2677,18 @@ export interface MetadataCPE {
 }
 
 // @public
+export interface NuevoDestinoDestinatarioCPEAutomotorDGParams {
+    // (undocumented)
+    cartaPorte: CartaPorteId;
+    // (undocumented)
+    destinatario?: DestinatarioCPE;
+    // (undocumented)
+    destino: DestinoCPEDG;
+    // (undocumented)
+    transporte: TransporteAutomotorModificaCPEDG;
+}
+
+// @public
 export interface NuevoDestinoDestinatarioCPEAutomotorParams {
     // (undocumented)
     cartaPorte: CartaPorteId;
@@ -1794,6 +2698,22 @@ export interface NuevoDestinoDestinatarioCPEAutomotorParams {
     destino: DestinoCPE;
     // (undocumented)
     transporte: TransporteAutomotorModificaCPE;
+}
+
+// @public
+export interface NuevoDestinoDestinatarioCPEEmisionDestinoDGParams extends NuevoDestinoDestinatarioCPEAutomotorDGParams, ConCuitDestino {
+}
+
+// @public
+export interface NuevoDestinoDestinatarioCPEFerroviariaDGParams {
+    // (undocumented)
+    cartaPorte: CartaPorteId;
+    // (undocumented)
+    destinatario?: DestinatarioCPE;
+    // (undocumented)
+    destino: DestinoPlantaCPEDG;
+    // (undocumented)
+    transporte: TransporteFerroviariaModificaCPE;
 }
 
 // @public
@@ -1851,11 +2771,32 @@ export interface OrigenCPEAutomotor {
 }
 
 // @public
+export interface OrigenCPEDG {
+    cuitTitularPlanta?: CuitInput;
+    // (undocumented)
+    domicilioOrigen: DomicilioPUCCPE;
+    // (undocumented)
+    esUsuarioIndustria: boolean;
+    // (undocumented)
+    planta?: number;
+}
+
+// @public
 export interface PercepcionLpg {
     // (undocumented)
     descripcion: string;
     // (undocumented)
     importeFinal: number;
+}
+
+// @public
+export interface PercepcionLsg {
+    // (undocumented)
+    alicuota: number;
+    // (undocumented)
+    baseCalculo: number;
+    // (undocumented)
+    detalleAclaratoria: string;
 }
 
 // @public
@@ -1872,6 +2813,18 @@ export interface PlantaCPE {
     nroPlanta?: number;
     // (undocumented)
     ubicacionGeoreferencial?: string;
+}
+
+// @public
+export interface PlantaDGCPE {
+    // (undocumented)
+    actividad?: number;
+    // (undocumented)
+    conPlantaDG?: string;
+    // (undocumented)
+    nroPlanta?: number;
+    // (undocumented)
+    sinPlantaDG?: string;
 }
 
 // @public
@@ -1895,11 +2848,49 @@ export interface RechazoCPEParams {
 }
 
 // @public
+export interface RegresoOrigenCPEAutomotorDGParams {
+    // (undocumented)
+    cartaPorte: CartaPorteId;
+    // (undocumented)
+    cuitDestinatario?: CuitInput;
+    // (undocumented)
+    domicilioDestino?: DomicilioPUCCPE;
+    // (undocumented)
+    planta?: number;
+    // (undocumented)
+    transporte: TransporteAutomotorModificaCPEDG;
+}
+
+// @public
 export interface RegresoOrigenCPEAutomotorParams {
     // (undocumented)
     cartaPorte: CartaPorteId;
     // (undocumented)
     transporte: TransporteAutomotorModificaCPE;
+}
+
+// @public
+export interface RegresoOrigenCPEEmisionDestinoDGParams extends ConCuitDestino {
+    // (undocumented)
+    cartaPorte: CartaPorteId;
+    // (undocumented)
+    planta?: number;
+    // (undocumented)
+    transporte: TransporteAutomotorModificaCPEDG;
+}
+
+// @public
+export interface RegresoOrigenCPEFerroviariaDGParams {
+    // (undocumented)
+    cartaPorte: CartaPorteId;
+    // (undocumented)
+    cuitDestinatario: CuitInput;
+    // (undocumented)
+    domicilioDestino?: DomicilioPUCCPE;
+    // (undocumented)
+    planta?: number;
+    // (undocumented)
+    transporte: TransporteFerroviariaModificaCPE;
 }
 
 // @public
@@ -1982,6 +2973,10 @@ export interface SolicitanteCartaPorteParams {
     cuitSolicitante: CuitInput;
 }
 
+// @public
+export interface SolicitanteDestinoCartaPorteParams extends SolicitanteCartaPorteParams, ConCuitDestino {
+}
+
 export { TicketStorage }
 
 // @public
@@ -1989,11 +2984,52 @@ export const TIPO_CPE: {
     readonly AUTOMOTOR: 74;
     readonly FERROVIARIA: 75;
     readonly AUTOMOTOR_FLETE_CORTO: 274;
+    readonly AUTOMOTOR_DG: 284;
+    readonly FERROVIARIA_DG: 285;
+    readonly EMISION_DESTINO_DG: 286;
+    readonly DUCTOS_DG: 287;
 };
 
 // @public
 export interface TipoEmbalajeCPE extends CodigoDescripcion {
     unidadMedida: CodigoDescripcion[];
+}
+
+// @public
+export interface TotalesUnificadosLsg {
+    // (undocumented)
+    importeNeto?: number;
+    // (undocumented)
+    iva105?: number;
+    // (undocumented)
+    iva21?: number;
+    // (undocumented)
+    pagoSegunCondicion?: number;
+    // (undocumented)
+    subtotalCredDeb?: number;
+    // (undocumented)
+    subtotalGeneral?: number;
+    // (undocumented)
+    totalBasePercepciones?: number;
+}
+
+// @public
+export interface TransporteAutomotorCPEDG {
+    // (undocumented)
+    cuitChofer: CuitInput;
+    // (undocumented)
+    cuitIntermediarioFlete?: CuitInput;
+    // (undocumented)
+    cuitPagadorFlete: CuitInput;
+    // (undocumented)
+    cuitTransportista: CuitInput;
+    dominio: string[];
+    // (undocumented)
+    fechaHoraPartida: FechaHoraInput;
+    // (undocumented)
+    kmRecorrer: number;
+    // (undocumented)
+    tarifa?: number;
 }
 
 // @public
@@ -2003,6 +3039,38 @@ export interface TransporteAutomotorModificaCPE {
     // (undocumented)
     fechaHoraPartida: FechaHoraInput;
     kmRecorrer: number;
+}
+
+// @public
+export type TransporteAutomotorModificaCPEDG = Omit<TransporteAutomotorModificaCPE, 'codigoTurno'>;
+
+// @public
+export interface TransporteFerroviariaCPEDG {
+    // (undocumented)
+    cuitConductor?: CuitInput;
+    // (undocumented)
+    cuitConductorTramo2?: CuitInput;
+    // (undocumented)
+    cuitIntermediarioFlete?: CuitInput;
+    // (undocumented)
+    cuitPagadorFlete: CuitInput;
+    // (undocumented)
+    cuitTransportista: CuitInput;
+    // (undocumented)
+    cuitTransportistaTramo2?: CuitInput;
+    // (undocumented)
+    fechaHoraPartidaTren: FechaHoraInput;
+    // (undocumented)
+    kmRecorrer: number;
+    // (undocumented)
+    nroOperativo: number;
+    nroPrecinto: string[];
+    // (undocumented)
+    nroVagon: number;
+    // (undocumented)
+    ramal: RamalCPE;
+    // (undocumented)
+    tarifa?: number;
 }
 
 // @public
@@ -2016,16 +3084,34 @@ export interface TransporteFerroviariaModificaCPE {
 }
 
 // @public
+export function validateAjusteContrato(params: AjusteContratoParams): void;
+
+// @public
 export function validateAjusteUnificado(params: AjusteUnificadoParams): void;
+
+// @public
+export function validateAutorizarAnticipo(params: AutorizarAnticipoParams): void;
 
 // @public
 export function validateAutorizarCPEAutomotor(params: AutorizarCPEAutomotorParams): void;
 
 // @public
+export function validateAutorizarCPEAutomotorDG(params: AutorizarCPEAutomotorDGParams): void;
+
+// @public
+export function validateAutorizarCPEEmisionDestinoDG(params: AutorizarCPEEmisionDestinoDGParams): void;
+
+// @public
 export function validateAutorizarCPEFerroviaria(params: AutorizarCPEFerroviariaParams): void;
 
 // @public
+export function validateAutorizarCPEFerroviariaDG(params: AutorizarCPEFerroviariaDGParams): void;
+
+// @public
 export function validateCgAutorizar(params: CgAutorizarParams): void;
+
+// @public
+export function validateCgInformarCalidad(params: CgInformarCalidadParams): void;
 
 // @public
 export function validateConfirmacionDefinitivaCPEAutomotor(params: ConfirmacionDefinitivaCPEAutomotorParams): void;
@@ -2044,6 +3130,15 @@ export function validateEditarCPEFerroviaria(params: EditarCPEFerroviariaParams)
 
 // @public
 export function validateLiquidacion(params: LiquidacionAutorizarParams): void;
+
+// @public
+export function validateLsgAjustarXCoe(params: LsgAjustarXCoeParams): void;
+
+// @public
+export function validateLsgAjustarXContrato(params: LsgAjustarXContratoParams): void;
+
+// @public
+export function validateLsgAutorizar(params: LsgAutorizarParams): void;
 
 export { ValidationErrorDetail }
 

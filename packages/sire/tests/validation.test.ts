@@ -80,7 +80,8 @@ describe('formatImporte', () => {
   it('redondea a 2 decimales', () => {
     expect(formatImporte(0)).toBe('0.00');
     expect(formatImporte(2100)).toBe('2100.00');
-    expect(formatImporte(10.005)).toBe('10.01');
+    expect(formatImporte(10.005)).toBe('10.00'); // mitad al par
+    expect(formatImporte(10.015)).toBe('10.02');
     expect(formatImporte(99_999_999_999.99)).toBe('99999999999.99');
   });
 

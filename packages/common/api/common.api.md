@@ -48,6 +48,7 @@ export interface ArcaAuthErrorOptions {
 
 // @public
 export interface ArcaBaseConfig {
+    alreadyAuthenticatedCooldownMs?: number;
     autoClockSkew?: boolean;
     cert: string;
     clockOffsetMs?: number;
@@ -216,9 +217,11 @@ export interface ArcaSoapErrorOptions {
 export class ArcaTicketVigenteError extends ArcaAuthError {
     constructor(service: string, options?: {
         cause?: unknown;
+        retryAfterMs?: number;
     });
     // (undocumented)
     static readonly code: string;
+    readonly retryAfterMs?: number;
     // (undocumented)
     readonly service: string;
 }
@@ -297,6 +300,9 @@ export function createWsaaClient(config: ArcaBaseConfig & {
 }, onEvent?: (event: ArcaEvent) => void): WsaaClient;
 
 // @public
+export function diasEntre(desde: Date | string, hasta: Date | string): number;
+
+// @public
 export enum DocTipo {
     // (undocumented)
     ACTA_NACIMIENTO = 93,
@@ -366,6 +372,7 @@ export enum DocTipo {
     DNI = 96,
     // (undocumented)
     EN_TRAMITE = 92,
+    FONDO_COMUN_INVERSION_CNV = 31,
     // (undocumented)
     LC = 90,
     // (undocumented)
@@ -715,6 +722,7 @@ export class WsaaClient {
 
 // @public (undocumented)
 export interface WsaaClientConfig {
+    alreadyAuthenticatedCooldownMs?: number;
     autoClockSkew?: boolean;
     cert: string;
     clockOffsetMs?: number;

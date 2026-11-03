@@ -37,7 +37,7 @@ src/
   service.ts        — ArcaSdkBase, SoapServiceClient, createWsaaClient, transportOptions,
                       parseServerStatus, serverStatusOk, statusOf
   errors.ts         — jerarquía de errores
-  validators.ts     — CUIT/CUIL, CBU, formatDate, parseArcaDate (alias deprecado parseAfipDate), validateFecha(Rango)
+  validators.ts     — CUIT/CUIL, CBU, formatDate, parseArcaDate (alias deprecado parseAfipDate), validateFecha(Rango), diasEntre
   dates.ts          — AR_TIMEZONE, formatDateTimeAR (único formateador Intl de hora argentina)
   rounding.ts       — roundHalfUp, roundHalfEven
   qr.ts             — generarUrlQR, QR_URL, QRInput, QROptions
@@ -71,6 +71,7 @@ const wsaa = new WsaaClient({
   autoClockSkew?: boolean,          // default true
   loginErrorCooldownMs?: number,    // espera tras error transitorio, default 60000 (0 la desactiva)
   permanentErrorCooldownMs?: number,// espera tras error no reintentable, default Infinity (0 la desactiva)
+  alreadyAuthenticatedCooldownMs?: number, // espera tras coe.alreadyAuthenticated, default 120000 prod / 600000 homo
   fetch?: typeof fetch,
   legacyTls?: "auto" | "never" | "always",
 });
@@ -79,15 +80,15 @@ const wsaa = new WsaaClient({
 El constructor lanza `ArcaValidationError` si el certificado o la clave son inválidos, si no se corresponden, si la clave encriptada no tiene (o tiene mal) `keyPassphrase`, o si `tokenTTLMinutes` está fuera de 1..1440. Cert y clave se parsean una sola vez.
 
 Propiedades y métodos:
-- `getAccessTicket(service, { signal }?)`: memoria → storage → login (deduplicado por servicio). `service` se valida: 3 a 32 caracteres `[A-Za-z0-9_-]` (si no, `ArcaValidationError`). El `signal` solo cancela la espera, nunca un login en curso.
-- `clearTicket(service)` / `clearAllTickets()`: borran tickets (memoria y storage) y limpian esperas. Ojo: WSAA no emite otro TA mientras el anterior esté vigente; borrar uno vigente deja sin acceso hasta 12 h.
+- `getAccessTicket(service, { signal }?)`: memoria → storage → login (deduplicado por servicio). `service` se valida: 3 a 32 caracteres `[A-Za-z0-9_-]` empezando con una letra (si no, `ArcaValidationError`). El `signal` solo cancela la espera, nunca un login en curso.
+- `clearTicket(service)` / `clearAllTickets()`: borran tickets (memoria y storage) y limpian esperas. Ojo: WSAA rechaza un TA nuevo mientras el anterior esté vigente y dentro del lapso de retención; borrar uno vigente deja sin acceso durante ese lapso (según el manual de WSAA, 2 min en producción y 10 en homologación).
 - `resetLoginCooldown(service?)`: limpia esperas sin tocar tickets (usar después de corregir la causa de un error no reintentable).
 - `ticketKey(service)`: `"{prod|homo|hash}:{huella del cert}:{service}"`.
 - `endpoint`, `production` (readonly), `clockOffsetMs`, `now()`.
 
 Comportamiento:
 - Margen de 2 minutos antes del vencimiento; dentro del margen intenta renovar y, si WSAA no lo permite, sigue usando el ticket hasta su vencimiento real.
-- `coe.alreadyAuthenticated` sin ticket en el storage (releído a 0/250/750 ms) → `ArcaTicketVigenteError`.
+- `coe.alreadyAuthenticated` sin ticket en el storage (releído a 0/250/750 ms) → `ArcaTicketVigenteError` (`retryable: true`, `retryAfterMs`). Durante `alreadyAuthenticatedCooldownMs` (default 120000 en producción, 600000 en homologación) se relanza sin llamar a WSAA.
 - Respuesta de WSAA: sin `loginCmsReturn`, `credentials`, `token`/`sign`, con `expirationTime` ilegible o no futuro → `ArcaAuthError` (`retryable: true`). Sin `expirationTime` en el TA se asumen 12 h.
 - Esperas tras un login fallido (spec WSAA 1.2.2). `getAccessTicket` lanza `ArcaAuthError` con `faultCode`, `statusCode`, `retryable` y `cause`:
   - No reintentables (`retryable: false`): faultcodes `cms.*`, `coe.*` (salvo alreadyAuthenticated), `xml.*` (salvo desfase de reloj) y `wsn.*` salvo `wsn.unavailable`. No se piden más TA para ese servicio hasta `resetLoginCooldown`/`clearTicket`/`clearAllTickets` (o `permanentErrorCooldownMs`).
@@ -96,7 +97,8 @@ Comportamiento:
   - Error de red sin enviar o abort: sin espera.
   - Durante una espera, si hay un ticket por vencer todavía utilizable, se devuelve.
 - Secretos (cert/clave parseados y tickets en memoria) en campos privados `#`: no aparecen en `JSON.stringify` ni `util.inspect`.
-- `uniqueId` del TRA: entero aleatorio de 32 bits sin signo; `generationTime` = ahora − 2 min (con offset).
+- `uniqueId` del TRA: entero aleatorio de 32 bits sin signo; `generationTime` = ahora − 2 min (con offset); `expirationTime` = ahora + `tokenTTLMinutes`, sin pasar de 24 h desde `generationTime` (con 1440 queda ahora + 1438 min).
+- Nombre del servicio: debe empezar con una letra (XSD del TRA).
 
 `certificateInfo(pem)` → `{ subject, issuer, notBefore, notAfter, cuit? }` (`cuit` del `serialNumber` del sujeto, `"CUIT 20123456786"`). Lanza `ArcaValidationError` si el PEM es inválido.
 
@@ -129,7 +131,7 @@ function extractMethodResult(parsed, method, options?: { kind?: SoapOperationKin
 function checkServiceErrors(result, serviceName): void;            // lanza ArcaServiceError
 function extractServiceErrors(result): ServiceErrorDetail[];       // sin lanzar
 function parseXml(xml: string, options?: { parseNumbers?: boolean }): Record<string, unknown>;
-function buildXml(obj: Record<string, unknown>): string;           // omite propiedades null/undefined
+function buildXml(obj: Record<string, unknown>): string;           // omite propiedades null/undefined; Date → xsd:dateTime -03:00
 function ensureArray<T>(val: T | T[] | undefined | null): T[];
 function getNestedValue(obj, ...keys): unknown;
 ```
@@ -147,7 +149,7 @@ function getNestedValue(obj, ...keys): unknown;
 ```typescript
 function validateCuit(cuit: string | number, field?: string): string; // 11 dígitos; prefijos 20,23,24,27,30,33,34,50,51,55
 function isValidCuit(cuit): boolean;
-function normalizeCuit(cuit): string;          // quita guiones, puntos y espacios
+function normalizeCuit(cuit): string;          // quita guiones, puntos y espacios de un string (un number se convierte tal cual)
 function formatCuit(cuit): string;             // "XX-XXXXXXXX-X"
 function validateCBU(cbu: string): string;     // 22 dígitos + checksums; quita espacios y guiones; solo string
 function isValidCBU(cbu: string): boolean;
@@ -155,30 +157,33 @@ function formatDate(date: Date | string): string;      // YYYYMMDD en hora de Ar
 function parseArcaDate(s: string): Date;               // mediodía de Argentina (15:00 UTC); parseAfipDate = alias deprecado
 function validateFecha(date: Date | string, fieldName: string): void;
 function validateFechaRango(inicio, fin | undefined): void; // fin no puede ser anterior (puede ser igual); compara fechas calendario AR
+function diasEntre(desde: Date | string, hasta: Date | string): number; // días de calendario AR (hasta - desde)
 function collectErrors(fn, errors): void; function collectErrorsWithPrefix(fn, errors, prefix): void;
 
 const AR_TIMEZONE = "America/Argentina/Buenos_Aires";
 function formatDateTimeAR(d: Date, options?: { millis?: boolean }): string; // "AAAA-MM-DDTHH:mm:ss[.SSS]-03:00"
 function roundHalfUp(value: number, digits: number): number;   // mitad hacia arriba sobre el decimal escrito (8.575 → 8.58)
-function roundHalfEven(value: number, digits: number): number; // mitad al par (WSMTXCA): 8.565 → 8.56, 8.575 → 8.58, 2.675 → 2.68
+function roundHalfEven(value: number, digits: number): number; // mitad al par (el de los manuales de ARCA; lo usa dec() del DSL): 8.565 → 8.56, 8.575 → 8.58, 2.675 → 2.68
 
 const QR_URL = "https://www.arca.gob.ar/fe/qr/";
 function generarUrlQR(input: QRInput, options?: { baseUrl?: string }): string;
 interface QRInput { fecha: string | Date; cuit: number | string; ptoVta: number; tipoCmp: number; nroCmp: number;
   importe: number; moneda: string; ctz: number; tipoDocRec?: number; nroDocRec?: number | string;
   tipoCodAut?: "E" | "A"; codAut: number | string; }
-// JSON versión 1 en Base64; importe a 2 decimales, ctz a 6; ptoVta ≤ 5 dígitos, nroCmp ≤ 8; codAut de 14 dígitos.
+// JSON versión 1 en Base64; importe a 2 decimales y ctz a 6 (mitad al par, ≤ 13 enteros); ptoVta ≤ 5 dígitos,
+// tipoCmp ≤ 3, nroCmp ≤ 8; moneda de 3 caracteres; tipoDocRec entero ≤ 2 dígitos; nroDocRec ≤ 20 dígitos
+// (string si no entra en un number seguro; se escribe como número JSON); codAut de 14 dígitos. Lanza ArcaValidationError.
 ```
 
 ## Schema DSL (`@ramiidv/arca-common/schema`)
 
 El mismo schema valida y codifica un request (`encodeRequest(input, schema, context, extraCheck?)`: orden XSD, obligatorios, rangos, CUIT, decimales, fechas; lanza `ArcaValidationError` con todos los errores) y decodifica una respuesta pedida con `parseNumbers: false` (`decodeResponse(node, schema, path, options?)`).
 
-Constructores: `str({ minLen, maxLen, values, pattern, patternMessage })`, `nonEmptyStr({ min?, max? })` (no vacío ni solo espacios: "no puede estar vacío"), `int(min?, max?, minExclusive?)`, `id()`, `dec(digits, min?, max?, minExclusive?)`, `importe(max?)` (= `dec(2, 0, max)`), `porcentaje()` (= `dec(2, 0, 100)`), `double`, `bool`, `siNo`, `cuit({ decodeAs })`, `date`, `date8`, `datetime`, `base64`, `custom(encode, decode?)`, `obj`, `choice`, `opt`, `must`, `list`, `wrapped`, `xml`. También exporta `formatDateTimeAR`, `roundHalfUp`, `roundHalfEven`.
+Constructores: `str({ minLen, maxLen, values, pattern, patternMessage })` (rechaza controles que XML 1.0 no admite y surrogates UTF-16 sueltos), `nonEmptyStr({ min?, max? })` (no vacío ni solo espacios: "no puede estar vacío"), `int(min?, max?, minExclusive?)`, `id()`, `dec(digits, min?, max?, minExclusive?)` (mitad al par), `importe(max?)` (= `dec(2, 0, max)`), `porcentaje()` (= `dec(2, 0, 100)`), `double`, `bool`, `siNo`, `cuit({ decodeAs })`, `date`, `date8`, `datetime` (Date o ISO-8601 con segundos), `base64`, `custom(encode, decode?)`, `obj`, `choice`, `opt`, `must`, `list(f, minItems = 1, maxItems?)`, `wrapped(item, f, minItems = 1, maxItems?)`, `xml`. También exporta `formatDateTimeAR`, `roundHalfUp`, `roundHalfEven`.
 
 `decodeResponse` options: `error?: (message) => Error` (prioridad), `kind?: "consulta" | "emision"` (con `"emision"` el error por defecto es `ArcaResponseError` con `uncertain: true`), `emptyLists?: "array" | "omit"`.
 
-`@ramiidv/arca-common/testing`: `mockFetch`, `mockFetchByMethod`, `mockFetchWith`, `hangingReply`, `networkError`, `xmlResponse`, `soapEnvelope`, `soapResponse`, `soapFault`, `soapFaultResponse`, `loginResponse`, `fakeTicketStorage`, `testCert` (cert autofirmado y su clave, válidos para `WsaaClient`), `requestParams`, `childOrder`, `loadXsdTypes`, `checkSchemaAgainstXsd(schema, type, types, { direction, ignore })`.
+`@ramiidv/arca-common/testing`: `mockFetch`, `mockFetchByMethod`, `mockFetchWith`, `hangingReply`, `networkError`, `xmlResponse`, `soapEnvelope`, `soapResponse`, `soapFault`, `soapFaultResponse`, `loginResponse`, `fakeTicketStorage`, `testCert` (cert autofirmado y su clave, válidos para `WsaaClient`), `requestParams`, `childOrder`, `loadXsdTypes`, `checkSchemaAgainstXsd(schema, type, types, { direction, ignore })`. `loadXsdTypes` resuelve la herencia (`complexContent/extension`) también en tipos anónimos; `soapFault` escapa `faultCode` y `faultString`.
 
 ## Errores
 
@@ -190,7 +195,7 @@ class ArcaAuthError extends ArcaError {
   retryable: boolean;   // true = transitorio; false = corregir la causa antes de reintentar
   constructor(message: string, options?: { cause?; faultCode?; statusCode?; retryable? }); // faultCode/statusCode se toman de cause (ArcaSoapError) si no se indican
 }
-class ArcaTicketVigenteError extends ArcaAuthError { service: string }
+class ArcaTicketVigenteError extends ArcaAuthError { service: string; retryAfterMs?: number } // retryable: true
 class ArcaSoapError extends ArcaError {
   statusCode?: number; faultCode?: string; faultString?: string; faultDetail?: unknown;
   responseBody?: string; responseDate?: Date; uncertain: boolean; aborted: boolean;
@@ -204,14 +209,14 @@ class ArcaResponseError extends ArcaError { uncertain: boolean }   // respuesta 
 
 - `AccessTicket { token; sign; expirationTime (ISO UTC); generationTime?; service? }` — JSON puro.
 - `TicketStorage { get(key, { onError }?); set(key, ticket); delete?(key) }`.
-- `ArcaBaseConfig { cert; key; keyPassphrase?; cuit; production?; timeout?; retries?; retryDelayMs?; tokenTTLMinutes?; onEvent?; ticketStorage?; clockOffsetMs?; autoClockSkew?; loginErrorCooldownMs?; permanentErrorCooldownMs?; fetch?; legacyTls? }`.
+- `ArcaBaseConfig { cert; key; keyPassphrase?; cuit; production?; timeout?; retries?; retryDelayMs?; tokenTTLMinutes?; onEvent?; ticketStorage?; clockOffsetMs?; autoClockSkew?; loginErrorCooldownMs?; permanentErrorCooldownMs?; alreadyAuthenticatedCooldownMs?; fetch?; legacyTls? }`.
 - `SoapCallOptions { timeout?; retries?; retryDelayMs?; soapAction?; onEvent?; methodName?; kind?; signal?; fetch?; legacyTls?; parseNumbers? }`.
 - `SoapOperationKind = "consulta" | "emision"`; `CallOptions { signal? }`; `ServerStatus { appserver; dbserver; authserver }`.
 - `ArcaEvent`: `auth:login`, `auth:cache-hit`, `auth:clock-skew`, `auth:storage-error`, `request:start`, `request:end`, `request:retry`, `request:error`.
 
 ## Constantes
 
-`WSAA_ENDPOINTS` (`testing`: https://wsaahomo.afip.gov.ar/ws/services/LoginCms, `production`: https://wsaa.afip.gov.ar/ws/services/LoginCms), `WSAA_NAMESPACE`, `AR_TIMEZONE`, `QR_URL`, `DocTipo` (CUIT=80, CUIL=86, DNI=96, CONSUMIDOR_FINAL=99...), `Provincia` (0-24, sin 15), `CondicionIva`.
+`WSAA_ENDPOINTS` (`testing`: https://wsaahomo.afip.gov.ar/ws/services/LoginCms, `production`: https://wsaa.afip.gov.ar/ws/services/LoginCms), `WSAA_NAMESPACE`, `AR_TIMEZONE`, `QR_URL`, `DocTipo` (CUIT=80, CUIL=86, DNI=96, CONSUMIDOR_FINAL=99, FONDO_COMUN_INVERSION_CNV=31...), `Provincia` (0-24, sin 15), `CondicionIva`.
 
 ## Conceptos
 

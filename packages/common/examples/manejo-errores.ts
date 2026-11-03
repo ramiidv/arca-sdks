@@ -60,8 +60,8 @@ async function ejemploErroresWsaa() {
   } catch (e) {
     if (e instanceof ArcaTicketVigenteError) {
       // WSAA ya emitió un TA para este certificado y servicio, pero no está en
-      // memoria ni en el ticketStorage: hay que esperar a que venza (hasta 12 h).
-      console.log('TA vigente inaccesible:', e.service);
+      // memoria ni en el ticketStorage: WSAA lo rechaza durante un lapso de retención.
+      console.log('TA vigente inaccesible:', e.service, '- reintentar en', e.retryAfterMs, 'ms');
     } else if (e instanceof ArcaAuthError) {
       // getAccessTicket envuelve todo error de login en ArcaAuthError: el
       // original (ArcaSoapError con el Fault de WSAA, timeout, etc.) está en `cause`.
@@ -85,7 +85,7 @@ async function ejemploErroresWsaa() {
         // Después de corregirla (ej: autorizar el certificado en ARCA):
         wsaa.resetLoginCooldown('wsfe');
         // Ojo: no borres tickets vigentes (clearTicket/clearAllTickets) "por las
-        // dudas": WSAA no emite otro TA hasta que venza el anterior (hasta 12 h).
+        // dudas": WSAA rechaza los pedidos repetidos durante un lapso de retención.
       }
     } else if (e instanceof ArcaValidationError) {
       // Nombre de servicio inválido.

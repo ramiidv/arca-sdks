@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   validateCuit,
   normalizeCuit,
+  diasEntre,
   formatCuit,
   isValidCuit,
   validateCuil,
@@ -31,6 +32,11 @@ describe('validateCuit', () => {
 
   it('validates a CUIT passed as number', () => {
     expect(validateCuit(20123456786)).toBe('20123456786');
+  });
+
+  it('rechaza un number que no es entero (no le quita el punto decimal)', () => {
+    expect(() => validateCuit(2012345678.6)).toThrow(ArcaValidationError);
+    expect(normalizeCuit(2012345678.6)).toBe('2012345678.6');
   });
 
   it('validates prefix 30 (persona jurídica)', () => {
@@ -400,5 +406,36 @@ describe('auditoría: CUIT y CBU', () => {
     expect(validateCBU(' 0110599-5 00000041817221 ')).toBe('0110599500000041817221');
     expect(validateCBU('01105995-00000041817221')).toBe('0110599500000041817221');
     expect(() => validateCBU(1105995 as unknown as string)).toThrow(ArcaValidationError);
+  });
+});
+
+describe('diasEntre', () => {
+  it('cuenta días de calendario de Argentina (la hora no cuenta)', () => {
+    expect(diasEntre('2026-11-01', '20261104')).toBe(3);
+    expect(diasEntre('2026-02-27', '2026-03-01')).toBe(2);
+    expect(diasEntre('2026-11-04', '2026-11-01')).toBe(-3);
+    // 02:30 UTC del 2 es 23:30 del 1 en Argentina.
+    expect(diasEntre(new Date('2026-11-02T02:30:00Z'), '2026-11-01')).toBe(0);
+    expect(() => diasEntre('2026-13-01', '2026-11-01')).toThrow(ArcaValidationError);
+  });
+});
+
+describe('diasEntre: casos borde', () => {
+  it('informa qué fecha es inválida (desde / hasta)', () => {
+    const err = (() => {
+      try {
+        diasEntre('2026-11-01', 'x');
+      } catch (e) {
+        return e as ArcaValidationError;
+      }
+    })();
+    expect(err?.field).toBe('hasta');
+    expect(() => diasEntre(new Date(Number.NaN), '2026-11-01')).toThrow(/desde/);
+  });
+
+  it('años bisiestos y años < 100 (sin el corrimiento de Date.UTC a 19xx)', () => {
+    expect(diasEntre('2024-02-28', '2024-03-01')).toBe(2);
+    expect(diasEntre('0050-01-01', '0051-01-01')).toBe(365);
+    expect(diasEntre('2025-12-31', '2026-12-31')).toBe(365);
   });
 });

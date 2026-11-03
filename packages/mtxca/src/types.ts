@@ -89,7 +89,7 @@ export interface MtxcaSubtotalIVA {
 export interface MtxcaOtroTributo {
   /** Código de tributo (`getTiposTributo()`). */
   codigo: number;
-  /** Obligatoria si `codigo` es 99. */
+  /** Hasta 25 caracteres. Obligatoria si `codigo` es 99 (301) y en FCE (302); se valida localmente en CAE. */
   descripcion?: string;
   baseImponible: number;
   importe: number;
@@ -100,6 +100,7 @@ export interface MtxcaComprobanteAsociado {
   codigoTipoComprobante: number;
   numeroPuntoVenta: number;
   numeroComprobante: number;
+  /** En una nota FCE, obligatorio en el asociado FCE (209 / 809) y es el CUIT del emisor (210 / 810). */
   cuit?: number | string;
   fechaEmision?: FechaInput;
 }
@@ -125,7 +126,7 @@ export interface MtxcaDatoAdicional {
 export interface MtxcaComprador {
   codigoTipoDocumento: number;
   numeroDocumento: number | string;
-  /** Porcentaje de titularidad (2 decimales). */
+  /** Porcentaje de titularidad (2 decimales), mayor a 0 y menor a 100 (424, 425). */
   porcentaje: number;
 }
 
@@ -177,8 +178,8 @@ export interface MtxcaComprobanteBase {
   subtotalesIVA?: MtxcaSubtotalIVA[];
   datosAdicionales?: MtxcaDatoAdicional[];
   /**
-   * Solo con `codigoConcepto` 1 (432); en FCE, uno solo (433). No se admite en
-   * `informarComprobanteCAEA` (753).
+   * Más de uno, solo con `codigoConcepto` 1 (420, 432) y no en FCE (433). No
+   * se admite en `informarComprobanteCAEA` (753).
    */
   compradores?: MtxcaComprador[];
   /** Códigos de actividad (`getActividadesVigentes()`). */
@@ -207,16 +208,22 @@ export interface MtxcaComprobanteCAEA extends MtxcaComprobanteBase {
   codigoTipoAutorizacion?: 'A';
   /** Opcional; si se informa debe coincidir con la fecha hasta del CAEA. */
   fechaVencimiento?: FechaInput;
-  /** Fecha/hora de generación: `Date` (hora de Argentina) o string `YYYY-MM-DDTHH:MM:SS`. */
+  /**
+   * Fecha/hora de generación: `Date` (hora de Argentina) o string
+   * `YYYY-MM-DDTHH:MM:SS`. Obligatoria desde el 01/08/2026 (754): el SDK la
+   * exige localmente en `informarComprobanteCAEA` e `informarAjusteIVACAEA`.
+   */
   fechaHoraGen?: Date | string;
 }
 
 /** Opciones de `ArcaMtxca.autorizar()`. */
 export interface AutorizarOptions extends CallOptions {
   /**
-   * Valida localmente la coherencia de importes según las validaciones
-   * excluyentes del manual (default: true). Desactivalo solo si ARCA acepta
-   * un caso que esta validación rechaza.
+   * Valida localmente las reglas de negocio excluyentes del manual (default:
+   * true): importes y fórmulas, pero también receptor, fechas, moneda, FCE,
+   * comprobantes asociados, datos adicionales, compradores, etc. Con `false`
+   * solo se valida el XSD (y el dígito verificador de los CUIT). Desactivalo
+   * solo si ARCA acepta un caso que esta validación rechaza.
    */
   validarImportes?: boolean;
 }

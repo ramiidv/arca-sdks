@@ -63,17 +63,19 @@ export interface ConstatarInput {
   cbteTipo: number;
   /** Número de comprobante (1 a 99999999). */
   cbteNro: number;
-  /** Fecha del comprobante: `YYYYMMDD`, `YYYY-MM-DD` o `Date`. Se envía como `YYYYMMDD`. */
+  /** Fecha del comprobante (desde el 01/01/2013, 101): `YYYYMMDD`, `YYYY-MM-DD` o `Date`. Se envía como `YYYYMMDD`. */
   cbteFch: string | Date;
-  /** Importe total (>= 0, se redondea a 2 decimales). En comprobantes sin importe total, 0. */
+  /** Importe total (>= 0, se redondea a 2 decimales, mitad al par). En comprobantes sin importe total, 0. */
   impTotal: number;
   /** Código de autorización (CAE, CAI o CAEA), 14 dígitos. */
   codAutorizacion: string;
   /**
    * Tipo de documento del receptor (ver `getDocTipos()`). Obligatorio, con
-   * CUIT (80), en comprobantes A, A con leyenda y MiPyME/FCE (113, 114); en B,
-   * C, R, 30, 31, 37, 38, 41 y 49, solo si el importe supera $10.000.000 (115,
-   * 116). Si se informa, también hay que informar `docNroReceptor` (117).
+   * CUIT (80), en comprobantes A, A con leyenda y MiPyME/FCE (113, 114; se
+   * valida localmente); en B, C, R, 30, 31, 37, 38, 41 y 49, solo si el importe
+   * supera $10.000.000 (115, 116; lo valida ARCA). En los comprobantes T (195,
+   * 196, 197), 80, 91, 94 o 96 (118). Si se informa, también hay que informar
+   * `docNroReceptor` (117).
    */
   docTipoReceptor?: number | string;
   /** Número de documento del receptor (solo dígitos, hasta 20; con `docTipoReceptor` 80 se valida como CUIT). */

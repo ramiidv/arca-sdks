@@ -62,6 +62,7 @@ describe('validateFacturarOpts', () => {
     expect(() =>
       validateFacturarOpts({
         ...validOpts,
+        cbteTipo: CbteTipo.FACTURA_A,
         docTipo: DocTipo.CUIT,
         docNro: 30712345671,
         condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
@@ -430,7 +431,7 @@ describe('validateFacturarOpts: opcionales FCE MiPyME (10165-10173, 10214-10216)
   });
 });
 
-describe('validateFacturarOpts: reglas del manual WSFEv1 v4.7', () => {
+describe('validateFacturarOpts: reglas del manual WSFEv1 v4.8', () => {
   const base = { ptoVta: 1, items: [{ neto: 100, iva: IvaTipo.IVA_21 }] };
 
   it('NC/ND sin cbtesAsoc ni periodoAsoc → 10197', () => {
@@ -479,6 +480,19 @@ describe('validateFacturarOpts: reglas del manual WSFEv1 v4.7', () => {
     ).not.toThrow();
   });
 
+  it('B a No Categorizado con otros tributos y sin el 13: la 10283 solo observa, no se rechaza', () => {
+    expect(() =>
+      validateFacturarOpts({
+        ...base,
+        cbteTipo: CbteTipo.FACTURA_B,
+        docTipo: DocTipo.CUIT,
+        docNro: 23000000000,
+        condicionIva: CondicionIva.NO_CATEGORIZADO,
+        tributos: [{ id: TributoTipo.PERCEP_IIBB, desc: 'IIBB', baseImp: 100, alic: 3, importe: 3 }],
+      }),
+    ).not.toThrow();
+  });
+
   describe('compradores (10135-10147)', () => {
     const receptor = {
       ...base,
@@ -519,5 +533,370 @@ describe('validateFacturarOpts: reglas del manual WSFEv1 v4.7', () => {
     ])('rechaza %s', (_, compradores, codigo) => {
       expect(() => validateFacturarOpts({ ...receptor, compradores })).toThrow(codigo);
     });
+  });
+});
+
+describe('validateFacturarOpts: más reglas del manual WSFEv1 v4.8', () => {
+  const base = { ptoVta: 1, items: [{ neto: 100, iva: IvaTipo.IVA_21 }] };
+  const cuit = (docNro = 30712345671) => ({ docTipo: DocTipo.CUIT, docNro });
+  const B = { ...base, cbteTipo: CbteTipo.FACTURA_B };
+  const A = { ...base, cbteTipo: CbteTipo.FACTURA_A, ...cuit(), condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO };
+
+  it('10243: condición frente al IVA del receptor por clase (B y 49)', () => {
+    expect(() => validateFacturarOpts({ ...B, ...cuit(), condicionIva: CondicionIva.MONOTRIBUTISTA })).toThrow('10243');
+    expect(() => validateFacturarOpts({ ...B, ...cuit(), condicionIva: CondicionIva.EXENTO })).not.toThrow();
+    expect(() =>
+      validateFacturarOpts({
+        ...base,
+        cbteTipo: CbteTipo.FACTURA_C,
+        ...cuit(),
+        condicionIva: CondicionIva.MONOTRIBUTISTA,
+      }),
+    ).not.toThrow();
+  });
+
+  it('tipo 49 (Bienes Usados): concepto 1, opcionales 91 y 93, receptor consumidor final', () => {
+    const usados = {
+      ...base,
+      cbteTipo: CbteTipo.COMPRA_BIENES_USADOS,
+      docTipo: DocTipo.DNI,
+      docNro: 30111222,
+      condicionIva: CondicionIva.CONSUMIDOR_FINAL,
+      opcionales: [
+        { id: '91', valor: 'Juan Pérez' },
+        { id: '93', valor: 'Calle 123' },
+      ],
+    };
+    expect(() => validateFacturarOpts(usados)).not.toThrow();
+    expect(() => validateFacturarOpts({ ...usados, opcionales: [{ id: '91', valor: 'Juan Pérez' }] })).toThrow('10084');
+    expect(() => validateFacturarOpts({ ...usados, opcionales: [] })).toThrow('10078');
+    expect(() => validateFacturarOpts({ ...usados, condicionIva: CondicionIva.EXENTO })).toThrow('10243');
+    expect(() =>
+      validateFacturarOpts({ ...usados, servicio: { desde: '20261001', hasta: '20261031', vtoPago: '20261130' } }),
+    ).toThrow('10085');
+  });
+
+  it('docTipo 31 (FCI CNV): docNro de hasta 4 dígitos y condición 15', () => {
+    const fci = {
+      ...B,
+      docTipo: DocTipo.FONDO_COMUN_INVERSION_CNV,
+      docNro: 1234,
+      condicionIva: CondicionIva.IVA_NO_ALCANZADO,
+    };
+    expect(() => validateFacturarOpts(fci)).not.toThrow();
+    expect(() => validateFacturarOpts({ ...fci, docNro: 12345 })).toThrow('10271');
+    expect(() => validateFacturarOpts({ ...fci, condicionIva: CondicionIva.EXENTO })).toThrow('10272');
+  });
+
+  it('10015: docTipo 99 con docNro distinto de 0', () => {
+    expect(() => validateFacturarOpts({ ...B, docTipo: DocTipo.CONSUMIDOR_FINAL, docNro: 123 })).toThrow('10015');
+  });
+
+  it('10069 / 10140: el receptor y los compradores no pueden ser el emisor', () => {
+    expect(() => validateFacturarOpts(A, { cuitEmisor: 30712345671 })).toThrow('10069');
+    const compradores = [
+      { docTipo: DocTipo.CUIT, docNro: 30712345671, porcentaje: 60 },
+      { docTipo: DocTipo.CUIT, docNro: 20123456786, porcentaje: 40 },
+    ];
+    expect(() => validateFacturarOpts({ ...A, compradores }, { cuitEmisor: 20123456786 })).toThrow('10140');
+  });
+
+  it('10068: tipos que no admiten opcionales', () => {
+    expect(() =>
+      validateFacturarOpts({ ...base, cbteTipo: CbteTipo.NOTA_VENTA_CONTADO_B, opcionales: [{ id: '5', valor: 'x' }] }),
+    ).toThrow('10068');
+  });
+
+  it('10040: tipos y asociados admitidos', () => {
+    const asoc = (tipo: number) => [{ tipo, ptoVta: 1, nro: 10 }];
+    expect(() => validateFacturarOpts({ ...base, cbteTipo: CbteTipo.FACTURA_C, cbtesAsoc: asoc(88) })).toThrow('10040');
+    expect(() => validateFacturarOpts({ ...B, cbtesAsoc: asoc(CbteTipo.FACTURA_B) })).toThrow('10040');
+    expect(() => validateFacturarOpts({ ...B, cbtesAsoc: asoc(88) })).not.toThrow();
+    expect(() =>
+      validateFacturarOpts({ ...base, cbteTipo: CbteTipo.NOTA_CREDITO_B, cbtesAsoc: asoc(CbteTipo.FACTURA_A) }),
+    ).toThrow('10040');
+    expect(() =>
+      validateFacturarOpts({ ...base, cbteTipo: CbteTipo.NOTA_CREDITO_B, cbtesAsoc: asoc(CbteTipo.RECIBO_B) }),
+    ).not.toThrow();
+  });
+
+  it('seguros de caución: 2901/2902 en A y B 1-3/6-8, de hasta 30 caracteres y en igual cantidad', () => {
+    const caucion = [
+      { id: '2901', valor: 'POL-1' },
+      { id: '2902', valor: 'END-1' },
+    ];
+    expect(() => validateFacturarOpts({ ...A, opcionales: caucion })).not.toThrow();
+    expect(() => validateFacturarOpts({ ...A, opcionales: [caucion[0]] })).toThrow('10281');
+    expect(() =>
+      validateFacturarOpts({ ...A, opcionales: [caucion[0], { id: '2902', valor: 'x'.repeat(31) }] }),
+    ).toThrow('10276');
+    expect(() => validateFacturarOpts({ ...base, cbteTipo: CbteTipo.FACTURA_C, opcionales: caucion })).toThrow('10273');
+  });
+
+  it('compradores: no en FCE (10194), solo concepto 1 (10150), CUIT de 11 dígitos (10139)', () => {
+    const compradores = [
+      { docTipo: DocTipo.CUIT, docNro: 30712345671, porcentaje: 60 },
+      { docTipo: DocTipo.CUIL, docNro: 20111111112, porcentaje: 40 },
+    ];
+    expect(() =>
+      validateFacturarOpts({
+        ...A,
+        compradores,
+        servicio: { desde: '20261001', hasta: '20261031', vtoPago: '20261130' },
+      }),
+    ).toThrow('10150');
+    expect(() =>
+      validateFacturarOpts({ ...A, compradores: [compradores[0], { ...compradores[1], docNro: 2011111111 }] }),
+    ).toThrow('10139');
+    expect(() =>
+      validateFacturarOpts({
+        ...A,
+        cbteTipo: CbteTipo.FCE_FACTURA_A,
+        compradores,
+        vtoPago: '20991130',
+        opcionales: [
+          { id: '2101', valor: '0110599500000041817221' },
+          { id: '27', valor: 'SCA' },
+        ],
+      }),
+    ).toThrow('10194');
+  });
+});
+
+describe('validateFacturarOpts: NC/ND FCE (10151, 10158, 10164, 10178, 10183)', () => {
+  const nota = {
+    ptoVta: 1,
+    cbteTipo: CbteTipo.FCE_NOTA_CREDITO_A,
+    docTipo: DocTipo.CUIT,
+    docNro: 30712345671,
+    condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
+    items: [{ neto: 100, iva: IvaTipo.IVA_21 }],
+    opcionales: [{ id: '22', valor: 'N' }],
+  };
+  const factura = { tipo: CbteTipo.FCE_FACTURA_A, ptoVta: 1, nro: 10, cuit: 20123456786, fecha: '20261020' };
+
+  it('sin anulación: una sola factura FCE más remitos (10156, 10157); en una anulación, sin remitos (10183)', () => {
+    const remito = { ...factura, tipo: 91 };
+    expect(() => validateFacturarOpts({ ...nota, cbtesAsoc: [factura, remito] })).not.toThrow();
+    expect(() => validateFacturarOpts({ ...nota, cbtesAsoc: [remito] })).toThrow('10156');
+    expect(() => validateFacturarOpts({ ...nota, cbtesAsoc: [factura, { ...factura, nro: 11 }] })).toThrow('10156');
+    expect(() =>
+      validateFacturarOpts({ ...nota, opcionales: [{ id: '22', valor: 'S' }], cbtesAsoc: [factura, remito] }),
+    ).toThrow('10183');
+  });
+
+  it('el asociado lleva cuit y fecha', () => {
+    expect(() => validateFacturarOpts({ ...nota, cbtesAsoc: [factura] })).not.toThrow();
+    expect(() => validateFacturarOpts({ ...nota, cbtesAsoc: [{ ...factura, cuit: undefined }] })).toThrow('10151');
+    expect(() => validateFacturarOpts({ ...nota, cbtesAsoc: [{ ...factura, fecha: undefined }] })).toThrow('10158');
+  });
+
+  it('anulación: la ND asocia una NC y la NC una factura o ND', () => {
+    const anulacion = { ...nota, opcionales: [{ id: '22', valor: 'S' }] };
+    expect(() => validateFacturarOpts({ ...anulacion, cbtesAsoc: [factura] })).not.toThrow();
+    expect(() =>
+      validateFacturarOpts({ ...anulacion, cbtesAsoc: [{ ...factura, tipo: CbteTipo.FCE_NOTA_CREDITO_A }] }),
+    ).toThrow('10183');
+    expect(() =>
+      validateFacturarOpts({ ...anulacion, cbteTipo: CbteTipo.FCE_NOTA_DEBITO_A, cbtesAsoc: [factura] }),
+    ).toThrow('10183');
+  });
+
+  it('receptor 23000000000 (10178) y vtoPago anterior a hoy (10164)', () => {
+    expect(() =>
+      validateFacturarOpts({
+        ...nota,
+        docNro: 23000000000,
+        cbtesAsoc: [factura],
+      }),
+    ).toThrow('10178');
+    const anulacion = { ...nota, opcionales: [{ id: '22', valor: 'S' }], cbtesAsoc: [factura] };
+    expect(() =>
+      validateFacturarOpts({ ...anulacion, vtoPago: '20261105' }, { ahora: new Date('2026-11-10T12:00:00-03:00') }),
+    ).toThrow('10164');
+  });
+});
+
+describe('validateFacturarExpoOpts: manual WSFEX 3.1.1', () => {
+  const expo = {
+    ptoVta: 1,
+    cbteTipo: CbteTipo.FACTURA_E,
+    tipoExpo: 2,
+    pais: 212,
+    cliente: { nombre: 'ACME', cuitPais: 55000002126, domicilio: '123 Main St' },
+    moneda: 'DOL',
+    formaPago: 'Wire',
+    items: [{ codigo: 'X', descripcion: 'Y', cantidad: 1, unidad: 7, precioUnitario: 10 }],
+  };
+
+  it('1602: con canMisMonExt "S" la cotización se puede omitir', () => {
+    expect(() => validateFacturarExpoOpts({ ...expo, canMisMonExt: 'S' })).not.toThrow();
+    expect(() => validateFacturarExpoOpts(expo)).toThrow('1602');
+  });
+
+  it('1600/1601/1605: hasta 4 enteros, PES con 1, canMisMonExt solo en Factura E en moneda extranjera', () => {
+    expect(() => validateFacturarExpoOpts({ ...expo, cotizacion: 10000 })).toThrow('1600');
+    expect(() => validateFacturarExpoOpts({ ...expo, moneda: 'PES', cotizacion: 2 })).toThrow('1601');
+    expect(() => validateFacturarExpoOpts({ ...expo, moneda: 'PES', cotizacion: 1, canMisMonExt: 'S' })).toThrow(
+      '1605',
+    );
+    const cbtesAsoc = [{ cbteTipo: 19, cbtePuntoVta: 1, cbteNro: 5, cbteCuit: 20123456786 }];
+    expect(() =>
+      validateFacturarExpoOpts({
+        ...expo,
+        cbteTipo: CbteTipo.NOTA_CREDITO_E,
+        cotizacion: 1200,
+        canMisMonExt: 'N',
+        cbtesAsoc,
+      }),
+    ).toThrow('1605');
+  });
+
+  it('asociados: 1755, 1754 y 2047', () => {
+    const asoc = (cbteTipo: number) => ({ cbteTipo, cbtePuntoVta: 1, cbteNro: 5, cbteCuit: 20123456786 });
+    expect(() => validateFacturarExpoOpts({ ...expo, cotizacion: 1200, cbtesAsoc: [asoc(19)] })).toThrow('1755');
+    expect(() =>
+      validateFacturarExpoOpts({ ...expo, cotizacion: 1200, cbtesAsoc: [asoc(88), asoc(89)] }),
+    ).not.toThrow();
+    const nc = { ...expo, cbteTipo: CbteTipo.NOTA_CREDITO_E, cotizacion: 1200 };
+    expect(() => validateFacturarExpoOpts(nc)).toThrow('2047');
+    expect(() => validateFacturarExpoOpts({ ...nc, cbtesAsoc: [asoc(19), asoc(19)] })).toThrow('1754');
+    expect(() => validateFacturarExpoOpts({ ...nc, cbtesAsoc: [asoc(19)] })).not.toThrow();
+  });
+});
+
+describe('validateFacturarOpts: casos borde del manual WSFEv1 v4.8', () => {
+  const base = { ptoVta: 1, items: [{ neto: 100, iva: IvaTipo.IVA_21 }] };
+  const A = {
+    ...base,
+    cbteTipo: CbteTipo.FACTURA_A,
+    docTipo: DocTipo.CUIT,
+    docNro: 30712345671,
+    condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
+  };
+
+  it('10015: docNro obligatorio fuera de docTipo 99; el tipo 49 no admite docTipo 99', () => {
+    const B = { ...base, cbteTipo: CbteTipo.FACTURA_B, condicionIva: CondicionIva.CONSUMIDOR_FINAL };
+    expect(() => validateFacturarOpts({ ...B, docTipo: DocTipo.DNI })).toThrow('10015');
+    expect(() => validateFacturarOpts({ ...B, docTipo: DocTipo.DNI, docNro: 0 })).toThrow('10015');
+    expect(() => validateFacturarOpts({ ...B, docTipo: DocTipo.DNI, docNro: 30111222 })).not.toThrow();
+    expect(() => validateFacturarOpts({ ...B, docTipo: DocTipo.CONSUMIDOR_FINAL })).not.toThrow();
+    expect(() =>
+      validateFacturarOpts({
+        ...B,
+        cbteTipo: CbteTipo.COMPRA_BIENES_USADOS,
+        opcionales: [
+          { id: '91', valor: 'Juan Pérez' },
+          { id: '93', valor: 'Calle 123' },
+        ],
+      }),
+    ).toThrow('10015');
+  });
+
+  it('10069: también con CUIL; sin cuitEmisor no se valida', () => {
+    const cuil = {
+      ...base,
+      cbteTipo: CbteTipo.FACTURA_B,
+      docTipo: DocTipo.CUIL,
+      docNro: 20123456786,
+      condicionIva: CondicionIva.CONSUMIDOR_FINAL,
+    };
+    expect(() => validateFacturarOpts(cuil, { cuitEmisor: 20123456786 })).toThrow('10069');
+    expect(() => validateFacturarOpts(cuil)).not.toThrow();
+  });
+
+  it('10067: un tributo que redondea a 0 no cuenta como ImpTrib > 0', () => {
+    const noCat = {
+      ...base,
+      cbteTipo: CbteTipo.FACTURA_B,
+      docTipo: DocTipo.CUIT,
+      docNro: 23000000000,
+      condicionIva: CondicionIva.NO_CATEGORIZADO,
+    };
+    const tributo = (importe: number) => [{ id: TributoTipo.IMPUESTOS_INTERNOS, baseImp: 100, alic: 0, importe }];
+    expect(() => validateFacturarOpts({ ...noCat, tributos: tributo(0.004) })).toThrow('10067');
+    expect(() => validateFacturarOpts({ ...noCat, tributos: tributo(0.01) })).not.toThrow();
+  });
+
+  describe('compradores: 10143, 10145 y empates en 10146', () => {
+    const c = (docNro: number, porcentaje: number) => ({ docTipo: DocTipo.CUIT, docNro, porcentaje });
+
+    it('con empate en el mayor porcentaje alcanza con que el receptor sea uno de ellos', () => {
+      expect(() => validateFacturarOpts({ ...A, compradores: [c(20111111112, 50), c(30712345671, 50)] })).not.toThrow();
+    });
+
+    it('el receptor tiene que estar entre los compradores (10145)', () => {
+      expect(() => validateFacturarOpts({ ...A, compradores: [c(20111111112, 60), c(20123456786, 40)] })).toThrow(
+        '10145',
+      );
+    });
+
+    it('porcentaje con más de 2 decimales (10143)', () => {
+      expect(() =>
+        validateFacturarOpts({ ...A, compradores: [c(30712345671, 66.665), c(20111111112, 33.335)] }),
+      ).toThrow('10143');
+    });
+  });
+
+  describe('NC/ND FCE: asociados según anulación (10156/10157, 10183)', () => {
+    const nota = {
+      ptoVta: 1,
+      cbteTipo: CbteTipo.FCE_NOTA_DEBITO_A,
+      docTipo: DocTipo.CUIT,
+      docNro: 30712345671,
+      condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
+      items: [{ neto: 100, iva: IvaTipo.IVA_21 }],
+    };
+    const asoc = (tipo: number) => [{ tipo, ptoVta: 1, nro: 10, cuit: 20123456786, fecha: '20261020' }];
+    const anulacion = (valor: 'S' | 'N') => ({ opcionales: [{ id: '22', valor }] });
+
+    it('sin anulación solo asocian la factura FCE', () => {
+      expect(() => validateFacturarOpts({ ...nota, ...anulacion('N'), cbtesAsoc: asoc(201) })).not.toThrow();
+      expect(() => validateFacturarOpts({ ...nota, ...anulacion('N'), cbtesAsoc: asoc(203) })).toThrow('10157');
+    });
+
+    it('de anulación, la ND asocia una NC', () => {
+      expect(() => validateFacturarOpts({ ...nota, ...anulacion('S'), cbtesAsoc: asoc(203) })).not.toThrow();
+    });
+
+    it('cbtesAsoc incompleto se rechaza antes que las reglas de la tabla', () => {
+      expect(() =>
+        validateFacturarOpts({ ...nota, ...anulacion('N'), cbtesAsoc: [{ tipo: 201, ptoVta: 1, nro: 0 }] }),
+      ).toThrow('cbtesAsoc.nro es requerido');
+    });
+  });
+
+  it('10164: compara con la fecha de hoy en Argentina (no en UTC)', () => {
+    const factura = {
+      ...A,
+      cbteTipo: CbteTipo.FCE_FACTURA_A,
+      opcionales: [
+        { id: '2101', valor: '0110599500000041817221' },
+        { id: '27', valor: 'SCA' },
+      ],
+      fecha: '20261109',
+      vtoPago: '20261109',
+    };
+    // 02:00 UTC del 10/11 son las 23:00 del 09/11 en Argentina.
+    expect(() => validateFacturarOpts(factura, { ahora: new Date('2026-11-10T02:00:00Z') })).not.toThrow();
+    expect(() => validateFacturarOpts(factura, { ahora: new Date('2026-11-10T04:00:00Z') })).toThrow('10164');
+  });
+});
+
+describe('validateFacturarExpoOpts: 1605 con PES', () => {
+  it('con PES no se informa canMisMonExt, ni siquiera "N"', () => {
+    const expo = {
+      ptoVta: 1,
+      cbteTipo: CbteTipo.FACTURA_E,
+      tipoExpo: 2,
+      pais: 212,
+      cliente: { nombre: 'ACME', cuitPais: 55000002126, domicilio: '123 Main St' },
+      moneda: 'PES',
+      cotizacion: 1,
+      formaPago: 'Wire',
+      items: [{ codigo: 'X', descripcion: 'Y', cantidad: 1, unidad: 7, precioUnitario: 10 }],
+    };
+    expect(() => validateFacturarExpoOpts(expo)).not.toThrow();
+    expect(() => validateFacturarExpoOpts({ ...expo, canMisMonExt: 'N' })).toThrow('1605');
   });
 });

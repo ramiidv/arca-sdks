@@ -28,6 +28,7 @@ export {
   porcentaje,
   str,
   wrapped,
+  xml,
 } from '@ramiidv/arca-common/schema';
 export type { Field, Schema } from '@ramiidv/arca-common/schema';
 

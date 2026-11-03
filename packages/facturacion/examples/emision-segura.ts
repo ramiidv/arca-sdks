@@ -28,7 +28,7 @@ const arca = new ArcaFacturacion({
   cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
   key: fs.readFileSync('./certs/clave.key', 'utf-8'),
   production: false,
-  // Sin storage, un reinicio deja sin poder loguearse hasta que venza el TA anterior.
+  // Sin storage, un reinicio deja sin poder loguearse durante el lapso de retención de WSAA.
   ticketStorage: new FileTicketStorage('./.arca-tickets'),
 });
 

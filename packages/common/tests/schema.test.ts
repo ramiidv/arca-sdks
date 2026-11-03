@@ -28,7 +28,7 @@ import { double } from '../src/schema.js';
 describe('schema: encode', () => {
   it('redondea decimales según fractionDigits y rechaza NaN/Infinity/negativos', () => {
     const s = { a: dec(2, 0), b: opt(dec(3, 0)) };
-    expect(encodeRequest({ a: 1.005, b: 2 }, s, 't')).toEqual({ a: '1.01', b: '2.000' });
+    expect(encodeRequest({ a: 1.015, b: 2 }, s, 't')).toEqual({ a: '1.02', b: '2.000' });
     for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, -1, '1']) {
       expect(() => encodeRequest({ a: bad }, s, 't')).toThrow(ArcaValidationError);
     }
@@ -141,6 +141,8 @@ describe('schema v2', () => {
     expect(roundHalfUp(-0.001, 2)).toBe(0);
     expect(roundHalfUp(1e-7, 6)).toBe(0);
     expect(encodeRequest({ a: 8.575 }, { a: dec(2) }, 't')).toEqual({ a: '8.58' });
+    // dec() redondea mitad al par (Round Half Even, el método de los manuales de ARCA).
+    expect(encodeRequest({ a: 8.565, b: 1.005 }, { a: dec(2), b: dec(2) }, 't')).toEqual({ a: '8.56', b: '1.00' });
   });
 
   it('siNo: boolean en la API, S/N en el XML', () => {

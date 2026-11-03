@@ -1,4 +1,5 @@
 import { generarUrlQR } from '@ramiidv/arca-common';
+import { Moneda } from './constants.js';
 import { fail } from './validation.js';
 import type { FacturaResult, QROptions } from './types.js';
 
@@ -41,8 +42,8 @@ export function urlQRDesdeFactura(factura: FacturaResult, datos: DatosQR, option
   if (!factura.aprobada || !factura.cae) fail('factura', 'el comprobante no está aprobado: no tiene CAE para el QR');
   const fecha = datos.fecha ?? factura.fecha;
   if (fecha === undefined) fail('fecha', 'falta la fecha del comprobante (datos.fecha)');
-  const moneda = datos.moneda ?? factura.moneda ?? 'PES';
-  const ctz = datos.ctz ?? factura.cotizacion ?? (moneda === 'PES' ? 1 : undefined);
+  const moneda = datos.moneda ?? factura.moneda ?? Moneda.PESOS;
+  const ctz = datos.ctz ?? factura.cotizacion ?? (moneda === Moneda.PESOS ? 1 : undefined);
   if (ctz === undefined) fail('ctz', 'falta la cotización del comprobante (datos.ctz)');
   return generarUrlQR(
     {

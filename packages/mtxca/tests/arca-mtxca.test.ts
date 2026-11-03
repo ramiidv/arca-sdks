@@ -188,7 +188,7 @@ describe('ArcaMtxca: CAEA, QR y eventos', () => {
     expect(m.fn).not.toHaveBeenCalled();
   });
 
-  it('informarAjusteIVACAEA usa el ticket y el wrapper propio; solo valida el XSD', async () => {
+  it('informarAjusteIVACAEA usa el ticket y el wrapper propio; valida el XSD y fechaHoraGen (754)', async () => {
     const m = mockFetch(
       soapResponse(
         'informarAjusteIVACAEAResponse',
@@ -199,6 +199,7 @@ describe('ArcaMtxca: CAEA, QR y eventos', () => {
     const res = await mtxca(m.fetch).informarAjusteIVACAEA({
       ...facturaA({ codigoTipoComprobante: 2, condicionIVAReceptor: undefined }),
       caea: CAEA,
+      fechaHoraGen: '2026-11-01T10:00:00-03:00',
     });
     expect(res).toMatchObject({ resultado: 'A', comprobante: { caea: CAEA, codigoTipoComprobante: 2 } });
     expect(m.calls[0].body).toContain('<ser:informarAjusteIVACAEARequest');

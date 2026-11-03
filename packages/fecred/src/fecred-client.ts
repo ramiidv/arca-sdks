@@ -217,7 +217,10 @@ export class FecredClient extends SoapServiceClient {
     return this.consulta(m, auth, [params, REQ[m]], RESP[m], opts);
   }
 
-  /** `consultarObligadoRecepcion`: si la CUIT está obligada a recibir FCE (campo `respuesta`) y desde cuándo. */
+  /**
+   * `consultarObligadoRecepcion`: si la CUIT está obligada a recibir FCE (campo `respuesta`) y desde cuándo.
+   * @deprecated El manual (§2.4.13) la depreca porque la información es incompleta: usar `consultarMontoObligadoRecepcion`.
+   */
   async consultarObligadoRecepcion(
     auth: WsAuthSource,
     cuitConsultada: number | string,

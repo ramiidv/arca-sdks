@@ -15,6 +15,7 @@ import {
   ArcaSoapError,
   ArcaTicketVigenteError,
   ArcaValidationError,
+  WSFECRED_ERRORES_REINTENTABLES,
 } from '@ramiidv/arca-fecred';
 
 async function main() {
@@ -37,20 +38,23 @@ async function main() {
     if (e instanceof ArcaValidationError) {
       for (const d of e.details) console.error(`Campo ${d.field}: ${d.message}`);
     } else if (e instanceof ArcaTicketVigenteError) {
-      console.error('Hay un TA vigente que no está en el ticketStorage:', e.message);
+      console.error('WSAA ya emitió un TA que no está en el ticketStorage; reintentá en', e.retryAfterMs, 'ms.');
     } else if (e instanceof ArcaAuthError) {
       console.error('Error de autenticación:', e.faultCode, e.message);
-      // No borres el ticket (clearAuthCache): WSAA no emite otro mientras siga
-      // vigente. Si no es reintentable (ej: coe.notAuthorized), corregí la causa
+      // No borres el ticket (clearAuthCache): WSAA rechaza los pedidos repetidos
+      // durante un lapso de retención (minutos). Si no es reintentable (ej: coe.notAuthorized), corregí la causa
       // en ARCA (asociar wsfecred al certificado) y después:
       if (!e.retryable) fecred.wsaa.resetLoginCooldown('wsfecred');
     } else if (e instanceof ArcaServiceError) {
       for (const err of e.errors) console.error(`ARCA [${err.rawCode ?? err.code}]: ${err.msg}`);
+      // 1103 ("reinténtelo más tarde"): no se procesó, se puede reintentar más tarde.
+      if (e.errors.some((err) => WSFECRED_ERRORES_REINTENTABLES.includes(err.code)))
+        console.error('Reintentar más tarde');
     } else if (e instanceof ArcaSoapError) {
       if (e.uncertain) {
         // No se sabe si ARCA aceptó la FCE: consultar el estado antes de reintentar.
         const { ctaCte } = await fecred.consultarCtaCte({ codCtaCte: '1234567890' });
-        console.error('Resultado incierto. Estado actual:', ctaCte.estadoCtaCte.estado);
+        console.error('Resultado incierto. Estado actual:', ctaCte?.estadoCtaCte.estado);
       } else {
         console.error('Error de conexión (no procesado):', e.message);
       }

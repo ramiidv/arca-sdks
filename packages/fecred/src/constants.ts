@@ -96,3 +96,10 @@ export type Resultado = (typeof Resultado)[keyof typeof Resultado];
 
 /** `TipoCodAutorizacionType` (enumeración del XSD: `A` o `E`). */
 export type TipoCodAutorizacion = 'A' | 'E';
+
+/**
+ * Errores de WSFECRED que se resuelven reintentando más tarde (manual v2.0.3,
+ * errores genéricos): 1103 "La operación no pudo realizarse, reinténtelo más
+ * tarde". Llegan como `ArcaServiceError` con el código en `errors[].code`.
+ */
+export const WSFECRED_ERRORES_REINTENTABLES: readonly number[] = [1103];

@@ -61,9 +61,13 @@ async function main() {
     if (e instanceof ArcaValidationError) {
       for (const d of e.details) console.error(`Campo ${d.field}: ${d.message}`);
     } else if (e instanceof ArcaTicketVigenteError) {
-      console.error('WSAA ya emitió un ticket para este certificado; esperá a que venza o usá ticketStorage.');
+      console.error(
+        'WSAA ya emitió un ticket que no está en el storage; reintentá en',
+        e.retryAfterMs,
+        'ms (y usá ticketStorage).',
+      );
     } else if (e instanceof ArcaAuthError) {
-      // Borrar el ticket no sirve: WSAA no emite otro mientras siga vigente. Corregí la causa
+      // Borrar el ticket no sirve: WSAA rechaza los pedidos repetidos por unos minutos. Corregí la causa
       // (certificado vencido, servicio wscdc no asociado, etc.). Tras un error no reintentable
       // (e.retryable === false) el SDK bloquea nuevos logins: después de corregirlo, llamá a
       // cdc.wsaa.resetLoginCooldown('wscdc') para volver a intentar sin reiniciar el proceso.
