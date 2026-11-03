@@ -28,16 +28,32 @@ de cada servicio: redondeo mitad al par, `coe.alreadyAuthenticated` con la
 espera del lapso de retención de WSAA, derivados granarios y liquidación
 secundaria en agro, y validaciones locales nuevas en cada SDK.
 
-Sin publicar todavía (changesets `major-*`): API uniforme entre los paquetes.
-Node >= 22.12; todas las emisiones lanzan `ArcaRechazoError` ante un rechazo
-de ARCA; clientes de bajo nivel con `{ endpoint, transport? }`; `ENDPOINTS` con
-la misma forma en todos los paquetes; `ArcaResponseError` ante una respuesta
-inválida; sin los alias ni las operaciones deprecadas. facturacion pasa a 7.0 y
-el resto sube la minor (0.x).
+Sin publicar todavía (PR #16, changesets `major-*`): API uniforme entre los
+paquetes. Node >= 22.12; los rechazos de ARCA (`resultado` R) lanzan
+`ArcaRechazoError`; clientes de bajo nivel con `{ endpoint, transport? }`;
+`ENDPOINTS` con la misma forma en todos los paquetes; `ArcaResponseError` ante
+una respuesta inválida; `formatServiceErrors` para los mensajes de error de
+ARCA; sin los alias ni las operaciones deprecadas. Versiones que salen:
+
+| Paquete | Actual | Próxima |
+|---|---|---|
+| `@ramiidv/arca-common` | 0.8.0 | 0.9.0 |
+| `@ramiidv/arca-facturacion` | 6.2.0 | 7.0.0 |
+| `@ramiidv/arca-padron` | 0.8.0 | 0.9.0 |
+| `@ramiidv/arca-agro` | 0.7.0 | 0.8.0 |
+| `@ramiidv/arca-cdc` | 0.7.0 | 0.8.0 |
+| `@ramiidv/arca-fecred` | 0.7.0 | 0.8.0 |
+| `@ramiidv/arca-mtxca` | 0.7.0 | 0.8.0 |
+| `@ramiidv/arca-sire` | 0.6.0 | 0.7.0 |
+| `@ramiidv/arca-empleados` | 0.5.1 | 0.6.0 |
+
+Todos los SDKs pasan a depender de `@ramiidv/arca-common` ^0.9.0: para
+compartir el `WsaaClient` hay que actualizarlos juntos.
 
 ## Pendientes operativos
 
-- [ ] Al publicar la release de API uniforme, actualizar arca-server (los
+- [ ] Al publicar la release de API uniforme, pasar las versiones de arriba a
+      la tabla de versiones publicadas y actualizar arca-server (los
       rechazos de `facturar`/`notaCredito`/`notaDebito` pasan a lanzar
       `ArcaRechazoError`) y la landing.
 
