@@ -11,8 +11,8 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "build": "npm run build --workspaces",
-    "clean": "npm run clean --workspaces",
+    "build": "node scripts/clean-dist.mjs --all && npm run build --workspaces",
+    "clean": "node scripts/clean-dist.mjs --all",
     "typecheck": "npm run typecheck --workspaces",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
