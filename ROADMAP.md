@@ -9,53 +9,33 @@ Versiones publicadas (2026-11-03, con trusted publishing y provenance):
 
 | Paquete | Versión | Notas |
 |---|---|---|
-| `@ramiidv/arca-common` | 0.8.0 | `ArcaSdkBase`, `SoapServiceClient`, `/schema` (DSL del XSD), `/testing`, QR, certificados |
-| `@ramiidv/arca-facturacion` | 6.2.0 | WSFEv1, WSFEX, CAEA y QR sobre el DSL |
-| `@ramiidv/arca-padron` | 0.8.0 | Constancia, A4, A10, A13, A100 |
-| `@ramiidv/arca-agro` | 0.7.0 | WSCPE (con derivados granarios), WSLPG (liquidación primaria y secundaria) |
-| `@ramiidv/arca-cdc` | 0.7.0 | WSCDC |
-| `@ramiidv/arca-fecred` | 0.7.0 | WSFECRED |
-| `@ramiidv/arca-mtxca` | 0.7.0 | WSMTXCA |
-| `@ramiidv/arca-sire` | 0.6.0 | SIRE C2005 |
-| `@ramiidv/arca-empleados` | 0.5.1 | Genera un TXT, no usa SOAP |
+| `@ramiidv/arca-common` | 0.9.0 | `ArcaSdkBase`, `SoapServiceClient`, `/schema` (DSL del XSD), `/testing`, QR, certificados, `ArcaRechazoError` |
+| `@ramiidv/arca-facturacion` | 7.0.0 | WSFEv1, WSFEX, CAEA y QR sobre el DSL |
+| `@ramiidv/arca-padron` | 0.9.0 | Constancia, A4, A10, A13, A100 |
+| `@ramiidv/arca-agro` | 0.8.0 | WSCPE (con derivados granarios), WSLPG (liquidación primaria y secundaria) |
+| `@ramiidv/arca-cdc` | 0.8.0 | WSCDC |
+| `@ramiidv/arca-fecred` | 0.8.0 | WSFECRED |
+| `@ramiidv/arca-mtxca` | 0.8.0 | WSMTXCA |
+| `@ramiidv/arca-sire` | 0.7.0 | SIRE C2005 |
+| `@ramiidv/arca-empleados` | 0.6.0 | Genera un TXT, no usa SOAP |
 
 Todos los SDKs con web service extienden `ArcaSdkBase`, así que comparten
 configuración, `wsaa`, `cuit`, `production`, `on`/`off`, `config.wsaa`,
-`config.signal` y `clearAuthCache()`.
+`config.signal` y `clearAuthCache()`. Todos dependen de `@ramiidv/arca-common`
+^0.9.0: para compartir el `WsaaClient` hay que actualizarlos juntos.
 
-La última release (PR #15) salió de una revisión contra los manuales vigentes
-de cada servicio: redondeo mitad al par, `coe.alreadyAuthenticated` con la
-espera del lapso de retención de WSAA, derivados granarios y liquidación
-secundaria en agro, y validaciones locales nuevas en cada SDK.
-
-Sin publicar todavía (PR #16, changesets `major-*`): API uniforme entre los
-paquetes. Node >= 22.12; los rechazos de ARCA (`resultado` R) lanzan
-`ArcaRechazoError`; clientes de bajo nivel con `{ endpoint, transport? }`;
-`ENDPOINTS` con la misma forma en todos los paquetes; `ArcaResponseError` ante
-una respuesta inválida; `formatServiceErrors` para los mensajes de error de
-ARCA; sin los alias ni las operaciones deprecadas. Versiones que salen:
-
-| Paquete | Actual | Próxima |
-|---|---|---|
-| `@ramiidv/arca-common` | 0.8.0 | 0.9.0 |
-| `@ramiidv/arca-facturacion` | 6.2.0 | 7.0.0 |
-| `@ramiidv/arca-padron` | 0.8.0 | 0.9.0 |
-| `@ramiidv/arca-agro` | 0.7.0 | 0.8.0 |
-| `@ramiidv/arca-cdc` | 0.7.0 | 0.8.0 |
-| `@ramiidv/arca-fecred` | 0.7.0 | 0.8.0 |
-| `@ramiidv/arca-mtxca` | 0.7.0 | 0.8.0 |
-| `@ramiidv/arca-sire` | 0.6.0 | 0.7.0 |
-| `@ramiidv/arca-empleados` | 0.5.1 | 0.6.0 |
-
-Todos los SDKs pasan a depender de `@ramiidv/arca-common` ^0.9.0: para
-compartir el `WsaaClient` hay que actualizarlos juntos.
+La última release (PR #16) unificó la API entre los paquetes: Node >= 22.12;
+los rechazos de ARCA (`resultado` R) lanzan `ArcaRechazoError`; clientes de bajo
+nivel con `{ endpoint, transport? }`; `ENDPOINTS` con la misma forma en todos los
+paquetes; `ArcaResponseError` ante una respuesta inválida; `formatServiceErrors`
+para los mensajes de error de ARCA; sin los alias ni las operaciones deprecadas.
+La anterior (PR #15) salió de una revisión contra los manuales vigentes de cada
+servicio.
 
 ## Pendientes operativos
 
-- [ ] Al publicar la release de API uniforme, pasar las versiones de arriba a
-      la tabla de versiones publicadas y actualizar arca-server (los
-      rechazos de `facturar`/`notaCredito`/`notaDebito` pasan a lanzar
-      `ArcaRechazoError`) y la landing.
+- [ ] Mergear la adaptación de arca-server (ramiidv/arca-server#5) y de la
+      landing (ramiidv/arca-sdk-web#5) a la release de API uniforme.
 
 ## Próximos pasos técnicos
 
