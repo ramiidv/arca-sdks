@@ -24,7 +24,7 @@ Los sub-clientes solo se obtienen desde `ArcaAgro` (sus clases se exportan como 
 
 ## Configuración
 
-`ArcaAgroConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`: `cuit` (number | string, se valida el dígito verificador), `cert`, `key`, `keyPassphrase?`, `production` (default false), `timeout` (30000), `retries` (1, solo consultas), `retryDelayMs` (1000), `tokenTTLMinutes` (720), `ticketStorage`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs`, `alreadyAuthenticatedCooldownMs`, `fetch`, `legacyTls`, `onEvent`, `wsaa` (WsaaClient compartido, mismo entorno), `signal` (cancela todas las llamadas de la instancia), `endpoints?: { cpe?, lpg?, wsaa? }`.
+`ArcaAgroConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`: `cuit` (number | string, se valida el dígito verificador), `cert`, `key`, `keyPassphrase?`, `production` (default false), `timeout` (30000), `retries` (1, solo consultas), `retryDelayMs` (1000), `tokenTTLMinutes` (10), `ticketStorage`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs`, `alreadyAuthenticatedCooldownMs`, `fetch`, `legacyTls`, `maxResponseBytes` (50 MB), `onEvent`, `wsaa` (WsaaClient compartido, mismo entorno), `signal` (cancela todas las llamadas de la instancia), `endpoints?: { cpe?, lpg?, wsaa? }`.
 
 ```typescript
 import fs from 'node:fs';

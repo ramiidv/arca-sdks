@@ -35,6 +35,7 @@ const padron = new ArcaPadron({
   alreadyAuthenticatedCooldownMs?: number,
   fetch?: typeof fetch,          // fetch propio (proxy, tests)
   legacyTls?: 'auto' | 'never' | 'always',
+  maxResponseBytes?: number,     // tamaño máximo del body de una respuesta, default 52428800 (50 MB)
   wsaa?: WsaaClient,             // WsaaClient compartido (ej: facturacion.wsaa de @ramiidv/arca-facturacion), mismo entorno
   signal?: AbortSignal,          // cancela todas las llamadas de la instancia
   endpoints?: { wsaa?, a5?, a4?, a10?, a13?, a100? }, // URLs propias
@@ -230,4 +231,4 @@ Hosts: homologación `https://awshomo.afip.gov.ar`, producción `https://aws.afi
 
 Propiedades públicas: padron.wsaa, padron.a5 (constancia: getPersona, getPersonaList), padron.a4, padron.a10, padron.a13 (getPersona, getPersonaV2, getIdPersonaListByDocumento), padron.a100 (getParameterCollectionByName). Reciben `auth: WsAuth = { token, sign, cuitRepresentada }` como primer argumento (ticket: `padron.wsaa.getAccessTicket(SERVICE_IDS.a4)`).
 
-Sueltos: `new PadronA4Client({ endpoint: ENDPOINTS.a4.testing, transport? })` (lo mismo PadronA5Client, PadronA10Client, PadronA13Client, PadronA100Client). Config = `ServiceClientConfig` de @ramiidv/arca-common (`{ endpoint, transport?: ServiceTransport }`, `ServiceTransport` = `{ timeout, retries, retryDelayMs, onEvent, fetch, legacyTls }`; los dos tipos y `ServiceEndpoints` se reexportan desde el paquete); el namespace lo fija cada cliente. `ensureArray`, `parseXml` y `buildXml` no se exportan: importarlos de @ramiidv/arca-common.
+Sueltos: `new PadronA4Client({ endpoint: ENDPOINTS.a4.testing, transport? })` (lo mismo PadronA5Client, PadronA10Client, PadronA13Client, PadronA100Client). Config = `ServiceClientConfig` de @ramiidv/arca-common (`{ endpoint, transport?: ServiceTransport }`, `ServiceTransport` = `{ timeout, retries, retryDelayMs, onEvent, fetch, legacyTls, maxResponseBytes }`; los dos tipos y `ServiceEndpoints` se reexportan desde el paquete); el namespace lo fija cada cliente. `ensureArray`, `parseXml` y `buildXml` no se exportan: importarlos de @ramiidv/arca-common.

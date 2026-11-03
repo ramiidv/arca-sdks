@@ -77,7 +77,7 @@ describe('ArcaSdkBase', () => {
   it('elige el endpoint según el entorno o el indicado', () => {
     expect(demo().client.endpoint).toBe(ENDPOINTS.testing);
     expect(demo({ production: true }).client.endpoint).toBe(ENDPOINTS.production);
-    expect(demo({ endpoints: { demo: 'http://proxy/ws' } }).client.endpoint).toBe('http://proxy/ws');
+    expect(demo({ endpoints: { demo: 'https://proxy.test/ws' } }).client.endpoint).toBe('https://proxy.test/ws');
   });
 
   it('reutiliza un WsaaClient compartido', () => {
@@ -167,7 +167,7 @@ describe('ArcaSdkBase: WsaaClient compartido de otro entorno', () => {
   });
 
   it('con un endpoint WSAA propio no se valida', () => {
-    const proxy = new WsaaClient({ ...testCert(), endpoint: 'http://proxy/wsaa', production: true });
+    const proxy = new WsaaClient({ ...testCert(), endpoint: 'https://proxy.test/wsaa', production: true });
     expect(demo({ wsaa: proxy }).wsaa).toBe(proxy);
     const official = new WsaaClient({ ...testCert(), endpoint: WSAA_ENDPOINTS.production });
     expect(() => demo({ wsaa: official })).toThrow(ArcaValidationError);

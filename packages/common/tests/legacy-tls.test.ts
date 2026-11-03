@@ -156,3 +156,74 @@ describe('soapCall: parseNumbers por el transporte legacy', () => {
     expect(valores(parsed)).toEqual({ valor: 10.5, exp: 1000, n: 3 });
   });
 });
+
+describe('soapCall: alcance del TLS legacy', () => {
+  it("'auto' no baja el TLS para hosts fuera de la lista de ARCA", async () => {
+    const otro = 'https://otro.example.test/ws';
+    mockFetch(dhTooSmall(), dhTooSmall());
+    const err = await soapCall(otro, '<x/>', { retries: 0 }).catch((e) => e);
+    expect(legacy).not.toHaveBeenCalled();
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err.uncertain).toBe(false);
+    expect(err.message).toContain('ERR_SSL_DH_KEY_TOO_SMALL');
+
+    // Y no queda recordado.
+    await soapCall(otro, '<x/>', { retries: 0 }).catch(() => {});
+    expect(legacy).not.toHaveBeenCalled();
+  });
+
+  it('emite request:legacy-tls en cada request por el transporte legacy', async () => {
+    const events: Array<{ type: string }> = [];
+    const onEvent = (e: { type: string }) => events.push(e);
+    mockFetch(dhTooSmall());
+    legacy.mockResolvedValue(legacyOk());
+    await soapCall(URL, '<x/>', { onEvent, methodName: 'FEDummy' });
+    await soapCall(URL, '<x/>', { onEvent, methodName: 'FEDummy' });
+    await soapCall('https://otro.example.test/ws', '<x/>', { onEvent, legacyTls: 'always', methodName: 'm' });
+    expect(events.filter((e) => e.type === 'request:legacy-tls')).toEqual([
+      { type: 'request:legacy-tls', endpoint: URL, method: 'FEDummy' },
+      { type: 'request:legacy-tls', endpoint: URL, method: 'FEDummy' },
+      { type: 'request:legacy-tls', endpoint: 'https://otro.example.test/ws', method: 'm' },
+    ]);
+  });
+
+  it('un 3xx por el transporte legacy tampoco se sigue', async () => {
+    legacy.mockResolvedValueOnce({
+      status: 307,
+      statusText: 'Temporary Redirect',
+      headers: { location: 'https://evil.test/x?token=SECRETO' },
+      body: '',
+    });
+    const err = await soapCall(URL, '<x/>', { legacyTls: 'always', kind: 'emision' }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err).toMatchObject({ statusCode: 307, uncertain: false });
+    expect(err.message).toContain('https://evil.test');
+    expect(err.message).not.toContain('SECRETO');
+    expect(legacy).toHaveBeenCalledTimes(1);
+  });
+
+  it('una respuesta legacy cortada a mitad del body es incierta en emisiones', async () => {
+    const { LegacyTlsResponseError } = await import('../src/legacy-tls.js');
+    legacy.mockRejectedValueOnce(
+      new LegacyTlsResponseError('Respuesta cortada', 200, { date: 'Thu, 29 Oct 2026 15:00:00 GMT' }),
+    );
+    const err = await soapCall(URL, '<x/>', { legacyTls: 'always', kind: 'emision' }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err).toMatchObject({ statusCode: 200, uncertain: true });
+    expect(err.message).toContain('Respuesta cortada');
+    expect(err.responseDate).toEqual(new Date('2026-10-29T15:00:00Z'));
+  });
+
+  it('pasa maxResponseBytes al transporte legacy y clasifica el corte', async () => {
+    const { LegacyTlsResponseError, ResponseTooLargeError } = await import('../src/legacy-tls.js');
+    legacy.mockRejectedValueOnce(
+      new LegacyTlsResponseError('Respuesta demasiado grande', 200, {}, { cause: new ResponseTooLargeError(10) }),
+    );
+    const err = await soapCall(URL, '<x/>', { legacyTls: 'always', maxResponseBytes: 10, retries: 2 }).catch((e) => e);
+    expect(legacy.mock.calls[0][1].maxResponseBytes).toBe(10);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err.cause).toBeInstanceOf(ResponseTooLargeError);
+    expect(err.uncertain).toBe(false);
+    expect(legacy).toHaveBeenCalledTimes(1);
+  });
+});

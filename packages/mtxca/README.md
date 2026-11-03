@@ -45,6 +45,8 @@ Glosario:
 
 ## Inicio rápido
 
+La carpeta `certs/` del ejemplo (certificado y clave privada) tiene que estar en el `.gitignore` del proyecto: la clave nunca se versiona.
+
 ```typescript
 import { readFileSync } from 'node:fs';
 import { ArcaMtxca, ArcaRechazoError, CbteTipo, Concepto, CodigoCondicionIVA, Moneda } from '@ramiidv/arca-mtxca';
@@ -117,7 +119,7 @@ try {
 | `timeout`, `retries`, `retryDelayMs`                                                                                                      | Transporte. `retries` solo aplica a consultas.                                                                                                                                                                                                               |
 | `ticketStorage`                                                                                                                           | Storage persistente de tickets WSAA (recomendado en producción).                                                                                                                                                                                             |
 | `tokenTTLMinutes`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs`, `alreadyAuthenticatedCooldownMs` | Opciones de WSAA. `permanentErrorCooldownMs` (default `Infinity`): espera tras un error no reintentable; `alreadyAuthenticatedCooldownMs` (default: 2 minutos en producción, 10 en homologación): espera tras `coe.alreadyAuthenticated`; `0` las desactiva. |
-| `fetch`, `legacyTls`                                                                                                                      | `fetch` propio (proxy, tests) y transporte TLS legacy.                                                                                                                                                                                                       |
+| `fetch`, `legacyTls`, `maxResponseBytes`                                                                                                  | `fetch` propio (proxy, tests), transporte TLS legacy y tamaño máximo del body de una respuesta (default 50 MB).                                                                                                                                              |
 | `onEvent`                                                                                                                                 | Callback de eventos (`auth:*`, `request:*`).                                                                                                                                                                                                                 |
 | `onEvento`                                                                                                                                | Recibe el `evento` (aviso de ARCA) de cualquier respuesta: `(evento, method) => void`.                                                                                                                                                                       |
 
@@ -188,7 +190,7 @@ Lanza `ArcaValidationError` si falta un dato (ej. la cotización de una moneda e
 
 ```typescript
 import { ENDPOINTS, MtxcaClient } from '@ramiidv/arca-mtxca';
-// { endpoint, transport?, onEvento? }: transport son las opciones de red (timeout, retries, onEvent, fetch, legacyTls)
+// { endpoint, transport?, onEvento? }: transport son las opciones de red (timeout, retries, onEvent, fetch, legacyTls, maxResponseBytes)
 const client = new MtxcaClient({ endpoint: ENDPOINTS.wsmtxca.testing, transport: { timeout: 60_000 } });
 await client.dummy();
 ```

@@ -24,7 +24,7 @@ const sire = new ArcaSire({
   wsaa?: WsaaClient,         // compartido, del mismo entorno
   signal?: AbortSignal,      // cancela todas las llamadas de la instancia
   timeout?, retries?, retryDelayMs?, ticketStorage?, tokenTTLMinutes?, clockOffsetMs?,
-  autoClockSkew?, loginErrorCooldownMs?, permanentErrorCooldownMs?, alreadyAuthenticatedCooldownMs?, fetch?, legacyTls?, onEvent?,
+  autoClockSkew?, loginErrorCooldownMs?, permanentErrorCooldownMs?, alreadyAuthenticatedCooldownMs?, fetch?, legacyTls?, maxResponseBytes?, onEvent?,
 });
 ```
 

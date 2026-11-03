@@ -64,12 +64,15 @@ export interface TicketStorageGetOptions {
  * WSFEX y WSCDC) negocian Diffie-Hellman de 1024 bits, que Node rechaza con
  * `ERR_SSL_DH_KEY_TOO_SMALL`.
  *
- * - `auto` (default): usa `fetch`; si el handshake falla por ese motivo,
+ * - `auto` (default): usa `fetch`; si el handshake falla por ese motivo y el
+ *   host es uno de los de ARCA que lo necesitan (`servicios1.afip.gov.ar`),
  *   reintenta el mismo request con el transporte legacy (es seguro: el request
- *   no llegó a enviarse) y recuerda el host para las siguientes llamadas.
+ *   no llegó a enviarse) y recuerda el host para las siguientes llamadas. Con
+ *   cualquier otro host el error se lanza tal cual.
  * - `never`: nunca usa el transporte legacy.
- * - `always`: usa siempre el transporte legacy.
+ * - `always`: usa siempre el transporte legacy, con cualquier host.
  *
+ * Cada request que va por el transporte legacy emite `request:legacy-tls`.
  * Solo aplica al `fetch` por defecto: con un `fetch` inyectado no hay fallback.
  */
 export type LegacyTlsMode = 'auto' | 'never' | 'always';
@@ -101,7 +104,7 @@ export interface ArcaBaseConfig {
   retryDelayMs?: number;
   /**
    * Vigencia del TRA (pedido de acceso firmado) en minutos, de 1 a 1440
-   * (default: 720). No es la vida del Ticket de Acceso: WSAA emite los TA con
+   * (default: 10). No es la vida del Ticket de Acceso: WSAA emite los TA con
    * una vigencia propia (12 horas, según el manual).
    */
   tokenTTLMinutes?: number;
@@ -137,6 +140,8 @@ export interface ArcaBaseConfig {
   fetch?: typeof fetch;
   /** Uso del transporte TLS legacy para hosts con DH de 1024 bits (default: `auto`). */
   legacyTls?: LegacyTlsMode;
+  /** Tamaño máximo del body de una respuesta, en bytes (default: 52428800, 50 MB). */
+  maxResponseBytes?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +182,12 @@ export interface SoapCallOptions {
   /** Uso del transporte TLS legacy para hosts con DH de 1024 bits (default: `auto`). */
   legacyTls?: LegacyTlsMode;
   /**
+   * Tamaño máximo del body de la respuesta, en bytes (default: 52428800, 50
+   * MB). Si se supera, se corta la lectura y se lanza `ArcaSoapError` (no se
+   * reintenta; en emisiones, `uncertain: true`).
+   */
+  maxResponseBytes?: number;
+  /**
    * `true` (default): los textos numéricos de la respuesta se convierten a
    * `number` (salvo los de 8 o más dígitos). `false`: todos los valores de
    * texto quedan como string, sin conversión (para campos `xs:string` como
@@ -215,5 +226,7 @@ export type ArcaEvent =
   | { type: 'auth:storage-error'; service: string; operation: 'get' | 'set' | 'delete'; error: Error | string }
   | { type: 'request:start'; method: string; endpoint: string }
   | { type: 'request:end'; method: string; endpoint: string; durationMs: number }
+  /** El request va por el transporte TLS legacy (`SECLEVEL=1`, ver `LegacyTlsMode`). */
+  | { type: 'request:legacy-tls'; method: string; endpoint: string }
   | { type: 'request:retry'; method: string; endpoint: string; attempt: number; error: Error | string }
   | { type: 'request:error'; method: string; endpoint: string; error: Error | string };

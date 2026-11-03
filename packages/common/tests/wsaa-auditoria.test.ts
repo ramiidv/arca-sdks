@@ -230,8 +230,8 @@ describe('WsaaClient: validaciones de configuración', () => {
     expect(client({ production: true }).production).toBe(true);
     expect(client({ endpoint: WSAA_ENDPOINTS.production }).production).toBe(true);
     expect(client({ endpoint: WSAA_ENDPOINTS.testing, production: true }).production).toBe(false);
-    expect(client({ endpoint: 'http://proxy/wsaa', production: true }).production).toBe(true);
-    expect(client({ endpoint: 'http://proxy/wsaa' }).production).toBe(false);
+    expect(client({ endpoint: 'https://proxy.test/wsaa', production: true }).production).toBe(true);
+    expect(client({ endpoint: 'https://proxy.test/wsaa' }).production).toBe(false);
   });
 });
 
@@ -310,6 +310,14 @@ describe('WsaaClient: TRA y firma CMS', () => {
     const now = Date.now() + offset;
     expect(Math.abs(gen - (now - 2 * 60_000))).toBeLessThan(5_000);
     expect(Math.abs(exp - (now + 30 * 60_000))).toBeLessThan(5_000);
+  });
+
+  it('por defecto el TRA vence 10 minutos después de la hora actual', async () => {
+    const fetch = mockFetch(ok());
+    await client().getAccessTicket('wsfe');
+    const tra = traOf(bodyOf(fetch, 0));
+    const exp = Date.parse(/<expirationTime>([^<]+)</.exec(tra)![1]);
+    expect(Math.abs(exp - (Date.now() + 10 * 60_000))).toBeLessThan(5_000);
   });
 
   it('con tokenTTLMinutes 1440 el TRA vence 24 horas después de su generationTime', async () => {

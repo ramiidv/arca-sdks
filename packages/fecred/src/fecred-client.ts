@@ -68,8 +68,17 @@ export type WsAuthSource = WsAuth | (() => Promise<WsAuth>);
 /**
  * Errores de la capa común de autenticación de los WS Java de ARCA
  * (`wscommon_NNN`: token, sign o CUIT representada inválidos o vencidos).
+ * Solo cuentan como código: el `faultcode` completo (con o sin prefijo de
+ * namespace) o el inicio del `faultstring` (`wscommon_005: Token inválido`).
+ * Un Fault de negocio o de sistema que mencione `wscommon_N` en el medio del
+ * texto no es de autenticación.
  */
-const AUTH_FAULT = /\bwscommon_\d+/i;
+const AUTH_FAULT_CODE = /^(?:[\w.-]+:)?wscommon_\d+$/i;
+const AUTH_FAULT_STRING = /^wscommon_\d+\b/i;
+
+function isAuthFault(e: ArcaSoapError): boolean {
+  return AUTH_FAULT_CODE.test(e.faultCode?.trim() ?? '') || AUTH_FAULT_STRING.test(e.faultString?.trim() ?? '');
+}
 
 /**
  * Un SOAP Fault `wscommon_*` es un rechazo del `authRequest` antes de procesar
@@ -78,7 +87,7 @@ const AUTH_FAULT = /\bwscommon_\d+/i;
  */
 function authFault(e: unknown): ArcaAuthError | undefined {
   if (!(e instanceof ArcaSoapError) || e.faultString === undefined) return undefined;
-  if (!AUTH_FAULT.test(`${e.faultCode ?? ''} ${e.faultString}`)) return undefined;
+  if (!isAuthFault(e)) return undefined;
   return new ArcaAuthError(`${SERVICE}: ${e.faultString}`, { cause: e });
 }
 

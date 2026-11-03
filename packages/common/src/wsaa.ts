@@ -2,6 +2,7 @@ import { createHash, randomInt } from 'node:crypto';
 import forge from 'node-forge';
 import { parseCredentials } from './certificate.js';
 import type { ParsedCredentials } from './certificate.js';
+import { validateEndpoint } from './endpoint.js';
 import { ArcaAuthError, ArcaSoapError, ArcaTicketVigenteError, ArcaValidationError } from './errors.js';
 import { soapCallWith, parseXml, buildXml, extractMethodResult, safeEmit, abortedBeforeSend } from './soap-client.js';
 import { normalizeAccessTicket } from './ticket-storage.js';
@@ -12,12 +13,23 @@ import { WSAA_ENDPOINTS, WSAA_NAMESPACE } from './constants.js';
 const EXPIRY_MARGIN_MS = 2 * 60_000;
 /** Antigüedad del `generationTime` del TRA, para tolerar relojes levemente adelantados. */
 const TRA_GENERATION_OFFSET_MS = 2 * 60_000;
-/** Vigencia por defecto del TRA (`expirationTime - now`), en minutos. */
-const DEFAULT_TOKEN_TTL_MINUTES = 720;
+/**
+ * Vigencia por defecto del TRA (`expirationTime - now`), en minutos. Corta a
+ * propósito: el TRA solo se usa para un login y el TA dura 12 horas igual, así
+ * que una vigencia larga solo amplía la ventana en que un CMS filtrado sirve.
+ */
+const DEFAULT_TOKEN_TTL_MINUTES = 10;
 /** Vigencia máxima del TRA que acepta WSAA (24 horas desde su propia hora; más da `xml.expirationTime.invalid`). */
 const MAX_TOKEN_TTL_MINUTES = 1440;
 /** Vida de un TA según el manual de WSAA (12 horas): se usa si la respuesta no trae `expirationTime`. */
 const DEFAULT_TA_LIFETIME_MS = 12 * 60 * 60_000;
+/**
+ * Un TA que vence a más de 24 horas (de la hora de ARCA) no es plausible (WSAA
+ * los emite por 12 horas): se trata como inválido, venga de WSAA o del storage.
+ */
+const MAX_TA_LIFETIME_MS = 24 * 60 * 60_000;
+/** Desfase de reloj máximo que `autoClockSkew` aplica: uno mayor indica un header `Date` absurdo. */
+const MAX_AUTO_CLOCK_OFFSET_MS = 24 * 60 * 60_000;
 /** Espera por defecto antes de volver a intentar un login fallido (la spec de WSAA pide no reintentar enseguida). */
 const DEFAULT_LOGIN_ERROR_COOLDOWN_MS = 60_000;
 /**
@@ -46,15 +58,20 @@ export interface WsaaClientConfig {
   keyPassphrase?: string;
   /** Usar producción (default: false = testing/homologación) */
   production?: boolean;
-  /** URL del endpoint WSAA. Si se provee, ignora `production` para elegir la URL. */
+  /**
+   * URL del endpoint WSAA. Si se provee, ignora `production` para elegir la URL.
+   * Tiene que ser `https://` (`http://` solo en loopback: `localhost`,
+   * `127.0.0.0/8`, `::1`) y sin usuario ni contraseña.
+   */
   endpoint?: string;
   /**
    * Vigencia del TRA en minutos (`expirationTime` del pedido), de 1 a 1440
-   * (default: 720). No es la vida del Ticket de Acceso: WSAA emite cada TA con
+   * (default: 10). No es la vida del Ticket de Acceso: WSAA emite cada TA con
    * su propio vencimiento, 12 horas desde su propia hora, sea cual sea la del
    * TRA. WSAA rechaza un `expirationTime` a más de 24 horas de su propia hora
    * (`xml.expirationTime.invalid`), así que el tope es 1438 minutos: deja 2
-   * minutos de margen para un reloj local adelantado.
+   * minutos de margen para un reloj local adelantado. Una vigencia corta acota
+   * el lapso en que un TRA firmado (CMS) que se filtre sirve para pedir un TA.
    */
   tokenTTLMinutes?: number;
   /** Timeout en milisegundos (default: 30000) */
@@ -83,7 +100,8 @@ export interface WsaaClientConfig {
   /**
    * Si WSAA rechaza el TRA por `generationTime`/`expirationTime` (reloj local
    * desfasado), calcula el offset desde el header `Date` de la respuesta,
-   * reintenta el login una vez y emite `auth:clock-skew`. Default: true.
+   * reintenta el login una vez y emite `auth:clock-skew`. Un offset calculado
+   * de más de 24 horas no se aplica (se lanza el error original). Default: true.
    */
   autoClockSkew?: boolean;
   /**
@@ -120,6 +138,8 @@ export interface WsaaClientConfig {
   fetch?: typeof fetch;
   /** Uso del transporte TLS legacy (ver `SoapCallOptions.legacyTls`). Default: `auto`. */
   legacyTls?: LegacyTlsMode;
+  /** Tamaño máximo del body de una respuesta, en bytes (default: 52428800, 50 MB). */
+  maxResponseBytes?: number;
 }
 
 /**
@@ -135,6 +155,10 @@ export class WsaaClient {
   readonly #credentials: ParsedCredentials;
   /** Tickets en memoria (token y sign son credenciales). */
   readonly #ticketCache = new Map<string, AccessTicket>();
+  /** Storage de tickets (puede tenerlos en memoria, ej: `MemoryTicketStorage`). */
+  readonly #storage?: TicketStorage;
+  /** Logins en curso: una promesa resuelta muestra su valor (el ticket) en `util.inspect`. */
+  readonly #pendingLogins = new Map<string, Promise<AccessTicket>>();
   /** URL de WSAA (LoginCms) que usa este cliente. */
   public readonly endpoint: string;
   /**
@@ -143,9 +167,11 @@ export class WsaaClient {
    */
   public readonly production: boolean;
   private readonly tokenTTLMinutes: number;
-  private readonly soapOpts: Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs' | 'fetch' | 'legacyTls'>;
+  private readonly soapOpts: Pick<
+    SoapCallOptions,
+    'timeout' | 'retries' | 'retryDelayMs' | 'fetch' | 'legacyTls' | 'maxResponseBytes'
+  >;
   private readonly onEvent?: (event: ArcaEvent) => void;
-  private readonly storage?: TicketStorage;
   private readonly autoClockSkew: boolean;
   private readonly keyPrefix: string;
   private readonly loginErrorCooldownMs: number;
@@ -153,7 +179,6 @@ export class WsaaClient {
   private readonly alreadyAuthenticatedCooldownMs: number;
   private offsetMs: number;
 
-  private readonly pendingLogins = new Map<string, Promise<AccessTicket>>();
   /**
    * Servicios para los que WSAA rechazó un login nuevo (alreadyAuthenticated)
    * mientras el ticket actual seguía vigente: hasta que venza, se usa ese
@@ -165,9 +190,11 @@ export class WsaaClient {
 
   /**
    * @throws ArcaValidationError si el certificado o la clave son inválidos, si
-   *   no se corresponden, o si `tokenTTLMinutes` está fuera de rango.
+   *   no se corresponden, si `tokenTTLMinutes` está fuera de rango o si
+   *   `endpoint` no es una URL https.
    */
   constructor(config: WsaaClientConfig) {
+    if (config.endpoint !== undefined) validateEndpoint(config.endpoint, 'endpoint');
     this.#credentials = parseCredentials(config.cert, config.key, config.keyPassphrase);
     this.endpoint = config.endpoint ?? (config.production ? WSAA_ENDPOINTS.production : WSAA_ENDPOINTS.testing);
     this.production =
@@ -194,7 +221,7 @@ export class WsaaClient {
       );
     }
     this.onEvent = config.onEvent;
-    this.storage = config.ticketStorage;
+    this.#storage = config.ticketStorage;
     this.autoClockSkew = config.autoClockSkew ?? true;
     this.offsetMs = config.clockOffsetMs ?? 0;
     this.loginErrorCooldownMs = Math.max(0, config.loginErrorCooldownMs ?? DEFAULT_LOGIN_ERROR_COOLDOWN_MS);
@@ -210,6 +237,7 @@ export class WsaaClient {
       retryDelayMs: config.retryDelayMs,
       fetch: config.fetch,
       legacyTls: config.legacyTls,
+      maxResponseBytes: config.maxResponseBytes,
     };
     this.keyPrefix = `${environmentLabel(this.endpoint)}:${certFingerprint(config.cert)}`;
   }
@@ -254,12 +282,12 @@ export class WsaaClient {
       return cached;
     }
 
-    let pending = this.pendingLogins.get(service);
+    let pending = this.#pendingLogins.get(service);
     if (!pending) {
       pending = this.resolveTicket(service).finally(() => {
-        this.pendingLogins.delete(service);
+        this.#pendingLogins.delete(service);
       });
-      this.pendingLogins.set(service, pending);
+      this.#pendingLogins.set(service, pending);
     }
     return raceWithSignal(pending, opts?.signal, (reason) => abortedBeforeSend('getAccessTicket', reason));
   }
@@ -318,9 +346,12 @@ export class WsaaClient {
     return this.msToExpiry(ticket) > 0;
   }
 
+  /** Ms hasta el vencimiento; `-Infinity` si es ilegible o vence a más de 24 horas (no plausible). */
   private msToExpiry(ticket: AccessTicket): number {
     const expires = Date.parse(ticket.expirationTime);
-    return Number.isFinite(expires) ? expires - this.now().getTime() : -Infinity;
+    if (!Number.isFinite(expires)) return -Infinity;
+    const remaining = expires - this.now().getTime();
+    return remaining > MAX_TA_LIFETIME_MS ? -Infinity : remaining;
   }
 
   private isLoginBlocked(service: string, ticket: AccessTicket): boolean {
@@ -412,7 +443,7 @@ export class WsaaClient {
     service: string,
     expiring: AccessTicket | undefined,
   ): Promise<{ ticket: AccessTicket; source: 'memory' | 'storage' } | undefined> {
-    const delays = this.storage ? ALREADY_AUTHENTICATED_REREAD_DELAYS_MS : [];
+    const delays = this.#storage ? ALREADY_AUTHENTICATED_REREAD_DELAYS_MS : [];
     for (let i = 0; i < delays.length; i++) {
       if (delays[i] > 0) await delay(delays[i]);
       const again = await this.readFromStorage(service);
@@ -432,8 +463,12 @@ export class WsaaClient {
       const responseDate = (error as ArcaSoapError).responseDate;
       if (!responseDate) throw error;
 
+      // Un desfase de más de 24 horas no es un reloj corrido sino un header `Date` absurdo: no se aplica.
+      const offsetMs = responseDate.getTime() - Date.now();
+      if (Math.abs(offsetMs) > MAX_AUTO_CLOCK_OFFSET_MS) throw error;
+
       const previousOffsetMs = this.offsetMs;
-      this.offsetMs = responseDate.getTime() - Date.now();
+      this.offsetMs = offsetMs;
       safeEmit(this.onEvent, { type: 'auth:clock-skew', service, offsetMs: this.offsetMs, previousOffsetMs });
       try {
         return await this.performLogin(service);
@@ -474,9 +509,9 @@ export class WsaaClient {
   }
 
   private async readFromStorage(service: string): Promise<AccessTicket | null> {
-    if (!this.storage) return null;
+    if (!this.#storage) return null;
     try {
-      const raw = await this.storage.get(this.ticketKey(service), {
+      const raw = await this.#storage.get(this.ticketKey(service), {
         onError: (error) => this.emitStorageError(service, 'get', error),
       });
       return normalizeAccessTicket(raw);
@@ -487,9 +522,9 @@ export class WsaaClient {
   }
 
   private async writeToStorage(service: string, ticket: AccessTicket): Promise<void> {
-    if (!this.storage) return;
+    if (!this.#storage) return;
     try {
-      await this.storage.set(this.ticketKey(service), ticket);
+      await this.#storage.set(this.ticketKey(service), ticket);
     } catch (error) {
       // El ticket sigue siendo válido en memoria; no fallar la operación.
       this.emitStorageError(service, 'set', error);
@@ -497,9 +532,9 @@ export class WsaaClient {
   }
 
   private async deleteFromStorage(service: string): Promise<void> {
-    if (!this.storage?.delete) return;
+    if (!this.#storage?.delete) return;
     try {
-      await this.storage.delete(this.ticketKey(service));
+      await this.#storage.delete(this.ticketKey(service));
     } catch (error) {
       this.emitStorageError(service, 'delete', error);
     }
@@ -561,8 +596,12 @@ export class WsaaClient {
     if (!ticket) {
       throw invalid('expirationTime ilegible');
     }
-    if (Date.parse(ticket.expirationTime) <= this.now().getTime()) {
+    const remaining = Date.parse(ticket.expirationTime) - this.now().getTime();
+    if (remaining <= 0) {
       throw invalid(`expirationTime (${ticket.expirationTime}) no es posterior a la hora actual`);
+    }
+    if (remaining > MAX_TA_LIFETIME_MS) {
+      throw invalid(`expirationTime (${ticket.expirationTime}) está a más de 24 horas de la hora actual`);
     }
     return ticket;
   }

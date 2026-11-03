@@ -32,6 +32,8 @@ npm install @ramiidv/arca-agro
 
 Los códigos del ejemplo (provincias, localidades, `planta`, granos, `codPuerto`, actividad, conceptos `'CO'` y `'RG'`) son ilustrativos: los válidos se obtienen con las [paramétricas](#glosario) de cada servicio.
 
+La carpeta `certs/` del ejemplo (certificado y clave privada) tiene que estar en el `.gitignore` del proyecto: la clave nunca se versiona.
+
 ```ts
 import fs from 'node:fs';
 import { ArcaAgro, FileTicketStorage, TIPO_CPE } from '@ramiidv/arca-agro';
@@ -133,11 +135,12 @@ console.log(autorizacion.coe, autorizacion.totalNetoAPagar); // '330100012345' 8
 | `production`                                                                                                           | `boolean`                       | `false`            | Homologación o producción                                                                                     |
 | `timeout`                                                                                                              | `number`                        | `30000`            | Timeout HTTP (ms)                                                                                             |
 | `retries` / `retryDelayMs`                                                                                             | `number`                        | `1` / `1000`       | Reintentos de **consultas** (las emisiones nunca se reintentan)                                               |
-| `tokenTTLMinutes`                                                                                                      | `number`                        | `720`              | Vigencia del TRA pedida a WSAA                                                                                |
+| `tokenTTLMinutes`                                                                                                      | `number`                        | `10`               | Vigencia del TRA pedida a WSAA                                                                                |
 | `ticketStorage`                                                                                                        | `TicketStorage`                 | memoria            | Persistencia del TA (recomendado en producción: `FileTicketStorage` o propio)                                 |
 | `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs`, `alreadyAuthenticatedCooldownMs` |                                 |                    | Opciones de WSAA (ver `@ramiidv/arca-common`)                                                                 |
 | `fetch`                                                                                                                | `typeof fetch`                  | `globalThis.fetch` | `fetch` propio (proxy, tests)                                                                                 |
 | `legacyTls`                                                                                                            | `'auto' \| 'never' \| 'always'` | `'auto'`           | Transporte TLS legacy                                                                                         |
+| `maxResponseBytes`                                                                                                     | `number`                        | `52428800`         | Tamaño máximo del body de una respuesta (50 MB)                                                               |
 | `onEvent`                                                                                                              | `(e: ArcaEvent) => void`        | —                  | Eventos `auth:*` y `request:*`                                                                                |
 | `wsaa`                                                                                                                 | `WsaaClient`                    | —                  | `WsaaClient` compartido con otros SDKs (mismo certificado); tiene que ser del mismo entorno (`production`)    |
 | `signal`                                                                                                               | `AbortSignal`                   | —                  | Cancela todas las llamadas de la instancia (ej: al apagar la app); se combina con el `signal` de cada llamada |
@@ -185,6 +188,8 @@ await agro.cpe.informarContingencia({ cartaPorte, contingencia: { concepto: 'C',
 manual §3.2). Para mantenerlos, pasalos de nuevo o usá `{ preservarIntervinientes: true }`: el SDK
 consulta la CPE (después de validar los datos; si la consulta falla, la edición no se envía) y completa
 con el valor vigente los CUIT que no pasaste (`undefined`). Para quitar uno, pasalo como `null`.
+No es atómico: son dos llamadas (consulta y edición), así que si otro usuario o sistema edita la CPE
+entre ambas, sus cambios en esos CUIT se pisan con los valores leídos en la consulta.
 
 ```ts
 import type { ArcaAgro } from '@ramiidv/arca-agro';

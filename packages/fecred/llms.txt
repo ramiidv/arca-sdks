@@ -25,6 +25,7 @@ const fecred = new ArcaFecred({
   tokenTTLMinutes?, clockOffsetMs?, autoClockSkew?, loginErrorCooldownMs?, permanentErrorCooldownMs?,
   alreadyAuthenticatedCooldownMs?, // opciones de WSAA (ver @ramiidv/arca-common); la última, default 120000 prod / 600000 homo
   fetch?: typeof fetch, legacyTls?: 'auto' | 'never' | 'always',
+  maxResponseBytes?: number,    // tamaño máximo del body de una respuesta, default 52428800 (50 MB)
   onEvent?: (e: ArcaEvent) => void,
   wsaa?: WsaaClient,            // compartir WSAA entre SDKs (mismo entorno)
   signal?: AbortSignal,         // cancela todas las llamadas de la instancia

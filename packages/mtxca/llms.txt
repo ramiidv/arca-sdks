@@ -28,6 +28,7 @@ const mtxca = new ArcaMtxca({
   permanentErrorCooldownMs?: number, // default Infinity: espera tras un error de WSAA no reintentable; 0 la desactiva
   alreadyAuthenticatedCooldownMs?: number, // default 120000 prod / 600000 homo: espera tras coe.alreadyAuthenticated; 0 la desactiva
   fetch?: typeof fetch, legacyTls?: 'auto' | 'never' | 'always',
+  maxResponseBytes?: number, // tamaño máximo del body de una respuesta, default 52428800 (50 MB)
   onEvent?: (event: ArcaEvent) => void,
   onEvento?: (evento: { codigo, descripcion }, method: string) => void, // `evento` de ARCA de cualquier respuesta
 });
@@ -127,7 +128,7 @@ Validación sin request: `validateComprobanteCAE(c, ctx?)` (reglas de autorizar)
 - getPuntosVenta / getPuntosVentaCAE / getPuntosVentaCAEA -> { numeroPuntoVenta, bloqueado: 'S'|'N', fechaBaja? }[]
 - clearAuthCache(): Promise<void>
 
-Bajo nivel: `mtxca.client` / `new MtxcaClient({ endpoint, transport?, onEvento? })` (`transport`: timeout, retries, retryDelayMs, onEvent, fetch, legacyTls), una función por operación del WSDL (las emisiones también lanzan ArcaRechazoError); recibe `MtxcaAuth { token, sign, cuitRepresentada }`. Valida el XSD y redondea, sin las reglas de negocio.
+Bajo nivel: `mtxca.client` / `new MtxcaClient({ endpoint, transport?, onEvento? })` (`transport`: timeout, retries, retryDelayMs, onEvent, fetch, legacyTls, maxResponseBytes), una función por operación del WSDL (las emisiones también lanzan ArcaRechazoError); recibe `MtxcaAuth { token, sign, cuitRepresentada }`. Valida el XSD y redondea, sin las reglas de negocio.
 
 ## Enums
 

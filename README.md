@@ -73,7 +73,8 @@ npm run test:smoke         # require() desde CommonJS
 
 Los tests de integración corren localmente, con el certificado de homologación
 de cada desarrollador. `npm run test:integration` toma las variables `ARCA_TEST_*`
-del entorno o de un `.env` en la raíz (está en `.gitignore`: no se versiona):
+del entorno o de un `.env` en la raíz (`.env`, `certs/` y los archivos `*.key`/`*.crt`/`*.pem`
+están en `.gitignore`: no se versionan):
 
 ```sh
 ARCA_TEST_CERT=./certs/homo.crt     # certificado (PEM o ruta al archivo)
@@ -95,8 +96,10 @@ Pendientes, próximos pasos y gotchas en [ROADMAP.md](ROADMAP.md).
 Cada cambio que afecta a un paquete publicado lleva un changeset
 (`npm run changeset`). Al mergear a `main`, el workflow de release corre CI y
 abre el PR "chore: version packages" (versiones, CHANGELOGs y rangos internos
-actualizados); al mergearlo se publican en npm, con trusted publishing (OIDC) y
-provenance, en orden de dependencias.
+actualizados); al mergearlo, y con la aprobación del environment `npm-publish`,
+se publican en npm, con trusted publishing (OIDC) y provenance, en orden de
+dependencias. Las actions de los workflows están fijadas por SHA y Dependabot
+las mantiene al día. Detalles en [ROADMAP.md](ROADMAP.md#cómo-publicar).
 
 ## Licencia
 

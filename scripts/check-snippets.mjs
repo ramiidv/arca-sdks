@@ -38,7 +38,13 @@ writeFileSync(
   join(out, 'tsconfig.json'),
   JSON.stringify({
     extends: join(root, 'tsconfig.base.json'),
-    compilerOptions: { noEmit: true, declaration: false, declarationMap: false, sourceMap: false },
+    compilerOptions: {
+      noEmit: true,
+      declaration: false,
+      declarationMap: false,
+      sourceMap: false,
+      inlineSources: false,
+    },
     include: ['*.mts'],
   }),
 );

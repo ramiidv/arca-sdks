@@ -35,9 +35,13 @@ export type SireClientConfig = ServiceClientConfig;
 /**
  * Faults con `faultcode` `soapenv:Server` que, según lo observado en
  * homologación, son rechazos previos a procesar el request: XML que no cumple
- * el schema y operación inexistente.
+ * el schema (`XML invalido, no cumple el schema: ...`) y request mal formado.
+ *
+ * Anclados al inicio del mensaje: un Fault de sistema que mencione estos textos
+ * en el medio no debe pasar por rechazo, porque un rechazo no es incierto y el
+ * integrador podría reintentar una emisión que sí se registró.
  */
-const REJECTION_FAULT_PATTERNS = [/^XML invalido/i, /no cumple el schema/i, /^Request mal formado/i];
+const REJECTION_FAULT_PATTERNS = [/^XML invalido\b/i, /^Request mal formado\b/i];
 
 /**
  * Faults de token/sign faltante o inválido. El manual no publica la lista; en

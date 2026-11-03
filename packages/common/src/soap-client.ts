@@ -1,8 +1,9 @@
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import { formatDateTimeAR } from './dates.js';
-import { ArcaSoapError, ArcaServiceError } from './errors.js';
+import { originOf, validateEndpoint } from './endpoint.js';
+import { ArcaResponseError, ArcaSoapError, ArcaServiceError, ArcaValidationError } from './errors.js';
 import type { ServiceErrorDetail } from './errors.js';
-import { legacyTlsRequest, LegacyTlsResponseError } from './legacy-tls.js';
+import { legacyTlsRequest, LegacyTlsResponseError, ResponseTooLargeError } from './legacy-tls.js';
 import type { ArcaEvent, SoapCallOptions, SoapOperationKind } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -55,10 +56,18 @@ const xmlBuilder = new XMLBuilder({
 });
 
 /**
+ * SOAP no admite DTDs: una respuesta con `<!DOCTYPE` no se parsea (el parser
+ * expandiría las entidades declaradas en ella).
+ */
+const DOCTYPE_RE = /<!DOCTYPE/i;
+
+/**
  * Parsea un string XML a objeto JS. Con `parseNumbers: false` los valores de
  * texto no se convierten a número.
+ * @throws ArcaResponseError si el XML tiene una declaración `<!DOCTYPE`.
  */
 export function parseXml(xml: string, options?: ParseXmlOptions): Record<string, unknown> {
+  if (DOCTYPE_RE.test(xml)) throw new ArcaResponseError('XML con declaración <!DOCTYPE: no se procesa');
   const parser = options?.parseNumbers === false ? xmlTextParser : xmlParser;
   return parser.parse(xml) as Record<string, unknown>;
 }
@@ -68,10 +77,26 @@ export function parseXml(xml: string, options?: ParseXmlOptions): Record<string,
  * con valor `null`/`undefined` se omiten, en lugar de enviarse como `<x/>`.
  * Un `Date` (también dentro de arrays u objetos anidados) se envía como
  * `xsd:dateTime` en hora de Argentina (`AAAA-MM-DDTHH:mm:ss-03:00`).
- * @throws ArcaValidationError si algún `Date` es inválido.
+ *
+ * Las keys son nombres de elemento XML (con prefijo opcional, ej: `ser:dummy`),
+ * atributos con `@_` (ej: `@_xmlns:ser`) o `#text`; los valores se escapan.
+ * @throws ArcaValidationError si algún `Date` es inválido o alguna key no es un nombre XML válido.
  */
 export function buildXml(obj: Record<string, unknown>): string {
   return xmlBuilder.build(prepareForXml(obj)) as string;
+}
+
+/** Nombre XML con prefijo opcional (QName): `nombre` o `prefijo:nombre`. */
+const XML_NAME = '[\\p{L}_][\\p{L}\\p{M}\\p{N}._-]*';
+const QNAME_RE = new RegExp(`^(?:@_)?${XML_NAME}(?::${XML_NAME})?$`, 'u');
+
+function validateXmlKey(key: string): void {
+  if (key === '#text' || QNAME_RE.test(key)) return;
+  throw new ArcaValidationError(
+    `Nombre de elemento o atributo XML inválido: ${JSON.stringify(key.slice(0, 50))}`,
+    [{ field: key.slice(0, 50), message: 'no es un nombre XML válido' }],
+    'buildXml',
+  );
 }
 
 /** Copia de `value` sin propiedades ni elementos `null`/`undefined`, con los `Date` formateados (recursivo). */
@@ -81,6 +106,7 @@ function prepareForXml(value: unknown): unknown {
   if (value === null || typeof value !== 'object') return value;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value)) {
+    validateXmlKey(k);
     if (v !== null && v !== undefined) out[k] = prepareForXml(v);
   }
   return out;
@@ -280,14 +306,16 @@ function parseResponseDate(header: string | null): Date | undefined {
 /**
  * Un error es reintentable (solo en consultas) si es transitorio: red, timeout,
  * respuesta cortada o ilegible, o un 5xx sin SOAP Fault (502/503/504 de un
- * proxy). Un SOAP Fault es una respuesta determinística del servicio y un 4xx
- * un rechazo del request: no se reintentan.
+ * proxy). Un SOAP Fault es una respuesta determinística del servicio, un 4xx
+ * un rechazo del request, un 3xx una redirección que no se sigue y una
+ * respuesta que supera `maxResponseBytes` volvería a superarlo: no se reintentan.
  */
 function isRetryable(error: ArcaSoapError): boolean {
   if (error.aborted) return false;
   if (error.faultString !== undefined) return false;
+  if (error.cause instanceof ResponseTooLargeError) return false;
   const status = error.statusCode;
-  return status === undefined || status < 400 || status >= 500;
+  return status === undefined || status < 300 || status >= 500;
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -312,16 +340,18 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 // Transporte TLS legacy
 // ---------------------------------------------------------------------------
 
+/**
+ * Hosts de ARCA que negocian DH de 1024 bits: con `legacyTls: 'auto'` solo
+ * estos pasan al transporte legacy ante `ERR_SSL_DH_KEY_TOO_SMALL`.
+ * `servicios1.afip.gov.ar`: WSFEv1, WSFEX y WSCDC de producción.
+ */
+const LEGACY_TLS_ALLOWED_HOSTS = new Set(['servicios1.afip.gov.ar']);
+
 /** Hosts que necesitaron el transporte legacy (DH de 1024 bits), para no fallar la primera vez cada vez. */
 const legacyTlsHosts = new Set<string>();
 
-function hostOf(endpoint: string): string {
-  try {
-    return new URL(endpoint).host;
-  } catch {
-    return endpoint;
-  }
-}
+/** Tamaño máximo por defecto del body de una respuesta: 50 MB (alcanza para los PDF en base64 de WSLPG/WSCPE). */
+const DEFAULT_MAX_RESPONSE_BYTES = 50 * 1024 * 1024;
 
 /** Respuesta HTTP normalizada (de `fetch` o del transporte legacy). */
 interface TransportResponse {
@@ -329,18 +359,67 @@ interface TransportResponse {
   statusText: string;
   ok: boolean;
   date: string | null;
-  /** Lee el body. Puede fallar si la conexión se corta. */
+  /** Header `Location` (en un 3xx). */
+  location: string | null;
+  /** Lee el body. Puede fallar si la conexión se corta o si supera `maxResponseBytes`. */
   text(): Promise<string>;
+  /** Descarta el body sin leerlo. */
+  discard(): void;
 }
 
-function fromFetchResponse(response: Response): TransportResponse {
+function fromFetchResponse(response: Response, maxBytes: number): TransportResponse {
   return {
     status: response.status,
     statusText: response.statusText,
     ok: response.ok,
     date: response.headers.get('date'),
-    text: () => response.text(),
+    location: response.headers.get('location'),
+    text: () => readBodyCapped(response, maxBytes),
+    discard: () => {
+      response.body?.cancel().catch(() => {});
+    },
   };
+}
+
+/** Respuesta del transporte legacy (el body ya se leyó entero, o falló: lo indica `text`). */
+function fromLegacyResponse(
+  status: number,
+  statusText: string,
+  headers: Record<string, string>,
+  text: () => Promise<string>,
+): TransportResponse {
+  return {
+    status,
+    statusText,
+    ok: status >= 200 && status < 300,
+    date: headers['date'] ?? null,
+    location: headers['location'] ?? null,
+    text,
+    discard: () => {},
+  };
+}
+
+/** Lee el body de `response` como UTF-8 (igual que `response.text()`), cortando si supera `maxBytes`. */
+async function readBodyCapped(response: Response, maxBytes: number): Promise<string> {
+  if (Number(response.headers.get('content-length')) > maxBytes) {
+    response.body?.cancel().catch(() => {});
+    throw new ResponseTooLargeError(maxBytes);
+  }
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      reader.cancel().catch(() => {});
+      throw new ResponseTooLargeError(maxBytes);
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
 // ---------------------------------------------------------------------------
@@ -362,9 +441,15 @@ function fromFetchResponse(response: Response): TransportResponse {
  * `faultCode`/`faultString`; en consultas no son `uncertain`. Todos los errores
  * con respuesta incluyen `responseDate` (header `Date` del servidor).
  *
- * Si el `fetch` por defecto falla con `ERR_SSL_DH_KEY_TOO_SMALL` (hosts con DH
- * de 1024 bits), el mismo request se reintenta una vez con un transporte
- * `node:https` con `SECLEVEL=1` (ver `legacyTls`).
+ * Si el `fetch` por defecto falla con `ERR_SSL_DH_KEY_TOO_SMALL` en un host
+ * de ARCA con DH de 1024 bits (`servicios1.afip.gov.ar`), el mismo request se
+ * reintenta una vez con un transporte `node:https` con `SECLEVEL=1` (ver
+ * `legacyTls`).
+ *
+ * Seguridad: el endpoint tiene que ser `https://` (`http://` solo en
+ * loopback); las redirecciones (3xx) no se siguen, se lanzan como
+ * `ArcaSoapError`; una respuesta con `<!DOCTYPE` no se parsea; el body se
+ * corta en `maxResponseBytes` (default 50 MB).
  *
  * Con `parseNumbers: false` los valores de texto de la respuesta quedan como
  * string (por cualquiera de los dos transportes).
@@ -380,6 +465,7 @@ export function soapCall(
 /**
  * `soapCall` con un criterio propio de reintento (en consultas). WSAA lo usa
  * para reintentar solo los errores sin envío (`uncertain: false`).
+ * @throws ArcaValidationError si `endpoint` no es una URL https (ver `validateEndpoint`).
  * @internal
  */
 export async function soapCallWith(
@@ -397,8 +483,17 @@ export async function soapCallWith(
   const externalSignal = opts?.signal;
   const injectedFetch = opts?.fetch;
   const legacyTls = opts?.legacyTls ?? 'auto';
+  const maxResponseBytes = opts?.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
   const responseParser = opts?.parseNumbers === false ? soapResponseTextParser : soapResponseParser;
-  const host = hostOf(endpoint);
+  const url = validateEndpoint(endpoint, 'endpoint');
+  if (typeof maxResponseBytes !== 'number' || !(maxResponseBytes > 0)) {
+    throw new ArcaValidationError(
+      `maxResponseBytes inválido: ${String(maxResponseBytes)}. Tiene que ser un número positivo.`,
+      [{ field: 'maxResponseBytes', message: 'debe ser un número positivo', value: maxResponseBytes }],
+      'maxResponseBytes',
+    );
+  }
+  const host = url.host;
 
   const envelope =
     `<?xml version="1.0" encoding="UTF-8"?>` +
@@ -453,16 +548,21 @@ export async function soapCallWith(
 
     const doFetch = injectedFetch ?? globalThis.fetch;
     try {
-      const response = await doFetch(endpoint, { method: 'POST', headers, body: envelope, signal });
-      return fromFetchResponse(response);
+      // Sin seguir redirecciones: un 307/308 reenviaría el body (token y sign,
+      // o el CMS de WSAA) a otro host.
+      const response = await doFetch(endpoint, { method: 'POST', headers, body: envelope, signal, redirect: 'manual' });
+      return fromFetchResponse(response, maxResponseBytes);
     } catch (err) {
       // Falla de handshake: el request no se envió, así que es seguro
-      // reintentarlo con el transporte legacy (también en emisiones).
+      // reintentarlo con el transporte legacy (también en emisiones). Solo con
+      // los hosts de ARCA que lo necesitan: con otro host sería bajar la
+      // seguridad del TLS sin motivo.
       if (
         injectedFetch === undefined &&
         legacyTls === 'auto' &&
         !signal.aborted &&
-        networkErrorCode(err) === 'ERR_SSL_DH_KEY_TOO_SMALL'
+        networkErrorCode(err) === 'ERR_SSL_DH_KEY_TOO_SMALL' &&
+        LEGACY_TLS_ALLOWED_HOSTS.has(url.hostname)
       ) {
         legacyTlsHosts.add(host);
         return sendLegacy(signal);
@@ -472,29 +572,22 @@ export async function soapCallWith(
   }
 
   async function sendLegacy(signal: AbortSignal): Promise<TransportResponse> {
+    safeEmit(onEvent, { type: 'request:legacy-tls', endpoint, method: methodName });
     try {
-      const res = await legacyTlsRequest(endpoint, { method: 'POST', headers, body: envelope, signal });
-      return {
-        status: res.status,
-        statusText: res.statusText,
-        ok: res.status >= 200 && res.status < 300,
-        date: res.headers['date'] ?? null,
-        text: async () => res.body,
-      };
+      const res = await legacyTlsRequest(endpoint, {
+        method: 'POST',
+        headers,
+        body: envelope,
+        signal,
+        maxResponseBytes,
+      });
+      return fromLegacyResponse(res.status, res.statusText, res.headers, async () => res.body);
     } catch (err) {
       if (err instanceof LegacyTlsResponseError) {
-        // El servidor ya respondió y el body se cortó: se informa como error de lectura.
-        const status = err.status;
-        const date = err.headers['date'] ?? null;
-        return {
-          status,
-          statusText: '',
-          ok: status >= 200 && status < 300,
-          date,
-          text: async () => {
-            throw err.cause ?? err;
-          },
-        };
+        // El servidor ya respondió y el body se cortó (o superó `maxResponseBytes`): se informa como error de lectura.
+        return fromLegacyResponse(err.status, '', err.headers, async () => {
+          throw err.cause ?? err;
+        });
       }
       throw err;
     }
@@ -523,10 +616,32 @@ export async function soapCallWith(
       }
 
       const responseDate = parseResponseDate(response.date);
+
+      // Redirección: no se sigue (el body no se reenvía a otro host) y el
+      // servidor no procesó el request. `status 0`: `opaqueredirect` de un
+      // `fetch` inyectado que respeta `redirect: 'manual'` como un navegador.
+      if ((response.status >= 300 && response.status < 400) || response.status === 0) {
+        response.discard();
+        const target = redirectTarget(response.location, endpoint);
+        return new ArcaSoapError(
+          `${methodName}: el servidor respondió con una redirección (HTTP ${response.status}${target ? ` hacia ${target}` : ''}), que no se sigue. Verificá el endpoint configurado.`,
+          { statusCode: response.status, responseDate, uncertain: false },
+        );
+      }
+
       let responseText: string;
       try {
         responseText = await response.text();
       } catch (err) {
+        if (err instanceof ResponseTooLargeError) {
+          // El servidor respondió, pero no se puede leer: en emisiones no se sabe qué contestó.
+          return new ArcaSoapError(`${err.message} llamando a ${methodName}`, {
+            cause: err,
+            statusCode: response.status,
+            responseDate,
+            uncertain: kind === 'emision',
+          });
+        }
         // La respuesta empezó a llegar: el servidor procesó (o está procesando) el request.
         const base = fetchError(err, timedOut);
         return new ArcaSoapError(base.message, {
@@ -538,9 +653,11 @@ export async function soapCallWith(
         });
       }
 
+      // SOAP no admite DTDs: con `<!DOCTYPE` no se parsea (ni se expanden sus entidades).
+      const hasDoctype = DOCTYPE_RE.test(responseText);
       let parsed: Record<string, unknown> | undefined;
       try {
-        parsed = responseParser.parse(responseText) as Record<string, unknown>;
+        parsed = hasDoctype ? undefined : (responseParser.parse(responseText) as Record<string, unknown>);
       } catch {
         parsed = undefined;
       }
@@ -576,10 +693,12 @@ export async function soapCallWith(
         // 2xx sin Envelope SOAP (ej: página HTML de mantenimiento de un proxy, o
         // el texto plano `BL<id> <fecha> 500` con que WSCPE responde un request
         // que no cumple el XSD): error de transporte, reintentable en consultas.
-        // El extracto del body queda en el mensaje y en `responseBody`.
+        // También una respuesta con `<!DOCTYPE`, que no se parsea. El extracto
+        // del body queda en el mensaje y en `responseBody`.
         const excerpt = bodyExcerpt(responseText);
+        const doctype = hasDoctype ? ', con declaración <!DOCTYPE, que no se procesa' : '';
         return new ArcaSoapError(
-          `Respuesta inválida de ${methodName}: HTTP ${response.status} sin SOAP Envelope (${excerpt ? `respuesta: ${excerpt}` : 'body vacío'})`,
+          `Respuesta inválida de ${methodName}: HTTP ${response.status} sin SOAP Envelope${doctype} (${excerpt ? `respuesta: ${excerpt}` : 'body vacío'})`,
           {
             statusCode: response.status,
             responseDate,
@@ -617,6 +736,16 @@ export async function soapCallWith(
       cause: err,
       uncertain: !(code !== undefined && NOT_SENT_CODES.has(code)),
     });
+  }
+}
+
+/** Host (sin ruta ni query) al que apunta el header `Location` de una redirección. */
+function redirectTarget(location: string | null, base: string): string | undefined {
+  if (!location) return undefined;
+  try {
+    return originOf(new URL(location, base));
+  } catch {
+    return undefined;
   }
 }
 

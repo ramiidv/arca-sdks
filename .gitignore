@@ -6,3 +6,12 @@ coverage/
 .arca-test-tickets/
 certs/
 .arca-tickets/
+.env.*
+
+# Certificados y claves privadas (ARCA/AFIP): nunca al repo.
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
