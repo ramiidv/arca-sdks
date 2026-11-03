@@ -42,7 +42,7 @@ function fail(field: string, message: string, value?: unknown): never {
  *   `cancelaEnMismaMonedaExtranjera`, usá el comprobante de `consultarComprobante`.
  *
  * @param cuit CUIT del emisor.
- * @throws ArcaValidationError si el comprobante fue rechazado o falta algún dato.
+ * @throws ArcaValidationError si falta algún dato.
  */
 export function urlQR(
   cuit: number | string,
@@ -60,8 +60,12 @@ export function urlQR(
     fecha: string | Date | undefined;
   };
   if (resultado !== undefined) {
-    if (resultado.resultado === 'R' || !resultado.comprobante) {
-      fail('resultado', 'el comprobante fue rechazado: no tiene CAE/CAEA', resultado.resultado);
+    if (resultado === null || typeof resultado !== 'object' || !resultado.comprobante) {
+      fail(
+        'resultado',
+        'no tiene comprobante (CAE/CAEA): pasá el resultado de autorizar o informarComprobanteCAEA',
+        resultado,
+      );
     }
     const r = resultado.comprobante;
     const cae = 'cae' in r;

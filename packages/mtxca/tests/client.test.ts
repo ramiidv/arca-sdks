@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { ArcaResponseError, ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  ArcaRechazoError,
+  ArcaResponseError,
+  ArcaServiceError,
+  ArcaSoapError,
+  ArcaValidationError,
+} from '@ramiidv/arca-common';
 import { soapFault } from '@ramiidv/arca-common/testing';
 import {
   AUTH,
@@ -12,6 +18,9 @@ import {
   requestBody,
   soapResponse,
 } from './helpers.js';
+import { ENDPOINTS } from '../src/constants.js';
+import { MtxcaClient } from '../src/mtxca-client.js';
+import type { MtxcaClientConfig } from '../src/mtxca-client.js';
 
 /** Orden de la secuencia de ComprobanteType en el XSD. */
 const COMPROBANTE_ORDER = [
@@ -234,7 +243,7 @@ describe('autorizarComprobante', () => {
     expect(bonif).toContain('<importeItem>-12.10</importeItem>');
   });
 
-  it('parsea un rechazo (R) con arrayErrores y observaciones de 1 y N elementos sin lanzar', async () => {
+  it('un rechazo (R) lanza ArcaRechazoError con errores y observaciones de 1 y N elementos', async () => {
     const m = mockFetch(
       soapResponse(
         'autorizarComprobanteResponse',
@@ -245,15 +254,27 @@ describe('autorizarComprobante', () => {
           `<evento><codigo>1</codigo><descripcion>Mantenimiento programado</descripcion></evento>`,
       ),
     );
-    const res = await client(m.fetch).autorizarComprobante(AUTH, facturaA());
-    expect(res.resultado).toBe('R');
-    expect(res.comprobante).toBeUndefined();
-    expect(res.errores).toEqual([
-      { codigo: 102, descripcion: 'Numero no correlativo' },
-      { codigo: 115, descripcion: 'Total incorrecto' },
+    const onEvento = vi.fn();
+    const err = await client(m.fetch, { onEvento })
+      .autorizarComprobante(AUTH, facturaA())
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err).toBeInstanceOf(ArcaServiceError);
+    expect(err.code).toBe('ARCA_RECHAZO');
+    expect(err.operacion).toBe('autorizarComprobante');
+    expect(err.errors).toEqual([
+      { code: 102, msg: 'Numero no correlativo' },
+      { code: 115, msg: 'Total incorrecto' },
     ]);
-    expect(res.observaciones).toEqual([{ codigo: 190, descripcion: 'Falta condicion IVA receptor' }]);
-    expect(res.evento).toEqual({ codigo: 1, descripcion: 'Mantenimiento programado' });
+    expect(err.observaciones).toEqual([{ code: 190, msg: 'Falta condicion IVA receptor' }]);
+    expect(err.message).toBe(
+      'WSMTXCA autorizarComprobante: rechazado: [102] Numero no correlativo, [115] Total incorrecto',
+    );
+    // El evento se sigue notificando aunque la emisión sea rechazada.
+    expect(onEvento).toHaveBeenCalledWith(
+      { codigo: 1, descripcion: 'Mantenimiento programado' },
+      'autorizarComprobante',
+    );
   });
 
   it('parsea O (aprobado con observaciones) con CAE como string', async () => {
@@ -265,7 +286,6 @@ describe('autorizarComprobante', () => {
     );
     const res = await client(m.fetch).autorizarComprobante(AUTH, facturaA());
     expect(res.resultado).toBe('O');
-    if (res.resultado === 'R') throw new Error('esperaba aprobado');
     expect(res.comprobante).toEqual({
       cuit: '20123456786',
       codigoTipoComprobante: 1,
@@ -283,11 +303,11 @@ describe('autorizarComprobante', () => {
     const err = await client(m.fetch)
       .autorizarComprobante(AUTH, facturaA())
       .catch((e) => e);
-    expect(err).toBeInstanceOf(ArcaSoapError);
-    expect((err as ArcaSoapError).uncertain).toBe(true);
+    expect(err).toBeInstanceOf(ArcaResponseError);
+    expect((err as ArcaResponseError).uncertain).toBe(true);
   });
 
-  it('sin resultado pero con arrayErrores lanza ArcaServiceError', async () => {
+  it('sin resultado pero con arrayErrores lanza ArcaServiceError (no ArcaRechazoError)', async () => {
     const m = mockFetch(
       soapResponse(
         'autorizarComprobanteResponse',
@@ -298,6 +318,7 @@ describe('autorizarComprobante', () => {
       .autorizarComprobante(AUTH, facturaA())
       .catch((e) => e);
     expect(err).toBeInstanceOf(ArcaServiceError);
+    expect(err).not.toBeInstanceOf(ArcaRechazoError);
     expect((err as ArcaServiceError).errors[0].code).toBe(10010);
   });
 
@@ -368,7 +389,7 @@ describe('consultarUltimoComprobanteAutorizado', () => {
       soapResponse('consultarUltimoComprobanteAutorizadoResponse', ''),
     );
     await expect(client(m.fetch).consultarUltimoComprobanteAutorizado(AUTH, 4000, 1)).rejects.toBeInstanceOf(
-      ArcaSoapError,
+      ArcaResponseError,
     );
   });
 
@@ -547,7 +568,7 @@ describe('parámetros', () => {
       soapResponse('consultarTiposDocumentoResponse', ''),
       soapResponse('consultarTiposDocumentoResponse', ''),
     );
-    await expect(client(m.fetch).consultarTiposDocumento(AUTH)).rejects.toBeInstanceOf(ArcaSoapError);
+    await expect(client(m.fetch).consultarTiposDocumento(AUTH)).rejects.toBeInstanceOf(ArcaResponseError);
   });
 });
 
@@ -585,7 +606,12 @@ describe('CAEA', () => {
         '<arrayErrores><codigoDescripcion><codigo>1300</codigo><descripcion>Fuera de plazo</descripcion></codigoDescripcion></arrayErrores>',
       ),
     );
-    await expect(client(m.fetch).solicitarCAEA(AUTH, 202611, 2)).rejects.toBeInstanceOf(ArcaServiceError);
+    const rechazo = await client(m.fetch)
+      .solicitarCAEA(AUTH, 202611, 2)
+      .catch((e) => e);
+    expect(rechazo).toBeInstanceOf(ArcaServiceError);
+    expect(rechazo).not.toBeInstanceOf(ArcaRechazoError);
+    expect(rechazo).toMatchObject({ errors: [{ code: 1300, msg: 'Fuera de plazo' }] });
     const h = hangingFetch();
     const err = await client(h.fetch, { timeout: 20 })
       .solicitarCAEA(AUTH, 202611, 2)
@@ -638,7 +664,6 @@ describe('CAEA', () => {
       fechaHoraGen: '2026-11-01T10:30:00',
     });
     expect(res.resultado).toBe('A');
-    if (res.resultado === 'R') throw new Error('esperaba aprobado');
     expect(res.comprobante).toEqual({
       caea: '36434058476543',
       codigoTipoComprobante: 1,
@@ -666,7 +691,7 @@ describe('CAEA', () => {
     expect(h.fn).toHaveBeenCalledTimes(1);
   });
 
-  it('informarCAEANoUtilizadoPtoVta: orden del request y rechazo devuelto', async () => {
+  it('informarCAEANoUtilizadoPtoVta: orden del request y rechazo lanzado', async () => {
     const m = mockFetch(
       soapResponse(
         'informarCAEANoUtilizadoPtoVtaResponse',
@@ -674,9 +699,14 @@ describe('CAEA', () => {
           '<arrayErrores><codigoDescripcion><codigo>1400</codigo><descripcion>El CAEA tiene comprobantes informados</descripcion></codigoDescripcion></arrayErrores>',
       ),
     );
-    const res = await client(m.fetch).informarCAEANoUtilizadoPtoVta(AUTH, '36434058476543', 4000);
-    expect(res).toMatchObject({ resultado: 'R', caea: '36434058476543', numeroPuntoVenta: 4000 });
-    expect(res.errores).toEqual([{ codigo: 1400, descripcion: 'El CAEA tiene comprobantes informados' }]);
+    const err = await client(m.fetch)
+      .informarCAEANoUtilizadoPtoVta(AUTH, '36434058476543', 4000)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err).toMatchObject({
+      operacion: 'informarCAEANoUtilizadoPtoVta',
+      errors: [{ code: 1400, msg: 'El CAEA tiene comprobantes informados' }],
+    });
     expect(childOrder(m.calls[0].body, 'ser:informarCAEANoUtilizadoPtoVtaRequest')).toEqual([
       'authRequest',
       'CAEA',
@@ -738,7 +768,7 @@ describe('schemas del XSD (DSL de common)', () => {
 
   it('consultarComprobante sin arrayItems (obligatorio) es una respuesta inválida', async () => {
     const m = mockFetch(consultado(''), consultado(''));
-    await expect(client(m.fetch).consultarComprobante(AUTH, 1, 4000, 1)).rejects.toBeInstanceOf(ArcaSoapError);
+    await expect(client(m.fetch).consultarComprobante(AUTH, 1, 4000, 1)).rejects.toBeInstanceOf(ArcaResponseError);
   });
 
   it('comprobanteResponse vacío en un aprobado es inválido e incierto', async () => {
@@ -746,8 +776,8 @@ describe('schemas del XSD (DSL de common)', () => {
     const err = await client(m.fetch)
       .autorizarComprobante(AUTH, facturaA())
       .catch((e) => e);
-    expect(err).toBeInstanceOf(ArcaSoapError);
-    expect((err as ArcaSoapError).uncertain).toBe(true);
+    expect(err).toBeInstanceOf(ArcaResponseError);
+    expect((err as ArcaResponseError).uncertain).toBe(true);
   });
 
   it('redondea mitad al par sobre el decimal (8.575 → 8.58, 8.565 → 8.56, como roundImporte)', async () => {
@@ -863,7 +893,7 @@ describe('CAEA: operaciones restantes', () => {
       ),
     );
     const res = await client(m.fetch).informarCAEANoUtilizado(AUTH, Number(CAEA) as unknown as string);
-    expect(res).toEqual({ resultado: 'A', fechaProceso: '2026-11-16', caea: CAEA, errores: [], evento: undefined });
+    expect(res).toEqual({ resultado: 'A', fechaProceso: '2026-11-16', caea: CAEA });
     expect('numeroPuntoVenta' in res).toBe(false);
     expect(childOrder(m.calls[0].body, 'ser:informarCAEANoUtilizadoRequest')).toEqual(['authRequest', 'CAEA']);
     const h = hangingFetch();
@@ -881,11 +911,11 @@ describe('CAEA: operaciones restantes', () => {
     const err = await client(m.fetch)
       .informarCAEANoUtilizado(AUTH, CAEA)
       .catch((e) => e);
-    expect(err).toBeInstanceOf(ArcaSoapError);
-    expect((err as ArcaSoapError).uncertain).toBe(true);
+    expect(err).toBeInstanceOf(ArcaResponseError);
+    expect((err as ArcaResponseError).uncertain).toBe(true);
   });
 
-  it('informarComprobanteCAEA: R devuelve errores sin comprobante; O devuelve observaciones y comprobante', async () => {
+  it('informarComprobanteCAEA: R lanza ArcaRechazoError; O devuelve observaciones y comprobante', async () => {
     const m = mockFetch(
       soapResponse(
         'informarComprobanteCAEAResponse',
@@ -899,13 +929,12 @@ describe('CAEA: operaciones restantes', () => {
       ),
     );
     const c = client(m.fetch);
-    const r = await c.informarComprobanteCAEA(AUTH, { ...facturaA(), caea: CAEA });
-    expect(r).toEqual({
-      resultado: 'R',
-      fechaProceso: undefined,
+    const r = await c.informarComprobanteCAEA(AUTH, { ...facturaA(), caea: CAEA }).catch((e) => e);
+    expect(r).toBeInstanceOf(ArcaRechazoError);
+    expect(r).toMatchObject({
+      operacion: 'informarComprobanteCAEA',
+      errors: [{ code: 705, msg: 'CAEA inválido' }],
       observaciones: [],
-      errores: [{ codigo: 705, descripcion: 'CAEA inválido' }],
-      evento: undefined,
     });
     const o = await c.informarComprobanteCAEA(AUTH, { ...facturaA(), caea: CAEA });
     expect(o).toMatchObject({
@@ -954,7 +983,7 @@ describe('CAEA: operaciones restantes', () => {
     expect(requestBody(m.calls[0]).name).toBe('ser:consultarPuntosVentaCAERequest');
     expect(requestBody(m.calls[1]).name).toBe('ser:consultarPuntosVentaCAEARequest');
     // arrayPuntosVenta es obligatorio en estas dos.
-    await expect(c.consultarPuntosVentaCAE(AUTH)).rejects.toBeInstanceOf(ArcaSoapError);
+    await expect(c.consultarPuntosVentaCAE(AUTH)).rejects.toBeInstanceOf(ArcaResponseError);
   });
 });
 
@@ -990,6 +1019,106 @@ describe('SOAP Fault', () => {
     expect(err).toBeInstanceOf(ArcaSoapError);
     expect((err as ArcaSoapError).uncertain).toBe(false);
     expect((err as ArcaSoapError).faultString).toBe('Token vencido');
+  });
+});
+
+describe('rechazos de emisiones (ArcaRechazoError)', () => {
+  const ERRORES =
+    '<arrayErrores><codigoDescripcion><codigo>999</codigo><descripcion>Rechazado</descripcion></codigoDescripcion></arrayErrores>';
+  const CAEA = '36434058476543';
+  const casos: Array<[string, (c: MtxcaClient) => Promise<unknown>]> = [
+    ['autorizarComprobante', (c) => c.autorizarComprobante(AUTH, facturaA())],
+    ['autorizarAjusteIVA', (c) => c.autorizarAjusteIVA(AUTH, facturaA({ codigoTipoComprobante: 2 }))],
+    ['informarComprobanteCAEA', (c) => c.informarComprobanteCAEA(AUTH, { ...facturaA(), caea: CAEA })],
+    [
+      'informarAjusteIVACAEA',
+      (c) => c.informarAjusteIVACAEA(AUTH, { ...facturaA({ codigoTipoComprobante: 2 }), caea: CAEA }),
+    ],
+    ['informarCAEANoUtilizado', (c) => c.informarCAEANoUtilizado(AUTH, CAEA)],
+    ['informarCAEANoUtilizadoPtoVta', (c) => c.informarCAEANoUtilizadoPtoVta(AUTH, CAEA, 4000)],
+  ];
+
+  for (const [method, call] of casos) {
+    it(`${method}: resultado R lanza ArcaRechazoError (y no devuelve el rechazo)`, async () => {
+      const m = mockFetch(soapResponse(`${method}Response`, `<resultado>R</resultado>${ERRORES}`));
+      const err = await call(client(m.fetch)).catch((e) => e);
+      expect(err).toBeInstanceOf(ArcaRechazoError);
+      expect(err).toBeInstanceOf(ArcaServiceError);
+      expect(err).toMatchObject({ code: 'ARCA_RECHAZO', operacion: method, errors: [{ code: 999, msg: 'Rechazado' }] });
+      expect(m.calls).toHaveLength(1);
+    });
+  }
+
+  it('R sin arrayErrores: el mensaje lista las observaciones', async () => {
+    const m = mockFetch(
+      soapResponse(
+        'autorizarComprobanteResponse',
+        '<resultado>R</resultado><arrayObservaciones><codigoDescripcion><codigo>190</codigo>' +
+          '<descripcion>Falta condicion IVA receptor</descripcion></codigoDescripcion></arrayObservaciones>',
+      ),
+    );
+    const err = await client(m.fetch)
+      .autorizarComprobante(AUTH, facturaA())
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err).toMatchObject({ errors: [], observaciones: [{ code: 190, msg: 'Falta condicion IVA receptor' }] });
+    expect(err.message).toBe('WSMTXCA autorizarComprobante: rechazado: [190] Falta condicion IVA receptor');
+  });
+
+  it('un resultado desconocido es una respuesta inválida e incierta (no un rechazo)', async () => {
+    const m = mockFetch(soapResponse('informarCAEANoUtilizadoResponse', '<resultado>X</resultado>'));
+    const err = await client(m.fetch)
+      .informarCAEANoUtilizado(AUTH, CAEA)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaResponseError);
+    expect(err).not.toBeInstanceOf(ArcaRechazoError);
+    expect((err as ArcaResponseError).uncertain).toBe(true);
+  });
+
+  it('solicitarCAEA: arrayErrores (sin resultado R) lanza ArcaServiceError', async () => {
+    const m = mockFetch(soapResponse('solicitarCAEAResponse', ERRORES));
+    const err = await client(m.fetch)
+      .solicitarCAEA(AUTH, 202611, 1)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaServiceError);
+    expect(err).not.toBeInstanceOf(ArcaRechazoError);
+    expect(err).toMatchObject({ errors: [{ code: 999, msg: 'Rechazado' }] });
+  });
+
+  it('una consulta con arrayErrores sigue lanzando ArcaServiceError (no es un rechazo)', async () => {
+    const m = mockFetch(soapResponse('consultarCAEAResponse', ERRORES));
+    const err = await client(m.fetch)
+      .consultarCAEA(AUTH, CAEA)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaServiceError);
+    expect(err).not.toBeInstanceOf(ArcaRechazoError);
+  });
+});
+
+describe('configuración del cliente', () => {
+  it('recibe { endpoint, transport } y usa el transporte (fetch, onEvent)', async () => {
+    const m = mockFetch(
+      soapResponse('dummyResponse', '<appserver>OK</appserver><dbserver>OK</dbserver><authserver>OK</authserver>'),
+    );
+    const onEvent = vi.fn();
+    const c = new MtxcaClient({ endpoint: 'https://proxy.local/mtxca', transport: { fetch: m.fetch, onEvent } });
+    expect(c.endpoint).toBe('https://proxy.local/mtxca');
+    expect(c.namespace).toBe(NS);
+    await c.dummy();
+    expect(m.calls[0].url).toBe('https://proxy.local/mtxca');
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'request:start' }));
+  });
+
+  it('sin endpoint lanza TypeError', () => {
+    expect(() => new MtxcaClient({} as MtxcaClientConfig)).toThrow(TypeError);
+  });
+
+  it('ENDPOINTS tiene la forma { wsmtxca: { testing, production } }', () => {
+    expect(Object.keys(ENDPOINTS)).toEqual(['wsmtxca']);
+    expect(ENDPOINTS.wsmtxca).toEqual({
+      testing: 'https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService',
+      production: 'https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService',
+    });
   });
 });
 

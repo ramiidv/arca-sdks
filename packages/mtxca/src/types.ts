@@ -7,6 +7,9 @@ export type {
   CallOptions,
   LegacyTlsMode,
   ServerStatus,
+  ServiceClientConfig,
+  ServiceEndpoints,
+  ServiceTransport,
   TicketStorage,
 } from '@ramiidv/arca-common';
 
@@ -19,7 +22,12 @@ export interface ArcaMtxcaConfig extends ArcaSdkConfig {
    * URLs propias (proxy, mock). Si se indican, ignoran `production`; las que no
    * se indiquen usan las oficiales.
    */
-  endpoints?: { mtxca?: string; wsaa?: string };
+  endpoints?: {
+    /** URL de WSMTXCA (`.../wsmtxca/services/MTXCAService`). */
+    wsmtxca?: string;
+    /** URL del WSAA (`.../ws/services/LoginCms`). Se ignora si se pasa `wsaa`. */
+    wsaa?: string;
+  };
   /**
    * Recibe el `evento` (aviso informativo de ARCA) de cualquier respuesta que
    * lo traiga, incluidas las que devuelven un número o una lista. Los errores
@@ -244,8 +252,11 @@ export interface CodigoDescripcionString {
   descripcion: string;
 }
 
-/** Resultado de una autorización: A = aprobado, O = aprobado con observaciones, R = rechazado. */
-export type MtxcaResultado = 'A' | 'O' | 'R';
+/**
+ * Resultado de una emisión aprobada: A = aprobado, O = aprobado con
+ * observaciones. Un rechazo (R) no se devuelve: lanza `ArcaRechazoError`.
+ */
+export type MtxcaResultado = 'A' | 'O';
 
 /** `ComprobanteCAEResponseType`. */
 export interface MtxcaComprobanteCAEResponse {
@@ -259,23 +270,19 @@ export interface MtxcaComprobanteCAEResponse {
   fechaVencimientoCAE: string;
 }
 
-interface ResultadoBase {
+/**
+ * Respuesta de `autorizarComprobante` / `autorizarAjusteIVA`: siempre un
+ * comprobante aprobado (`A`, u `O` con observaciones). Un rechazo lanza
+ * `ArcaRechazoError` (motivos en `errors`).
+ */
+export interface MtxcaAutorizarResult {
+  resultado: MtxcaResultado;
+  comprobante: MtxcaComprobanteCAEResponse;
   /** Observaciones (en A no suele haber; en O explican por qué). */
   observaciones: CodigoDescripcion[];
-  /** Motivos del rechazo (resultado R). */
-  errores: CodigoDescripcion[];
   /** Anuncio informativo del sistema, si lo hay. */
   evento?: CodigoDescripcion;
 }
-
-/**
- * Respuesta de `autorizarComprobante` / `autorizarAjusteIVA`. Un rechazo NO
- * lanza: devuelve `resultado: 'R'` con `errores`. Revisá `resultado` antes de
- * usar `comprobante`.
- */
-export type MtxcaAutorizarResult =
-  | (ResultadoBase & { resultado: 'A' | 'O'; comprobante: MtxcaComprobanteCAEResponse })
-  | (ResultadoBase & { resultado: 'R'; comprobante?: undefined });
 
 /** `ComprobanteCAEAResponseType`. */
 export interface MtxcaComprobanteCAEAResponse {
@@ -286,12 +293,20 @@ export interface MtxcaComprobanteCAEAResponse {
 }
 
 /**
- * Respuesta de `informarComprobanteCAEA` / `informarAjusteIVACAEA`. Un rechazo
- * NO lanza: devuelve `resultado: 'R'` con `errores`.
+ * Respuesta de `informarComprobanteCAEA` / `informarAjusteIVACAEA`: siempre un
+ * comprobante aceptado (`A`, u `O` con observaciones). Un rechazo lanza
+ * `ArcaRechazoError` (motivos en `errors`).
  */
-export type MtxcaInformarCAEAResult =
-  | (ResultadoBase & { resultado: 'A' | 'O'; fechaProceso: string; comprobante: MtxcaComprobanteCAEAResponse })
-  | (ResultadoBase & { resultado: 'R'; fechaProceso?: string; comprobante?: undefined });
+export interface MtxcaInformarCAEAResult {
+  resultado: MtxcaResultado;
+  /** Fecha de proceso (YYYY-MM-DD). */
+  fechaProceso: string;
+  comprobante: MtxcaComprobanteCAEAResponse;
+  /** Observaciones (en A no suele haber; en O explican por qué). */
+  observaciones: CodigoDescripcion[];
+  /** Anuncio informativo del sistema, si lo hay. */
+  evento?: CodigoDescripcion;
+}
 
 /** `CAEAResponseType`. */
 export interface MtxcaCAEA {
@@ -311,15 +326,18 @@ export interface MtxcaCAEA {
 }
 
 /**
- * Respuesta de `informarCAEANoUtilizado` / `informarCAEANoUtilizadoPtoVta`.
- * Un rechazo NO lanza: devuelve `resultado: 'R'` con `errores`.
+ * Respuesta de `informarCAEANoUtilizado` / `informarCAEANoUtilizadoPtoVta`:
+ * siempre una operación aceptada. Un rechazo lanza `ArcaRechazoError` (motivos
+ * en `errors`).
  */
 export interface MtxcaCAEANoUtilizadoResult {
   resultado: MtxcaResultado;
-  fechaProceso?: string;
-  caea?: string;
+  /** Fecha de proceso (YYYY-MM-DD). */
+  fechaProceso: string;
+  caea: string;
+  /** Solo en `informarCAEANoUtilizadoPtoVta`. */
   numeroPuntoVenta?: number;
-  errores: CodigoDescripcion[];
+  /** Anuncio informativo del sistema, si lo hay. */
   evento?: CodigoDescripcion;
 }
 

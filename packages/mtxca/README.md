@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@ramiidv/arca-mtxca)](https://www.npmjs.com/package/@ramiidv/arca-mtxca)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Node >= 20.19](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen)](https://nodejs.org)
+[![Node >= 22.12](https://img.shields.io/badge/node-%3E%3D22.12-brightgreen)](https://nodejs.org)
 
 SDK de TypeScript para el web service **WSMTXCA** de ARCA (ex AFIP): factura electrónica con detalle de ítems (código MTX/GTIN, cantidad, precio unitario e IVA por línea), con CAE y con CAEA.
 
@@ -11,6 +11,7 @@ SDK de TypeScript para el web service **WSMTXCA** de ARCA (ex AFIP): factura ele
 - Validación local de las reglas excluyentes del manual v0.25.8 (presencia de campos por unidad de medida, fórmulas por ítem, subtotales de IVA por alícuota, totales, FCE y sus datos adicionales, comprobantes asociados, compradores, Sujeto No Categorizado, condición de IVA del receptor).
 - URL del código QR (RG 4892) con `urlQR()`.
 - Las emisiones nunca se reintentan y los errores con resultado desconocido se marcan como `uncertain`.
+- Una emisión rechazada por ARCA (`resultado: 'R'`) lanza `ArcaRechazoError`: lo que devuelven `autorizar()` e `informar*()` es siempre una operación aprobada (`A`, u `O` con observaciones).
 - Los errores de negocio de ARCA (`arrayErrores`) se lanzan como `ArcaServiceError` en las consultas.
 - Autenticación WSAA automática (via `@ramiidv/arca-common`), con `ticketStorage` persistente opcional.
 - Solo ESM, `fetch` nativo.
@@ -25,7 +26,7 @@ npm install @ramiidv/arca-mtxca
 
 ## Requisitos
 
-- Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (Node ≥ 20.19 permite cargar módulos ESM con `require()`).
+- Node.js >= 22.12. Solo ESM; desde CommonJS se carga con `require()` (Node ≥ 22.12 permite cargar módulos ESM con `require()`).
 - Certificado digital de ARCA asociado al servicio `wsmtxca` y empadronamiento en "Codificación de Productos – Factura con Detalle".
 
 Pasos previos (detalle del certificado en [`@ramiidv/arca-common`](https://github.com/ramiidv/arca-sdks/tree/main/packages/common#primeros-pasos)):
@@ -46,7 +47,7 @@ Glosario:
 
 ```typescript
 import { readFileSync } from 'node:fs';
-import { ArcaMtxca, CbteTipo, Concepto, CodigoCondicionIVA, Moneda } from '@ramiidv/arca-mtxca';
+import { ArcaMtxca, ArcaRechazoError, CbteTipo, Concepto, CodigoCondicionIVA, Moneda } from '@ramiidv/arca-mtxca';
 import type { AutorizarRequest } from '@ramiidv/arca-mtxca';
 
 const mtxca = new ArcaMtxca({
@@ -89,15 +90,14 @@ const comprobante: AutorizarRequest = {
   ],
   subtotalesIVA: [{ codigo: CodigoCondicionIVA.IVA_21, importe: 21 }],
 };
-const res = await mtxca.autorizar(comprobante);
-
-if (res.resultado === 'R') {
-  console.error('Rechazado', res.errores);
-} else {
-  // 'A' aprobado, 'O' aprobado con observaciones
+try {
+  const res = await mtxca.autorizar(comprobante); // 'A' aprobado, 'O' aprobado con observaciones
   console.log(res.comprobante.numeroComprobante, res.comprobante.cae, res.comprobante.fechaVencimientoCAE);
   if (res.observaciones.length) console.warn(res.observaciones);
   console.log(mtxca.urlQR(comprobante, res)); // URL del QR (RG 4892)
+} catch (e) {
+  if (e instanceof ArcaRechazoError) console.error('Rechazado', e.errors); // [{ code, msg }]
+  else throw e;
 }
 ```
 
@@ -111,7 +111,7 @@ if (res.resultado === 'R') {
 | `keyPassphrase`                                                                                                                           | Contraseña de la clave, si está encriptada.                                                                                                                                                                                                                  |
 | `cuit`                                                                                                                                    | CUIT representada (número o string, con o sin guiones). Se valida el dígito verificador.                                                                                                                                                                     |
 | `production`                                                                                                                              | `false` (default) = homologación.                                                                                                                                                                                                                            |
-| `endpoints`                                                                                                                               | `{ mtxca?, wsaa? }`: URLs propias (proxy, mock). Ignoran `production`.                                                                                                                                                                                       |
+| `endpoints`                                                                                                                               | `{ wsmtxca?, wsaa? }`: URLs propias (proxy, mock). Ignoran `production`.                                                                                                                                                                                     |
 | `wsaa`                                                                                                                                    | `WsaaClient` compartido con otros SDKs del mismo certificado. Con él se ignoran `cert`, `key`, `keyPassphrase`, `ticketStorage` y las opciones de WSAA.                                                                                                      |
 | `signal`                                                                                                                                  | `AbortSignal` global: cancela todas las llamadas de la instancia.                                                                                                                                                                                            |
 | `timeout`, `retries`, `retryDelayMs`                                                                                                      | Transporte. `retries` solo aplica a consultas.                                                                                                                                                                                                               |
@@ -145,7 +145,7 @@ const { comprobante } = await mtxca.consultarComprobante(CbteTipo.FACTURA_A, 400
 const url = mtxca.urlQR(comprobante); // https://www.arca.gob.ar/fe/qr/?p=...
 ```
 
-Lanza `ArcaValidationError` si el comprobante fue rechazado o falta un dato (ej. la cotización de una moneda extranjera omitida por `cancelaEnMismaMonedaExtranjera`: en ese caso, usá el comprobante de `consultarComprobante()`).
+Lanza `ArcaValidationError` si falta un dato (ej. la cotización de una moneda extranjera omitida por `cancelaEnMismaMonedaExtranjera`: en ese caso, usá el comprobante de `consultarComprobante()`).
 
 ### CAEA
 
@@ -187,10 +187,13 @@ Lanza `ArcaValidationError` si el comprobante fue rechazado o falta un dato (ej.
 `mtxca.client` (`MtxcaClient`) expone una función por operación del WSDL (`autorizarComprobante`, `consultarCAEA`, ...) que recibe `MtxcaAuth` (`{ token, sign, cuitRepresentada }`) y `numeroComprobante` explícito. Valida contra el XSD (y el dígito verificador de los CUIT) y redondea, pero no aplica las reglas de negocio del manual (para eso, `validateComprobanteCAE`/`validateComprobanteCAEA`). Se puede usar sin `ArcaMtxca`:
 
 ```typescript
-import { MtxcaClient, MTXCA_ENDPOINTS } from '@ramiidv/arca-mtxca';
-const client = new MtxcaClient({ endpoint: MTXCA_ENDPOINTS.testing });
+import { ENDPOINTS, MtxcaClient } from '@ramiidv/arca-mtxca';
+// { endpoint, transport?, onEvento? }: transport son las opciones de red (timeout, retries, onEvent, fetch, legacyTls)
+const client = new MtxcaClient({ endpoint: ENDPOINTS.wsmtxca.testing, transport: { timeout: 60_000 } });
 await client.dummy();
 ```
+
+Igual que `ArcaMtxca`, las emisiones del cliente de bajo nivel lanzan `ArcaRechazoError` ante un rechazo.
 
 ### Reglas de importes
 
@@ -265,32 +268,34 @@ subtotalesIVA: [{ codigo: 5, importe: 18.9 }],
 
 ## Manejo de errores
 
-| Situación                      | Qué pasa                                                             |
-| ------------------------------ | -------------------------------------------------------------------- |
-| Datos inválidos localmente     | `ArcaValidationError` (no se hace ningún request).                   |
-| ARCA aprueba                   | `{ resultado: 'A', comprobante: { cae, fechaVencimientoCAE, ... } }` |
-| ARCA aprueba con observaciones | `{ resultado: 'O', comprobante, observaciones }`                     |
-| ARCA rechaza                   | `{ resultado: 'R', errores }` — **no lanza**; revisá `resultado`.    |
-| Consulta con `arrayErrores`    | `ArcaServiceError` con `errors[]` (`code`, `msg`).                   |
-| Fault SOAP, HTTP, red, timeout | `ArcaSoapError` (`uncertain`, `faultString`, `statusCode`).          |
-| Respuesta con forma inesperada | `ArcaSoapError` (`uncertain: true` en emisiones).                    |
-| Login WSAA                     | `ArcaAuthError` / `ArcaTicketVigenteError`.                          |
+| Situación                      | Qué pasa                                                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| Datos inválidos localmente     | `ArcaValidationError` (no se hace ningún request).                                                                       |
+| ARCA aprueba                   | `{ resultado: 'A', comprobante: { cae, fechaVencimientoCAE, ... }, observaciones }`                                      |
+| ARCA aprueba con observaciones | `{ resultado: 'O', comprobante, observaciones }`                                                                         |
+| ARCA rechaza una emisión       | `ArcaRechazoError` (`operacion`, `errors[]` y `observaciones[]` con `{ code, msg }`). También es un `ArcaServiceError`. |
+| Consulta con `arrayErrores`    | `ArcaServiceError` con `errors[]` (`code`, `msg`).                                                                       |
+| Fault SOAP, HTTP, red, timeout | `ArcaSoapError` (`uncertain`, `faultString`, `statusCode`).                                                              |
+| Respuesta con forma inesperada | `ArcaResponseError` (`uncertain: true` en emisiones).                                                                    |
+| Login WSAA                     | `ArcaAuthError` / `ArcaTicketVigenteError`.                                                                              |
+
+`ArcaRechazoError` corresponde a `resultado: 'R'` de `autorizar`, `autorizarAjusteIVA`, `informarComprobanteCAEA`, `informarAjusteIVACAEA` e `informarCAEANoUtilizado*`; `operacion` es el método de ARCA (ej. `autorizarComprobante`). Los errores de ARCA sin `resultado: 'R'` (el `arrayErrores` de `solicitarCAEA`, o una emisión respondida con `arrayErrores` sin `resultado`) lanzan `ArcaServiceError`, como en las consultas.
 
 `ultimoComprobante()` devuelve 0 solo ante el error 1502 de ARCA ("no hay comprobantes para ese punto de venta y tipo"); cualquier otro error lanza.
 
 ### Emisiones con resultado incierto
 
-`autorizar`, `autorizarAjusteIVA`, `solicitarCAEA`, `informarComprobanteCAEA`, `informarAjusteIVACAEA`, `informarCAEANoUtilizado` e `informarCAEANoUtilizadoPtoVta` se envían una sola vez (nunca se reintentan). Si fallan con `ArcaSoapError` y `uncertain === true` (timeout, conexión cortada, HTTP 5xx, SOAP Fault `Server`, respuesta ilegible), ARCA pudo haber procesado el request. Los Fault `Client` (ej. "Token vencido", errores de estructura) no son inciertos: el request se rechazó antes de procesarse. **No reintentes a ciegas**: si el comprobante ya fue autorizado, un reenvío con el mismo número es rechazado por correlatividad (102) y uno con el número siguiente duplica la factura.
+`autorizar`, `autorizarAjusteIVA`, `solicitarCAEA`, `informarComprobanteCAEA`, `informarAjusteIVACAEA`, `informarCAEANoUtilizado` e `informarCAEANoUtilizadoPtoVta` se envían una sola vez (nunca se reintentan). Si fallan con `ArcaSoapError` y `uncertain === true` (timeout, conexión cortada, HTTP 5xx, SOAP Fault `Server`) o con `ArcaResponseError` y `uncertain === true` (respuesta ilegible), ARCA pudo haber procesado el request. Un `ArcaRechazoError` no es incierto: ARCA respondió y no emitió nada. Los Fault `Client` (ej. "Token vencido", errores de estructura) no son inciertos: el request se rechazó antes de procesarse. **No reintentes a ciegas**: si el comprobante ya fue autorizado, un reenvío con el mismo número es rechazado por correlatividad (102) y uno con el número siguiente duplica la factura.
 
 ```typescript
-import { type ArcaMtxca, type AutorizarRequest, ArcaSoapError, CbteTipo } from '@ramiidv/arca-mtxca';
+import { type ArcaMtxca, type AutorizarRequest, ArcaResponseError, ArcaSoapError, CbteTipo } from '@ramiidv/arca-mtxca';
 
 async function autorizarSeguro(mtxca: ArcaMtxca, comprobante: AutorizarRequest) {
   const numero = (await mtxca.ultimoComprobante(4000, CbteTipo.FACTURA_A)) + 1;
   try {
     return await mtxca.autorizar({ ...comprobante, numeroComprobante: numero });
   } catch (e) {
-    if (e instanceof ArcaSoapError && e.uncertain) {
+    if ((e instanceof ArcaSoapError || e instanceof ArcaResponseError) && e.uncertain) {
       // ¿Llegó a autorizarse?
       const ultimo = await mtxca.ultimoComprobante(4000, CbteTipo.FACTURA_A);
       if (ultimo >= numero) {
@@ -312,7 +317,7 @@ Las solicitudes de un mismo punto de venta y tipo deben ser secuenciales (ARCA r
 
 `onEvent` (o `mtxca.on(tipo, handler)`) recibe `auth:login`, `auth:cache-hit`, `auth:clock-skew`, `auth:storage-error`, `request:start`, `request:end`, `request:retry` y `request:error` (ver `ArcaEvent` en `@ramiidv/arca-common`).
 
-El `evento` de WSMTXCA (aviso informativo de ARCA, `{ codigo, descripcion }`, ej. mantenimiento programado) llega como `evento?` en los resultados de autorizaciones, informes de CAEA, `consultarComprobante`, `solicitarCAEA`, `consultarCAEA` y `getCotizacionMoneda`, y de **cualquier** respuesta (incluidas las que devuelven un número o una lista) a `onEvento(evento, method)` de la configuración.
+El `evento` de WSMTXCA (aviso informativo de ARCA, `{ codigo, descripcion }`, ej. mantenimiento programado) llega como `evento?` en los resultados de autorizaciones, informes de CAEA, `consultarComprobante`, `solicitarCAEA`, `consultarCAEA` y `getCotizacionMoneda`, y de **cualquier** respuesta (incluidas las que devuelven un número o una lista, y las de emisiones rechazadas) a `onEvento(evento, method)` de la configuración.
 
 ## Entornos
 
@@ -321,7 +326,7 @@ El `evento` de WSMTXCA (aviso informativo de ARCA, `{ codigo, descripcion }`, ej
 | Homologación | `https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService`       |
 | Producción   | `https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService` |
 
-`production: false` (default) usa homologación. Las URLs están en `MTXCA_ENDPOINTS`; las de WSAA, en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
+`production: false` (default) usa homologación. Las URLs están en `ENDPOINTS.wsmtxca` (`ENDPOINTS` tiene la forma `{ wsmtxca: { testing, production } }`, como en todos los SDKs); las de WSAA, en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
 
 ## Ejemplos
 

@@ -2,7 +2,9 @@ import { vi } from 'vitest';
 import { parseXml } from '@ramiidv/arca-common';
 import { hangingReply, mockFetch as commonMockFetch, soapEnvelope, xmlResponse } from '@ramiidv/arca-common/testing';
 import type { MockReply, RecordedRequest } from '@ramiidv/arca-common/testing';
+import type { ServiceTransport } from '@ramiidv/arca-common';
 import { MtxcaClient } from '../src/mtxca-client.js';
+import type { MtxcaClientConfig } from '../src/mtxca-client.js';
 import type { MtxcaAuth, MtxcaComprobanteCAE } from '../src/types.js';
 
 export { childOrder } from '@ramiidv/arca-common/testing';
@@ -36,11 +38,17 @@ function spied(mock: ReturnType<typeof commonMockFetch>) {
   return { fetch: fn as unknown as typeof fetch, calls: mock.calls, fn };
 }
 
+/** `MtxcaClient` de homologación con `fetchImpl`; `extra` son opciones de transporte y `onEvento`. */
 export function client(
   fetchImpl: typeof fetch,
-  extra: Partial<ConstructorParameters<typeof MtxcaClient>[0]> = {},
+  extra: ServiceTransport & Pick<MtxcaClientConfig, 'onEvento'> = {},
 ): MtxcaClient {
-  return new MtxcaClient({ endpoint: ENDPOINT, fetch: fetchImpl, retryDelayMs: 1, ...extra });
+  const { onEvento, ...transport } = extra;
+  return new MtxcaClient({
+    endpoint: ENDPOINT,
+    transport: { fetch: fetchImpl, retryDelayMs: 1, ...transport },
+    onEvento,
+  });
 }
 
 /** Elemento del request dentro del Body (con su prefijo `ser:`), parseado. */

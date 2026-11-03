@@ -2,9 +2,10 @@
  * Ejemplo: manejo de errores.
  *
  *   - ArcaValidationError: datos inválidos detectados localmente (no se envió nada)
- *   - resultado 'R': ARCA rechazó el comprobante (autorizar no lanza)
+ *   - ArcaRechazoError: ARCA rechazó el comprobante (resultado 'R'); es un ArcaServiceError
  *   - ArcaServiceError: una consulta devolvió arrayErrores
  *   - ArcaSoapError: Fault SOAP, HTTP, red o timeout (ver `uncertain`)
+ *   - ArcaResponseError: respuesta con forma inesperada (ver `uncertain`)
  *   - ArcaAuthError / ArcaTicketVigenteError: login WSAA
  */
 
@@ -12,6 +13,8 @@ import fs from 'node:fs';
 import {
   ArcaMtxca,
   ArcaAuthError,
+  ArcaRechazoError,
+  ArcaResponseError,
   ArcaServiceError,
   ArcaSoapError,
   ArcaTicketVigenteError,
@@ -63,14 +66,15 @@ async function main() {
       subtotalesIVA: [{ codigo: CodigoCondicionIVA.IVA_21, importe: 21 }],
     });
 
-    if (res.resultado === 'R') {
-      for (const err of res.errores) console.error(`ARCA rechazó [${err.codigo}] ${err.descripcion}`);
-    } else {
-      console.log('CAE:', res.comprobante.cae);
-    }
+    // Siempre aprobado ('A' u 'O'): un rechazo lanza ArcaRechazoError.
+    console.log('CAE:', res.comprobante.cae);
   } catch (e) {
     if (e instanceof ArcaValidationError) {
       for (const d of e.details) console.error(`Dato inválido (${d.field}): ${d.message}`);
+    } else if (e instanceof ArcaRechazoError) {
+      // Antes que ArcaServiceError: ArcaRechazoError es una subclase.
+      for (const err of e.errors) console.error(`ARCA rechazó ${e.operacion} [${err.code}] ${err.msg}`);
+      for (const o of e.observaciones) console.warn(`Observación [${o.code}] ${o.msg}`);
     } else if (e instanceof ArcaServiceError) {
       for (const err of e.errors) console.error(`Error de ARCA [${err.code}] ${err.msg}`);
     } else if (e instanceof ArcaSoapError) {
@@ -79,6 +83,10 @@ async function main() {
         fault: e.faultString,
         status: e.statusCode,
       });
+      if (e.uncertain)
+        console.error('El comprobante pudo haberse autorizado: verificá con ultimoComprobante/consultarComprobante.');
+    } else if (e instanceof ArcaResponseError) {
+      console.error(`Respuesta inesperada de ARCA: ${e.message}`);
       if (e.uncertain)
         console.error('El comprobante pudo haberse autorizado: verificá con ultimoComprobante/consultarComprobante.');
     } else if (e instanceof ArcaTicketVigenteError) {

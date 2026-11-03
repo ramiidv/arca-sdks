@@ -11,6 +11,8 @@ export {
   ArcaAuthError,
   ArcaSoapError,
   ArcaServiceError,
+  ArcaRechazoError,
+  ArcaResponseError,
   ArcaValidationError,
   ArcaTicketVigenteError,
 } from '@ramiidv/arca-common';
@@ -57,12 +59,15 @@ export type {
   CallOptions,
   LegacyTlsMode,
   ServerStatus,
+  ServiceClientConfig,
+  ServiceEndpoints,
+  ServiceTransport,
   TicketStorage,
 } from './types.js';
 
 // Constantes
 export {
-  MTXCA_ENDPOINTS,
+  ENDPOINTS,
   MTXCA_NAMESPACE,
   MTXCA_SERVICE_ID,
   ALICUOTAS_IVA,

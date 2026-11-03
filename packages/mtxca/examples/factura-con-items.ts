@@ -9,6 +9,8 @@
 import fs from 'node:fs';
 import {
   ArcaMtxca,
+  ArcaRechazoError,
+  ArcaResponseError,
   ArcaSoapError,
   CbteTipo,
   CodigoCondicionIVA,
@@ -75,17 +77,17 @@ async function main() {
   };
 
   try {
+    // Si ARCA lo rechaza, lanza ArcaRechazoError: acá siempre llega un comprobante aprobado (A u O).
     const res = await mtxca.autorizar(req);
-
-    if (res.resultado === 'R') {
-      console.error('Rechazado:', res.errores);
-      return;
-    }
     console.log(`Resultado ${res.resultado}: CAE ${res.comprobante.cae}, vence ${res.comprobante.fechaVencimientoCAE}`);
     for (const o of res.observaciones) console.warn(`Observación ${o.codigo}: ${o.descripcion}`);
     console.log('QR:', mtxca.urlQR(req, res));
   } catch (e) {
-    if (e instanceof ArcaSoapError && e.uncertain) {
+    if (e instanceof ArcaRechazoError) {
+      for (const err of e.errors) console.error(`Rechazado [${err.code}] ${err.msg}`);
+      return;
+    }
+    if ((e instanceof ArcaSoapError || e instanceof ArcaResponseError) && e.uncertain) {
       // No reintentar a ciegas: verificar si quedó autorizado.
       if ((await mtxca.ultimoComprobante(ptoVta, tipo)) >= numero) {
         const { comprobante } = await mtxca.consultarComprobante(tipo, ptoVta, numero);

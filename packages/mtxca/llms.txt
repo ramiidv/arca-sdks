@@ -6,7 +6,7 @@
 
 npm install @ramiidv/arca-mtxca
 
-Requisitos: Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (Node >= 20.19 permite cargar módulos ESM con `require()`). Depende de `@ramiidv/arca-common`.
+Requisitos: Node >= 22.12. Solo ESM; desde CommonJS se carga con `require()` (Node >= 22.12 permite cargar módulos ESM con `require()`). Depende de `@ramiidv/arca-common`.
 
 ## Configuración
 
@@ -19,7 +19,7 @@ const mtxca = new ArcaMtxca({
   keyPassphrase?: string,    // si la clave está encriptada
   cuit: number | string,     // CUIT representada; se valida el dígito verificador
   production?: boolean,      // default false (homologación)
-  endpoints?: { mtxca?: string, wsaa?: string }, // overrides
+  endpoints?: { wsmtxca?: string, wsaa?: string }, // overrides (claves = las de ENDPOINTS)
   wsaa?: WsaaClient,         // WsaaClient compartido; con él se ignoran cert, key, keyPassphrase, ticketStorage y las opciones de WSAA
   signal?: AbortSignal,      // cancela todas las llamadas
   timeout?: number, retries?: number, retryDelayMs?: number,
@@ -35,7 +35,7 @@ const mtxca = new ArcaMtxca({
 
 `ArcaMtxcaConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common` (incluye `wsaa` y `signal`).
 
-Endpoints: homologación https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService, producción https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService. Namespace http://impl.service.wsmtxca.afip.gov.ar/service/, SOAPAction = namespace + operación, wrappers `{operacion}Request` / `{operacion}Response`.
+Endpoints (`ENDPOINTS.wsmtxca.testing` / `.production`; `ENDPOINTS` = `{ wsmtxca: { testing, production } }`): homologación https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService, producción https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService. Namespace http://impl.service.wsmtxca.afip.gov.ar/service/, SOAPAction = namespace + operación, wrappers `{operacion}Request` / `{operacion}Response`.
 
 Todos los métodos aceptan `opts?: { signal?: AbortSignal }` como último parámetro.
 
@@ -72,8 +72,8 @@ const res = await mtxca.autorizar({
   comprobantesAsociados?, periodoComprobantesAsociados?, datosAdicionales?, compradores?, actividades?: number[],
 }, { validarImportes?: boolean /* default true; false desactiva todas las reglas de negocio locales; solo quedan el XSD y el dígito verificador de los CUIT */, signal? });
 
-if (res.resultado === 'R') res.errores;                 // rechazo: NO lanza
-else res.comprobante.cae, res.comprobante.fechaVencimientoCAE; // 'A' u 'O' (con observaciones)
+res.resultado; // siempre 'A' u 'O' (con observaciones): un rechazo lanza ArcaRechazoError
+res.comprobante.cae, res.comprobante.fechaVencimientoCAE, res.observaciones;
 ```
 
 Reglas validadas localmente (manual WSMTXCA): importeItem = (precio*cantidad - bonif)*(1+alícuota) en clase A (precio sin IVA) y precio*cantidad - bonif en clase B (precio con IVA); importeGravado = Σ(importeItem - IVA) de condiciones 3-6; importeNoGravado = Σ condición 1; importeExento = Σ condición 2; importeSubtotal = gravado + no gravado + exento; importeTotal = subtotal + otros tributos + Σ subtotalesIVA = otros tributos + Σ importeItem. Margen: relativo <= 0.01% o absoluto <= 0.01 por elemento. Bonificación (99) en clase A: |Σ IVA| <= IVA de los demás ítems de la condición (516). Redondeo Round Half Even (mitad al par, nota 4 del manual: 8.565 -> 8.56, 8.575 -> 8.58): importes 2 decimales, cantidad/precio/bonificación/cotización 6 (`roundImporte`, `roundDecimal`).
@@ -96,26 +96,27 @@ Validación sin request: `validateComprobanteCAE(c, ctx?)` (reglas de autorizar)
 ## Errores
 
 - ArcaValidationError: datos inválidos (sin request). `details[]` con field/message.
-- autorizar / autorizarAjusteIVA / informar*: un rechazo devuelve resultado 'R' con errores.
-- Consultas: arrayErrores => ArcaServiceError (`errors[]` con code/msg).
-- ArcaSoapError: Fault/HTTP/red/timeout/respuesta ilegible. En emisiones nunca se reintenta; `uncertain: true` => pudo procesarse (Fault Server, timeout, 5xx). Fault Client (ej. "Token vencido") no es incierto.
+- ArcaRechazoError (extiende ArcaServiceError, code 'ARCA_RECHAZO'): ARCA rechazó una emisión con resultado 'R' (autorizar, autorizarAjusteIVA, informarComprobanteCAEA, informarAjusteIVACAEA, informarCAEANoUtilizado*). `operacion` (método de ARCA), `errors[]` y `observaciones[]` con { code, msg }. No es incierto: no se emitió nada.
+- arrayErrores sin resultado 'R' (consultas, solicitarCAEA, emisiones sin resultado) => ArcaServiceError (`errors[]` con code/msg).
+- ArcaSoapError: Fault/HTTP/red/timeout. En emisiones nunca se reintenta; `uncertain: true` => pudo procesarse (Fault Server, timeout, 5xx). Fault Client (ej. "Token vencido") no es incierto.
+- ArcaResponseError: respuesta con forma inesperada (falta un campo obligatorio, valor inválido); `uncertain: true` en emisiones.
   Recuperación: `ultimoComprobante(ptoVta, tipo)` y `consultarComprobante(tipo, ptoVta, nro)`; para solicitarCAEA, `consultarCAEAEntreFechas`.
 - `ultimoComprobante` devuelve 0 solo ante el error 1502 (sin comprobantes).
 
 ## Métodos
 
-- autorizar(req, opts?) -> MtxcaAutorizarResult
+- autorizar(req, opts?) -> MtxcaAutorizarResult { resultado: 'A'|'O', comprobante, observaciones, evento? }
 - autorizarAjusteIVA(req, opts?) -> MtxcaAutorizarResult (solo validación XSD)
 - ultimoComprobante(ptoVta, cbteTipo, opts?) -> number
 - siguienteComprobante(ptoVta, cbteTipo, opts?) -> number
 - consultarComprobante(cbteTipo, ptoVta, cbteNro, opts?) -> { comprobante, observaciones, evento? }
-- urlQR(comprobante, resultado?, options?) -> string: URL del QR (RG 4892) con la CUIT de la instancia. Con resultado de autorizar/informarComprobanteCAEA (tipoCodAut E/A), o sin resultado con el comprobante de consultarComprobante. Lanza ArcaValidationError si fue rechazado o falta la cotización. También `urlQR(cuit, comprobante, resultado?, options?)` exportada.
+- urlQR(comprobante, resultado?, options?) -> string: URL del QR (RG 4892) con la CUIT de la instancia. Con resultado de autorizar/informarComprobanteCAEA (tipoCodAut E/A), o sin resultado con el comprobante de consultarComprobante. Lanza ArcaValidationError si falta un dato (ej. la cotización). También `urlQR(cuit, comprobante, resultado?, options?)` exportada.
 - solicitarCAEA(periodo AAAAMM, orden 1|2, opts?) -> MtxcaCAEA { caea, fechaDesde, fechaHasta, fechaTopeInforme, ..., evento? }
 - consultarCAEA(caea, opts?) -> MtxcaCAEA
 - consultarCAEAEntreFechas(desde, hasta, opts?) -> MtxcaCAEA[]
-- informarComprobanteCAEA({ ...comprobante, numeroComprobante, caea, fechaHoraGen }, opts?) -> MtxcaInformarCAEAResult. fechaHoraGen es obligatoria (754): Date (hora de Argentina) o 'YYYY-MM-DDTHH:MM:SS'.
+- informarComprobanteCAEA({ ...comprobante, numeroComprobante, caea, fechaHoraGen }, opts?) -> MtxcaInformarCAEAResult { resultado: 'A'|'O', fechaProceso, comprobante: { caea, codigoTipoComprobante, numeroPuntoVenta, numeroComprobante }, observaciones, evento? }. fechaHoraGen es obligatoria (754): Date (hora de Argentina) o 'YYYY-MM-DDTHH:MM:SS'.
 - informarAjusteIVACAEA(comp, opts?) -> MtxcaInformarCAEAResult. Valida el XSD y fechaHoraGen (754).
-- informarCAEANoUtilizado(caea, opts?) / informarCAEANoUtilizadoPtoVta(caea, ptoVta, opts?) -> { resultado, fechaProceso?, caea?, errores }
+- informarCAEANoUtilizado(caea, opts?) / informarCAEANoUtilizadoPtoVta(caea, ptoVta, opts?) -> { resultado: 'A'|'O', fechaProceso, caea, numeroPuntoVenta? (solo PtoVta), evento? }
 - consultarPtosVtaCAEANoInformados(caea, opts?) -> PuntoVenta[]
 - status() -> { appserver, dbserver, authserver } (dummy, sin auth)
 - getTiposComprobante, getTiposDocumento, getAlicuotasIVA, getCondicionesIVA, getUnidadesMedida, getTiposTributo, getTiposDatosAdicionales -> { codigo: number, descripcion }[]
@@ -126,7 +127,7 @@ Validación sin request: `validateComprobanteCAE(c, ctx?)` (reglas de autorizar)
 - getPuntosVenta / getPuntosVentaCAE / getPuntosVentaCAEA -> { numeroPuntoVenta, bloqueado: 'S'|'N', fechaBaja? }[]
 - clearAuthCache(): Promise<void>
 
-Bajo nivel: `mtxca.client` / `new MtxcaClient({ endpoint })`, una función por operación del WSDL; recibe `MtxcaAuth { token, sign, cuitRepresentada }`. Valida el XSD y redondea, sin las reglas de negocio.
+Bajo nivel: `mtxca.client` / `new MtxcaClient({ endpoint, transport?, onEvento? })` (`transport`: timeout, retries, retryDelayMs, onEvent, fetch, legacyTls), una función por operación del WSDL (las emisiones también lanzan ArcaRechazoError); recibe `MtxcaAuth { token, sign, cuitRepresentada }`. Valida el XSD y redondea, sin las reglas de negocio.
 
 ## Enums
 
