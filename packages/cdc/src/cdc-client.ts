@@ -1,6 +1,7 @@
 import {
   ArcaResponseError,
   checkServiceErrors,
+  extractServiceErrors,
   parseServerStatus,
   SoapServiceClient,
   validateCuit,
@@ -59,7 +60,23 @@ function decode<T>(node: unknown, schema: Schema, path: string): T {
 }
 
 type MensajeRaw = { code: number; msg?: string };
-const mensajes = (list: MensajeRaw[]): CdcMensaje[] => list.map((m) => ({ code: m.code, msg: m.msg ?? '' }));
+/** Mensajes de ARCA (`code`, `msg`), sin los `Evt` con código 0: ARCA los manda cuando no hay eventos. */
+const mensajes = (list: MensajeRaw[]): CdcMensaje[] =>
+  list.filter((m) => m.code !== 0).map((m) => ({ code: m.code, msg: m.msg ?? '' }));
+
+/** Código de `Errors` con el que una tabla de parámetros responde que no tiene datos. */
+const SIN_RESULTADOS = 503;
+
+/**
+ * `true` si los `Errors` de la respuesta son solo el 503 "Sin Resultados" (la
+ * tabla está vacía; ej. `OpcionalesTipoConsultar` en homologación). El 503
+ * también es un error de infraestructura en el manual, así que se exige el
+ * texto "Sin Resultados".
+ */
+function esSinResultados(result: Raw): boolean {
+  const errors = extractServiceErrors(result).filter((e) => e.code !== 0 || e.rawCode !== undefined);
+  return errors.length > 0 && errors.every((e) => e.code === SIN_RESULTADOS && /^sin resultados/i.test(e.msg.trim()));
+}
 
 /**
  * Bloque `Auth` con los nombres del XML. La CUIT se valida (dígito verificador) y
@@ -109,7 +126,8 @@ export class CdcClient extends SoapServiceClient {
 
   /**
    * Llama a un método de tabla (`ResultGet/<child>`), verifica `Errors` y
-   * decodifica los ítems (`Desc` ausente queda como `''`) y los `Events`.
+   * decodifica los ítems (`Desc` ausente queda como `''`) y los `Events`. El
+   * 503 "Sin Resultados" es una tabla vacía (`[]`); cualquier otro error lanza.
    */
   private async consultarTabla<T extends { desc: string }>(
     method: string,
@@ -119,6 +137,10 @@ export class CdcClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<ListaCdc<T>> {
     const result = await this.call(method, { Auth: authXml(auth) }, opts);
+    if (esSinResultados(result)) {
+      const { eventos } = decode<{ eventos: MensajeRaw[] }>(result, { eventos: S.EVENTS }, method);
+      return conEventos<T>([], mensajes(eventos));
+    }
     checkServiceErrors(result, `WSCDC ${method}`);
     const r = decode<{ resultGet: T[]; eventos: MensajeRaw[] }>(
       result,
@@ -203,7 +225,10 @@ export class CdcClient extends SoapServiceClient {
     return this.consultarTabla('DocumentosTipoConsultar', 'DocTipo', S.ID_DESC, auth, opts);
   }
 
-  /** `OpcionalesTipoConsultar`: identificadores válidos para `Opcionales`. */
+  /**
+   * `OpcionalesTipoConsultar`: identificadores válidos para `Opcionales`. Si
+   * ARCA no tiene ninguno (503 "Sin Resultados"), devuelve `[]`.
+   */
   async getTiposOpcionales(auth: CdcAuth, opts?: CallOptions): Promise<ListaCdc<OpcionalTipoItem>> {
     return this.consultarTabla('OpcionalesTipoConsultar', 'OpcionalTipo', S.ID_DESC, auth, opts);
   }

@@ -128,14 +128,15 @@ export interface ConstatarResult {
   cmpResp?: ComprobanteConstatado;
   /** Observaciones (motivos del rechazo funcional, u observaciones no excluyentes). */
   observaciones: CdcMensaje[];
-  /** Eventos informados por ARCA (`Events`). */
+  /** Eventos informados por ARCA (`Events`), sin los de código 0 (ARCA los manda cuando no hay eventos). */
   eventos: CdcMensaje[];
 }
 
 /**
  * Lista de una tabla de parámetros. Es un array común; si ARCA informó
- * `Events`, se leen en `lista.eventos` (propiedad no enumerable: no aparece al
- * iterar, serializar con `JSON.stringify` ni copiar el array).
+ * `Events` (con código distinto de 0), se leen en `lista.eventos` (propiedad
+ * no enumerable: no aparece al iterar, serializar con `JSON.stringify` ni
+ * copiar el array). Si ARCA responde 503 "Sin Resultados", la lista es `[]`.
  */
 export type ListaCdc<T> = T[] & { eventos?: CdcMensaje[] };
 

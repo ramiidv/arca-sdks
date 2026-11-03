@@ -112,7 +112,12 @@ Todos aceptan un último parámetro opcional `opts?: { signal?: AbortSignal }`.
 
 Las tablas devuelven un `ListaCdc<T>`: un array común (`desc` es `''` si ARCA no la informa) con los
 `Events` de ARCA, si vinieron, en `lista.eventos` (propiedad no enumerable: no aparece al iterar,
-serializar ni copiar el array). `status()` devuelve lo que informa ARCA sin evaluarlo: usá
+serializar ni copiar el array). Si ARCA responde el error `503` "Sin Resultados" (como
+`OpcionalesTipoConsultar` en homologación), la tabla es `[]`; cualquier otro error lanza
+`ArcaServiceError`.
+
+ARCA manda `<Events><Evt><Code>0</Code></Evt></Events>` cuando no hay eventos: el SDK descarta los
+eventos con código `0`, así que no aparecen en `lista.eventos` ni en `eventos` de `constatar()`. `status()` devuelve lo que informa ARCA sin evaluarlo: usá
 `serverStatusOk(status)` de `@ramiidv/arca-common` para saber si los tres servidores están en `OK`.
 
 ### `constatar(input)`
@@ -137,7 +142,7 @@ interface ConstatarResult {
   fchProceso: string; // YYYYMMDDHHMMSS
   cmpResp?: ComprobanteConstatado; // los datos del comprobante tal como los devuelve ARCA
   observaciones: { code: number; msg: string }[];
-  eventos: { code: number; msg: string }[]; // Events de ARCA
+  eventos: { code: number; msg: string }[]; // Events de ARCA (sin los de código 0)
 }
 ```
 
