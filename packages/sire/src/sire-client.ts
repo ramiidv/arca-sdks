@@ -52,7 +52,7 @@ const REJECTION_FAULT_PATTERNS = [/^XML invalido/i, /no cumple el schema/i, /^Re
 /**
  * Faults de token/sign faltante o inválido (ej: `MISSING_AUTHENTICATION_TOKEN`,
  * observado en homologación; el manual no publica la lista). Se lanzan como
- * `ArcaAuthError` y `ArcaSire` descarta el ticket cacheado.
+ * `ArcaAuthError` (el ticket cacheado no se borra: ver `ArcaSire.emitirCertificado`).
  */
 const AUTH_FAULT_PATTERN = /^[A-Z_]*(TOKEN|SIGN)[A-Z_]*$/;
 

@@ -225,7 +225,8 @@ describe('emitirCertificado', () => {
 
   it('Fault soapenv:Server de schema (real de homologación) → ArcaSireServiceError con entidades decodificadas', async () => {
     const msg =
-      'XML invalido, no cumple el schema: cvc-datatype-valid.1.2.1: &amp;apos;abc&amp;apos; is not a valid value for &amp;apos;integer&amp;apos;.';
+      // `fault()` escapa el texto: en el XML queda `&amp;apos;`, como lo manda ARCA.
+      'XML invalido, no cumple el schema: cvc-datatype-valid.1.2.1: &apos;abc&apos; is not a valid value for &apos;integer&apos;.';
     const sire = makeSire(mockFetch(xmlResponse(fault('soapenv:Server', msg), 500)));
     const err = await sire.emitirCertificado(FACTURA).catch((e) => e);
     expect(err).toBeInstanceOf(ArcaSireServiceError);
@@ -234,7 +235,7 @@ describe('emitirCertificado', () => {
     );
   });
 
-  it('Fault de token/sign → ArcaAuthError y descarta el ticket cacheado', async () => {
+  it('Fault de token/sign → ArcaAuthError, sin borrar el ticket cacheado', async () => {
     for (const msg of ['MISSING_AUTHENTICATION_TOKEN', 'INVALID_SIGN']) {
       const sire = makeSire(mockFetch(xmlResponse(fault('soapenv:Server', msg), 500)));
       const clear = vi.spyOn(sire, 'clearAuthCache');
@@ -244,14 +245,14 @@ describe('emitirCertificado', () => {
       expect(err.message).toBe(`SIRE emitir: ${msg}`);
       expect(err.faultCode).toBe('soapenv:Server');
       expect(err.cause).toBeInstanceOf(ArcaSoapError);
-      expect(clear).toHaveBeenCalledTimes(1);
+      expect(clear).not.toHaveBeenCalled();
     }
     const sire = makeSire(mockFetch(xmlResponse(fault('soapenv:Client', 'EXPIRED_TOKEN'), 500)));
     const clear = vi.spyOn(sire, 'clearAuthCache');
     await expect(sire.anularCertificado({ numeroCertificado: '1', motivoAnulacion: 4 })).rejects.toBeInstanceOf(
       ArcaAuthError,
     );
-    expect(clear).toHaveBeenCalledTimes(1);
+    expect(clear).not.toHaveBeenCalled();
   });
 
   it('un rechazo de negocio no descarta el ticket', async () => {

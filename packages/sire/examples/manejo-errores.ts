@@ -4,7 +4,8 @@
  * - ArcaValidationError: datos inválidos (no se llamó a ARCA).
  * - ArcaSireServiceError: ARCA rechazó el certificado (no se emitió).
  * - ArcaSoapError con uncertain=true: no se sabe si se emitió. No reintentar a ciegas.
- * - ArcaAuthError: falla de WSAA o SIRE rechazó el token/sign (el SDK descarta el ticket cacheado).
+ * - ArcaAuthError: falla de WSAA o SIRE rechazó el token/sign (el SDK no borra el ticket cacheado;
+ *   si está dañado, clearAuthCache()).
  */
 import { readFileSync } from 'node:fs';
 import {
