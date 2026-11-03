@@ -1,7 +1,25 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { parseEnv } from 'node:util';
 import { defineConfig } from 'vitest/config';
 
 const commonSrc = fileURLToPath(new URL('./packages/common/src/', import.meta.url));
+
+/**
+ * Variables `ARCA_TEST_*` del `.env` local (no se versiona, ver .gitignore) para
+ * los tests de integración. Las del entorno tienen prioridad sobre las del archivo.
+ */
+function arcaTestEnv(): Record<string, string> {
+  const file = fileURLToPath(new URL('./.env', import.meta.url));
+  if (!existsSync(file)) return {};
+  const vars = parseEnv(readFileSync(file, 'utf8'));
+  return Object.fromEntries(
+    Object.entries(vars).filter(
+      (entry): entry is [string, string] =>
+        entry[0].startsWith('ARCA_TEST_') && entry[1] !== undefined && process.env[entry[0]] === undefined,
+    ),
+  );
+}
 
 export default defineConfig({
   // Los tests de cada paquete usan el código fuente de common, no su `dist/`:
@@ -28,6 +46,7 @@ export default defineConfig({
         test: {
           name: 'integration',
           include: ['packages/*/tests/integration/**/*.test.ts'],
+          env: arcaTestEnv(),
         },
       },
     ],
