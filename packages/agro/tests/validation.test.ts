@@ -30,7 +30,7 @@ import { ArcaAgroResponseError } from '../src/errors.js';
 describe('schema: encode', () => {
   it('redondea decimales según fractionDigits y rechaza NaN/Infinity/negativos', () => {
     const s = { a: dec(2, 0), b: opt(dec(3, 0)) };
-    expect(encodeRequest({ a: 1.005, b: 2 }, s, 't')).toEqual({ a: '1.01', b: '2.000' });
+    expect(encodeRequest({ a: 1.005, b: 2 }, s, 't')).toEqual({ a: '1.00', b: '2.000' }); // mitad al par
     for (const bad of [NaN, Infinity, -1, '1']) {
       expect(() => encodeRequest({ a: bad }, s, 't')).toThrow(ArcaValidationError);
     }

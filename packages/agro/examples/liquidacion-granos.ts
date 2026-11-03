@@ -3,7 +3,7 @@
  *
  * 1. Paramétricas (granos, puertos, tipos de operación)
  * 2. Último número de orden + autorización
- * 3. Consulta por COE (con PDF) y anulación
+ * 3. Consulta por COE (con PDF) y anulación por contradocumento
  */
 import fs from 'node:fs';
 import { ArcaAgro, FileTicketStorage } from '@ramiidv/arca-agro';
@@ -68,8 +68,12 @@ async function main() {
   const consulta = await agro.lpg.liquidacionXCoeConsultar(autorizacion.coe, { pdf: true });
   if (consulta.pdf) fs.writeFileSync(`lpg-${autorizacion.coe}.pdf`, Buffer.from(consulta.pdf, 'base64'));
 
-  const anulacion = await agro.lpg.liquidacionAnular(autorizacion.coe);
-  console.log('Anulación:', anulacion.resultado);
+  // Anulación por contradocumento: una nueva liquidación (consume el siguiente
+  // número de orden) que queda en estado PA hasta que el vendedor la acepta.
+  const contra = await agro.lpg.lpgAnularContraDocumento({
+    anulacionBase: { puntoEmision: ptoEmision, nroOrden: nroOrden + 1, coeAnular: autorizacion.coe },
+  });
+  console.log('Contradocumento:', contra.autorizacion.coe, 'estado:', contra.autorizacion.estado);
 }
 
 main().catch(console.error);

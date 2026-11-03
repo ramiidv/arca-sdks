@@ -372,14 +372,17 @@ const OPERACIONES: OpCase[] = [
       a.cpe.nuevoDestinoDestinatarioCPEFerroviaria({
         transporte: modificaTren,
         destino,
-        cartaPorte: { ...cartaPorte, tipoCPE: 75 },
+        cartaPorte: { ...cartaPorte, tipoCPE: TIPO_CPE.FERROVIARIA },
       }),
     order: ['cartaPorte', 'destino', 'transporte'],
   },
   {
     method: 'regresoOrigenCPEFerroviaria',
     run: (a) =>
-      a.cpe.regresoOrigenCPEFerroviaria({ transporte: modificaTren, cartaPorte: { ...cartaPorte, tipoCPE: 75 } }),
+      a.cpe.regresoOrigenCPEFerroviaria({
+        transporte: modificaTren,
+        cartaPorte: { ...cartaPorte, tipoCPE: TIPO_CPE.FERROVIARIA },
+      }),
     order: ['cartaPorte', 'transporte'],
   },
   {
@@ -388,7 +391,7 @@ const OPERACIONES: OpCase[] = [
       a.cpe.desvioCPEFerroviaria({
         transporte: modificaTren,
         destino: { planta: 10, codLocalidad: 1, codProvincia: 1, cuit: CUIT4 },
-        cartaPorte: { ...cartaPorte, tipoCPE: 75 },
+        cartaPorte: { ...cartaPorte, tipoCPE: TIPO_CPE.FERROVIARIA },
       }),
     order: ['cartaPorte', 'destino', 'transporte'],
   },
@@ -523,14 +526,14 @@ describe('WSCPE: consultas', () => {
   it('consultarCPEPorDestino: fechas xsd:date y listas vacía / 1 / N', async () => {
     const item = (ctg: string) =>
       `<cartaPorte><tipoCartaPorte>74</tipoCartaPorte><nroCTG>${ctg}</nroCTG><fechaPartida>2026-11-01T08:30:00-03:00</fechaPartida><estado>CN</estado></cartaPorte>`;
-    const params = { planta: 1938, fechaPartidaDesde: '20261101', fechaPartidaHasta: new Date('2026-11-05T12:00:00Z') };
+    const params = { planta: 1938, fechaPartidaDesde: '20261101', fechaPartidaHasta: new Date('2026-11-04T12:00:00Z') };
 
     const vacia = setup(() => cpeResp('ConsultarCPEPorDestinoResp', METADATA));
     expect(await vacia.agro.cpe.consultarCPEPorDestino(params)).toEqual([]);
     expect(vacia.calls[0].element).toBe('ser:ConsultarCPEPorDestinoReq');
     expect(keys(vacia.calls[0].req.solicitud)).toEqual(['planta', 'fechaPartidaDesde', 'fechaPartidaHasta']);
     expect(vacia.calls[0].req.solicitud.fechaPartidaDesde).toBe('2026-11-01');
-    expect(vacia.calls[0].req.solicitud.fechaPartidaHasta).toBe('2026-11-05');
+    expect(vacia.calls[0].req.solicitud.fechaPartidaHasta).toBe('2026-11-04');
 
     const una = setup(() => cpeResp('ConsultarCPEPorDestinoResp', item('010100000001')));
     expect(await una.agro.cpe.consultarCPEPorDestino(params)).toEqual([
@@ -586,8 +589,8 @@ describe('WSCPE: consultas', () => {
 
   it('consultarUltNroOrden sin nroOrden → error (no 0)', async () => {
     const { agro } = setup(() => cpeResp('ConsultarUltNroOrdenResp', METADATA));
-    await expect(agro.cpe.consultarUltNroOrden(1, 74)).rejects.toBeInstanceOf(ArcaAgroResponseError);
-    await expect(agro.cpe.siguienteNroOrden(1, 74)).rejects.toBeInstanceOf(ArcaAgroResponseError);
+    await expect(agro.cpe.consultarUltNroOrden(1, TIPO_CPE.AUTOMOTOR)).rejects.toBeInstanceOf(ArcaAgroResponseError);
+    await expect(agro.cpe.siguienteNroOrden(1, TIPO_CPE.AUTOMOTOR)).rejects.toBeInstanceOf(ArcaAgroResponseError);
   });
 
   it('respuesta sin <respuesta> → ArcaAgroResponseError', async () => {
@@ -595,7 +598,7 @@ describe('WSCPE: consultas', () => {
       () =>
         `<S:Envelope xmlns:S="http://schemas.xmlsoap.org/soap/envelope/"><S:Body><ns2:ConsultarUltNroOrdenResp xmlns:ns2="${CPE_NS}"/></S:Body></S:Envelope>`,
     );
-    await expect(agro.cpe.consultarUltNroOrden(1, 74)).rejects.toBeInstanceOf(ArcaAgroResponseError);
+    await expect(agro.cpe.consultarUltNroOrden(1, TIPO_CPE.AUTOMOTOR)).rejects.toBeInstanceOf(ArcaAgroResponseError);
   });
 });
 
@@ -749,6 +752,241 @@ describe('WSCPE: validación local (no llama a ARCA)', () => {
   it('origen sin operador ni productor', async () => {
     const e = await invalid((p) => (p.origen = {}));
     expect(e.details.map((d) => d.field)).toContain('origen');
+  });
+
+  it('reglas del manual: dominios (2144), turno (2244), cosecha (2073) y RENSPA (2153)', async () => {
+    const field = async (m: (p: AutorizarCPEAutomotorParams) => void) => (await invalid(m)).details[0].field;
+    expect(await field((p) => (p.transporte.dominio = ['AB123CD', 'AC456EF', 'AD789GH', 'AE012IJ']))).toBe(
+      'transporte.dominio',
+    );
+    expect(await field((p) => (p.transporte.codigoTurno = 'T#1'))).toBe('transporte.codigoTurno');
+    expect(await field((p) => (p.transporte.codigoTurno = ' T1'))).toBe('transporte.codigoTurno');
+    expect(await field((p) => (p.datosCarga.cosecha = 526))).toBe('datosCarga.cosecha');
+    expect(
+      await field((p) => (p.origen = { productor: { codProvincia: 1, codLocalidad: 10270, nroRenspa: '01.234.5' } })),
+    ).toBe('origen.productor.nroRenspa');
+  });
+
+  it('turno y RENSPA válidos', async () => {
+    const { agro, calls } = setup(() => cpeResp('AutorizarCPEAutomotorResp', DETALLE_AUTOMOTOR));
+    const p = autorizarAutomotor();
+    p.transporte.codigoTurno = 'T-12_3/A 4';
+    p.origen = { productor: { codProvincia: 1, codLocalidad: 10270, nroRenspa: '01.234.5.67890/12' } };
+    await agro.cpe.autorizarCPEAutomotor(p);
+    expect(calls[0].req.solicitud.transporte.codigoTurno).toBe('T-12_3/A 4');
+  });
+
+  it('motivos de anulación y rechazo (1 a 3) y contingencia G solo en ferroviaria', async () => {
+    const { agro, fetchMock } = setup(() => '');
+    const errorDe = (p: Promise<unknown>) => p.catch((e: ArcaValidationError) => e.details[0].field);
+    expect(await errorDe(agro.cpe.anularCPE({ cartaPorte, anulacionMotivo: 4 }))).toBe('anulacionMotivo');
+    expect(await errorDe(agro.cpe.rechazoCPE({ cuitSolicitante: CUIT, cartaPorte, rechazoMotivo: 0 }))).toBe(
+      'rechazoMotivo',
+    );
+    expect(await errorDe(agro.cpe.informarContingencia({ cartaPorte, contingencia: { concepto: 'G' } }))).toBe(
+      'contingencia.concepto',
+    );
+    expect(
+      await errorDe(
+        agro.cpe.cerrarContingenciaCPE({ cartaPorte, concepto: 'C', motivoDesactivacionCP: { concepto: 'D' } }),
+      ),
+    ).toBe('motivoDesactivacionCP.concepto');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('consultarCPEPorDestino: rango de hasta 3 días (2152)', async () => {
+    const { agro, fetchMock } = setup(() => '');
+    const e = await agro.cpe
+      .consultarCPEPorDestino({ planta: 1, fechaPartidaDesde: '2026-11-01', fechaPartidaHasta: '2026-11-05' })
+      .catch((err: ArcaValidationError) => err);
+    expect(e).toBeInstanceOf(ArcaValidationError);
+    expect((e as ArcaValidationError).details[0].field).toBe('fechaPartidaHasta');
+    const alReves = await agro.cpe
+      .consultarCPEPorDestino({ planta: 1, fechaPartidaDesde: '2026-11-03', fechaPartidaHasta: '2026-11-01' })
+      .catch((err: ArcaValidationError) => err);
+    expect(alReves).toBeInstanceOf(ArcaValidationError);
+    // Una fecha inválida la informa solo el schema (sin el error de rango).
+    const invalida = await agro.cpe
+      .consultarCPEPorDestino({ planta: 1, fechaPartidaDesde: '01/11/2026', fechaPartidaHasta: '2026-11-05' })
+      .catch((err: ArcaValidationError) => err);
+    expect((invalida as ArcaValidationError).details.map((d) => d.field)).toEqual(['fechaPartidaDesde']);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('consultarCPEPorDestino: 3 días exactos (Date o string) se envían', async () => {
+    const { agro, calls } = setup(() => cpeResp('ConsultarCPEPorDestinoResp', ''));
+    await agro.cpe.consultarCPEPorDestino({
+      planta: 1,
+      fechaPartidaDesde: new Date('2026-11-01T12:00:00-03:00'),
+      fechaPartidaHasta: '2026-11-04',
+    });
+    expect(calls[0].req.solicitud.fechaPartidaHasta).toBe('2026-11-04');
+  });
+
+  it('contingencia sin cartaPorte.tipoCPE: solo el error del schema', async () => {
+    const { agro, fetchMock } = setup(() => '');
+    const e = await agro.cpe
+      .informarContingencia({
+        cartaPorte: { sucursal: 1, nroOrden: 1 } as typeof cartaPorte,
+        contingencia: { concepto: 'G' },
+      })
+      .catch((err: ArcaValidationError) => err);
+    expect((e as ArcaValidationError).details.map((d) => d.field)).toEqual(['cartaPorte.tipoCPE']);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('WSCPE: ediciones con preservarIntervinientes', () => {
+  const INTERVINIENTES =
+    `<retiroProductor><cuitRemitenteComercialProductor>${CUIT}</cuitRemitenteComercialProductor></retiroProductor>` +
+    `<intervinientes><cuitRemitenteComercialVentaPrimaria>${CUIT2}</cuitRemitenteComercialVentaPrimaria>` +
+    `<cuitCorredorVentaPrimaria>${CUIT3}</cuitCorredorVentaPrimaria></intervinientes>`;
+  const conIntervinientes = DETALLE_AUTOMOTOR.replace('<datosCarga>', `${INTERVINIENTES}<datosCarga>`);
+  const responder = (call: { element: string }) =>
+    call.element.includes('Consultar')
+      ? cpeResp('ConsultarCPEAutomotorResp', conIntervinientes)
+      : cpeResp(call.element.slice(4).replace('Req', 'Resp'), CARTA_PORTE_RESP);
+  const edicion = {
+    nroCTG: '010100012345',
+    cuitDestinatario: CUIT4,
+    cuitChofer: CUIT5,
+    cuitTransportista: CUIT3,
+    destino: { cuit: CUIT4, esDestinoCampo: false, codProvincia: 12, codLocalidad: 5244, planta: 1938 },
+    pesoBruto: 41000,
+    codGrano: 23,
+  };
+
+  it('sin la opción no consulta y envía solo lo informado (ARCA anula el resto)', async () => {
+    const { agro, calls } = setup(responder);
+    await agro.cpe.editarCPEAutomotor(edicion);
+    expect(calls.map((c) => c.element)).toEqual(['ser:EditarCPEAutomotorReq']);
+    expect(calls[0].req.solicitud.cuitRemitenteComercialVentaPrimaria).toBeUndefined();
+  });
+
+  it('completa los CUIT no informados con los vigentes; null los quita', async () => {
+    const { agro, calls } = setup(responder);
+    await agro.cpe.editarCPEAutomotor(
+      { ...edicion, cuitCorredorVentaPrimaria: null },
+      { preservarIntervinientes: true },
+    );
+    expect(calls.map((c) => c.element)).toEqual(['ser:ConsultarCPEAutomotorReq', 'ser:EditarCPEAutomotorReq']);
+    expect(calls[0].req.solicitud.nroCTG).toBe('010100012345');
+    const enviado = calls[1].req.solicitud;
+    expect(String(enviado.cuitRemitenteComercialVentaPrimaria)).toBe(String(CUIT2));
+    expect(enviado.cuitCorredorVentaPrimaria).toBeUndefined();
+    expect(keys(enviado)[1]).toBe('cuitRemitenteComercialVentaPrimaria');
+  });
+
+  it('confirmada: completa intervinientes y el remitente productor', async () => {
+    const { agro, calls } = setup(responder);
+    await agro.cpe.editarCPEConfirmadaAutomotor(
+      { nroCTG: '010100012345', intervinientes: { cuitCorredorVentaSecundaria: CUIT5 } },
+      { preservarIntervinientes: true },
+    );
+    const interv = calls[1].req.solicitud.intervinientes;
+    expect(String(interv.cuitCorredorVentaPrimaria)).toBe(String(CUIT3));
+    expect(String(interv.cuitCorredorVentaSecundaria)).toBe(String(CUIT5));
+    expect(String(interv.cuitRemitenteComercialProductor)).toBe(String(CUIT));
+  });
+
+  it('ferroviaria: consulta la ferroviaria y completa destinatario, intervinientes y transportista', async () => {
+    const detalle =
+      CABECERA('020100012345') +
+      INTERVINIENTES +
+      `<destinatario><cuit>${CUIT4}</cuit></destinatario>` +
+      `<transporte><cuitTransportista>${CUIT3}</cuitTransportista></transporte>`;
+    const { agro, calls } = setup((call) =>
+      call.element.includes('Consultar')
+        ? cpeResp('ConsultarCPEFerroviariaResp', detalle)
+        : cpeResp(call.element.slice(4).replace('Req', 'Resp'), CARTA_PORTE_RESP),
+    );
+    await agro.cpe.editarCPEFerroviaria(
+      { nroCTG: '020100012345', pesoBruto: 80000, codGrano: 23, cuitRemitenteComercialVentaPrimaria: CUIT5 },
+      { preservarIntervinientes: true },
+    );
+    expect(calls.map((c) => c.element)).toEqual(['ser:ConsultarCPEFerroviariaReq', 'ser:EditarCPEFerroviariaReq']);
+    const enviado = calls[1].req.solicitud;
+    expect(String(enviado.cuitDestinatario)).toBe(String(CUIT4));
+    expect(String(enviado.cuitRemitenteComercialVentaPrimaria)).toBe(String(CUIT5));
+    expect(String(enviado.cuitCorredorVentaPrimaria)).toBe(String(CUIT3));
+    expect(String(enviado.cuitTransportista)).toBe(String(CUIT3));
+    // Orden XSD aunque los CUIT completados se agreguen al final del objeto.
+    expect(keys(enviado)).toEqual([
+      'nroCTG',
+      'cuitDestinatario',
+      'cuitRemitenteComercialVentaPrimaria',
+      'cuitCorredorVentaPrimaria',
+      'cuitTransportista',
+      'pesoBruto',
+      'codGrano',
+    ]);
+
+    const conf = setup((call) =>
+      call.element.includes('Consultar')
+        ? cpeResp('ConsultarCPEFerroviariaResp', detalle)
+        : cpeResp('EditarCPEConfirmadaFerroviariaResp', CARTA_PORTE_RESP),
+    );
+    await conf.agro.cpe.editarCPEConfirmadaFerroviaria(
+      { nroCTG: '020100012345', intervinientes: {} },
+      { preservarIntervinientes: true },
+    );
+    expect(conf.calls.map((c) => c.element)).toEqual([
+      'ser:ConsultarCPEFerroviariaReq',
+      'ser:EditarCPEConfirmadaFerroviariaReq',
+    ]);
+    expect(keys(conf.calls[1].req.solicitud.intervinientes)).toEqual([
+      'cuitCorredorVentaPrimaria',
+      'cuitRemitenteComercialVentaPrimaria',
+      'cuitRemitenteComercialProductor',
+    ]);
+  });
+
+  it('si la CPE vigente no tiene intervinientes, envía solo lo informado', async () => {
+    const { agro, calls } = setup((call) =>
+      call.element.includes('Consultar')
+        ? cpeResp('ConsultarCPEAutomotorResp', DETALLE_AUTOMOTOR)
+        : cpeResp('EditarCPEAutomotorResp', CARTA_PORTE_RESP),
+    );
+    await agro.cpe.editarCPEAutomotor(edicion, { preservarIntervinientes: true });
+    expect(calls).toHaveLength(2);
+    expect(keys(calls[1].req.solicitud)).toEqual([
+      'nroCTG',
+      'cuitDestinatario',
+      'cuitChofer',
+      'cuitTransportista',
+      'destino',
+      'pesoBruto',
+      'codGrano',
+    ]);
+  });
+
+  it('params inválidos → ArcaValidationError sin consultar', async () => {
+    const { agro, fetchMock } = setup(responder);
+    const e = await agro.cpe
+      .editarCPEAutomotor({ ...edicion, pesoBruto: 0 }, { preservarIntervinientes: true })
+      .catch((err: unknown) => err);
+    expect(e).toBeInstanceOf(ArcaValidationError);
+    const c = await agro.cpe
+      .editarCPEConfirmadaAutomotor(
+        { nroCTG: '010100012345' } as Parameters<ArcaAgro['cpe']['editarCPEConfirmadaAutomotor']>[0],
+        { preservarIntervinientes: true },
+      )
+      .catch((err: ArcaValidationError) => err);
+    expect(c).toBeInstanceOf(ArcaValidationError);
+    expect((c as ArcaValidationError).details[0].field).toBe('intervinientes');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('si la consulta falla, la edición no se envía', async () => {
+    const { agro, calls } = setup((call) =>
+      call.element.includes('Consultar')
+        ? cpeResp('ConsultarCPEAutomotorResp', ERROR_1)
+        : cpeResp('EditarCPEAutomotorResp', CARTA_PORTE_RESP),
+    );
+    const e = await agro.cpe.editarCPEAutomotor(edicion, { preservarIntervinientes: true }).catch((err) => err);
+    expect(e).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e.method).toBe('consultarCPEAutomotor');
+    expect(calls.map((c) => c.element)).toEqual(['ser:ConsultarCPEAutomotorReq']);
   });
 });
 

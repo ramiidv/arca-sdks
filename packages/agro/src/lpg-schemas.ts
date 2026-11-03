@@ -6,8 +6,25 @@
  * @internal
  */
 import { ArcaValidationError, validateCuit } from '@ramiidv/arca-common';
-import { base64, cuit, custom, date, dec, id, int, list, must, obj, opt, porcentaje, str, wrapped } from './schema.js';
+import {
+  base64,
+  cuit,
+  custom,
+  date,
+  dec,
+  id,
+  int,
+  list,
+  must,
+  obj,
+  opt,
+  porcentaje,
+  str,
+  wrapped,
+  xml,
+} from './schema.js';
 import type { Schema } from './schema.js';
+import type { GradoLpg } from './lpg-types.js';
 
 // ---------------------------------------------------------------------------
 // Tipos simples (XSD)
@@ -26,16 +43,36 @@ const siNo = () => str({ values: ['S', 'N'] }); // LpgSiNoType
 const alicuota = () => dec(4, 0, 100); // LpgAlicuotaType
 // biome-ignore lint/correctness/noPrecisionLoss: tope literal del XSD (maxInclusive)
 const importe17_2 = () => dec(2, 0, 99999999999999999.99); // LpgImporte_17_2_Type
-const gradoCodigo = () => str({ maxLen: 2 }); // LpgGradoCodigoType
+/** Grados que no llevan valor de grado (manual WSLPG §3.1; error 3014 en `cgInformarCalidad`). */
+export const GRADOS_SIN_VALOR: readonly GradoLpg[] = ['G1', 'G2', 'G3'];
+/** Grados que exigen valor de grado (manual WSLPG §3.1; error 3015 en `cgInformarCalidad`). */
+export const GRADOS_CON_VALOR: readonly GradoLpg[] = ['FG', 'F1', 'F2', 'F3'];
+/** `LpgGradoCodigoType`: el XSD solo limita el largo; los valores son los del manual WSLPG §3.1. */
+const gradoCodigo = () => str({ values: [...GRADOS_SIN_VALOR, ...GRADOS_CON_VALOR] });
 const gradoValor = () => dec(8, 0, 1.99999999, true); // LpgGradoValorType
 const factor = () => dec(8, 0, 999.99999999, true); // LpgFactorEntType
-const precioRefTn = () => dec(3, 0, 999999999.999); // LpgPrecioRefTnType
+/**
+ * `LpgPrecioRefTnType`. El manual WSLPG §3.1 indica 99999.999 como máximo, pero
+ * el XSD admite 999999999.999 (los precios en pesos por tonelada ya superan el
+ * tope del manual): se valida contra el XSD.
+ */
+const precioRefTn = () => dec(3, 0, 999999999.999);
 const precioFleteTn = () => dec(2, 0, 9999999.99); // LpgPrecioFleteTnType
 const datosAdicionales = () => str({ minLen: 0, maxLen: 400 }); // LpgDatosAdicionalesType
 const numeroContrato = () => int(0, 999999999999999, true); // LpgNumeroContratoType
 const importe12_2 = () => dec(2, 0, 999999999999.98); // LpgImporte12_2Type (maxExclusive 999999999999.99)
 const conceptoImporte = () => str({ minLen: 0, maxLen: 200 }); // LpgConceptoImporteType
 const zImporte8_2 = () => dec(2, 0, 99999999.99); // NumeroZ_8_2_Type
+// biome-ignore lint/correctness/noPrecisionLoss: tope literal del XSD (maxInclusive)
+const importe17_3 = () => dec(3, 0, 99999999999999999.999); // LpgImporte_17_3_Type
+const importe8_2 = () => dec(2, 0, 99999999.99, true); // Numero_8_2_Type
+const importe13_2 = () => dec(2, 0, 9999999999999.99, true); // Numero_13_2_Type
+const cantidad8_3 = () => dec(3, 0, 99999999.999, true); // Numero_8_3_Type
+const string50 = () => str({ minLen: 0, maxLen: 50 }); // String_50_Type
+const codPuerto = () => int(0, 9999, true); // LpgCodPuertoType
+const puertoLocalidad = () => str({ maxLen: 240 }); // LpgDesPuertoLocalidadType
+const porcentaje99 = () => dec(2, 0, 99.99); // LpgPorcType, LpgComisionGastosAdmType
+const codTipoOperacion = () => str({ minLen: 0, maxLen: 2 }); // LpgCodTipoOperacionType
 // LpgPorcentajeType = `porcentaje()` de common (dec(2, 0, 100)).
 
 /**
@@ -60,9 +97,13 @@ const cuit0 = () =>
 /** LpgCodigoDescripcionType */
 const CODIGO_DESCRIPCION: Schema = { codigo: str(), descripcion: str() };
 
+/** `opcionales.opcional[]` (LpgArrOpcionalType) */
+const OPCIONALES = opt(wrapped('opcional', obj(CODIGO_DESCRIPCION)));
+
 /** LpgCertType */
 const CERTIFICADO: Schema = {
-  tipoCertificadoDeposito: str({ maxLen: 3 }),
+  // LpgTipoCertificadoDepType: el XSD solo limita el largo; el manual WSLPG §3.1 admite solo "332".
+  tipoCertificadoDeposito: str({ values: ['332'] }),
   nroCertificadoDeposito: int(100000000, 999999999999, true),
   pesoNeto: pesoNeto(),
   pesoNetoTotalCertificado: opt(pesoNeto()),
@@ -80,11 +121,11 @@ export const LIQUIDACION_BASE: Schema = {
   cuitComprador: cuit(),
   nroActComprador: actividad(),
   nroIngBrutoComprador: ib(),
-  codTipoOperacion: str({ minLen: 0, maxLen: 2 }),
+  codTipoOperacion: codTipoOperacion(),
   esLiquidacionPropia: opt(siNo()),
   esCanje: opt(str({ values: ['P', 'T', 'N'] })),
-  codPuerto: int(0, 9999, true),
-  desPuertoLocalidad: opt(str({ maxLen: 240 })),
+  codPuerto: codPuerto(),
+  desPuertoLocalidad: opt(puertoLocalidad()),
   codGrano: codGrano(),
   pesoNetoSinCertificado: opt(pesoNeto()),
   codLocalidadProcedenciaSinCertificado: opt(codLocalidad()),
@@ -94,7 +135,7 @@ export const LIQUIDACION_BASE: Schema = {
   actuaCorredor: opt(siNo()),
   liquidaCorredor: siNo(),
   cuitCorredor: opt(cuit()),
-  comisionCorredor: opt(dec(2, 0, 99.99)),
+  comisionCorredor: opt(porcentaje99()),
   nroIngBrutoCorredor: opt(ib()),
   fechaPrecioOperacion: date(),
   precioRefTn: precioRefTn(),
@@ -110,7 +151,7 @@ export const LIQUIDACION_BASE: Schema = {
   codProvProcedencia: codProvincia(),
   datosAdicionales: opt(datosAdicionales()),
   certificados: opt(wrapped('certificado', obj(CERTIFICADO))),
-  opcionales: opt(wrapped('opcional', obj(CODIGO_DESCRIPCION))),
+  opcionales: OPCIONALES,
 };
 
 /** LpgDeduccionType */
@@ -119,7 +160,7 @@ const DEDUCCION: Schema = {
   detalleAclaratorio: opt(str({ minLen: 0, maxLen: 50 })),
   diasAlmacenaje: opt(int(0, 9999)),
   precioPKGdiario: opt(dec(8, 0, 999999.99999999)),
-  comisionGastosAdm: opt(dec(2, 0, 99.99)),
+  comisionGastosAdm: opt(porcentaje99()),
   baseCalculo: opt(dec(8, 0)),
   alicuotaIva: alicuota(),
 };
@@ -141,12 +182,29 @@ const PERCEPCION: Schema = {
   importeFinal: importe17_2(),
 };
 
+const DEDUCCIONES = opt(wrapped('deduccion', obj(DEDUCCION)));
+const RETENCIONES = opt(wrapped('retencion', obj(RETENCION)));
+
 /** LpgLiqReqType (sin `auth`) */
 export const LIQUIDACION_AUTORIZAR: Schema = {
   liquidacion: obj(LIQUIDACION_BASE),
-  deducciones: opt(wrapped('deduccion', obj(DEDUCCION))),
-  retenciones: opt(wrapped('retencion', obj(RETENCION))),
+  deducciones: DEDUCCIONES,
+  retenciones: RETENCIONES,
   percepciones: opt(wrapped('percepcion', obj(PERCEPCION))),
+};
+
+/** LpgAjustePorImporteType (ajuste por contrato): la parte final de LpgAjusteCreditoType / LpgAjusteDebitoType */
+const AJUSTE_POR_IMPORTE: Schema = {
+  datosAdicionales: opt(datosAdicionales()),
+  opcionales: OPCIONALES,
+  conceptoImporteIva0: opt(conceptoImporte()),
+  importeAjustarIva0: opt(importe12_2()),
+  conceptoImporteIva105: opt(conceptoImporte()),
+  importeAjustarIva105: opt(importe12_2()),
+  conceptoImporteIva21: opt(conceptoImporte()),
+  importeAjustarIva21: opt(importe12_2()),
+  deducciones: DEDUCCIONES,
+  retenciones: RETENCIONES,
 };
 
 /** LpgAjusteCreditoType / LpgAjusteDebitoType */
@@ -158,17 +216,11 @@ const AJUSTE_CREDITO_DEBITO: Schema = {
   valGrado: opt(gradoValor()),
   factor: opt(factor()),
   diferenciaPrecioFleteTn: precioFleteTn(),
-  datosAdicionales: opt(datosAdicionales()),
-  opcionales: opt(wrapped('opcional', obj(CODIGO_DESCRIPCION))),
-  conceptoImporteIva0: opt(conceptoImporte()),
-  importeAjustarIva0: opt(importe12_2()),
-  conceptoImporteIva105: opt(conceptoImporte()),
-  importeAjustarIva105: opt(importe12_2()),
-  conceptoImporteIva21: opt(conceptoImporte()),
-  importeAjustarIva21: opt(importe12_2()),
-  deducciones: opt(wrapped('deduccion', obj(DEDUCCION))),
-  retenciones: opt(wrapped('retencion', obj(RETENCION))),
+  ...AJUSTE_POR_IMPORTE,
 };
+
+/** LpgFusionType / LsgFusionType */
+const FUSION: Schema = { nroIngBrutos: ib(), nroActividad: actividad() };
 
 /** LpgAjusteUnificadoReqType (sin `auth`) */
 export const AJUSTE_UNIFICADO: Schema = {
@@ -179,10 +231,79 @@ export const AJUSTE_UNIFICADO: Schema = {
     certificados: opt(wrapped('certificado', obj(CERTIFICADO))),
     codLocalidad: codLocalidad(),
     codProv: codProvincia(),
-    fusion: opt(obj({ nroIngBrutos: ib(), nroActividad: actividad() })),
+    fusion: opt(obj(FUSION)),
   }),
   ajusteCredito: opt(obj(AJUSTE_CREDITO_DEBITO)),
   ajusteDebito: opt(obj(AJUSTE_CREDITO_DEBITO)),
+};
+
+/** LpgAjusteContratoReqType (sin `auth`) */
+export const AJUSTE_CONTRATO: Schema = {
+  ajusteBase: obj({
+    ptoEmision: ptoEmision(),
+    nroOrden: nroOrden(),
+    nroContrato: numeroContrato(),
+    certificados: opt(wrapped('certificado', obj(CERTIFICADO))),
+    actividad: actividad(),
+    codGrano: codGrano(),
+    cuitVendedor: cuit(),
+    cuitCorredor: opt(cuit()),
+    cuitComprador: cuit(),
+    precioRefTn: precioRefTn(),
+    codGradoEnt: gradoCodigo(),
+    valGradoEnt: gradoValor(),
+    precioFleteTn: precioFleteTn(),
+    codPuerto: codPuerto(),
+    desPuertoLocalidad: opt(puertoLocalidad()),
+    codLocalidad: codLocalidad(),
+    codProv: codProvincia(),
+  }),
+  ajusteCredito: opt(obj(AJUSTE_POR_IMPORTE)),
+  ajusteDebito: opt(obj(AJUSTE_POR_IMPORTE)),
+};
+
+/** LpgAutorizarAnticipoReqType (sin `auth`): `LpgLiquidacionAnticipoBaseType`, retenciones y deducciones */
+export const AUTORIZAR_ANTICIPO: Schema = {
+  anticipo: obj({
+    liquidacion: obj({
+      ptoEmision: ptoEmision(),
+      nroOrden: nroOrden(),
+      cuitComprador: cuit(),
+      nroActComprador: actividad(),
+      nroIngBrutoComprador: ib(),
+      codTipoOperacion: codTipoOperacion(),
+      nroContrato: opt(numeroContrato()),
+      codPuerto: codPuerto(),
+      descPuertoLocalidad: opt(puertoLocalidad()),
+      codGrano: codGrano(),
+      pesoNetoSinCertificado: pesoNeto(),
+      cuitVendedor: cuit(),
+      nroIngBrutoVendedor: ib(),
+      actuaCorredor: opt(siNo()),
+      liquidaCorredor: siNo(),
+      cuitCorredor: opt(cuit()),
+      comisionCorredor: opt(porcentaje99()),
+      nroIngBrutoCorredor: opt(ib()),
+      fechaPrecioOperacion: date(),
+      precioRefTn: precioRefTn(),
+      alicIvaOperacion: opt(alicuota()),
+      campaniaPpal: campania(),
+      codLocProcedencia: codLocalidad(),
+      codProvProcedencia: codProvincia(),
+      datosAdicionales: opt(datosAdicionales()),
+      opcionales: OPCIONALES,
+    }),
+    retenciones: RETENCIONES,
+    deducciones: DEDUCCIONES,
+  }),
+};
+
+/** LpgCancelarAnticipoReqType (sin `auth`): `pdf` es obligatorio en el XSD */
+export const CANCELAR_ANTICIPO: Schema = { coe: id(), ptoEmision: ptoEmision(), nroOrden: nroOrden(), pdf: siNo() };
+
+/** LpgAnularContraDocumentoReqType (sin `auth`): lo usan lpgAnularContraDocumento y lsgAnularContraDocumento */
+export const ANULAR_CONTRA_DOCUMENTO: Schema = {
+  anulacionBase: obj({ puntoEmision: ptoEmision(), nroOrden: nroOrden(), coeAnular: id() }),
 };
 
 /** LpgLiqConsXCoeReqType (sin `auth`): también lo usan cgSolicitarAnulacion y cgConfirmarAnulacion */
@@ -215,8 +336,96 @@ export const LIQ_POR_CONTRATO: Schema = {
   codGrano: codGrano(),
 };
 
+/** LpgAsociarLiqAContratoReqType (sin `auth`): lo usan asociarLiquidacionAContrato y lsgAsociarAContrato */
+export const ASOCIAR_A_CONTRATO: Schema = { coe: id(), ...LIQ_POR_CONTRATO };
+
 /** LpgAjustePorContratoReqType (sin `auth`) */
 export const AJUSTE_POR_CONTRATO: Schema = { nroContrato: numeroContrato() };
+
+// --- Liquidación secundaria (lsg*) ------------------------------------------
+
+/** LsgDeduccionType */
+const LSG_DEDUCCION: Schema = { detalleAclaratoria: string50(), baseCalculo: importe8_2(), alicuotaIVA: alicuota() };
+
+/** LsgPercepcionType */
+const LSG_PERCEPCION: Schema = { detalleAclaratoria: string50(), baseCalculo: importe13_2(), alicuota: alicuota() };
+
+/** LsgLiqReqType (sin `auth`) */
+export const LSG_AUTORIZAR: Schema = {
+  liqSecundariaBase: obj({
+    ptoEmision: ptoEmision(),
+    nroOrden: nroOrden(),
+    numeroContrato: opt(numeroContrato()),
+    cuitComprador: cuit(),
+    nroIngBrutoComprador: ib(),
+    codPuerto: codPuerto(),
+    desPuertoLocalidad: opt(puertoLocalidad()),
+    codGrano: codGrano(),
+    cantidadTn: cantidad8_3(),
+    cuitVendedor: cuit(),
+    nroActVendedor: actividad(),
+    nroIngBrutoVendedor: ib(),
+    actuaCorredor: opt(siNo()),
+    liquidaCorredor: siNo(),
+    cuitCorredor: opt(cuit()),
+    nroIngBrutoCorredor: opt(ib()),
+    fechaPrecioOperacion: date(),
+    precioRefTn: precioRefTn(),
+    precioOperacion: importe17_3(),
+    alicIvaOperacion: opt(alicuota()),
+    campaniaPPal: campania(),
+    codLocalidad: codLocalidad(),
+    codProvincia: codProvincia(),
+    deduccion: opt(list(obj(LSG_DEDUCCION), 0)),
+    percepcion: opt(list(obj(LSG_PERCEPCION), 0)),
+    opcionales: OPCIONALES,
+    datosAdicionales: opt(datosAdicionales()),
+  }),
+  facturaPapel: opt(
+    obj({
+      nroCAI: int(0, 99999999999999, true),
+      nroFacturaPapel: int(0, 999999999999, true),
+      fechaFactura: date(),
+      tipoComprobante: str({ values: ['1', '34', '51', '63', '39'] }),
+    }),
+  ),
+};
+
+/** LsgAjusteBaseReqType */
+const LSG_AJUSTE: Schema = {
+  conceptoIva0: opt(conceptoImporte()),
+  importeAjustar0: opt(importe13_2()),
+  conceptoIva10: opt(conceptoImporte()),
+  importeAjustar10: opt(importe13_2()),
+  conceptoIva21: opt(conceptoImporte()),
+  importeAjustar21: opt(importe13_2()),
+  percepcion: opt(list(obj(LSG_PERCEPCION), 0)),
+  datosAdicionales: opt(datosAdicionales()),
+};
+
+/** Punto de emisión, número de orden y lugar de un ajuste de liquidación secundaria. */
+const LSG_AJUSTE_ORDEN: Schema = {
+  ptoEmision: ptoEmision(),
+  nroOrden: nroOrden(),
+  codLocalidad: codLocalidad(),
+  codProvincia: codProvincia(),
+};
+
+const LSG_AJUSTES: Schema = { ajusteCredito: opt(obj(LSG_AJUSTE)), ajusteDebito: opt(obj(LSG_AJUSTE)) };
+
+/** LsgAjustarXCoeReqType (sin `auth`) */
+export const LSG_AJUSTAR_X_COE: Schema = { coe: id(), ...LSG_AJUSTE_ORDEN, ...LSG_AJUSTES, fusion: opt(obj(FUSION)) };
+
+/** LsgAjustarXContratoReqType (sin `auth`) */
+export const LSG_AJUSTAR_X_CONTRATO: Schema = {
+  nroContrato: numeroContrato(),
+  ...LSG_AJUSTE_ORDEN,
+  cuitComprador: cuit(),
+  cuitVendedor: cuit(),
+  cuitCorredor: opt(cuit0()),
+  codGrano: codGrano(),
+  ...LSG_AJUSTES,
+};
 
 const tipoCertificado = () => str({ values: ['P', 'R', 'T', 'E'] }); // CgTipoCertificadoType
 
@@ -255,6 +464,30 @@ const MERMAS: Schema = {
   pesoNetoMermaZarandeo: zImporte8_2(),
   tarifaZarandeo: zImporte8_2(),
 };
+
+/** CgCalidadType */
+const CALIDAD_CG: Schema = {
+  analisisMuestra: int(0, 9999999999, true),
+  nroBoletin: int(0, 9999999999, true),
+  codGrado: opt(gradoCodigo()),
+  valorGrado: opt(dec(2, 0, 1.99, true)),
+  valorContProteico: dec(2, 0, 999.99),
+  valorFactor: opt(factor()),
+  detalleMuestraAnalisis: opt(
+    list(
+      obj({
+        descripcionRubro: str({ minLen: 0, maxLen: 400 }),
+        tipoRubro: str({ values: ['B', 'R'] }),
+        porcentaje: porcentaje(),
+        valor: dec(2, 0, 999.99),
+      }),
+      0,
+    ),
+  ),
+};
+
+/** CgInformarCalidadReqType (sin `auth`) */
+export const CG_INFORMAR_CALIDAD: Schema = { coe: id(), calidad: obj(CALIDAD_CG) };
 
 /** CgAutorizarReqType (sin `auth`) */
 export const CG_AUTORIZAR: Schema = {
@@ -305,27 +538,7 @@ export const CG_AUTORIZAR: Schema = {
       montoSecado: zImporte8_2(),
       montoPorCadaPuntoExceso: zImporte8_2(),
       montoOtros: zImporte8_2(),
-      calidad: opt(
-        obj({
-          analisisMuestra: int(0, 9999999999, true),
-          nroBoletin: int(0, 9999999999, true),
-          codGrado: opt(gradoCodigo()),
-          valorGrado: opt(dec(2, 0, 1.99, true)),
-          valorContProteico: dec(2, 0, 999.99),
-          valorFactor: opt(factor()),
-          detalleMuestraAnalisis: opt(
-            list(
-              obj({
-                descripcionRubro: str({ minLen: 0, maxLen: 400 }),
-                tipoRubro: str({ values: ['B', 'R'] }),
-                porcentaje: porcentaje(),
-                valor: dec(2, 0, 999.99),
-              }),
-              0,
-            ),
-          ),
-        }),
-      ),
+      calidad: opt(obj(CALIDAD_CG)),
       pesoNetoMermaVolatil: zImporte8_2(),
       serviciosFormaDePago: opt(str({ minLen: 0, maxLen: 20 })),
       serviciosOtros: opt(zImporte8_2()),
@@ -516,6 +729,9 @@ export const R_ANULACION_RETURN: Schema = {
 /** LpgLiqUltNroOrdenReturnType */
 export const R_ULT_NRO_ORDEN: Schema = { nroOrden: must(int()), ...R_EVENTOS };
 
+/** LpgImportesNetoAjustadoType */
+const R_IMPORTE_AJUSTADO: Schema = { importe: dec(2), concepto: str(), alicuota: dec(4), ivaCalculado: dec(2) };
+
 const R_AJUSTE_CRED_DEB: Schema = {
   nroOpComercial: int(),
   fechaLiquidacion: date(),
@@ -524,11 +740,7 @@ const R_AJUSTE_CRED_DEB: Schema = {
   importeIva: dec(2),
   operacionConIva: dec(2),
   totalPesoNeto: int(),
-  importes: wrapped(
-    'importeReturn',
-    obj({ importe: dec(2), concepto: str(), alicuota: dec(4), ivaCalculado: dec(2) }),
-    0,
-  ),
+  importes: wrapped('importeReturn', obj(R_IMPORTE_AJUSTADO), 0),
   deducciones: R_DEDUCCIONES,
   totalDeduccion: dec(2),
   retenciones: R_RETENCIONES,
@@ -572,6 +784,12 @@ const R_AJUSTE_UNIFICADO: Schema = {
 /** LpgAjusteUnificadoReturnType */
 export const R_AJUSTE_UNIFICADO_RETURN: Schema = {
   ajusteUnificado: opt(obj(R_AJUSTE_UNIFICADO)),
+  ...R_EVENTOS,
+};
+
+/** LpgAjusteContratoReturnType (liquidacionAjustarContrato) */
+export const R_AJUSTE_CONTRATO_RETURN: Schema = {
+  ajusteContrato: opt(obj(R_AJUSTE_UNIFICADO)),
   ...R_EVENTOS,
 };
 
@@ -769,4 +987,160 @@ export const R_CG_ANULACION_RETURN: Schema = {
   ...R_EVENTOS,
   estadoCertificado: str(),
   pdf: opt(base64()),
+};
+
+// --- Liquidación secundaria (lsg*) ------------------------------------------
+
+/** LsgAutorizacionRespType */
+const R_LSG_AUTORIZACION: Schema = {
+  ptoEmision: int(),
+  nroOrden: int(),
+  fechaLiquidacion: date(),
+  subTotal: dec(2),
+  importeIva: dec(2),
+  operacionConIva: dec(2),
+  coe: id(),
+  totalDeducciones: dec(2),
+  totalPercepciones: dec(2),
+};
+
+/** LsgReturnType (lsgAutorizar) */
+export const R_LSG_AUTORIZAR_RETURN: Schema = {
+  autorizacion: opt(obj(R_LSG_AUTORIZACION)),
+  ...R_EVENTOS,
+};
+
+const R_LSG_DEDUCCION: Schema = { detalleAclaratoria: str(), baseCalculo: dec(2), alicuotaIVA: dec(4) };
+const R_LSG_PERCEPCION: Schema = { detalleAclaratoria: str(), baseCalculo: dec(2), alicuota: dec(4) };
+
+/** LsgTotalesUnificadosType */
+const R_LSG_TOTALES: Schema = {
+  subtotalCredDeb: dec(2),
+  subtotalGeneral: dec(2),
+  iva105: dec(2),
+  iva21: dec(2),
+  totalBasePercepciones: dec(2),
+  importeNeto: dec(2),
+  pagoSegunCondicion: dec(2),
+};
+
+/** LsgBaseType */
+const R_LSG_BASE: Schema = {
+  ptoEmision: int(),
+  nroOrden: int(),
+  cuitComprador: cuit(),
+  nroIngBrutoComprador: int(),
+  cuitVendedor: cuit(),
+  nroActVendedor: int(),
+  nroIngBrutoVendedor: int(),
+  actuaCorredor: str(),
+  liquidaCorredor: str(),
+  cuitCorredor: cuit(),
+  nroIngBrutoCorredor: int(),
+  codGrano: int(),
+  pesoNetoEnTn: dec(3),
+  campania: int(),
+  fechaPrecioOperacion: date(),
+  codPuerto: int(),
+  descripcionPuertoLocalidad: str(),
+  otraLocalidad: str(),
+  precioReferenciaTn: dec(3),
+  precioOperacionTn: dec(3),
+  alicuotaIvaOperacion: dec(4),
+  deduccion: list(obj(R_LSG_DEDUCCION), 0),
+  percepcion: list(obj(R_LSG_PERCEPCION), 0),
+  totalDeducciones: dec(2),
+  // El XSD escribe `todalPercepciones`.
+  totalPercepciones: xml('todalPercepciones', dec(2)),
+  codProvinciaOperacion: int(),
+  codLocalidadOperacion: int(),
+  localidadEmision: str(),
+  nroContrato: int(),
+  facturaPapel: opt(obj({ nroCAI: int(), nroFacturaPapel: int(), fechaFactura: date(), tipoComprobante: str() })),
+  estado: str(),
+  datosAdicionales: str(),
+};
+
+/** LsgResp2Type */
+const R_LSG_AUTORIZACION_CONSULTA: Schema = {
+  ptoEmision: int(),
+  nroOrden: int(),
+  fechaLiquidacion: date(),
+  precioOperacion: dec(3),
+  subtotal: dec(3),
+  importeIva: dec(3),
+  operacionConIva: dec(3),
+  coe: id(),
+  coeAjustado: id(),
+  datosAdicionales: str(),
+};
+
+/** LsgAjusteBaseRespType */
+const R_LSG_AJUSTE: Schema = {
+  tipoAjuste: str(),
+  req: opt(
+    obj({
+      conceptoIva0: str(),
+      importeAjustar0: dec(2),
+      conceptoIva10: str(),
+      importeAjustar10: dec(2),
+      conceptoIva21: str(),
+      importeAjustar21: dec(2),
+      percepcion: list(obj(R_LSG_PERCEPCION), 0),
+      datosAdicionales: str(),
+    }),
+  ),
+  coeAjustado: id(),
+  codLocalidad: int(),
+  codProvincia: int(),
+  totalesUnificados: opt(obj(R_LSG_TOTALES)),
+  estado: str(),
+};
+
+/**
+ * LsgConsultaReturnType (lsgConsultarXCoe, lsgConsultarXNroOrden,
+ * lsgAsociarAContrato). Un ajuste con crédito y débito trae dos liquidaciones.
+ */
+export const R_LSG_CONSULTA_RETURN: Schema = {
+  liquidaciones: must(
+    list(
+      obj({
+        liquidacion: opt(obj(R_LSG_BASE)),
+        autorizacion: opt(obj(R_LSG_AUTORIZACION_CONSULTA)),
+        ajuste: opt(obj(R_LSG_AJUSTE)),
+      }),
+      0,
+    ),
+  ),
+  pdf: opt(base64()),
+  ...R_EVENTOS,
+};
+
+/** LsgAjusteCredDebRespType */
+const R_LSG_AJUSTE_CRED_DEB: Schema = {
+  nroOpComercial: int(),
+  fechaLiquidacion: date(),
+  precioOperacion: dec(3),
+  subTotal: dec(2),
+  importeIVA: dec(2),
+  totalPesoNeto: int(),
+  importe: list(obj(R_IMPORTE_AJUSTADO), 0),
+  percepcion: list(obj(R_LSG_PERCEPCION), 0),
+  totalPercepcion: dec(2),
+  totalNetoAPagar: dec(2),
+  totalPagoSegunCondicion: dec(2),
+};
+
+/** LsgAjustarXCoeContratoReturnType (lsgAjustarXCoe, lsgAjustarXContrato): `eventos` va primero */
+export const R_LSG_AJUSTE_RETURN: Schema = {
+  ...R_EVENTOS,
+  ptoEmision: int(),
+  nroOrden: int(),
+  nroContrato: int(),
+  coeAjustado: id(),
+  coe: id(),
+  ajusteCredito: opt(obj(R_LSG_AJUSTE_CRED_DEB)),
+  ajusteDebito: opt(obj(R_LSG_AJUSTE_CRED_DEB)),
+  totalesUnificados: opt(obj(R_LSG_TOTALES)),
+  estado: str(),
 };
