@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0
+
+### Minor Changes
+
+- ac19882: `emitirCertificado`/`anularCertificado` ya no borran el ticket cacheado cuando SIRE rechaza el token/sign. WSAA rechaza los pedidos de un TA nuevo durante un lapso de retención, y el rechazo puede no deberse al ticket (CUIT no representada, request mal armado): borrarlo dejaba la instancia sin acceso. Se sigue lanzando `ArcaAuthError`; si el ticket está dañado, usá `clearAuthCache()`. Los importes se redondean mitad al par por el cambio de `dec()` en common.
+
+### Patch Changes
+
+- 1cccecc: Documentación: hosts `arca.gob.ar` que publica el manual v1.0.3 y cómo usarlos con `endpoints.sire`; `permanentErrorCooldownMs` en la configuración de WSAA; `coe`/`coeOriginal`/`cae` con solo espacios dan `ArcaValidationError`; regla de `fechaComprobante` para los tipos 3, 19 y 20; requisitos con los enlaces para el certificado y el micrositio SIRE. El JSDoc de `ArcaSireServiceError` ya no menciona token/sign inválido (sale como `ArcaAuthError`). Los ejemplos usan las mismas rutas de certificado que el README.
+- Updated dependencies [1cccecc]
+- Updated dependencies [bd57c86]
+  - @ramiidv/arca-common@0.8.0
+
 ## 0.5.0
 
 ### Minor Changes

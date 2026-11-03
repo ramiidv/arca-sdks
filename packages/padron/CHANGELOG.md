@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.0
+
+### Minor Changes
+
+- b874fa9: Revisión contra los manuales vigentes (constancia v4.1, A4 v1.3, A10 v1.2, A13 v1.4).
+  
+  - `TipoDomicilio` agrega `LEGAL_REAL` (`'LEGAL/REAL'`, el valor que informan los manuales) y `LOCALES_Y_ESTABLECIMIENTOS` (A4). `TipoDomicilio.LEGAL`, `TipoDomicilio.REAL` y `EstadoClave.LIMITADO` (no documentado; "limitada" aparece solo en `errorConstancia`) quedan `@deprecated`.
+  - `condicionIvaDesdePadron`: con `errorConstancia` y sin impuestos de IVA ni monotributo, el motivo es que ARCA no emitió la constancia, aunque haya otros impuestos (antes decía que podía ser consumidor final).
+
+### Patch Changes
+
+- 1cccecc: README y llms.txt: glosario, links a los manuales de A4, A10, A13 y A100, cómo asociar cada servicio al certificado, advertencia de `clearAuthCache()`, `MAX_PERSONA_LIST`, validación de documentos de `getIdPersonaListByDocumento` y `reason: 'otro'` (el SDK no lo emite: un Fault no reconocido queda como `ArcaSoapError`).
+- Updated dependencies [1cccecc]
+- Updated dependencies [bd57c86]
+  - @ramiidv/arca-common@0.8.0
+
 ## 0.7.0
 
 ### Minor Changes
