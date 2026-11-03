@@ -88,6 +88,7 @@ export {
   parseAfipDate,
   validateFecha,
   validateFechaRango,
+  diasEntre,
   // Helpers
   collectErrors,
   collectErrorsWithPrefix,

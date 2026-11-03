@@ -58,6 +58,7 @@ export function encodeRequest(input: unknown, schema: Schema, context: string, e
 // @public (undocumented)
 export interface Field {
     readonly choice?: boolean;
+    readonly maxItems?: number;
     readonly minItems?: number;
     // (undocumented)
     readonly optional?: boolean;
@@ -87,8 +88,8 @@ export const importe: (max?: number) => Field;
 // @public
 export const int: (min?: number, max?: number, minExclusive?: boolean) => Field;
 
-// @public (undocumented)
-export const list: (f: Field, minItems?: number) => Field;
+// @public
+export const list: (f: Field, minItems?: number, maxItems?: number) => Field;
 
 // @public
 export const must: (f: Field) => Field;
@@ -135,7 +136,7 @@ export const str: (o?: {
 }) => Field;
 
 // @public
-export const wrapped: (item: string, f: Field, minItems?: number) => Field;
+export const wrapped: (item: string, f: Field, minItems?: number, maxItems?: number) => Field;
 
 // @public
 export const xml: (name: string, f: Field) => Field;

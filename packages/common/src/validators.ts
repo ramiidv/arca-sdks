@@ -16,9 +16,10 @@ const VALID_PREFIXES = [20, 23, 24, 27, 30, 33, 34, 50, 51, 55];
 /**
  * Normaliza un CUIT/CUIL quitando guiones, puntos y espacios.
  * Acepta string (ej: `"20-12345678-6"`, `"20.12345678.6"`) o number. No valida.
+ * Un number se convierte tal cual (`2012345678.6` queda con el punto decimal).
  */
 export function normalizeCuit(cuit: string | number): string {
-  return String(cuit).replace(/[-.\s]/g, '');
+  return typeof cuit === 'number' ? String(cuit) : String(cuit).replace(/[-.\s]/g, '');
 }
 
 /**
@@ -341,6 +342,26 @@ export function validateFechaRango(fechaInicio: Date | string, fechaFin: Date | 
       'fechaFin',
     );
   }
+}
+
+/**
+ * Días de calendario de Argentina entre dos fechas (`hasta - desde`; negativo
+ * si `hasta` es anterior). La hora de un `Date` no cuenta. Acepta `Date` o
+ * strings `YYYYMMDD`/`YYYY-MM-DD`.
+ * @throws ArcaValidationError si alguna fecha es inválida.
+ */
+export function diasEntre(desde: Date | string, hasta: Date | string): number {
+  return (diaCalendario(hasta, 'hasta') - diaCalendario(desde, 'desde')) / MS_PER_DAY;
+}
+
+const MS_PER_DAY = 86_400_000;
+
+/** Medianoche UTC de la fecha calendario de Argentina de `date` (también años < 100). */
+function diaCalendario(date: Date | string, field: string): number {
+  const f = formatDate(toValidDate(date, field));
+  const t = new Date(0);
+  t.setUTCFullYear(Number(f.slice(0, 4)), Number(f.slice(4, 6)) - 1, Number(f.slice(6, 8)));
+  return t.getTime();
 }
 
 // ---------------------------------------------------------------------------

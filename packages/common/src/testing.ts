@@ -19,6 +19,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import forge from 'node-forge';
 import type { AccessTicket, TicketStorage } from './types.js';
+import { WSAA_NAMESPACE } from './constants.js';
 
 // ---------------------------------------------------------------------------
 // fetch simulado
@@ -189,10 +190,15 @@ export function soapResponse(element: string, inner: string, namespace: string):
   return soapEnvelope(`<${element} xmlns="${namespace}">${inner}</${element}>`);
 }
 
-/** Envelope con un SOAP Fault. */
+/** Escapa `&`, `<` y `>` para usar un texto como contenido de un elemento XML. */
+function escapeText(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Envelope con un SOAP Fault (`faultCode` y `faultString` se escapan). */
 export function soapFault(faultCode: string, faultString: string): string {
   return soapEnvelope(
-    `<soapenv:Fault><faultcode>${faultCode}</faultcode><faultstring>${faultString}</faultstring></soapenv:Fault>`,
+    `<soapenv:Fault><faultcode>${escapeText(faultCode)}</faultcode><faultstring>${escapeText(faultString)}</faultstring></soapenv:Fault>`,
   );
 }
 
@@ -214,9 +220,8 @@ export function loginResponse(token: string, expiration: Date, generation = new 
     '</header><credentials>' +
     `<token>${token}</token><sign>sign-${token}</sign>` +
     '</credentials></loginTicketResponse>';
-  const escaped = ta.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return soapEnvelope(
-    `<loginCmsResponse xmlns="http://wsaa.view.sua.dvadac.desein.afip.gov"><loginCmsReturn>${escaped}</loginCmsReturn></loginCmsResponse>`,
+    `<loginCmsResponse xmlns="${WSAA_NAMESPACE}"><loginCmsReturn>${escapeText(ta)}</loginCmsReturn></loginCmsResponse>`,
   );
 }
 

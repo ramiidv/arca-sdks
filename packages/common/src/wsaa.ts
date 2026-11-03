@@ -21,10 +21,16 @@ const DEFAULT_TA_LIFETIME_MS = 12 * 60 * 60_000;
 /** Espera por defecto antes de volver a intentar un login fallido (la spec de WSAA pide no reintentar enseguida). */
 const DEFAULT_LOGIN_ERROR_COOLDOWN_MS = 60_000;
 /**
- * Nombre de un servicio (WSN) en el TRA: letras, dígitos, `_` y `-` (ej:
- * `wsfe`, `ws_sr_padron_a13`, `sire-ws`), de 3 a 32 caracteres.
+ * Lapso en el que WSAA rechaza un TA repetido (`coe.alreadyAuthenticated`),
+ * según el manual del desarrollador de WSAA (§10.6).
  */
-const SERVICE_NAME_RE = /^[A-Za-z0-9_-]{3,32}$/;
+const ALREADY_AUTHENTICATED_COOLDOWN_MS = { production: 2 * 60_000, testing: 10 * 60_000 } as const;
+/**
+ * Nombre de un servicio (WSN) en el TRA, según el XSD del TRA: empieza con una
+ * letra y sigue con letras, dígitos, `_` o `-` (ej: `wsfe`, `ws_sr_padron_a13`,
+ * `sire-ws`), de 3 a 32 caracteres.
+ */
+const SERVICE_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]{2,31}$/;
 /**
  * Esperas (ms) entre relecturas del storage tras `coe.alreadyAuthenticated`:
  * otro proceso pudo haber obtenido el TA y estar por guardarlo.
@@ -45,7 +51,9 @@ export interface WsaaClientConfig {
   /**
    * Vigencia del TRA en minutos (`expirationTime` del pedido), de 1 a 1440
    * (default: 720). No es la vida del Ticket de Acceso: WSAA emite cada TA con
-   * su propio vencimiento (12 horas, según el manual).
+   * su propio vencimiento (12 horas, según el manual). El TRA nunca vence más
+   * de 24 horas después de su `generationTime`, que es 2 minutos anterior a la
+   * hora actual: con 1440, `expirationTime` queda 1438 minutos adelante.
    */
   tokenTTLMinutes?: number;
   /** Timeout en milisegundos (default: 30000) */
@@ -62,8 +70,8 @@ export interface WsaaClientConfig {
   onEvent?: (event: ArcaEvent) => void;
   /**
    * Storage persistente de Tickets de Acceso. Sin storage, un reinicio del
-   * proceso pierde el TA y WSAA rechaza el login siguiente hasta que venza
-   * (ver `ArcaTicketVigenteError`). Recomendado en producción.
+   * proceso pierde el TA y WSAA rechaza el login siguiente durante un lapso
+   * de retención (ver `ArcaTicketVigenteError`). Recomendado en producción.
    */
   ticketStorage?: TicketStorage;
   /**
@@ -98,6 +106,15 @@ export interface WsaaClientConfig {
    * Default: `Infinity` (hasta `clearTicket`/`clearAllTickets`/`resetLoginCooldown`); 0 lo desactiva.
    */
   permanentErrorCooldownMs?: number;
+  /**
+   * Tras `coe.alreadyAuthenticated` sin un ticket utilizable, durante cuántos
+   * ms `getAccessTicket` rechaza con `ArcaTicketVigenteError` sin llamar a
+   * WSAA: un pedido dentro del lapso de retención vuelve a ser rechazado.
+   * Default: el lapso del manual de WSAA, 120000 en producción y 600000 en
+   * homologación; 0 lo desactiva.
+   * `clearTicket`/`clearAllTickets`/`resetLoginCooldown` limpian la espera.
+   */
+  alreadyAuthenticatedCooldownMs?: number;
   /** `fetch` propio para los requests a WSAA. Default: `globalThis.fetch`. */
   fetch?: typeof fetch;
   /** Uso del transporte TLS legacy (ver `SoapCallOptions.legacyTls`). Default: `auto`. */
@@ -132,6 +149,7 @@ export class WsaaClient {
   private readonly keyPrefix: string;
   private readonly loginErrorCooldownMs: number;
   private readonly permanentErrorCooldownMs: number;
+  private readonly alreadyAuthenticatedCooldownMs: number;
   private offsetMs: number;
 
   private readonly pendingLogins = new Map<string, Promise<AccessTicket>>();
@@ -164,7 +182,13 @@ export class WsaaClient {
       throw new ArcaValidationError(
         `tokenTTLMinutes inválido: ${String(config.tokenTTLMinutes)}. Debe estar entre 1 y ${MAX_TOKEN_TTL_MINUTES} ` +
           '(es la vigencia del TRA; WSAA rechaza más de 24 horas).',
-        [{ field: 'tokenTTLMinutes', message: 'debe estar entre 1 y 1440', value: config.tokenTTLMinutes }],
+        [
+          {
+            field: 'tokenTTLMinutes',
+            message: `debe estar entre 1 y ${MAX_TOKEN_TTL_MINUTES}`,
+            value: config.tokenTTLMinutes,
+          },
+        ],
         'tokenTTLMinutes',
       );
     }
@@ -174,6 +198,11 @@ export class WsaaClient {
     this.offsetMs = config.clockOffsetMs ?? 0;
     this.loginErrorCooldownMs = Math.max(0, config.loginErrorCooldownMs ?? DEFAULT_LOGIN_ERROR_COOLDOWN_MS);
     this.permanentErrorCooldownMs = Math.max(0, config.permanentErrorCooldownMs ?? Infinity);
+    this.alreadyAuthenticatedCooldownMs = Math.max(
+      0,
+      config.alreadyAuthenticatedCooldownMs ??
+        ALREADY_AUTHENTICATED_COOLDOWN_MS[this.production ? 'production' : 'testing'],
+    );
     this.soapOpts = {
       timeout: config.timeout,
       retries: config.retries,
@@ -207,12 +236,14 @@ export class WsaaClient {
    *
    * El `signal` solo cancela la espera de este caller: un login en curso no se
    * aborta, porque un login que llega a WSAA y cuya respuesta se pierde deja
-   * el certificado bloqueado hasta que el TA venza.
+   * un TA vigente que no se puede recuperar, y WSAA rechaza los pedidos
+   * repetidos durante un lapso de retención (ver `ArcaTicketVigenteError`).
    *
    * @throws ArcaValidationError si `service` no es un nombre de servicio válido.
    * @throws ArcaAuthError si el login falla (ver `faultCode`, `retryable` y
    *   `cause`), o si el servicio está en espera tras un login fallido.
-   * @throws ArcaTicketVigenteError si WSAA indica que ya hay un TA vigente que no se encuentra.
+   * @throws ArcaTicketVigenteError si WSAA indica que ya hay un TA vigente que
+   *   no se encuentra, o si el servicio está en la espera posterior a ese rechazo.
    */
   async getAccessTicket(service: string, opts?: CallOptions): Promise<AccessTicket> {
     validateServiceName(service);
@@ -236,9 +267,10 @@ export class WsaaClient {
    * Invalida el ticket de un servicio, en memoria y en el `ticketStorage`, y
    * limpia la espera tras un login fallido.
    *
-   * Ojo: borrar un TA vigente no permite pedir otro: WSAA rechaza el login
-   * (`coe.alreadyAuthenticated`) hasta que venza. Para volver a intentar el
-   * login después de corregir un error, sin borrar tickets, usá `resetLoginCooldown`.
+   * Ojo: borrar un TA vigente no garantiza obtener otro: WSAA rechaza los
+   * pedidos repetidos (`coe.alreadyAuthenticated`) durante un lapso de
+   * retención. Para volver a intentar el login después de corregir un error,
+   * sin borrar tickets, usá `resetLoginCooldown`.
    */
   async clearTicket(service: string): Promise<void> {
     this.#ticketCache.delete(service);
@@ -340,13 +372,15 @@ export class WsaaClient {
           safeEmit(this.onEvent, { type: 'auth:cache-hit', service, source });
           return usable;
         }
-        throw new ArcaTicketVigenteError(service, { cause: error });
+        const waitMs = this.alreadyAuthenticatedCooldownMs;
+        if (waitMs > 0) this.loginFailures.set(service, { until: Date.now() + waitMs, error, kind: 'vigente' });
+        throw new ArcaTicketVigenteError(service, { cause: error, retryAfterMs: waitMs > 0 ? waitMs : undefined });
       }
       const kind = classifyLoginError(error);
       const waitMs =
         kind === 'permanent' ? this.permanentErrorCooldownMs : kind === 'transient' ? this.loginErrorCooldownMs : 0;
-      if (waitMs > 0) {
-        this.loginFailures.set(service, { until: Date.now() + waitMs, error, permanent: kind === 'permanent' });
+      if (kind !== 'none' && waitMs > 0) {
+        this.loginFailures.set(service, { until: Date.now() + waitMs, error, kind });
       }
       if (error instanceof ArcaAuthError) throw error;
       const msg = error instanceof Error ? error.message : String(error);
@@ -541,7 +575,9 @@ export class WsaaClient {
     // azar evita colisiones entre TRAs generados en el mismo segundo.
     const uniqueId = randomInt(1, 0x1_0000_0000);
     const generationTime = new Date(now.getTime() - TRA_GENERATION_OFFSET_MS).toISOString();
-    const expirationTime = new Date(now.getTime() + this.tokenTTLMinutes * 60_000).toISOString();
+    // WSAA rechaza un TRA que vence más de 24 horas después de su generationTime.
+    const ttlMs = Math.min(this.tokenTTLMinutes * 60_000, MAX_TOKEN_TTL_MINUTES * 60_000 - TRA_GENERATION_OFFSET_MS);
+    const expirationTime = new Date(now.getTime() + ttlMs).toISOString();
 
     const tra = {
       loginTicketRequest: {
@@ -683,14 +719,21 @@ function errorFields(error: unknown): { faultCode?: string; statusCode?: number 
 interface LoginFailure {
   until: number;
   error: unknown;
-  /** Error no reintentable: espera de `permanentErrorCooldownMs`. */
-  permanent: boolean;
+  /**
+   * `transient`: espera de `loginErrorCooldownMs`; `permanent`: error no
+   * reintentable, espera de `permanentErrorCooldownMs`; `vigente`:
+   * `coe.alreadyAuthenticated`, espera de `alreadyAuthenticatedCooldownMs`.
+   */
+  kind: 'transient' | 'permanent' | 'vigente';
 }
 
 function cooldownError(service: string, failure: LoginFailure, remainingMs: number): ArcaAuthError {
+  if (failure.kind === 'vigente') {
+    return new ArcaTicketVigenteError(service, { cause: failure.error, retryAfterMs: remainingMs });
+  }
   const msg = failure.error instanceof Error ? failure.error.message : String(failure.error);
   const fields = errorFields(failure.error);
-  if (failure.permanent) {
+  if (failure.kind === 'permanent') {
     const until = Number.isFinite(remainingMs)
       ? ` (o durante ${Math.ceil(remainingMs / 1000)}s más, permanentErrorCooldownMs)`
       : '';
@@ -712,7 +755,8 @@ function cooldownError(service: string, failure: LoginFailure, remainingMs: numb
 function validateServiceName(service: string): void {
   if (typeof service !== 'string' || !SERVICE_NAME_RE.test(service)) {
     throw new ArcaValidationError(
-      `Nombre de servicio WSAA inválido: "${String(service)}". Debe tener de 3 a 32 letras, dígitos, "_" o "-" ` +
+      `Nombre de servicio WSAA inválido: "${String(service)}". Debe empezar con una letra y tener de 3 a 32 ` +
+        'letras, dígitos, "_" o "-" ' +
         '(ej: "wsfe", "ws_sr_padron_a13").',
       [{ field: 'service', message: 'nombre de servicio inválido', value: service }],
       'service',

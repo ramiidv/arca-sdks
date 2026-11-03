@@ -1,6 +1,6 @@
 # Plan de trabajo
 
-Estado al 2026-11-01 y próximos pasos. Actualizar este archivo cuando se cierre
+Estado al 2026-11-03 y próximos pasos. Actualizar este archivo cuando se cierre
 o se agregue algo.
 
 ## Estado actual
@@ -28,6 +28,13 @@ los manuales de ARCA: bugs, manejo de errores de WSAA según la especificación,
 helpers compartidos en common, documentación y CI. El detalle está en los
 CHANGELOG de cada paquete.
 
+Sin publicar todavía (changesets `manuales-*`): revisión contra los manuales
+vigentes de cada servicio. Redondeo mitad al par en todos los decimales,
+`coe.alreadyAuthenticated` con una espera de minutos (el lapso de retención de
+WSAA) en lugar de hasta que venza el TA, derivados granarios (WSCPE) y
+liquidación secundaria (WSLPG) en agro, y validaciones locales nuevas en cada
+SDK.
+
 ## Pendientes operativos
 
 - [ ] Redesplegar arca-server con los SDKs nuevos. Para subir desde facturacion 5 /
@@ -36,7 +43,7 @@ CHANGELOG de cada paquete.
       Con facturacion 6.1 / common 0.7 revisar además los cambios de
       comportamiento de los CHANGELOG (validaciones locales nuevas, bloqueo de
       WSAA ante errores no reintentables, `status().ok` falso si un servidor
-      no está en `OK`).
+      no está en `OK`, redondeo mitad al par).
 - [ ] Commitear los cambios de la landing en `ramiidv/arca-sdk-web`.
 - [ ] Cargar en el repo los secrets `ARCA_TEST_CERT`, `ARCA_TEST_KEY` y
       `ARCA_TEST_CUIT`, y la variable `ARCA_TEST_SERVICES`.
@@ -56,7 +63,10 @@ CHANGELOG de cada paquete.
 - cdc `constatar()` devuelve `events`; las tablas, `eventos`.
 - Constantes de endpoints con la misma forma en todos los paquetes.
 - Quitar los alias deprecados (`afipSoapCall`, `parseAfipDate`, re-exports de
-  padron).
+  padron, `TipoDomicilio.LEGAL`/`REAL` y `EstadoClave.LIMITADO` de padron).
+- Quitar las operaciones que los manuales discontinuaron y siguen en el WSDL:
+  `consultarObligadoRecepcion` (fecred), `liquidacionAnular` y `lsgAnular`
+  (agro).
 
 ### 2. Mantenimiento
 

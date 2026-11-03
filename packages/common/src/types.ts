@@ -127,6 +127,12 @@ export interface ArcaBaseConfig {
    * `resetLoginCooldown`); 0 lo desactiva.
    */
   permanentErrorCooldownMs?: number;
+  /**
+   * Espera tras `coe.alreadyAuthenticated` sin un ticket utilizable (ver
+   * `WsaaClientConfig.alreadyAuthenticatedCooldownMs`). Default: 120000 en
+   * producción y 600000 en homologación; 0 la desactiva.
+   */
+  alreadyAuthenticatedCooldownMs?: number;
   /** `fetch` propio para todos los requests HTTP (proxy, mTLS, tests). Default: `globalThis.fetch`. */
   fetch?: typeof fetch;
   /** Uso del transporte TLS legacy para hosts con DH de 1024 bits (default: `auto`). */

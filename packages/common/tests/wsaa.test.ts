@@ -132,7 +132,46 @@ describe('WsaaClient: TA vigente', () => {
     expect(err).toBeInstanceOf(ArcaAuthError);
     expect(err.code).toBe('ARCA_TICKET_VIGENTE');
     expect(err.service).toBe('wsfe');
-    expect(err.message).toMatch(/esperar a que venza/);
+    expect(err.retryable).toBe(true);
+    expect(err.retryAfterMs).toBe(600_000);
+    expect(err.message).toMatch(/lapso de retención/);
+  });
+
+  it('durante la espera no vuelve a llamar a WSAA; después sí', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const fetch = mockFetch(alreadyAuth(), xmlResponse(loginResponse('T1', new Date(Date.now() + 12 * HOUR))));
+      const wsaa = client({ production: true });
+      await expect(wsaa.getAccessTicket('wsfe')).rejects.toMatchObject({ retryAfterMs: 120_000 });
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(Date.now() + 60_000);
+      const again = await wsaa.getAccessTicket('wsfe').catch((e) => e);
+      expect(again).toBeInstanceOf(ArcaTicketVigenteError);
+      expect(again.retryAfterMs).toBeLessThanOrEqual(60_000);
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(Date.now() + 61_000);
+      expect((await wsaa.getAccessTicket('wsfe')).token).toBe('T1');
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('alreadyAuthenticatedCooldownMs: 0 desactiva la espera; resetLoginCooldown la limpia', async () => {
+    const fetch = mockFetch(alreadyAuth(), alreadyAuth(), alreadyAuth(), alreadyAuth());
+    const sinEspera = client({ alreadyAuthenticatedCooldownMs: 0 });
+    const first = await sinEspera.getAccessTicket('wsfe').catch((e) => e);
+    expect(first.retryAfterMs).toBeUndefined();
+    await expect(sinEspera.getAccessTicket('wsfe')).rejects.toBeInstanceOf(ArcaTicketVigenteError);
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    const conEspera = client();
+    await expect(conEspera.getAccessTicket('wsfe')).rejects.toBeInstanceOf(ArcaTicketVigenteError);
+    conEspera.resetLoginCooldown('wsfe');
+    await expect(conEspera.getAccessTicket('wsfe')).rejects.toBeInstanceOf(ArcaTicketVigenteError);
+    expect(fetch).toHaveBeenCalledTimes(4);
   });
 
   it('si otro proceso guardó el ticket mientras tanto, lo usa', async () => {
@@ -507,5 +546,65 @@ describe('FileTicketStorage: robustez', () => {
     } finally {
       await rm(base, { recursive: true, force: true });
     }
+  });
+});
+
+describe('WsaaClient: espera tras coe.alreadyAuthenticated', () => {
+  const alreadyAuth = () =>
+    xmlResponse(
+      soapFault('ns1:coe.alreadyAuthenticated', 'El CEE ya posee un TA valido para el acceso al WSN solicitado'),
+      500,
+    );
+
+  it('las llamadas concurrentes durante la espera rechazan sin llamar a WSAA', async () => {
+    const fetch = mockFetch(alreadyAuth());
+    const wsaa = client();
+    const first = await wsaa.getAccessTicket('wsfe').catch((e) => e);
+    expect(first).toBeInstanceOf(ArcaTicketVigenteError);
+
+    const results = await Promise.all([1, 2, 3].map(() => wsaa.getAccessTicket('wsfe').catch((e) => e)));
+    for (const err of results) {
+      expect(err).toBeInstanceOf(ArcaTicketVigenteError);
+      expect(err.retryable).toBe(true);
+      expect(err.retryAfterMs).toBeGreaterThan(0);
+      expect(err.retryAfterMs).toBeLessThanOrEqual(600_000);
+      expect(err.cause).toBeInstanceOf(ArcaSoapError);
+      expect(err.faultCode).toBe('ns1:coe.alreadyAuthenticated');
+    }
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('clearTicket y clearAllTickets limpian la espera', async () => {
+    const fetch = mockFetch(alreadyAuth(), alreadyAuth(), alreadyAuth());
+    const wsaa = client();
+    await expect(wsaa.getAccessTicket('wsfe')).rejects.toBeInstanceOf(ArcaTicketVigenteError);
+    await wsaa.clearTicket('wsfe');
+    await expect(wsaa.getAccessTicket('wsfe')).rejects.toBeInstanceOf(ArcaTicketVigenteError);
+    await wsaa.clearAllTickets();
+    await expect(wsaa.getAccessTicket('wsfe')).rejects.toBeInstanceOf(ArcaTicketVigenteError);
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('durante la espera usa el ticket que otro proceso guardó en el storage', async () => {
+    const storage = new MemoryTicketStorage();
+    const fetch = mockFetch(alreadyAuth());
+    const wsaa = client({ ticketStorage: storage });
+    await expect(wsaa.getAccessTicket('wsfe')).rejects.toBeInstanceOf(ArcaTicketVigenteError);
+
+    await storage.set(wsaa.ticketKey('wsfe'), {
+      token: 'OTRO',
+      sign: 's',
+      expirationTime: new Date(Date.now() + HOUR).toISOString(),
+    });
+    expect((await wsaa.getAccessTicket('wsfe')).token).toBe('OTRO');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('la espera es por servicio', async () => {
+    const fetch = mockFetch(alreadyAuth(), xmlResponse(loginResponse('P1', new Date(Date.now() + 12 * HOUR))));
+    const wsaa = client();
+    await expect(wsaa.getAccessTicket('wsfe')).rejects.toBeInstanceOf(ArcaTicketVigenteError);
+    expect((await wsaa.getAccessTicket('ws_sr_padron_a13')).token).toBe('P1');
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 });

@@ -19,8 +19,8 @@ export const WSAA_NAMESPACE = 'http://wsaa.view.sua.dvadac.desein.afip.gov';
  * Fuente: ARCA, "Tablas del sistema" de Factura Electrónica, tabla
  * "Documento identificatorio del comprador"
  * (https://www.afip.gob.ar/fe/ayuda/tablas.asp →
- * https://www.afip.gob.ar/fe/documentos/TABLA%20DOC_ID%20COMPRADOR%20V.0%20%2025082010.xls).
- * No existe el código 15.
+ * https://www.afip.gob.ar/fe/documentos/TABLA%20DOC_ID%20COMPRADOR%20V.0%20%2025082010.xls),
+ * más el código 31 (manual WSFEv1 4.5). No existe el código 15.
  */
 export enum DocTipo {
   CI_POLICIA_FEDERAL = 0,
@@ -48,6 +48,8 @@ export enum DocTipo {
   CI_SANTA_CRUZ = 23,
   CI_TIERRA_DEL_FUEGO = 24,
   CERTIFICADO_MIGRACION = 30,
+  /** Fondo Común de Inversiones CNV: solo para entidades financieras (manual WSFEv1 4.5, validaciones 10270-10272). */
+  FONDO_COMUN_INVERSION_CNV = 31,
   CUIT = 80,
   CUIL = 86,
   CDI = 87,

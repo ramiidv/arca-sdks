@@ -111,23 +111,32 @@ export class ArcaAuthError extends ArcaError {
  *
  * Pasa cuando el proceso se reinicia sin `ticketStorage`, cuando el storage se
  * borró, o cuando un login anterior llegó a ARCA pero la respuesta se perdió.
- * El TA anterior no se puede recuperar: hay que esperar a que venza (WSAA los
- * emite con vigencia de hasta 12 horas) o usar otro certificado.
+ * WSAA rechaza los pedidos repetidos durante un lapso de retención (según el
+ * manual del desarrollador, 2 minutos en producción y 10 en homologación); el
+ * cliente no vuelve a llamar a WSAA hasta `retryAfterMs` (ver
+ * `WsaaClientConfig.alreadyAuthenticatedCooldownMs`). Es `retryable`.
  */
 export class ArcaTicketVigenteError extends ArcaAuthError {
   static override readonly code: string = 'ARCA_TICKET_VIGENTE';
   public readonly service: string;
+  /** Cuántos ms faltan para que el cliente vuelva a intentar el login, si se conoce. */
+  public readonly retryAfterMs?: number;
 
-  constructor(service: string, options?: { cause?: unknown }) {
+  constructor(service: string, options?: { cause?: unknown; retryAfterMs?: number }) {
+    const wait =
+      options?.retryAfterMs !== undefined && Number.isFinite(options.retryAfterMs)
+        ? ` El próximo login se intenta en ${Math.ceil(options.retryAfterMs / 1000)}s.`
+        : '';
     super(
       `WSAA indica que ya existe un Ticket de Acceso vigente para el servicio "${service}", ` +
-        'pero no está disponible en memoria ni en el ticketStorage. ' +
-        'No se puede recuperar: hay que esperar a que venza (hasta 12 horas desde que se emitió) ' +
-        'o usar otro certificado. Para evitarlo, configurá un ticketStorage persistente.',
-      options,
+        'pero no está disponible en memoria ni en el ticketStorage. WSAA rechaza los pedidos ' +
+        `repetidos durante un lapso de retención (minutos).${wait} ` +
+        'Para evitarlo, configurá un ticketStorage persistente.',
+      { cause: options?.cause, retryable: true },
     );
     this.name = 'ArcaTicketVigenteError';
     this.service = service;
+    this.retryAfterMs = options?.retryAfterMs;
   }
 }
 

@@ -4,7 +4,7 @@
  * https://www.arca.gob.ar/fe/qr/documentos/QRespecificaciones.pdf).
  */
 import { ArcaValidationError } from './errors.js';
-import { roundHalfUp } from './rounding.js';
+import { roundHalfEven } from './rounding.js';
 import { formatDate, validateCuit } from './validators.js';
 
 /** URL base del QR según la especificación vigente. */
@@ -18,19 +18,19 @@ export interface QRInput {
   cuit: number | string;
   /** Punto de venta (hasta 5 dígitos) */
   ptoVta: number;
-  /** Tipo de comprobante */
+  /** Tipo de comprobante (hasta 3 dígitos) */
   tipoCmp: number;
   /** Número de comprobante (hasta 8 dígitos) */
   nroCmp: number;
-  /** Importe total */
+  /** Importe total (hasta 13 enteros; se redondea a 2 decimales) */
   importe: number;
-  /** Código de moneda */
+  /** Código de moneda (3 caracteres) */
   moneda: string;
-  /** Cotización (se redondea a 6 decimales) */
+  /** Cotización (hasta 13 enteros; se redondea a 6 decimales) */
   ctz: number;
-  /** Tipo de documento del receptor (de corresponder) */
+  /** Tipo de documento del receptor (de corresponder, hasta 2 dígitos) */
   tipoDocRec?: number;
-  /** Número de documento del receptor (de corresponder) */
+  /** Número de documento del receptor (de corresponder, hasta 20 dígitos; como string si no entra en un `number`) */
   nroDocRec?: number | string;
   /** Tipo de código de autorización: "E" = CAE, "A" = CAEA */
   tipoCodAut?: 'E' | 'A';
@@ -49,18 +49,12 @@ function fail(field: string, msg: string, value?: unknown): never {
   throw new ArcaValidationError(`Validación: ${msg}`, [{ field, message: msg, value }], field);
 }
 
-/**
- * Redondea un importe a 2 decimales desplazando la coma en la representación
- * decimal (1.005 → 1.01), igual que los importes de WSFE.
- */
-function redondear2(n: number): number {
-  const s = String(n);
-  const cents = s.includes('e') ? Math.round(n * 100) : Math.round(Number(`${s}e2`));
-  return cents / 100;
-}
-
-/** Topes de la especificación: punto de venta de 5 dígitos y número de comprobante de 8. */
-const MAX_DIGITS = { ptoVta: 5, nroCmp: 8 } as const;
+/** Cantidad máxima de dígitos de los campos numéricos según la especificación. */
+const MAX_DIGITS = { ptoVta: 5, tipoCmp: 3, nroCmp: 8, tipoDocRec: 2, nroDocRec: 20 } as const;
+/** `importe` y `ctz` tienen hasta 13 dígitos enteros en la especificación. */
+const MAX_INTEGER_DIGITS = 13;
+const MAX_DECIMAL = 10 ** MAX_INTEGER_DIGITS;
+const NRO_DOC_REC_RE = new RegExp(`^\\d{1,${MAX_DIGITS.nroDocRec}}$`);
 
 /**
  * Genera la URL del QR de un comprobante según la especificación de ARCA
@@ -69,7 +63,7 @@ const MAX_DIGITS = { ptoVta: 5, nroCmp: 8 } as const;
  *
  * - `fecha` se envía como `YYYY-MM-DD` (acepta `YYYYMMDD`, `YYYY-MM-DD` o `Date`).
  * - `codAut` se envía como número de 14 dígitos (acepta el string que devuelve ARCA).
- * - `importe` se redondea a 2 decimales y `ctz` a 6.
+ * - `importe` se redondea a 2 decimales y `ctz` a 6, mitad al par (como WSFE).
  * - `tipoDocRec` / `nroDocRec` son "de corresponder": si no vienen, no se incluyen.
  * - La URL base es `QR_URL` (https://www.arca.gob.ar/fe/qr/) salvo `options.baseUrl`.
  *
@@ -92,17 +86,20 @@ export function generarUrlQR(input: QRInput, options?: QROptions): string {
   if (!/^\d{14}$/.test(codAut)) fail('codAut', 'codAut debe ser el CAE/CAEA de 14 dígitos', input.codAut);
   for (const k of ['ptoVta', 'tipoCmp', 'nroCmp'] as const) {
     if (!Number.isInteger(input[k]) || input[k] < 1) fail(k, `${k} debe ser un entero >= 1`, input[k]);
-  }
-  for (const k of ['ptoVta', 'nroCmp'] as const) {
     if (input[k] >= 10 ** MAX_DIGITS[k]) fail(k, `${k} debe tener como máximo ${MAX_DIGITS[k]} dígitos`, input[k]);
   }
   if (typeof input.importe !== 'number' || !Number.isFinite(input.importe))
     fail('importe', 'importe debe ser un número', input.importe);
+  const importe = roundHalfEven(input.importe, 2);
+  if (Math.abs(importe) >= MAX_DECIMAL)
+    fail('importe', `importe debe tener como máximo ${MAX_INTEGER_DIGITS} enteros`, input.importe);
   if (typeof input.ctz !== 'number' || !Number.isFinite(input.ctz) || input.ctz <= 0)
     fail('ctz', 'ctz debe ser un número > 0', input.ctz);
-  const ctz = roundHalfUp(input.ctz, 6);
+  const ctz = roundHalfEven(input.ctz, 6);
   if (ctz <= 0) fail('ctz', 'ctz debe ser un número > 0', input.ctz);
-  if (!input.moneda) fail('moneda', 'moneda es requerida', input.moneda);
+  if (ctz >= MAX_DECIMAL) fail('ctz', `ctz debe tener como máximo ${MAX_INTEGER_DIGITS} enteros`, input.ctz);
+  if (typeof input.moneda !== 'string' || input.moneda.length !== 3)
+    fail('moneda', 'moneda debe ser el código de 3 caracteres', input.moneda);
   const tipoCodAut = input.tipoCodAut ?? 'E';
   if (tipoCodAut !== 'E' && tipoCodAut !== 'A')
     fail('tipoCodAut', 'tipoCodAut debe ser "E" (CAE) o "A" (CAEA)', tipoCodAut);
@@ -114,21 +111,44 @@ export function generarUrlQR(input: QRInput, options?: QROptions): string {
     ptoVta: input.ptoVta,
     tipoCmp: input.tipoCmp,
     nroCmp: input.nroCmp,
-    importe: redondear2(input.importe),
+    importe,
     moneda: input.moneda,
     ctz,
   };
-  if (input.tipoDocRec !== undefined && input.tipoDocRec !== null) payload.tipoDocRec = input.tipoDocRec;
-  if (input.nroDocRec !== undefined && input.nroDocRec !== null && input.nroDocRec !== '') {
-    const nro = Number(input.nroDocRec);
-    if (!Number.isSafeInteger(nro) || nro < 0)
-      fail('nroDocRec', 'nroDocRec debe ser un número entero', input.nroDocRec);
-    payload.nroDocRec = nro;
+  if (input.tipoDocRec !== undefined && input.tipoDocRec !== null) {
+    const max = MAX_DIGITS.tipoDocRec;
+    if (!Number.isInteger(input.tipoDocRec) || input.tipoDocRec < 0 || input.tipoDocRec >= 10 ** max)
+      fail('tipoDocRec', `tipoDocRec debe ser un entero de hasta ${max} dígitos`, input.tipoDocRec);
+    payload.tipoDocRec = input.tipoDocRec;
+  }
+  // Hasta 20 dígitos: se escribe como número JSON a partir de los dígitos, sin pasar por `number`.
+  let nroDocRec: string | undefined;
+  const rawDocRec =
+    typeof input.nroDocRec === 'string' ? input.nroDocRec.trim() : (input.nroDocRec as number | null | undefined);
+  if (rawDocRec !== undefined && rawDocRec !== null && rawDocRec !== '') {
+    if (typeof rawDocRec === 'number') {
+      if (!Number.isSafeInteger(rawDocRec) || rawDocRec < 0)
+        fail(
+          'nroDocRec',
+          'nroDocRec debe ser un entero >= 0 (si supera Number.MAX_SAFE_INTEGER, pasalo como string)',
+          input.nroDocRec,
+        );
+    } else if (typeof rawDocRec !== 'string' || !NRO_DOC_REC_RE.test(rawDocRec)) {
+      fail(
+        'nroDocRec',
+        `nroDocRec debe ser un número entero de hasta ${MAX_DIGITS.nroDocRec} dígitos`,
+        input.nroDocRec,
+      );
+    }
+    nroDocRec = String(rawDocRec).replace(/^0+(?=\d)/, '');
+    payload.nroDocRec = nroDocRec;
   }
   payload.tipoCodAut = tipoCodAut;
   // 14 dígitos < 2^53: el número es exacto.
   payload.codAut = Number(codAut);
 
-  const base64 = Buffer.from(JSON.stringify(payload)).toString('base64');
+  let json = JSON.stringify(payload);
+  if (nroDocRec !== undefined) json = json.replace(`"nroDocRec":"${nroDocRec}"`, `"nroDocRec":${nroDocRec}`);
+  const base64 = Buffer.from(json).toString('base64');
   return `${options?.baseUrl ?? QR_URL}?p=${base64}`;
 }

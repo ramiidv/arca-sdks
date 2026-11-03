@@ -213,10 +213,10 @@ describe('WsaaClient: validaciones de configuración', () => {
     expect(() => client({ tokenTTLMinutes: 1440 })).not.toThrow();
   });
 
-  it('nombre de servicio: 3 a 32 letras, dígitos, _ o -', async () => {
+  it('nombre de servicio: empieza con letra, 3 a 32 letras, dígitos, _ o -', async () => {
     const fetch = mockFetch();
     const wsaa = client();
-    for (const service of ['ws', 'wsfe;drop', 'a'.repeat(33), 'ws fe', '']) {
+    for (const service of ['ws', 'wsfe;drop', 'a'.repeat(33), 'ws fe', '', '1wsfe', '_wsfe', '-wsfe']) {
       await expect(wsaa.getAccessTicket(service)).rejects.toBeInstanceOf(ArcaValidationError);
     }
     expect(fetch).not.toHaveBeenCalled();
@@ -310,6 +310,15 @@ describe('WsaaClient: TRA y firma CMS', () => {
     const now = Date.now() + offset;
     expect(Math.abs(gen - (now - 2 * 60_000))).toBeLessThan(5_000);
     expect(Math.abs(exp - (now + 30 * 60_000))).toBeLessThan(5_000);
+  });
+
+  it('con tokenTTLMinutes 1440 el TRA vence 24 horas después de su generationTime', async () => {
+    const fetch = mockFetch(ok());
+    await client({ tokenTTLMinutes: 1440 }).getAccessTicket('wsfe');
+    const tra = traOf(bodyOf(fetch, 0));
+    const gen = Date.parse(/<generationTime>([^<]+)</.exec(tra)![1]);
+    const exp = Date.parse(/<expirationTime>([^<]+)</.exec(tra)![1]);
+    expect(exp - gen).toBe(24 * HOUR);
   });
 
   it('la firma CMS (SHA-256, atributos autenticados) verifica con la clave pública del certificado', async () => {

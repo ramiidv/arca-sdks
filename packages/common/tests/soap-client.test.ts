@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { vi } from 'vitest';
-import { afipSoapCall, soapCall } from '../src/soap-client.js';
-import { ArcaSoapError } from '../src/errors.js';
+import { afipSoapCall, buildXml, soapCall } from '../src/soap-client.js';
+import { ArcaSoapError, ArcaValidationError } from '../src/errors.js';
 import { mockFetch, soapEnvelope, soapFault, xmlResponse } from './helpers.js';
 
 const URL = 'https://example.test/ws';
@@ -568,5 +568,36 @@ describe('parseNumbers', () => {
     expect(parseXml(xml)).toEqual({ root: { a: 10.5, b: 1000, c: 3 } });
     expect(parseXml(xml, { parseNumbers: false })).toEqual({ root: { a: '10.50', b: '1E3', c: '3' } });
     expect(parseXml(xml, { parseNumbers: true })).toEqual({ root: { a: 10.5, b: 1000, c: 3 } });
+  });
+});
+
+describe('buildXml', () => {
+  it('omite null/undefined y envía un Date como xsd:dateTime en hora de Argentina', () => {
+    const xml = buildXml({ req: { a: null, b: undefined, fecha: new Date('2026-11-01T11:30:00Z'), l: [1, null, 2] } });
+    expect(xml.replace(/>\s+</g, '><').trim()).toBe(
+      '<req><fecha>2026-11-01T08:30:00-03:00</fecha><l>1</l><l>2</l></req>',
+    );
+  });
+});
+
+describe('buildXml: Date en cualquier nivel', () => {
+  it('formatea Date dentro de arrays y objetos anidados', () => {
+    const d = new Date('2026-11-01T11:30:00Z');
+    const xml = buildXml({ req: { items: [{ f: d }, d], sub: { deep: { f: d } } } }).replace(/>\s+</g, '><');
+    expect(xml).toContain('<items><f>2026-11-01T08:30:00-03:00</f></items><items>2026-11-01T08:30:00-03:00</items>');
+    expect(xml).toContain('<sub><deep><f>2026-11-01T08:30:00-03:00</f></deep></sub>');
+  });
+
+  it('un Date inválido lanza ArcaValidationError', () => {
+    expect(() => buildXml({ req: { f: new Date(Number.NaN) } })).toThrow(ArcaValidationError);
+  });
+});
+
+describe('testing.soapFault', () => {
+  it('escapa faultcode y faultstring', async () => {
+    mockFetch(xmlResponse(soapFault('ns1:a<b', 'Tipo <x> & "y"'), 500));
+    const err = await soapCall('https://example.test/ws', '<x/>').catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err).toMatchObject({ faultCode: 'ns1:a<b', faultString: 'Tipo <x> & "y"' });
   });
 });

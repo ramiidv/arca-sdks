@@ -4,8 +4,8 @@
  * Un `Schema` lista los elementos de una `xsd:sequence` en el orden del XSD.
  * Con el mismo schema se:
  * - codifica un request (`encodeRequest`): orden XSD, campos obligatorios,
- *   rangos, largos, CUIT con dígito verificador, decimales redondeados según
- *   `fractionDigits`, fechas `xsd:date`/`xsd:dateTime`;
+ *   rangos, largos, CUIT con dígito verificador, decimales redondeados mitad
+ *   al par según `fractionDigits`, fechas `xsd:date`/`xsd:dateTime`;
  * - decodifica una respuesta (`decodeResponse`): `xs:string` → `string`, IDs
  *   largos (CTG/COE) → `string`, números → `number`, arrays de un solo
  *   elemento → array.
@@ -28,7 +28,7 @@
 import { formatDateTimeAR } from './dates.js';
 import { ArcaResponseError, ArcaValidationError } from './errors.js';
 import type { ValidationErrorDetail } from './errors.js';
-import { roundHalfUp } from './rounding.js';
+import { roundHalfEven } from './rounding.js';
 import { ensureArray } from './soap-client.js';
 import type { SoapOperationKind } from './types.js';
 import { formatDate, validateCuit } from './validators.js';
@@ -76,6 +76,8 @@ export interface Field {
   readonly optional?: boolean;
   /** Si está definido, el campo es una lista con este mínimo de elementos. */
   readonly minItems?: number;
+  /** En requests: máximo de elementos de la lista (`maxOccurs` del XSD o tope del manual). */
+  readonly maxItems?: number;
   /**
    * Nombre del elemento ítem dentro de un contenedor (ej: `deducciones` →
    * `deduccion[]`). El usuario pasa/recibe directamente el array.
@@ -108,6 +110,8 @@ export type Schema = { readonly [element: string]: Field };
 /**
  * `xsd:string`. `patternMessage` reemplaza el mensaje por defecto cuando no se
  * cumple `pattern` (ej: `str({ pattern: /\S/, patternMessage: 'no puede estar vacío' })`).
+ * En requests rechaza los caracteres que XML 1.0 no admite (controles salvo
+ * tab, LF y CR; U+FFFE/U+FFFF) y los surrogates UTF-16 sueltos.
  */
 export const str = (
   o: { minLen?: number; maxLen?: number; values?: readonly string[]; pattern?: RegExp; patternMessage?: string } = {},
@@ -120,7 +124,10 @@ export const int = (min?: number, max?: number, minExclusive = false): Field => 
 });
 /** ID numérico largo (nroCTG, COE): se envía y se devuelve como string de dígitos. */
 export const id = (): Field => ({ scalar: { kind: 'id' } });
-/** `xsd:decimal` con `fractionDigits`: se redondea a `digits` decimales. */
+/**
+ * `xsd:decimal` con `fractionDigits`: se redondea a `digits` decimales, mitad al
+ * par (Round Half Even, el método que indican los manuales de ARCA).
+ */
 export const dec = (digits: number, min?: number, max?: number, minExclusive = false): Field => ({
   scalar: { kind: 'dec', digits, min, max, minExclusive },
 });
@@ -163,7 +170,7 @@ export const cuit = (o: { decodeAs?: 'number' | 'string' } = {}): Field => ({
 export const date = (): Field => ({ scalar: { kind: 'date' } });
 /** Fecha `AAAAMMDD` (servicios ASMX como WSFE/WSCDC). Acepta `Date` o string `AAAAMMDD`/`AAAA-MM-DD`. */
 export const date8 = (): Field => ({ scalar: { kind: 'date8' } });
-/** `xsd:dateTime`. Acepta `Date` (hora de Argentina, -03:00) o string ISO-8601. */
+/** `xsd:dateTime`. Acepta `Date` (hora de Argentina, -03:00) o string ISO-8601 con segundos. */
 export const datetime = (): Field => ({ scalar: { kind: 'datetime' } });
 export const base64 = (): Field => ({ scalar: { kind: 'base64' } });
 export const obj = (schema: Schema): Field => ({ schema });
@@ -179,15 +186,26 @@ export const choice = (schema: Schema): Field => ({
 export const opt = (f: Field): Field => ({ ...f, optional: true });
 /** Respuestas: el elemento es obligatorio según el XSD (`minOccurs=1`). */
 export const must = (f: Field): Field => ({ ...f, required: true });
-export const list = (f: Field, minItems = 1): Field => ({ ...f, minItems });
+/** Lista de elementos repetidos, con mínimo (default 1) y máximo opcional (solo se verifican en requests). */
+export const list = (f: Field, minItems = 1, maxItems?: number): Field => ({ ...f, minItems, maxItems });
 /** Contenedor con ítems repetidos: `<container><item/>...</container>`. */
-export const wrapped = (item: string, f: Field, minItems = 1): Field => ({ ...f, minItems, wrap: item });
+export const wrapped = (item: string, f: Field, minItems = 1, maxItems?: number): Field => ({
+  ...f,
+  minItems,
+  maxItems,
+  wrap: item,
+});
 
 // ---------------------------------------------------------------------------
 // Encode (requests)
 // ---------------------------------------------------------------------------
 
-const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/;
+const DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/;
+/** Caracteres que XML 1.0 no admite (controles salvo tab, LF y CR, y U+FFFE/U+FFFF). */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: es justamente lo que se busca
+const XML_INVALID_CHARS_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/;
+/** Surrogate UTF-16 sin su par: no es un carácter, XML 1.0 tampoco lo admite. */
+const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date);
@@ -211,6 +229,8 @@ function encodeScalar(v: unknown, s: Scalar, path: string, errors: ValidationErr
       if (s.minLen !== undefined && v.length < s.minLen) return fail(`debe tener al menos ${s.minLen} caracteres`);
       if (s.maxLen !== undefined && v.length > s.maxLen) return fail(`debe tener como máximo ${s.maxLen} caracteres`);
       if (s.pattern && !s.pattern.test(v)) return fail(s.patternMessage ?? `formato inválido (${s.pattern.source})`);
+      if (XML_INVALID_CHARS_RE.test(v)) return fail('tiene caracteres de control que XML no admite');
+      if (LONE_SURROGATE_RE.test(v)) return fail('tiene un surrogate UTF-16 sin su par (no es texto válido)');
       return v;
     }
     case 'int': {
@@ -225,7 +245,7 @@ function encodeScalar(v: unknown, s: Scalar, path: string, errors: ValidationErr
     }
     case 'dec': {
       if (typeof v !== 'number' || !Number.isFinite(v)) return fail('debe ser un número finito');
-      const rounded = roundHalfUp(v, s.digits);
+      const rounded = roundHalfEven(v, s.digits);
       if (checkRange(rounded, s.min, s.max, s.minExclusive) === undefined) return undefined;
       return rounded.toFixed(s.digits);
     }
@@ -324,6 +344,10 @@ function encodeObject(
       }
       if (v.length < f.minItems) {
         errors.push({ field: p, message: `${p} debe tener al menos ${f.minItems} elemento(s)`, value: v });
+        continue;
+      }
+      if (f.maxItems !== undefined && v.length > f.maxItems) {
+        errors.push({ field: p, message: `${p} debe tener como máximo ${f.maxItems} elemento(s)`, value: v });
         continue;
       }
       if (v.length === 0) continue;
