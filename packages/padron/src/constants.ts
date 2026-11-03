@@ -55,10 +55,19 @@ export const ENDPOINTS = {
 // Enums (domain-specific)
 // ---------------------------------------------------------------------------
 
-/** Tipos de domicilio */
+/**
+ * Tipos de domicilio (`tipoDomicilio`), según los manuales de la constancia
+ * (v4.1), A4 (v1.3), A10 (v1.2) y A13 (v1.4): `FISCAL`, `LEGAL/REAL` y, en
+ * A4, `LOCALES Y ESTABLECIMIENTOS`.
+ */
 export enum TipoDomicilio {
   FISCAL = 'FISCAL',
+  LEGAL_REAL = 'LEGAL/REAL',
+  /** Solo en A4. */
+  LOCALES_Y_ESTABLECIMIENTOS = 'LOCALES Y ESTABLECIMIENTOS',
+  /** @deprecated Los manuales informan `LEGAL/REAL` (`TipoDomicilio.LEGAL_REAL`). Se quita en la próxima major. */
   LEGAL = 'LEGAL',
+  /** @deprecated Los manuales informan `LEGAL/REAL` (`TipoDomicilio.LEGAL_REAL`). Se quita en la próxima major. */
   REAL = 'REAL',
 }
 
@@ -108,6 +117,11 @@ export enum ImpuestoId {
 export enum EstadoClave {
   ACTIVO = 'ACTIVO',
   INACTIVO = 'INACTIVO',
+  /**
+   * @deprecated Los manuales solo documentan `ACTIVO` e `INACTIVO`; "limitada"
+   * aparece en el texto de `errorConstancia`, no en `estadoClave`. Se quita en
+   * la próxima major.
+   */
   LIMITADO = 'LIMITADO',
 }
 

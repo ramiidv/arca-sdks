@@ -122,7 +122,8 @@ function erroresRegimen(persona: PersonaA5 | PersonaA4): string[] {
  *   con un motivo propio: no tiene `CondicionIVAReceptorId`.
  * - Si no figura ninguno, devuelve `condicionIva: null`: el padrón no alcanza
  *   para decidir (puede ser consumidor final o sujeto no categorizado según la
- *   operación). No adivina.
+ *   operación). No adivina. Si además ARCA no emitió la constancia
+ *   (`errorConstancia`), el motivo es ese, aunque figuren otros impuestos.
  *
  * Si ARCA informó errores de la constancia (`errorConstancia`, ej: CUIT
  * limitada por la RG 3832/16; `errorRegimenGeneral`; `errorMonotributo`) o la
@@ -206,7 +207,8 @@ export function condicionIvaDesdePadron(persona: PersonaA5 | PersonaA4): Condici
     };
   }
 
-  if (errorConstancia !== undefined && impuestos.length === 0) {
+  // Sin IVA ni monotributo que definan la condición (casos de arriba): el motivo es que ARCA no emitió la constancia.
+  if (errorConstancia !== undefined) {
     return {
       condicionIva: null,
       motivo: `ARCA no emitió la constancia: ${errorConstancia}.${avisoClave}${notaErrores}`,

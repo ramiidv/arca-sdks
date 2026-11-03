@@ -32,6 +32,7 @@ const padron = new ArcaPadron({
   autoClockSkew?: boolean,       // default true
   loginErrorCooldownMs?: number,
   permanentErrorCooldownMs?: number,
+  alreadyAuthenticatedCooldownMs?: number,
   fetch?: typeof fetch,          // fetch propio (proxy, tests)
   legacyTls?: 'auto' | 'never' | 'always',
   wsaa?: WsaaClient,             // WsaaClient compartido (ej: facturacion.wsaa de @ramiidv/arca-facturacion), mismo entorno
@@ -43,8 +44,8 @@ const padron = new ArcaPadron({
 Todos los métodos aceptan un último argumento opcional `{ signal?: AbortSignal }`.
 Las CUIT se aceptan con o sin guiones ('20-11111111-2', '20111111112', 20111111112), se validan localmente (dígito verificador; `ArcaValidationError` sin llamar a ARCA) y se envían normalizadas.
 Todas las operaciones de Padrón son consultas.
-Sin `ticketStorage`, un reinicio pierde el ticket de acceso y WSAA rechaza nuevos logins hasta que vence (`ArcaTicketVigenteError`).
-`await padron.clearAuthCache()` borra los tickets (memoria y storage): WSAA no emite otro mientras el anterior siga vigente, así que borrar un TA vigente deja sin acceso hasta 12 h. No usarlo ante ArcaAuthError (corregir la causa en ARCA); solo para un ticket dañado.
+Sin `ticketStorage`, un reinicio pierde el ticket de acceso y WSAA rechaza nuevos logins durante el lapso de retención (minutos), con `ArcaTicketVigenteError`.
+`await padron.clearAuthCache()` borra los tickets (memoria y storage): WSAA rechaza los pedidos de un TA nuevo durante un lapso de retención (minutos), así que borrar un TA vigente puede dejar sin acceso durante ese lapso. No usarlo ante ArcaAuthError (corregir la causa en ARCA); solo para un ticket dañado.
 Cada servicio (ws_sr_constancia_inscripcion, ws_sr_padron_a4, ws_sr_padron_a10, ws_sr_padron_a13, ws_sr_padron_a100) tiene que estar asociado al certificado (WSASS en homologación, Administrador de Relaciones de Clave Fiscal en producción); si no, WSAA responde coe.notAuthorized.
 
 ## Métodos principales
@@ -56,7 +57,7 @@ Constancia de inscripción vía ws_sr_constancia_inscripcion (`getPersona_v2`; r
 `getPersonaList_v2`: 1 a 250 CUITs (`MAX_PERSONA_LIST`) por llamada (fuera de ese rango, ArcaValidationError), resultado en el orden de `cuits`. Una CUIT no hace fallar el lote: inexistente → errorConstancia.error = ['No existe persona con ese Id']; CUIT inválida → no se envía a ARCA y vuelve con idPersona = valor recibido y errorConstancia.error = ['CUIT inválido: ... No se consultó a ARCA.']; persona con datos inválidos en la respuesta → errorConstancia con el detalle (si no trae CUIT, se omite).
 
 ### condicionIvaDesdePadron(persona: PersonaA5 | PersonaA4): { condicionIva: CondicionIva | null; motivo: string }
-Función pura. Estados de impuestos: palabras de TipoEstado del manual A4 (ACTIVO, ACTIVO EN TRAMITE, BAJA PROVISORIA, BAJA DEFINITIVA, EXENTO, EXENTO EN TRAMITE, NO APORTANTE) o ids SUPA (AC, EX, BP, BD, NA). Activo = ACTIVO / ACTIVO EN TRAMITE. Monotributo (impuesto 20 activo; la categoría solo si no figura el 20; un 20 en BAJA nunca cuenta) → MONOTRIBUTISTA (6); categorías 61/99/100/101-104 → MONOTRIBUTO_SOCIAL (13); descripción de categoría con "PROMOVID" → MONOTRIBUTO_INDEPENDIENTE_PROMOVIDO (16); categoría 98 (asociado cooperativa) → MONOTRIBUTISTA. Monotributo tiene prioridad sobre IVA. IVA 30 activo → RESPONSABLE_INSCRIPTO (1); IVA 30 EXENTO/EXENTO EN TRAMITE o impuesto 32 → EXENTO (4); impuesto 34 → IVA_NO_ALCANZADO (15); impuesto 33 (responsable no inscripto, categoría eliminada) → null con motivo propio. NO APORTANTE no es "no alcanzado". Si no, null con motivo (nunca asume consumidor final). Los errores de ARCA (errorConstancia, p. ej. CUIT limitada RG 3832/16; errorRegimenGeneral; errorMonotributo) y una CUIT no activa se advierten siempre en el motivo, también cuando la condición se determinó. Usar el resultado como `condicionIva` en @ramiidv/arca-facturacion.
+Función pura. Estados de impuestos: palabras de TipoEstado del manual A4 (ACTIVO, ACTIVO EN TRAMITE, BAJA PROVISORIA, BAJA DEFINITIVA, EXENTO, EXENTO EN TRAMITE, NO APORTANTE) o ids SUPA (AC, EX, BP, BD, NA). Activo = ACTIVO / ACTIVO EN TRAMITE. Monotributo (impuesto 20 activo; la categoría solo si no figura el 20; un 20 en BAJA nunca cuenta) → MONOTRIBUTISTA (6); categorías 61/99/100/101-104 → MONOTRIBUTO_SOCIAL (13); descripción de categoría con "PROMOVID" → MONOTRIBUTO_INDEPENDIENTE_PROMOVIDO (16); categoría 98 (asociado cooperativa) → MONOTRIBUTISTA. Monotributo tiene prioridad sobre IVA. IVA 30 activo → RESPONSABLE_INSCRIPTO (1); IVA 30 EXENTO/EXENTO EN TRAMITE o impuesto 32 → EXENTO (4); impuesto 34 → IVA_NO_ALCANZADO (15); impuesto 33 (responsable no inscripto, categoría eliminada) → null con motivo propio. NO APORTANTE no es "no alcanzado". Si no, null con motivo (nunca asume consumidor final); con errorConstancia y sin IVA ni monotributo que definan la condición, el motivo es "ARCA no emitió la constancia: ..." aunque haya otros impuestos. Los errores de ARCA (errorConstancia, p. ej. CUIT limitada RG 3832/16; errorRegimenGeneral; errorMonotributo) y una CUIT no activa se advierten siempre en el motivo, también cuando la condición se determinó. Usar el resultado como `condicionIva` en @ramiidv/arca-facturacion.
 
 ### getPersonaA13(cuit): Promise<PersonaA13>
 Datos básicos vía ws_sr_padron_a13 `getPersona` (domicilio[] con calle, numero, codigoPostal, estadoDomicilio...). Con la clave inactiva lanza ArcaPadronServiceError reason 'inactiva'.
@@ -188,7 +189,7 @@ interface ServerStatus {
 Todos extienden ArcaError (de @ramiidv/arca-common), tienen un `code` estable e `instanceof` funciona aunque haya copias duplicadas del paquete:
 - ArcaValidationError: CUIT/documento inválido (no se envió el request).
 - ArcaAuthError: errores de autenticación WSAA.
-- ArcaTicketVigenteError (extiende ArcaAuthError): WSAA ya emitió un TA vigente que no está en memoria ni en el storage.
+- ArcaTicketVigenteError (extiende ArcaAuthError; retryable: true, retryAfterMs): WSAA ya emitió un TA que no está en memoria ni en el storage y rechaza otro durante el lapso de retención (minutos).
 - ArcaPadronServiceError (extiende ArcaServiceError): errores de negocio. ARCA los informa como SOAP Fault; los textos conocidos se convierten con un `reason` tipado: 'inexistente' ("La Clave (CUIT/CUIL) consultada es inexistente", "No existe persona con ese Id"; en la constancia también desde errorConstancia), 'inactiva' ("... se encuentra INACTIVA"), 'id_invalido' ("El Id de la persona no es valido"), 'no_autorizado' ("No autorizado, par token/sign invalido.", "Falta token y/o sign.", "Debe enviar la CUIT representada", "Este token no le permite actuar en representacion de la CUIT ..."). Un Fault con otro texto queda como ArcaSoapError; el SDK no emite 'otro' (solo es el default del constructor). `errors[0].msg` tiene el texto de ARCA; `cause`, el ArcaSoapError original. Nunca se reintentan.
 - ArcaPadronError: respuesta de ARCA sin un elemento obligatorio (ej: personaReturn sin persona).
 - ArcaSoapError: errores HTTP/transporte, timeouts, cancelaciones y SOAP Faults no reconocidos (statusCode?, faultCode?, faultString?, uncertain, aborted).
@@ -217,9 +218,9 @@ Hosts: homologación `https://awshomo.afip.gov.ar`, producción `https://aws.afi
 ## Enums
 
 - Provincia (0-24)
-- TipoDomicilio (FISCAL, LEGAL, REAL)
+- TipoDomicilio (FISCAL, LEGAL_REAL = 'LEGAL/REAL', LOCALES_Y_ESTABLECIMIENTOS (solo A4); LEGAL y REAL deprecados: los manuales informan 'LEGAL/REAL')
 - TipoPersona (FISICA, JURIDICA)
-- EstadoClave (ACTIVO, INACTIVO, LIMITADO)
+- EstadoClave (ACTIVO, INACTIVO; LIMITADO deprecado: no figura en los manuales)
 - ImpuestoId (GANANCIAS_PH=11, MONOTRIBUTO=20, MONOTRIBUTO_AUTONOMO=21, IVA_RESPONSABLE_INSCRIPTO=30, BIENES_PERSONALES=180, EMPLEADOR=301, AUTONOMOS=308: de los manuales de ARCA; GANANCIAS_PJ=10, IVA_EXENTO=32, IVA_RESPONSABLE_NO_INSCRIPTO=33, IVA_NO_ALCANZADO=34 no figuran en los manuales del padrón). El monotributo social se identifica por categoría, no por id de impuesto.
 - DocTipo (códigos numéricos de WSFEv1, de common): NO es el `tipoDocumento` string del padrón ("DNI", "LC"...).
 - CondicionIva (reexportado de @ramiidv/arca-common)

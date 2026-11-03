@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ArcaSoapError, ArcaValidationError, CondicionIva } from '@ramiidv/arca-common';
 import { ArcaPadron } from '../src/arca-padron.js';
 import { condicionIvaDesdePadron } from '../src/condicion-iva.js';
-import { ENDPOINTS } from '../src/constants.js';
+import { ENDPOINTS, EstadoClave, TipoDomicilio } from '../src/constants.js';
 import { ArcaPadronError, ArcaPadronServiceError } from '../src/errors.js';
 import { CUIT_REPRESENTADA, fault, mockFetch, padron, requestBody, respuesta } from './helpers.js';
 
@@ -546,7 +546,8 @@ describe('A13', () => {
     );
     const p = await client.getPersonaA13V2('20002444233');
     expect(p.estadoClave).toBe('INACTIVO');
-    expect(p.domicilio?.map((d) => d.tipoDomicilio)).toEqual(['FISCAL', 'LEGAL/REAL']);
+    expect(p.domicilio?.map((d) => d.tipoDomicilio)).toEqual([TipoDomicilio.FISCAL, TipoDomicilio.LEGAL_REAL]);
+    expect(p.estadoClave).toBe(EstadoClave.INACTIVO);
     expect(p.domicilio?.[0]).toMatchObject({ codigoPostal: '4600', numero: 415, estadoDomicilio: 'DECLARADO' });
   });
 

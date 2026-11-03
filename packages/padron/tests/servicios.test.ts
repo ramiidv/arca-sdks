@@ -4,7 +4,7 @@ import { ArcaSoapError, MemoryTicketStorage, CondicionIva } from '@ramiidv/arca-
 import { ArcaPadron } from '../src/arca-padron.js';
 import { mockFetch, padron, respuesta } from './helpers.js';
 import { condicionIvaDesdePadron } from '../src/condicion-iva.js';
-import { ENDPOINTS } from '../src/constants.js';
+import { ENDPOINTS, TipoDomicilio } from '../src/constants.js';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -135,11 +135,17 @@ describe('A4, A10, A13 y A100 con respuestas reales (personaReturn)', () => {
         '<personaReturn><metadata><servidor>x</servidor></metadata><persona>' +
           '<estadoClave>ACTIVO</estadoClave><idPersona>30712345671</idPersona><razonSocial>RESTO SA</razonSocial>' +
           '<tipoPersona>JURIDICA</tipoPersona>' +
+          '<domicilio><codPostal>5000</codPostal><tipoDomicilio>FISCAL</tipoDomicilio></domicilio>' +
+          '<domicilio><codPostal>5000</codPostal><tipoDomicilio>LOCALES Y ESTABLECIMIENTOS</tipoDomicilio></domicilio>' +
           '<impuesto><descripcionImpuesto>IVA</descripcionImpuesto><estado>ACTIVO</estado><idImpuesto>30</idImpuesto><periodo>201311</periodo></impuesto>' +
           '</persona></personaReturn>',
       ),
     );
     const p = await client.getPersona('30712345671');
+    expect(p.domicilio?.map((d) => d.tipoDomicilio)).toEqual([
+      TipoDomicilio.FISCAL,
+      TipoDomicilio.LOCALES_Y_ESTABLECIMIENTOS,
+    ]);
     expect(p.idPersona).toBe('30712345671');
     expect(p.razonSocial).toBe('RESTO SA');
     expect(p.impuesto).toEqual([expect.objectContaining({ idImpuesto: 30, estado: 'ACTIVO' })]);

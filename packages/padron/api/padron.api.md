@@ -443,7 +443,7 @@ export enum EstadoClave {
     ACTIVO = "ACTIVO",
     // (undocumented)
     INACTIVO = "INACTIVO",
-    // (undocumented)
+    // @deprecated (undocumented)
     LIMITADO = "LIMITADO"
 }
 
@@ -871,9 +871,12 @@ export { TicketStorage }
 export enum TipoDomicilio {
     // (undocumented)
     FISCAL = "FISCAL",
-    // (undocumented)
+    // @deprecated (undocumented)
     LEGAL = "LEGAL",
     // (undocumented)
+    LEGAL_REAL = "LEGAL/REAL",
+    LOCALES_Y_ESTABLECIMIENTOS = "LOCALES Y ESTABLECIMIENTOS",
+    // @deprecated (undocumented)
     REAL = "REAL"
 }
 
