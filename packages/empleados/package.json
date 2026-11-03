@@ -1,6 +1,6 @@
 {
   "name": "@ramiidv/arca-empleados",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "TypeScript SDK para generar el archivo TXT de ingreso masivo de relaciones laborales de Simplificación Registral (ARCA, ex AFIP): altas, bajas y modificaciones",
   "author": "ramiidv",
   "license": "MIT",
@@ -60,6 +60,6 @@
     "node": ">=22.12.0"
   },
   "dependencies": {
-    "@ramiidv/arca-common": "^0.9.0"
+    "@ramiidv/arca-common": "^0.10.0"
   }
 }
