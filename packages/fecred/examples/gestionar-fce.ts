@@ -36,6 +36,7 @@ async function main() {
 
   // 2. Detalle de una cuenta corriente
   const { ctaCte } = await fecred.consultarCtaCte({ codCtaCte: '1234567890' });
+  if (!ctaCte) throw new Error('ARCA no devolvió la cuenta corriente');
 
   // 3. Aceptar. Las tablas de códigos salen de consultarTipos*().
   const formas = await fecred.consultarTiposFormasCancelacion();
@@ -45,7 +46,10 @@ async function main() {
       saldoAceptado: ctaCte.saldo,
       codMoneda: ctaCte.codMoneda,
       cotizacionMonedaUlt: ctaCte.cotizacionMonedaUlt,
+      // Una cancelación lleva importe, formas y tipo juntos (validación 12008).
       formasCancelacion: [formas[0]],
+      importeCancelado: ctaCte.saldo,
+      tipoCancelacion: 'TOT',
     });
     console.log(`Aceptada: resultado ${r.resultado}`, r.observaciones);
   } catch (e) {

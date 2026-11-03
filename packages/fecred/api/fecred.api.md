@@ -84,6 +84,7 @@ export class ArcaFecred extends ArcaSdkBase<'wsfecred'> {
     consultarHistorialEstadosComprobante(idComprobante: IdComprobanteInput, opts?: CallOptions): Promise<HistorialEstadosComprobanteResult>;
     consultarHistorialEstadosCtaCte(idCtaCte: IdCtaCteInput, opts?: CallOptions): Promise<HistorialEstadosCtaCteResult>;
     consultarMontoObligadoRecepcion(params: ConsultarMontoObligadoRecepcionParams, opts?: CallOptions): Promise<MontoObligadoRecepcionResult>;
+    // @deprecated
     consultarObligadoRecepcion(cuitConsultada: number | string, opts?: CallOptions): Promise<ObligadoRecepcionResult>;
     consultarTiposAjustesOperacion(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarTiposFormasCancelacion(opts?: CallOptions): Promise<CodigoDescripcion[]>;
@@ -235,8 +236,7 @@ export interface ConsultarComprobantesResult extends InfoRespuesta {
 
 // @public (undocumented)
 export interface ConsultarCtaCteResult extends InfoRespuesta {
-    // (undocumented)
-    ctaCte: CuentaCorriente;
+    ctaCte?: CuentaCorriente;
 }
 
 // @public (undocumented)
@@ -415,6 +415,7 @@ export class FecredClient extends SoapServiceClient {
     consultarHistorialEstadosComprobante(auth: WsAuthSource, idComprobante: IdComprobanteInput, opts?: CallOptions): Promise<HistorialEstadosComprobanteResult>;
     consultarHistorialEstadosCtaCte(auth: WsAuthSource, idCtaCte: IdCtaCteInput, opts?: CallOptions): Promise<HistorialEstadosCtaCteResult>;
     consultarMontoObligadoRecepcion(auth: WsAuthSource, params: ConsultarMontoObligadoRecepcionParams, opts?: CallOptions): Promise<MontoObligadoRecepcionResult>;
+    // @deprecated
     consultarObligadoRecepcion(auth: WsAuthSource, cuitConsultada: number | string, opts?: CallOptions): Promise<ObligadoRecepcionResult>;
     consultarTiposAjustesOperacion(auth: WsAuthSource, opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarTiposFormasCancelacion(auth: WsAuthSource, opts?: CallOptions): Promise<CodigoDescripcion[]>;
@@ -826,6 +827,9 @@ export interface WsAuth {
 
 // @public
 export type WsAuthSource = WsAuth | (() => Promise<WsAuth>);
+
+// @public
+export const WSFECRED_ERRORES_REINTENTABLES: readonly number[];
 
 // (No @packageDocumentation comment for this package)
 

@@ -91,7 +91,10 @@ export class ArcaFecred extends ArcaSdkBase<'wsfecred'> {
     return this.client.consultarMontoObligadoRecepcion(this.auth(opts), params, this.callOptions(opts));
   }
 
-  /** Si una CUIT está obligada a recibir FCE y desde qué fecha. */
+  /**
+   * Si una CUIT está obligada a recibir FCE y desde qué fecha.
+   * @deprecated El manual (§2.4.13) la depreca porque la información es incompleta: usar `consultarMontoObligadoRecepcion`.
+   */
   consultarObligadoRecepcion(cuitConsultada: number | string, opts?: CallOptions): Promise<ObligadoRecepcionResult> {
     return this.client.consultarObligadoRecepcion(this.auth(opts), cuitConsultada, this.callOptions(opts));
   }

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FecredClient } from '../src/fecred-client.js';
+import { WSFECRED_ERRORES_REINTENTABLES } from '../src/constants.js';
 import { ArcaAuthError, ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
 import { soapFaultResponse } from '@ramiidv/arca-common/testing';
 import {
@@ -247,6 +248,21 @@ describe('errores de negocio', () => {
     expect(err.message).toBe('WSFECRED consultarObligadoRecepcion: [1] Err, [3] Obs');
   });
 
+  it('1103 ("reinténtelo más tarde") se reconoce con WSFECRED_ERRORES_REINTENTABLES', async () => {
+    const fetch = mockFetch(
+      ok(
+        'consultarCtasCtes',
+        '<consultarCtasCtesReturn><arrayErrores><codigoDescripcion><codigo>1103</codigo><descripcion>La operación no pudo realizarse, reinténtelo más tarde</descripcion></codigoDescripcion></arrayErrores></consultarCtasCtesReturn>',
+      ),
+    );
+    const err = await client(fetch)
+      .consultarCtasCtes(AUTH, { rol: 'Receptor' })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaServiceError);
+    expect(err.errors.some((e: { code: number }) => WSFECRED_ERRORES_REINTENTABLES.includes(e.code))).toBe(true);
+    expect(WSFECRED_ERRORES_REINTENTABLES).toEqual([1103]);
+  });
+
   it('resultado R sin errores también lanza (con las observaciones)', async () => {
     const fetch = mockFetch(
       ok(
@@ -420,6 +436,50 @@ describe('consultarComprobantes', () => {
 });
 
 describe('consultarCtaCte', () => {
+  it('sin ctaCte (opcional en el XSD) no lanza: el motivo viene en evento/observaciones', async () => {
+    const fetch = mockFetch(
+      ok(
+        'consultarCtaCte',
+        '<consultarCtaCteReturn><evento><codigo>1</codigo><descripcion>Aviso</descripcion></evento>' +
+          '<arrayObservaciones><codigoDescripcion><codigo>9</codigo><descripcion>Sin cuenta</descripcion></codigoDescripcion></arrayObservaciones>' +
+          '</consultarCtaCteReturn>',
+      ),
+    );
+    const r = await client(fetch).consultarCtaCte(AUTH, { codCtaCte: '1234567890' });
+    expect(r.ctaCte).toBeUndefined();
+    expect(r.evento).toEqual({ codigo: 1, descripcion: 'Aviso' });
+    expect(r.observaciones).toEqual([{ codigo: 9, descripcion: 'Sin cuenta' }]);
+  });
+
+  it('observaciones con el nombre cruzado (arrayObservacion) o con los dos nombres', async () => {
+    const obs = (tag: string, cod: number) =>
+      `<${tag}><codigoDescripcion><codigo>${cod}</codigo><descripcion>Obs ${cod}</descripcion></codigoDescripcion></${tag}>`;
+    const fetch = mockFetch(
+      ok('consultarCtaCte', `<consultarCtaCteReturn>${obs('arrayObservacion', 3)}</consultarCtaCteReturn>`),
+      ok(
+        'consultarCtaCte',
+        `<consultarCtaCteReturn>${obs('arrayObservaciones', 1)}${obs('arrayObservacion', 2)}</consultarCtaCteReturn>`,
+      ),
+      ok(
+        'consultarMontoObligadoRecepcion',
+        `<consultarMontoObligadoRecepcionReturn><obligado>N</obligado>${obs('arrayObservaciones', 4)}</consultarMontoObligadoRecepcionReturn>`,
+      ),
+    );
+    const c = client(fetch);
+    expect((await c.consultarCtaCte(AUTH, { codCtaCte: 1 })).observaciones).toEqual([
+      { codigo: 3, descripcion: 'Obs 3' },
+    ]);
+    expect((await c.consultarCtaCte(AUTH, { codCtaCte: 1 })).observaciones).toEqual([
+      { codigo: 1, descripcion: 'Obs 1' },
+      { codigo: 2, descripcion: 'Obs 2' },
+    ]);
+    const monto = await c.consultarMontoObligadoRecepcion(AUTH, {
+      cuitConsultada: 30712345671,
+      fechaEmision: '2026-11-01',
+    });
+    expect(monto.observaciones).toEqual([{ codigo: 4, descripcion: 'Obs 4' }]);
+  });
+
   it('idCtaCte con idFactura anidado y parsea CuentaCorrienteType', async () => {
     const fetch = mockFetch(
       ok(
@@ -441,11 +501,11 @@ describe('consultarCtaCte', () => {
       idFactura: { CUITEmisor: '30712345671', codTipoCmp: 201, ptoVta: 3, nroCmp: 125 },
     });
     expect(childOrder(xml, 'idFactura')).toEqual(['CUITEmisor', 'codTipoCmp', 'ptoVta', 'nroCmp']);
-    expect(r.ctaCte.estadoCtaCte.estado).toBe('Aceptada');
-    expect(r.ctaCte.factura.nroCmp).toBe(125);
-    expect(r.ctaCte.formasCancelacion).toEqual([{ codigo: 1, descripcion: 'Transferencia' }]);
-    expect(r.ctaCte.retenciones).toEqual([{ codTipo: 2, importe: 500, porcentaje: 3 }]);
-    expect(r.ctaCte.notasDCAsociadas).toEqual([]);
+    expect(r.ctaCte!.estadoCtaCte.estado).toBe('Aceptada');
+    expect(r.ctaCte!.factura.nroCmp).toBe(125);
+    expect(r.ctaCte!.formasCancelacion).toEqual([{ codigo: 1, descripcion: 'Transferencia' }]);
+    expect(r.ctaCte!.retenciones).toEqual([{ codTipo: 2, importe: 500, porcentaje: 3 }]);
+    expect(r.ctaCte!.notasDCAsociadas).toEqual([]);
   });
 
   it('arrayNotasDCAsociadas, retenciones (N), ajustes (con signo) e importes opcionales', async () => {
@@ -473,22 +533,22 @@ describe('consultarCtaCte', () => {
       ),
     );
     const r = await client(fetch).consultarCtaCte(AUTH, { codCtaCte: '1234567890' });
-    expect(r.ctaCte.notasDCAsociadas.map((n) => [n.codTipoCmp, n.nroCmp])).toEqual([
+    expect(r.ctaCte!.notasDCAsociadas.map((n) => [n.codTipoCmp, n.nroCmp])).toEqual([
       [203, 7],
       [203, 8],
     ]);
-    expect(r.ctaCte.retenciones).toEqual([
+    expect(r.ctaCte!.retenciones).toEqual([
       { codTipo: 2, importe: 500, porcentaje: 3, descMotivo: 'IIBB' },
       { codTipo: 4, importe: 0.5, porcentaje: 0.25 },
     ]);
-    expect(r.ctaCte.ajustesOperacion).toEqual([{ codigo: 1, importe: -100.5 }]);
+    expect(r.ctaCte!.ajustesOperacion).toEqual([{ codigo: 1, importe: -100.5 }]);
     expect(r.ctaCte).toMatchObject({
       importeTotalNotasDC: 2000,
       importeCancelado: 0,
       importeTotalRetPesos: 500.5,
       saldo: 118399.5,
     });
-    expect(r.ctaCte.importeEmbargoPesos).toBeUndefined();
+    expect(r.ctaCte!.importeEmbargoPesos).toBeUndefined();
     expect(r.evento).toEqual({ codigo: 1, descripcion: 'Aviso' });
   });
 
@@ -510,7 +570,7 @@ describe('emisiones', () => {
       formasCancelacion: [{ codigo: 1, descripcion: 'Transferencia' }],
       retenciones: [{ codTipo: 2, importe: 500.555, porcentaje: 3 }],
       ajustesOperacion: [{ codigo: 1, importe: -10 }],
-      tipoCancelacion: 'TOT',
+      tipoCancelacion: 'PAR',
       importeCancelado: 120000,
       importeTotalRetPesos: 500.555,
       saldoAceptado: 120500,

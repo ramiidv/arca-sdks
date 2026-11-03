@@ -14,6 +14,7 @@ export {
   TipoCancelacion,
   TipoAceptacion,
   Resultado,
+  WSFECRED_ERRORES_REINTENTABLES,
 } from './constants.js';
 export type { TipoCodAutorizacion } from './constants.js';
 

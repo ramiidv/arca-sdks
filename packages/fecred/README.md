@@ -8,7 +8,7 @@ SDK en TypeScript para el web service **WSFECRED** (FECredService) de **ARCA** (
 
 Cubre todas las operaciones del WSDL: obligación de recepción, cuentas corrientes, comprobantes, historial de estados, remitos, aceptación, rechazo, cancelación total, rechazo de notas de débito/crédito, opción de transferencia, Agentes de Depósito Colectivo y tablas de parámetros.
 
-Fuente: WSDL de FECredService (`https://fwshomo.afip.gob.ar/wsfecred/FECredService?wsdl`). El manual de WSFECRED no figura en el [catálogo oficial de ARCA](https://www.arca.gob.ar/ws/documentacion/catalogo.asp): el SDK sigue el WSDL y el XSD embebido en él (tipos y validaciones).
+Fuentes: WSDL de FECredService (`https://fwshomo.afip.gob.ar/wsfecred/FECredService?wsdl`) y el [manual del desarrollador de WSFECRED v2.0.3](https://servicioscf.afip.gob.ar/facturadecreditoelectronica/documentos/Manual_Desarrollador_WSFECRED_v2.0.3.pdf). Donde no coinciden, el SDK sigue al XSD.
 
 ## Glosario
 
@@ -64,6 +64,7 @@ console.log(ctasCtes.length, hayMas);
 const [cta] = ctasCtes;
 if (cta) {
   const { ctaCte } = await fecred.consultarCtaCte({ codCtaCte: cta.codCtaCte });
+  if (!ctaCte) throw new Error("ARCA no devolvió la cuenta corriente");
   const r = await fecred.aceptarFECred({
     idCtaCte: { codCtaCte: ctaCte.codCtaCte },
     saldoAceptado: ctaCte.saldo,
@@ -78,23 +79,23 @@ if (cta) {
 
 `ArcaFecredConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`:
 
-| Opción                                                                               | Tipo                            | Default            | Descripción                                                                                                   |
-| ------------------------------------------------------------------------------------ | ------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `cert`, `key`                                                                        | `string`                        | —                  | Certificado y clave privada (PEM)                                                                             |
-| `keyPassphrase`                                                                      | `string`                        | —                  | Contraseña de la clave, si está encriptada                                                                    |
-| `cuit`                                                                               | `number \| string`              | —                  | CUIT representada; se valida el dígito verificador y se envía como 11 dígitos                                 |
-| `production`                                                                         | `boolean`                       | `false`            | Homologación o producción                                                                                     |
-| `timeout`                                                                            | `number`                        | `30000`            | Timeout HTTP (ms)                                                                                             |
-| `retries` / `retryDelayMs`                                                           | `number`                        | `1` / `1000`       | Reintentos de **consultas** (las emisiones nunca se reintentan)                                               |
-| `tokenTTLMinutes`                                                                    | `number`                        | `720`              | Vigencia del TRA pedida a WSAA                                                                                |
-| `ticketStorage`                                                                      | `TicketStorage`                 | —                  | Persistencia del TA (recomendado en producción: `FileTicketStorage` o propio)                                 |
-| `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs` |                                 |                    | Opciones de WSAA (ver `@ramiidv/arca-common`)                                                                 |
-| `fetch`                                                                              | `typeof fetch`                  | `globalThis.fetch` | `fetch` propio (proxy, tests)                                                                                 |
-| `legacyTls`                                                                          | `'auto' \| 'never' \| 'always'` | `'auto'`           | Transporte TLS legacy                                                                                         |
-| `onEvent`                                                                            | `(e: ArcaEvent) => void`        | —                  | Eventos `auth:*` y `request:*`                                                                                |
-| `wsaa`                                                                               | `WsaaClient`                    | —                  | `WsaaClient` compartido con otros SDKs (mismo certificado); tiene que ser del mismo entorno (`production`)    |
-| `signal`                                                                             | `AbortSignal`                   | —                  | Cancela todas las llamadas de la instancia (ej: al apagar la app); se combina con el `signal` de cada llamada |
-| `endpoints`                                                                          | `{ wsfecred?, wsaa? }`          | —                  | Sobrescribe las URLs                                                                                          |
+| Opción                                                                                                                 | Tipo                            | Default            | Descripción                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `cert`, `key`                                                                                                          | `string`                        | —                  | Certificado y clave privada (PEM)                                                                             |
+| `keyPassphrase`                                                                                                        | `string`                        | —                  | Contraseña de la clave, si está encriptada                                                                    |
+| `cuit`                                                                                                                 | `number \| string`              | —                  | CUIT representada; se valida el dígito verificador y se envía como 11 dígitos                                 |
+| `production`                                                                                                           | `boolean`                       | `false`            | Homologación o producción                                                                                     |
+| `timeout`                                                                                                              | `number`                        | `30000`            | Timeout HTTP (ms)                                                                                             |
+| `retries` / `retryDelayMs`                                                                                             | `number`                        | `1` / `1000`       | Reintentos de **consultas** (las emisiones nunca se reintentan)                                               |
+| `tokenTTLMinutes`                                                                                                      | `number`                        | `720`              | Vigencia del TRA pedida a WSAA                                                                                |
+| `ticketStorage`                                                                                                        | `TicketStorage`                 | —                  | Persistencia del TA (recomendado en producción: `FileTicketStorage` o propio)                                 |
+| `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs`, `alreadyAuthenticatedCooldownMs` |                                 |                    | Opciones de WSAA (ver `@ramiidv/arca-common`)                                                                 |
+| `fetch`                                                                                                                | `typeof fetch`                  | `globalThis.fetch` | `fetch` propio (proxy, tests)                                                                                 |
+| `legacyTls`                                                                                                            | `'auto' \| 'never' \| 'always'` | `'auto'`           | Transporte TLS legacy                                                                                         |
+| `onEvent`                                                                                                              | `(e: ArcaEvent) => void`        | —                  | Eventos `auth:*` y `request:*`                                                                                |
+| `wsaa`                                                                                                                 | `WsaaClient`                    | —                  | `WsaaClient` compartido con otros SDKs (mismo certificado); tiene que ser del mismo entorno (`production`)    |
+| `signal`                                                                                                               | `AbortSignal`                   | —                  | Cancela todas las llamadas de la instancia (ej: al apagar la app); se combina con el `signal` de cada llamada |
+| `endpoints`                                                                                                            | `{ wsfecred?, wsaa? }`          | —                  | Sobrescribe las URLs                                                                                          |
 
 Todos los métodos aceptan un último parámetro opcional `opts?: CallOptions` (`{ signal }`) para cancelar.
 
@@ -106,9 +107,9 @@ Todos los métodos aceptan un último parámetro opcional `opts?: CallOptions` (
 | -------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------- |
 | `status()`                                                                                                                 | `dummy`   | `{ appserver, dbserver, authserver }`                                     |
 | `consultarMontoObligadoRecepcion({ cuitConsultada, fechaEmision })`                                                        | idem      | `{ obligado?, montoDesde?, observaciones }`                               |
-| `consultarObligadoRecepcion(cuit)`                                                                                         | idem      | `{ obligado?, desde?, observaciones }` (campo `respuesta` del WS)         |
+| `consultarObligadoRecepcion(cuit)` (deprecada por el manual: usar `consultarMontoObligadoRecepcion`)                       | idem      | `{ obligado?, desde?, observaciones }` (campo `respuesta` del WS)         |
 | `consultarCtasCtes({ rol, cuitContraparte?, fecha?, estadoCtaCte?, nroPagina?, opcionTransferencia? })`                    | idem      | `{ ctasCtes: InfoCtaCte[], nroPagina?, hayMas?, evento?, observaciones }` |
-| `consultarCtaCte(idCtaCte)`                                                                                                | idem      | `{ ctaCte: CuentaCorriente, evento?, observaciones }`                     |
+| `consultarCtaCte(idCtaCte)`                                                                                                | idem      | `{ ctaCte?: CuentaCorriente, evento?, observaciones }`                    |
 | `consultarComprobantes({ rol, cuitContraparte?, codTipoCmp?, estadoCmp?, fecha?, codCtaCte?, estadoCtaCte?, nroPagina? })` | idem      | `{ comprobantes: Comprobante[], nroPagina?, hayMas?, ... }`               |
 | `consultarHistorialEstadosComprobante(idComprobante)`                                                                      | idem      | `{ idComprobante, estados }`                                              |
 | `consultarHistorialEstadosCtaCte(idCtaCte)`                                                                                | idem      | `{ idCtaCte, estados }`                                                   |
@@ -137,9 +138,13 @@ Todos los métodos aceptan un último parámetro opcional `opts?: CallOptions` (
 
 `aceptarFECred` acepta además los opcionales del XSD: `confirmarNotasDC` (`{ acepta, idNota }[]`), `formasCancelacion`, `retenciones` (`{ codTipo, importe, porcentaje, descMotivo? }[]`), `ajustesOperacion` (`{ codigo, importe }[]`), `tipoCancelacion` (`'PAR' | 'TOT'`), `importeCancelado`, `importeTotalRetPesos`, `importeEmbargoPesos`, `informaCBU` y `cbuComprador`.
 
+Además del XSD se validan reglas del manual: `informaCBU` y `cbuComprador` van juntos (12013), sin CBU con cancelación total (12012) ni con saldo aceptado 0 (2016); `retenciones` con `importeTotalRetPesos` > 0 y viceversa (12007); una cancelación lleva `importeCancelado` > 0, `formasCancelacion` y `tipoCancelacion` (12008); con `PES` la cotización es 1 (2007, 12000); el porcentaje de una retención es mayor a 0 y menor a 100 (`PorcentajeSimpleType`, manual §3.1). En todos los requests que los llevan (`aceptarFECred`, `rechazarFECred`, `rechazarNotaDC`, `informarCancelacionTotalFECred`) no se repiten códigos de retenciones, ajustes, formas de cancelación ni motivos de rechazo (2003, 2013, 4002, 3001).
+
+El error 1103 ("La operación no pudo realizarse, reinténtelo más tarde") se resuelve reintentando: está en `WSFECRED_ERRORES_REINTENTABLES`.
+
 ### Tickets de acceso
 
-`await fecred.clearAuthCache()` borra el ticket de `wsfecred` (memoria y `ticketStorage`). **Ojo:** WSAA no emite un ticket nuevo mientras el anterior siga vigente, así que borrar un TA vigente te deja sin acceso hasta que venza (hasta 12 horas). Ante un `ArcaAuthError` no lo uses: corregí la causa en ARCA y, si el error no era reintentable (`retryable: false`), llamá a `fecred.wsaa.resetLoginCooldown("wsfecred")`. `clearAuthCache()` es solo para un ticket dañado (ej: cambiaste de certificado).
+`await fecred.clearAuthCache()` borra el ticket de `wsfecred` (memoria y `ticketStorage`). **Ojo:** WSAA rechaza los pedidos de un ticket nuevo durante un lapso de retención (minutos), así que borrar un TA vigente puede dejarte sin acceso durante ese lapso. Ante un `ArcaAuthError` no lo uses: corregí la causa en ARCA y, si el error no era reintentable (`retryable: false`), llamá a `fecred.wsaa.resetLoginCooldown("wsfecred")`. `clearAuthCache()` es solo para un ticket dañado (ej: cambiaste de certificado).
 
 ### Identificadores
 
@@ -167,7 +172,7 @@ const porFactura: IdCtaCteInput = {
 
 const { ctaCte } = await fecred.consultarCtaCte(porFactura);
 const { estados } = await fecred.consultarHistorialEstadosCtaCte(porCodigo);
-console.log(ctaCte.estadoCtaCte.estado, estados.length);
+console.log(ctaCte?.estadoCtaCte.estado, estados.length);
 ```
 
 Las respuestas devuelven `codCtaCte`, CUITs y `codAutorizacion` (CAE) como **string**; importes como `number`; fechas como el string que envía ARCA; los `S`/`N` como `boolean`.
@@ -217,15 +222,15 @@ Detalles del protocolo (verificados contra homologación): namespace `http://ar.
 
 ## Manejo de errores
 
-| Clase                    | Cuándo                                                                                                                                                                                                                                                                                                                      |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ArcaValidationError`    | Datos inválidos (CUIT con dígito verificador incorrecto, fechas inexistentes, importes NaN/negativos, textos fuera de 3..250, CBU inválido, etc.). No se llega a pedir el ticket ni a llamar a ARCA. `details[].field` indica el parámetro. Los importes con más de 2 decimales no se rechazan: se redondean a 2 (half-up). |
-| `ArcaServiceError`       | ARCA devolvió `arrayErrores` o `arrayErroresFormato`, o una emisión terminó con `resultado = 'R'`. `errors: { code, msg, rawCode? }[]`: primero los errores y después las observaciones. El mensaje incluye la operación (`WSFECRED aceptarFECred: ...`).                                                                   |
-| `ArcaSoapError`          | HTTP, timeout, SOAP Fault o respuesta que no cumple el XSD (falta un campo obligatorio, S/N inválido, etc.). `uncertain` indica si ARCA pudo haber procesado el request.                                                                                                                                                    |
-| `ArcaAuthError`          | Falla de WSAA, o SOAP Fault `wscommon_*` de WSFECRED (token, sign o CUIT representada rechazados). La operación no se procesó; el Fault original está en `cause`.                                                                                                                                                           |
-| `ArcaTicketVigenteError` | WSAA ya emitió un TA para este certificado y servicio, y no está en el `ticketStorage`.                                                                                                                                                                                                                                     |
+| Clase                    | Cuándo                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ArcaValidationError`    | Datos inválidos (CUIT con dígito verificador incorrecto, fechas inexistentes, importes NaN/negativos, textos fuera de 3..250, CBU inválido, etc.). No se llega a pedir el ticket ni a llamar a ARCA. `details[].field` indica el parámetro. Los importes con más de 2 decimales no se rechazan: se redondean a 2, mitad al par (Round Half Even, sección 3.3 del manual). |
+| `ArcaServiceError`       | ARCA devolvió `arrayErrores` o `arrayErroresFormato`, o una emisión terminó con `resultado = 'R'`. `errors: { code, msg, rawCode? }[]`: primero los errores y después las observaciones. El mensaje incluye la operación (`WSFECRED aceptarFECred: ...`).                                                                                                                 |
+| `ArcaSoapError`          | HTTP, timeout, SOAP Fault o respuesta que no cumple el XSD (falta un campo obligatorio, S/N inválido, etc.). `uncertain` indica si ARCA pudo haber procesado el request.                                                                                                                                                                                                  |
+| `ArcaAuthError`          | Falla de WSAA, o SOAP Fault `wscommon_*` de WSFECRED (token, sign o CUIT representada rechazados). La operación no se procesó; el Fault original está en `cause`.                                                                                                                                                                                                         |
+| `ArcaTicketVigenteError` | WSAA ya emitió un TA para este certificado y servicio, y no está en el `ticketStorage`.                                                                                                                                                                                                                                                                                   |
 
-Las observaciones (`arrayObservaciones`/`arrayObservacion`) y el `evento` no son errores: vienen en el resultado.
+Las observaciones (`arrayObservaciones`/`arrayObservacion`) y el `evento` no son errores: vienen en el resultado, en `observaciones`. El SDK lee el array con cualquiera de los dos nombres (el manual y el XSD los tienen cruzados en algunas operaciones) y, si vienen los dos, los une.
 
 ```typescript
 import { readFileSync } from "node:fs";

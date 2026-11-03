@@ -22,6 +22,8 @@ const fecred = new ArcaFecred({
   production?: boolean,         // default false (homologación)
   timeout?: number, retries?: number, retryDelayMs?: number,
   ticketStorage?: TicketStorage, // recomendado: new FileTicketStorage('./.arca-tickets')
+  tokenTTLMinutes?, clockOffsetMs?, autoClockSkew?, loginErrorCooldownMs?, permanentErrorCooldownMs?,
+  alreadyAuthenticatedCooldownMs?, // opciones de WSAA (ver @ramiidv/arca-common); la última, default 120000 prod / 600000 homo
   fetch?: typeof fetch, legacyTls?: 'auto' | 'never' | 'always',
   onEvent?: (e: ArcaEvent) => void,
   wsaa?: WsaaClient,            // compartir WSAA entre SDKs (mismo entorno)
@@ -41,17 +43,17 @@ interface FiltroFecha { tipo: 'Emision' | 'PuestaDispo' | 'VenPago' | 'VenAcep' 
 interface MotivoRechazo { codMotivo: number; descMotivo: string; justificacion: string } // textos 3..250
 ```
 
-Fechas: `Date`, `'YYYY-MM-DD'` o `'YYYYMMDD'`. Importes: number finito, se redondean a 2 decimales.
+Fechas: `Date`, `'YYYY-MM-DD'` o `'YYYYMMDD'`. Importes: number finito, se redondean a 2 decimales mitad al par (Round Half Even, manual v2.0.3 §3.3).
 
 ## Consultas
 
 ```typescript
 await fecred.status(); // dummy → { appserver, dbserver, authserver }
 await fecred.consultarMontoObligadoRecepcion({ cuitConsultada, fechaEmision }); // { obligado?: boolean, montoDesde?, observaciones }
-await fecred.consultarObligadoRecepcion(cuit);           // { obligado?: boolean, desde?, observaciones } (obligado undefined si ARCA no lo informa)
+await fecred.consultarObligadoRecepcion(cuit);           // @deprecated (manual §2.4.13): usar consultarMontoObligadoRecepcion. { obligado?: boolean, desde?, observaciones }
 await fecred.consultarCtasCtes({ rol: 'Emisor' | 'Receptor', cuitContraparte?, fecha?, estadoCtaCte?, nroPagina?, opcionTransferencia? });
 // → { ctasCtes: { codCtaCte, estadoCtaCte: { estado, fechaHoraEstado }, idFacturaCredito, importeTotalFC, saldo, saldoAceptado?, codMoneda, opcionTransferencia }[], nroPagina?, hayMas? }
-await fecred.consultarCtaCte(idCtaCte);                  // { ctaCte: CuentaCorriente }
+await fecred.consultarCtaCte(idCtaCte);                  // { ctaCte?: CuentaCorriente } (opcional en el XSD)
 await fecred.consultarComprobantes({ rol, cuitContraparte?, codTipoCmp?, estadoCmp?, fecha?, codCtaCte?, estadoCtaCte?, nroPagina? });
 // → { comprobantes: Comprobante[] (cuitEmisor, razonSocialEmi, codTipoCmp, ptoVta, nroCmp, codAutorizacion, fechaEmision, fechaVenPago?, importeTotal, estado: { estado, fechaHoraEstado }, ...), hayMas? }
 await fecred.consultarHistorialEstadosComprobante(idComprobante);
@@ -73,6 +75,7 @@ await fecred.aceptarFECred({
   confirmarNotasDC?, formasCancelacion?, retenciones?, ajustesOperacion?, tipoCancelacion?: 'PAR' | 'TOT',
   importeCancelado?, importeTotalRetPesos?, importeEmbargoPesos?, informaCBU?: boolean, cbuComprador?,
 });
+// Reglas locales de aceptarFECred (manual v2.0.3): informaCBU <=> cbuComprador (12013); sin CBU con tipoCancelacion TOT (12012) ni saldoAceptado 0 (2016); retenciones <=> importeTotalRetPesos > 0 (12007); cancelación: importeCancelado > 0 + formasCancelacion + tipoCancelacion juntos (12008); PES con cotización 1 (2007/12000); 0 < porcentaje de retención < 100. En todos los requests: códigos sin repetir en retenciones (2003), ajustesOperacion (2013), motivos (3001, rechazarFECred/rechazarNotaDC) y formasCancelacion (4002, también informarCancelacionTotalFECred).
 await fecred.rechazarFECred({ idCtaCte, motivos: MotivoRechazo[] });
 await fecred.informarCancelacionTotalFECred({ idCtaCte, formasCancelacion: { codigo, descripcion }[], importeCancelacion });
 await fecred.rechazarNotaDC({ idComprobante, motivos });
@@ -84,17 +87,19 @@ await fecred.informarFacturaAgtDptoCltv({ idCtaCte, ctaAgente: { cuitAgente, idC
 ## Errores
 
 - `ArcaValidationError`: parámetros inválidos (antes de pedir ticket o llamar a ARCA). `field`, `details`.
-- `ArcaServiceError`: `arrayErrores` / `arrayErroresFormato` o `resultado = 'R'`. `errors: { code, msg, rawCode? }[]` (errores y después observaciones). Mensaje `WSFECRED <operación>: ...`.
+- `ArcaServiceError`: `arrayErrores` / `arrayErroresFormato` o `resultado = 'R'`. `errors: { code, msg, rawCode? }[]` (errores y después observaciones). Mensaje `WSFECRED <operación>: ...`. `WSFECRED_ERRORES_REINTENTABLES` = [1103] ("reinténtelo más tarde"): no se procesó, se puede reintentar más tarde.
 - `ArcaSoapError`: HTTP / timeout / SOAP Fault / respuesta que no cumple el XSD. `uncertain = true` solo en emisiones (respuesta perdida, Fault Server, sin `resultado`): pudo haberse registrado → verificar con `consultarCtaCte` o `consultarHistorialEstadosCtaCte` antes de reintentar.
-- `ArcaAuthError`: falla de WSAA o SOAP Fault `wscommon_*` de WSFECRED (auth rechazado; no se procesó). `ArcaTicketVigenteError`: TA vigente fuera del `ticketStorage`.
+- `ArcaAuthError`: falla de WSAA o SOAP Fault `wscommon_*` de WSFECRED (auth rechazado; no se procesó). `ArcaTicketVigenteError` (`retryable: true`, `retryAfterMs`): WSAA rechazó el login por el lapso de retención y no hay un TA utilizable en memoria ni en el `ticketStorage`.
 
-`await fecred.clearAuthCache()` borra el ticket (memoria y storage): WSAA no emite otro mientras el anterior siga vigente, así que borrar un TA vigente deja sin acceso hasta 12 h. Ante ArcaAuthError no usarlo: corregir la causa en ARCA y llamar a `fecred.wsaa.resetLoginCooldown('wsfecred')`. Solo para un ticket dañado.
+`await fecred.clearAuthCache()` borra el ticket (memoria y storage): WSAA rechaza los pedidos de un TA nuevo durante un lapso de retención (minutos), así que borrar un TA vigente puede dejar sin acceso durante ese lapso. Ante ArcaAuthError no usarlo: corregir la causa en ARCA y llamar a `fecred.wsaa.resetLoginCooldown('wsfecred')`. Solo para un ticket dañado.
 
 ## Notas
 
 - Los códigos de formas de cancelación, motivos de rechazo, ajustes y retenciones salen de `consultarTipos*()`; no hay enums.
 - Enums del XSD (objeto + tipo literal): `RolCtaCte`, `EstadoCtaCte`, `EstadoComprobante`, `TipoFechaFiltro`, `OpcionTransferencia`, `TipoCancelacion`, `TipoAceptacion`, `Resultado`. Estrictos en los requests; en las respuestas (estados, `opcionTransferencia`, `tipoAcep`, `tipoCodAuto`) se acepta cualquier string (`ValorAbierto<T>`): un valor nuevo de ARCA no rompe la consulta.
 - `codCtaCte`, CUITs y `codAutorizacion` se devuelven como string; importes como number; S/N como boolean.
+- Observaciones: el SDK lee `arrayObservaciones` o `arrayObservacion` (el manual y el XSD los cruzan en algunas operaciones); si vienen los dos, los une en `observaciones`.
+- Fuentes: WSDL/XSD de FECredService y manual del desarrollador de WSFECRED v2.0.3; donde no coinciden, se sigue al XSD.
 - Cliente de bajo nivel: `fecred.client` (`FecredClient`), con un `WsAuthSource` como primer parámetro: `WsAuth` (`{ token, sign, cuitRepresentada }`) o `() => Promise<WsAuth>` (se llama después de validar los parámetros: un dato inválido no pide el TA). `new FecredClient({ endpoint, namespace })` requiere el namespace (`ENDPOINTS.wsfecred.namespace`).
 - Endpoints en `ENDPOINTS.wsfecred`: homologación `https://fwshomo.afip.gob.ar/wsfecred/FECredService`, producción `https://serviciosjava.afip.gob.ar/wsfecred/FECredService`. Namespace `http://ar.gob.afip.wsfecred/FECredService/`; SOAPAction = namespace + operación.
 - Ejemplos: https://github.com/ramiidv/arca-sdks/tree/main/packages/fecred/examples
