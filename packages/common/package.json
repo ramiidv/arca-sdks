@@ -1,6 +1,6 @@
 {
   "name": "@ramiidv/arca-common",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Utilidades compartidas para los SDKs de ARCA (ex AFIP) - WSAA, SOAP client, validadores, tipos comunes",
   "author": "ramiidv",
   "license": "MIT",
