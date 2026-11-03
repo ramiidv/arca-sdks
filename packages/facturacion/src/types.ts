@@ -78,9 +78,9 @@ export interface Tributo {
 
 /**
  * Comprador de un comprobante con receptores múltiples (estructura
- * `Compradores` de WSFEv1, validaciones 10135-10148): al menos 2, con
- * DocTipo 80, 86 u 87, porcentajes que suman 100 y el de mayor porcentaje
- * igual al receptor del comprobante.
+ * `Compradores` de WSFEv1, validaciones 10134-10150): al menos 2, con
+ * DocTipo 80, 86 u 87, porcentajes que suman 100 y el receptor del
+ * comprobante entre los de mayor porcentaje.
  */
 export interface Comprador {
   /** Tipo de documento: 80 (CUIT), 86 (CUIL) u 87 (CDI) */
@@ -166,7 +166,7 @@ export interface InvoiceDetail {
   opcionales?: Opcional[];
   /**
    * Condición de IVA del receptor (usar enum CondicionIva). Obligatorio según
-   * la RG 5616 (validación 10246 del manual WSFEv1 v4.7), también para
+   * la RG 5616 (validación 10246 del manual WSFEv1 v4.8), también para
    * consumidor final (DocTipo 99).
    */
   condicionIvaReceptorId?: number;
@@ -426,8 +426,8 @@ export interface WsfexInvoice {
   idImpositivo?: string;
   /** Código de moneda */
   monedaId: string;
-  /** Cotización de la moneda */
-  monedaCtz: number;
+  /** Cotización de la moneda. Se omite con `canMisMonExt: "S"` para usar la oficial (validación 1602). */
+  monedaCtz?: number;
   /** Importe total del comprobante */
   impTotal: number;
   /** Observaciones comerciales */
@@ -444,7 +444,10 @@ export interface WsfexInvoice {
   incotermsDs?: string;
   /** Fecha de pago (YYYYMMDD). Solo Factura E (19); obligatoria para servicios/otros (1672, 1673). */
   fechaPago?: string;
-  /** Cancela en misma moneda extranjera: "S" o "N" */
+  /**
+   * Cancela en misma moneda extranjera: "S" o "N". Solo en Factura E (19) en
+   * moneda extranjera (validación 1605).
+   */
   canMisMonExt?: string;
   /** Items del comprobante */
   items: WsfexItem[];
@@ -658,8 +661,12 @@ export interface FacturarExpoOpts {
   };
   /** Código de moneda */
   moneda: string;
-  /** Cotización de la moneda */
-  cotizacion: number;
+  /**
+   * Cotización de la moneda (1 con PES). Con moneda extranjera y
+   * `canMisMonExt: "S"` se puede omitir: ARCA registra la cotización oficial
+   * (validación 1602).
+   */
+  cotizacion?: number;
   /** Items del comprobante */
   items: ExpoLineItem[];
   /** Forma de pago. Obligatoria en Factura E (19), opcional en NC/ND (validación 1620). */
@@ -696,7 +703,10 @@ export interface FacturarExpoOpts {
    * admite en NC/ND (validación 1673).
    */
   fechaPago?: Date | string;
-  /** Cancela en misma moneda extranjera: "S" o "N" */
+  /**
+   * Cancela en la misma moneda extranjera: "S" o "N". Solo en Factura E (19)
+   * en moneda extranjera (validación 1605).
+   */
   canMisMonExt?: string;
   /** Datos opcionales (ver `getOpcionalesExpo`) */
   opcionales?: Opcional[];
@@ -812,7 +822,10 @@ export interface FacturarOpts {
   concepto?: number;
   /** Tipo de documento del receptor (usar enum DocTipo). Default: CONSUMIDOR_FINAL */
   docTipo?: number;
-  /** Número de documento del receptor. Default: 0 */
+  /**
+   * Número de documento del receptor. Default: 0, que solo vale con `docTipo`
+   * 99; con cualquier otro `docTipo` es obligatorio (validación 10015).
+   */
   docNro?: number;
   /** Fecha del comprobante (Date o string YYYYMMDD / YYYY-MM-DD). Default: hoy (timezone Argentina) */
   fecha?: Date | string;
@@ -837,15 +850,18 @@ export interface FacturarOpts {
   /** Código de moneda (usar enum Moneda). Default: PES */
   moneda?: string;
   /**
-   * Cotización de la moneda (> 0). Con PES debe ser 1 (default). Con moneda
-   * extranjera es obligatoria salvo `canMisMonExt: "S"` (ARCA usa la oficial).
+   * Cotización de la moneda (> 0, hasta 4 enteros). Con PES debe ser 1
+   * (default). Con moneda extranjera es obligatoria salvo `canMisMonExt: "S"`
+   * (ARCA usa la oficial).
    */
   cotizacion?: number;
   /** Tributos adicionales (Importe y BaseImp >= 0, se redondean a 2 decimales) */
   tributos?: Tributo[];
   /**
-   * Datos opcionales (`getTiposOpcional`). Solo en FCE MiPyME (validación
-   * 10169): 2101 (CBU, obligatorio en facturas: 10168), 2102 (alias), 27
+   * Datos opcionales (`getTiposOpcional`), solo en los tipos que los admiten
+   * (validación 10068). El tipo 49 lleva 91 y 93 (10078, 10084); los Seguros
+   * de Caución, 2901 y 2902 en igual cantidad (10273-10276, 10280, 10281). Solo en FCE
+   * MiPyME (validación 10169): 2101 (CBU, obligatorio en facturas: 10168), 2102 (alias), 27
    * ("SCA" o "ADC", obligatorio en facturas: 10216) y 22 (anulación "S" o
    * "N", obligatorio en NC/ND: 10173). Las NC/ND FCE no llevan 2101, 2102 ni
    * 27 (10172) y las facturas FCE no llevan 22 (10171).
@@ -863,7 +879,10 @@ export interface FacturarOpts {
    * moneda extranjera (validación 10241).
    */
   canMisMonExt?: 'S' | 'N';
-  /** Comprobantes asociados (para NC/ND, o para asociar otros comprobantes). */
+  /**
+   * Comprobantes asociados (para NC/ND, o para asociar otros comprobantes):
+   * solo los tipos que admite `CBTES_ASOCIABLES` (validación 10040).
+   */
   cbtesAsoc?: ComprobanteRef[];
   /**
    * Período asociado (`PeriodoAsoc`), solo para notas de crédito/débito (no
@@ -874,8 +893,9 @@ export interface FacturarOpts {
   actividades?: number[];
   /**
    * Compradores, para comprobantes con varios receptores (validaciones
-   * 10135-10148): al menos 2, porcentajes que suman 100, y el receptor del
-   * comprobante tiene que ser el de mayor porcentaje.
+   * 10134-10147, 10150 y 10194): solo en A, B, C o M (no FCE) con concepto 1,
+   * al menos 2, porcentajes que suman 100, y el receptor del comprobante entre
+   * los de mayor porcentaje.
    */
   compradores?: Comprador[];
 }
@@ -899,21 +919,25 @@ export interface ComprobanteRef {
   ptoVta: number;
   /** Número del comprobante original */
   nro: number;
-  /** CUIT del emisor (requerido para FCE). Se valida el dígito verificador. */
+  /** CUIT del emisor (requerido en NC/ND FCE, validación 10151). Se valida el dígito verificador. */
   cuit?: number | string;
-  /** Fecha del comprobante original (Date o string YYYYMMDD) */
+  /** Fecha del comprobante original (Date o string YYYYMMDD). Requerida en NC/ND FCE (validación 10158). */
   fecha?: Date | string;
 }
 
 export interface NotaCreditoOpts extends Omit<FacturarOpts, 'cbteTipo'> {
-  /** Comprobante original al que se asocia la nota de crédito.
-   * El tipo de NC se infiere automáticamente del tipo del comprobante original. */
+  /**
+   * Comprobante original al que se asocia la nota de crédito. El tipo de NC
+   * se infiere de la clase del original (`NOTA_CREDITO_MAP`).
+   */
   comprobanteOriginal: ComprobanteRef;
 }
 
 export interface NotaDebitoOpts extends Omit<FacturarOpts, 'cbteTipo'> {
-  /** Comprobante original al que se asocia la nota de débito.
-   * El tipo de ND se infiere automáticamente del tipo del comprobante original. */
+  /**
+   * Comprobante original al que se asocia la nota de débito. El tipo de ND se
+   * infiere de la clase del original (`NOTA_DEBITO_MAP`).
+   */
   comprobanteOriginal: ComprobanteRef;
 }
 

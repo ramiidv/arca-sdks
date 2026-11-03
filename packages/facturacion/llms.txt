@@ -42,16 +42,17 @@ new ArcaFacturacion({
   cuit: number | string,        // se valida el dígito verificador
   cert: string, key: string,    // PEM; keyPassphrase?: string
   production?: boolean,         // default false (homologación)
-  ticketStorage?: TicketStorage,// recomendado: sin él, un reinicio deja sin ticket hasta 12 h (ArcaTicketVigenteError)
+  ticketStorage?: TicketStorage,// recomendado: sin él, un reinicio deja sin ticket durante el lapso de retención de WSAA (ArcaTicketVigenteError)
   wsaa?: WsaaClient,            // WsaaClient compartido con otros SDKs del mismo certificado; con él se ignoran
                                 // cert, key, keyPassphrase, ticketStorage, tokenTTLMinutes, clockOffsetMs,
-                                // autoClockSkew, loginErrorCooldownMs, permanentErrorCooldownMs y endpoints.wsaa
+                                // autoClockSkew, loginErrorCooldownMs, permanentErrorCooldownMs, alreadyAuthenticatedCooldownMs y endpoints.wsaa
   signal?: AbortSignal,         // cancela todas las llamadas
   timeout?: number,             // 30000 ms
   retries?: number,             // 1: solo consultas; las emisiones nunca se reintentan
   retryDelayMs?: number,        // 1000 (backoff exponencial)
   tokenTTLMinutes?: number, clockOffsetMs?: number, autoClockSkew?: boolean, loginErrorCooldownMs?: number,
   permanentErrorCooldownMs?: number, // default Infinity: espera tras un error de WSAA no reintentable; 0 la desactiva
+  alreadyAuthenticatedCooldownMs?: number, // default 120000 prod / 600000 homo: espera tras coe.alreadyAuthenticated; 0 la desactiva
   paramCacheTTLMs?: number,     // 24 h; 0 sin cache. Puntos de venta y cotizaciones no se cachean
   endpoints?: { wsaa?: string, wsfe?: string, wsfex?: string },
   legacyTls?: 'auto' | 'never' | 'always', // default 'auto' (ver Entornos)
@@ -89,9 +90,9 @@ Todos los métodos aceptan como último parámetro `{ signal }`. Campos en camel
   moneda?: string, cotizacion?: number, canMisMonExt?: 'S' | 'N',
   descuentoGlobal?: number,         // monto final, se prorratea
   tributos?: { id, desc?, baseImp, alic, importe }[],
-  cbtesAsoc?: { tipo, ptoVta, nro, cuit?, fecha? }[],
+  cbtesAsoc?: { tipo, ptoVta, nro, cuit?, fecha? }[], // tipos de CBTES_ASOCIABLES (10040); en NC/ND FCE con cuit y fecha
   periodoAsoc?: { desde, hasta },   // NC/ND no FCE
-  opcionales?: { id: string, valor: string }[], // FCE: 2101 CBU, 27 SCA/ADC (facturas), 22 anulación S/N (NC/ND)
+  opcionales?: { id: string, valor: string }[], // solo en los tipos que los admiten (10068). FCE: 2101 CBU, 27 SCA/ADC (facturas), 22 anulación S/N (NC/ND); tipo 49: 91 y 93
   actividades?: number[],
   compradores?: { docTipo, docNro, porcentaje }[],
 }
@@ -99,21 +100,26 @@ Todos los métodos aceptan como último parámetro `{ signal }`. Campos en camel
 
 `FacturaResult`: `aprobada`, `cae?`, `caeVencimiento?`, `cbteNro`, `ptoVta`, `cbteTipo`, `importes` (`total`, `neto`, `iva`, `exento`, `noGravado`, `tributos`, `descuento?`), `observaciones` y `eventos` (`{ code, msg }[]`), `fecha?`, `docTipo?`, `docNro?`, `moneda?`, `cotizacion?`, `tipoCodAut?` ('E' CAE, 'A' CAEA), `raw`.
 
-Reglas validadas localmente (el mensaje cita el código del manual WSFEv1 v4.7):
+Reglas validadas localmente (el mensaje cita el código del manual WSFEv1 v4.8 o WSFEX 3.1.1):
 
-- Clase A y M (1-5, 34, 39, 51-54, 60, 63, 201-203): `docTipo` 80 y condición RI/monotributo (10013, 10243).
+- Clase A y M (1-5, 34, 39, 51-54, 60, 63, 201-203): `docTipo` 80 y condición RI/monotributo (10013, 10243). Clase B: condición 4, 5, 7, 8, 9, 10 o 15 (10243). Tipo 49: condición 5, concepto 1, opcionales 91 y 93 (10085, 10078, 10084).
+- `docTipo` 31 (FCI CNV): `docNro` <= 4 dígitos y condición 15 (10271, 10272). `docTipo` 99: `docNro` 0; otro `docTipo`: `docNro` obligatorio; tipo 49 no admite `docTipo` 99 (10015). Receptor y compradores distintos del emisor (10069, 10140).
+- `cbtesAsoc`: tipos y asociados de `CBTES_ASOCIABLES` (10040). `opcionales`: solo en los tipos que los admiten (10068). Seguros de Caución: 2901/2902 solo en 1, 2, 3, 6, 7 y 8, de 1 a 30 caracteres, en igual cantidad y hasta 6000 opcionales (10273-10276, 10280, 10281).
+- NC/ND FCE: asociados con `cuit` y `fecha` (10151, 10158); sin anulación asocian una sola factura FCE y además remitos 88, 91, 988, 990, 991, 993-997 (10156/10157); anulación: ND asocia NC, NC asocia factura o ND, sin remitos (10183). FCE: receptor distinto de 23000000000 (10178), `vtoPago` >= hoy (10164).
 - Concepto 2 y 3: `servicio` y vencimiento de pago (10032, 10049). Concepto 1 fuera de FCE no admite `vtoPago` (10031/10033).
 - Facturas FCE 201, 206, 211: `vtoPago` obligatorio con cualquier concepto (10163). NC/ND FCE de concepto 1: `vtoPago` solo si son de anulación, opcional 22 = 'S' (10175). Facturas FCE: opcionales 2101 (CBU, 22 dígitos) y 27 'SCA'/'ADC' obligatorios, sin 22 (10168, 10165, 10216, 10215, 10171). NC/ND FCE: opcional 22 'S'/'N' obligatorio, sin 2101, 2102 ni 27 (10173, 10167, 10172). FCE: 2102 (alias) de 6 a 20 caracteres (10166). Fuera de FCE no se informan 2101, 2102, 22 ni 27 (10169). FCE: receptor con CUIT (10176); NC/ND FCE con `cbtesAsoc` (10153), sin `periodoAsoc` (10196).
 - NC/ND: `cbtesAsoc` o `periodoAsoc` (10197).
-- B (6, 7, 8) a 23000000000 (No Categorizado) con importes gravados: tributo 13 `TributoTipo.PERCEP_IVA_NO_CATEGORIZADO` (10067, 10283).
-- Moneda: PES con cotización 1 (10039); extranjera con cotización salvo `canMisMonExt: 'S'` (10038, 10241).
-- Compradores: >= 2, docTipo 80/86/87, sin repetir, suman 100, el receptor es el de mayor porcentaje (10136-10147).
+- B (6, 7, 8) a 23000000000 (No Categorizado) con importes gravados y sin tributos: tributo 13 `TributoTipo.PERCEP_IVA_NO_CATEGORIZADO` (10067). Con otros tributos y sin el 13 no se rechaza (10283 solo observa).
+- Moneda: PES con cotización 1 (10039); extranjera con cotización (< 10000) salvo `canMisMonExt: 'S'` (10038, 10241).
+- Compradores: solo A, B, C o M (no FCE) y concepto 1 (10134, 10150, 10194); >= 2 con el receptor entre ellos, docTipo 80/86/87 con 11 dígitos, sin repetir, porcentajes de 2 decimales que suman 100, el receptor entre los de mayor porcentaje (10136-10147).
+- WSFEX: PES con cotización 1 (1601); extranjera con cotización < 10000 (1600) salvo `canMisMonExt: 'S'`, que permite omitirla (1602); `canMisMonExt` solo en Factura E en moneda extranjera, ni `'N'` con PES (1605); sin cotización no se envía `Moneda_ctz`; Factura E solo asocia 88, 89, 91, 993, 994 (1755); un asociado salvo 88/89 (1754); NC/ND de servicios con asociados (2047).
+- `notaCredito`/`notaDebito` infieren el tipo de la clase del original (facturas, notas, recibos, FCE; `NOTA_CREDITO_MAP`/`NOTA_DEBITO_MAP`, derivados de la validación 10040). En FCE una NC no asocia otra NC ni una ND otra ND (10157, 10183).
 
 ### Facturación WSFEv1 (API raw)
 
 - `crearFactura(request: InvoiceRequest): Promise<FECAESolicitarResult>`: `{ ptoVta, cbteTipo, invoices: InvoiceDetail[] }`. En lotes, `feCabResp.resultado` puede ser 'P' (parcial) y cada `feDetResp[i]` trae su resultado.
 - `crearFacturaAuto(ptoVta, cbteTipo, invoice)`, `ultimoComprobante(ptoVta, cbteTipo)`, `siguienteComprobante(...)`, `consultarComprobante(cbteTipo, ptoVta, cbteNro)`.
-- Valida: `ImpTotal` = `ImpTotConc + ImpNeto + ImpOpEx + ImpTrib + ImpIVA` (10048), `ImpIVA` = suma de `iva[].importe` (10023), `ImpTrib` = suma de `tributos[].importe` (10029), con el margen del manual (0,01 por elemento o 0,01 %); `condicionIvaReceptorId` obligatorio también con DocTipo 99 (10246). Importes redondeados a 2 decimales y `monCotiz` a 6.
+- Valida: `ImpTotal` = `ImpTotConc + ImpNeto + ImpOpEx + ImpTrib + ImpIVA` (10048), `ImpIVA` = suma de `iva[].importe` (10023), `ImpTrib` = suma de `tributos[].importe` (10029), con el margen del manual (0,01 por elemento o 0,01 %); `condicionIvaReceptorId` obligatorio también con DocTipo 99 (10246). Importes redondeados a 2 decimales y `monCotiz` a 6, mitad al par (Round Half Even, criterio del manual; también en la API simplificada).
 - Los campos de respuesta que ARCA puede omitir son opcionales en los tipos (ej: `feCabResp.fchProceso`, `resultGet.codAutorizacion`, `resultGet.monId`).
 
 ### Exportación WSFEX
@@ -127,7 +133,7 @@ Reglas validadas localmente (el mensaje cita el código del manual WSFEv1 v4.7):
 await arca.facturarExpo({
   ptoVta: 3, cbteTipo: CbteTipo.FACTURA_E, tipoExpo: TipoExpo.BIENES, pais: 212,
   cliente: { nombre: 'ACME', domicilio: 'Main St 1', cuitPais?: 55000002126, idImpositivo?: '12-3456789' }, // al menos uno (1580)
-  moneda: 'DOL', cotizacion: 1200,
+  moneda: 'DOL', cotizacion?: 1200,              // con canMisMonExt: 'S' se puede omitir (1602)
   formaPago: 'Transferencia',        // obligatoria solo en Factura E (1620)
   items: [
     { codigo: 'A1', descripcion: 'Widget', cantidad: 100, unidad: 7, precioUnitario: 10, bonificacion?: 0 },
@@ -156,7 +162,7 @@ await arca.facturarExpo({
 ### Funciones y constantes
 
 - Sin red: `armarComprobante`, `calcularTotales(items, { tributos?, tipoC?, descuentoGlobal? })`, `resolverCbteTipo(emisor, receptor, clase?)`, `requiereRecuperacion`, `intentoDesdeComprobante`, `coincideConIntento`, `facturaResultDesdeConsulta`, `generarUrlQR(input, options?)`, `urlQRDesdeFactura`, `formatFechaHora`. `ArcaFacturacion.generateQRUrl` = `generarUrlQR`.
-- Enums: `CbteTipo`, `Concepto`, `DocTipo`, `CondicionIva`, `IvaTipo` (`IVA_RATES`), `Moneda`, `TributoTipo`, `TipoExpo`, `NOTA_CREDITO_MAP`, `NOTA_DEBITO_MAP`.
+- Enums: `CbteTipo`, `Concepto`, `DocTipo`, `CondicionIva`, `IvaTipo` (`IVA_RATES`), `Moneda`, `TributoTipo`, `TipoExpo`, `NOTA_CREDITO_MAP`, `NOTA_DEBITO_MAP` (original → NC/ND), `CBTES_ASOCIABLES` (`Record<cbteTipo, cbteTipo[]>`: tipos asociables a cada tipo, validación 10040).
 - `Moneda`: PES, DOL, '060' euro, '012' real, '011' peso uruguayo, '033' peso chileno, '029' guaraní, '031' peso boliviano, '032' peso colombiano, '010' peso mexicano, '021' libra, '019' yen, '009' franco suizo, '018' dólar canadiense, '064' yuan. Tabla completa: `getMonedas()`.
 - Códigos: `WSFE_ERRORES_INTERNOS` [500, 501, 502], `WSFEX_ERRORES_INTERNOS` [500, 501, 502, 505], `WSFE_ERRORES_AUTH` [600, 601], `WSFEX_ERRORES_AUTH` [1000, 1001], `WSFE_NUMERO_NO_CORRESPONDE` 10016, `WSFE_CAEA_NUMERO_NO_CORRESPONDE` 703.
 - Clientes de bajo nivel: `WsfeClient`, `WsfexClient`, `WsaaClient`.

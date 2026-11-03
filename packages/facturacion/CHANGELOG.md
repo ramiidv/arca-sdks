@@ -4,7 +4,7 @@
 
 ### Minor Changes
 
-- db257db: Auditoría contra el Manual WSFEv1 v4.7, el Manual WSFEX v2.0.1 y la especificación del QR.
+- db257db: Auditoría contra el Manual WSFEv1 v4.7, el Manual WSFEX v3.1.1 y la especificación del QR.
   
   **Cambio de comportamiento: `Moneda.GUARANIES` y `Moneda.BOLIVIANOS` estaban invertidos.** Según la tabla de ARCA, `029` es Guaraní y `031` es Peso boliviano. Ahora `Moneda.GUARANIES = '029'` y `Moneda.BOLIVIANOS = '031'`. Quien facturaba con `Moneda.GUARANIES` enviaba pesos bolivianos (y al revés): revisá esos comprobantes.
   

@@ -1,5 +1,5 @@
 import { CondicionIva } from '@ramiidv/arca-common';
-import { CbteTipo, RECEPTORES_CLASE_A } from './constants.js';
+import { CbteTipo, RECEPTORES_CLASE_A, RECEPTORES_CLASE_B } from './constants.js';
 import { fail } from './validation.js';
 
 export type ClaseComprobante = 'factura' | 'nota_credito' | 'nota_debito';
@@ -10,23 +10,15 @@ export type ClaseComprobante = 'factura' | 'nota_credito' | 'nota_debito';
  *   responsables inscriptos y clase B al resto; monotributistas y exentos emiten clase C.
  * - RG 5003/2021, art. 2: los responsables inscriptos emiten clase A a los
  *   monotributistas (antes era B).
- * - Manual del desarrollador WSFEv1 (v4.7, 01/09/2026), tabla "Condición Frente
+ * - Manual del desarrollador WSFEv1 (v4.8, 01/12/2026), tabla "Condición Frente
  *   al IVA del receptor" por clase de comprobante:
  *     A: 1 (RI), 6 (Monotributo), 13 (Monotributista Social), 16 (Monotributo Trabajador
  *        Independiente Promovido)
  *     B: 4 (Exento), 5 (Consumidor Final), 7 (No Categorizado), 8 (Proveedor del Exterior),
  *        9 (Cliente del Exterior), 10 (IVA Liberado Ley 19.640), 15 (IVA No Alcanzado)
  *     C: todas
+ *   (`RECEPTORES_CLASE_A` y `RECEPTORES_CLASE_B` en constants.ts)
  */
-const RECEPTORES_CLASE_B = new Set<number>([
-  CondicionIva.EXENTO,
-  CondicionIva.CONSUMIDOR_FINAL,
-  CondicionIva.NO_CATEGORIZADO,
-  CondicionIva.PROVEEDOR_EXTERIOR,
-  CondicionIva.CLIENTE_EXTERIOR,
-  CondicionIva.IVA_LIBERADO,
-  CondicionIva.IVA_NO_ALCANZADO,
-]);
 
 const EMISORES_CLASE_C = new Set<number>([
   CondicionIva.MONOTRIBUTISTA,

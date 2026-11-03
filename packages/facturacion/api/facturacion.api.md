@@ -287,6 +287,9 @@ export function calcularTotales(items: LineItem[], opts?: {
 
 export { CallOptions }
 
+// @public
+export const CBTES_ASOCIABLES: Readonly<Record<number, readonly number[]>>;
+
 // @public (undocumented)
 export enum CbteTipo {
     // (undocumented)
@@ -532,7 +535,7 @@ export interface FacturarExpoOpts {
         domicilio: string;
         idImpositivo?: string;
     };
-    cotizacion: number;
+    cotizacion?: number;
     fecha?: Date | string;
     fechaPago?: Date | string;
     formaPago?: string;
@@ -1250,7 +1253,7 @@ export interface WsfexInvoice {
     incoterms?: string;
     incotermsDs?: string;
     items: WsfexItem[];
-    monedaCtz: number;
+    monedaCtz?: number;
     monedaId: string;
     obs?: string;
     obsComerciales?: string;

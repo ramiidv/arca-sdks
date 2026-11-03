@@ -353,6 +353,24 @@ describe('validaciones antes de tocar la red', () => {
     expect(err.message).toMatch(/WSFEX/);
     expect(mock.fn).not.toHaveBeenCalled();
   });
+
+  it('NC de una NC FCE (o ND de una ND FCE) → no se infiere el tipo (10157/10183), sin tocar la red', async () => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({});
+    const nota = (tipo: number) => ({
+      ptoVta: 1,
+      items: [{ neto: 1 }],
+      comprobanteOriginal: { tipo, ptoVta: 1, nro: 1 },
+    });
+    const nc = await arca.notaCredito(nota(CbteTipo.FCE_NOTA_CREDITO_A)).catch((e) => e);
+    expect(nc).toBeInstanceOf(ArcaValidationError);
+    expect(nc.field).toBe('comprobanteOriginal.tipo');
+    expect(nc.message).toMatch(/10157/);
+    const nd = await arca.notaDebito(nota(CbteTipo.FCE_NOTA_DEBITO_B)).catch((e) => e);
+    expect(nd).toBeInstanceOf(ArcaValidationError);
+    expect(nd.field).toBe('comprobanteOriginal.tipo');
+    expect(mock.fn).not.toHaveBeenCalled();
+  });
 });
 
 describe('parámetros', () => {

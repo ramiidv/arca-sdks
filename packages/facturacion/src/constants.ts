@@ -241,47 +241,57 @@ export enum Moneda {
 }
 
 // ============================================================
-// Mapeos de CbteTipo: Factura → Nota Crédito / Nota Débito
+// Clases de comprobante
 // ============================================================
 
-/**
- * Factura → Nota de Crédito del mismo tipo. Incluye la clase E (exportación)
- * como referencia, pero esas notas se emiten por WSFEX (`facturarExpo`), no
- * con `notaCredito`.
- */
-export const NOTA_CREDITO_MAP: Record<number, number> = {
-  [CbteTipo.FACTURA_A]: CbteTipo.NOTA_CREDITO_A,
-  [CbteTipo.FACTURA_B]: CbteTipo.NOTA_CREDITO_B,
-  [CbteTipo.FACTURA_C]: CbteTipo.NOTA_CREDITO_C,
-  [CbteTipo.FACTURA_E]: CbteTipo.NOTA_CREDITO_E,
-  [CbteTipo.FACTURA_M]: CbteTipo.NOTA_CREDITO_M,
-  [CbteTipo.FCE_FACTURA_A]: CbteTipo.FCE_NOTA_CREDITO_A,
-  [CbteTipo.FCE_FACTURA_B]: CbteTipo.FCE_NOTA_CREDITO_B,
-  [CbteTipo.FCE_FACTURA_C]: CbteTipo.FCE_NOTA_CREDITO_C,
-};
+/** Clase A de WSFEv1 sin FCE: 01-05, 34, 39, 60 y 63. */
+const CLASE_A: readonly number[] = [
+  CbteTipo.FACTURA_A,
+  CbteTipo.NOTA_DEBITO_A,
+  CbteTipo.NOTA_CREDITO_A,
+  CbteTipo.RECIBO_A,
+  CbteTipo.NOTA_VENTA_CONTADO_A,
+  CbteTipo.CBTE_A_ANEXO_I_RG1415,
+  CbteTipo.OTROS_CBTE_A_RG1415,
+  CbteTipo.CTA_VTA_LIQ_PROD_A,
+  CbteTipo.LIQUIDACION_A,
+];
 
-/** Factura → Nota de Débito del mismo tipo (la clase E se emite por WSFEX, ver `NOTA_CREDITO_MAP`). */
-export const NOTA_DEBITO_MAP: Record<number, number> = {
-  [CbteTipo.FACTURA_A]: CbteTipo.NOTA_DEBITO_A,
-  [CbteTipo.FACTURA_B]: CbteTipo.NOTA_DEBITO_B,
-  [CbteTipo.FACTURA_C]: CbteTipo.NOTA_DEBITO_C,
-  [CbteTipo.FACTURA_E]: CbteTipo.NOTA_DEBITO_E,
-  [CbteTipo.FACTURA_M]: CbteTipo.NOTA_DEBITO_M,
-  [CbteTipo.FCE_FACTURA_A]: CbteTipo.FCE_NOTA_DEBITO_A,
-  [CbteTipo.FCE_FACTURA_B]: CbteTipo.FCE_NOTA_DEBITO_B,
-  [CbteTipo.FCE_FACTURA_C]: CbteTipo.FCE_NOTA_DEBITO_C,
-};
+/** Clase B de WSFEv1 sin FCE: 06-10, 35, 40, 61 y 64. */
+const CLASE_B: readonly number[] = [
+  CbteTipo.FACTURA_B,
+  CbteTipo.NOTA_DEBITO_B,
+  CbteTipo.NOTA_CREDITO_B,
+  CbteTipo.RECIBO_B,
+  CbteTipo.NOTA_VENTA_CONTADO_B,
+  CbteTipo.CBTE_B_ANEXO_I_RG1415,
+  CbteTipo.OTROS_CBTE_B_RG1415,
+  CbteTipo.CTA_VTA_LIQ_PROD_B,
+  CbteTipo.LIQUIDACION_B,
+];
 
-/** CbteTipo que NO discriminan IVA (Monotributista - tipo C) */
-const TIPOS_C = new Set([
+/** Clase C de WSFEv1 sin FCE: 11-13 y 15. */
+const CLASE_C: readonly number[] = [
   CbteTipo.FACTURA_C,
   CbteTipo.NOTA_DEBITO_C,
   CbteTipo.NOTA_CREDITO_C,
   CbteTipo.RECIBO_C,
-  CbteTipo.FCE_FACTURA_C,
-  CbteTipo.FCE_NOTA_DEBITO_C,
-  CbteTipo.FCE_NOTA_CREDITO_C,
-]);
+];
+
+/** "A con leyenda operación sujeta a retención" (M): 51-54. */
+const CLASE_M: readonly number[] = [
+  CbteTipo.FACTURA_M,
+  CbteTipo.NOTA_DEBITO_M,
+  CbteTipo.NOTA_CREDITO_M,
+  CbteTipo.RECIBO_M,
+];
+
+const FCE_A: readonly number[] = [CbteTipo.FCE_FACTURA_A, CbteTipo.FCE_NOTA_DEBITO_A, CbteTipo.FCE_NOTA_CREDITO_A];
+const FCE_B: readonly number[] = [CbteTipo.FCE_FACTURA_B, CbteTipo.FCE_NOTA_DEBITO_B, CbteTipo.FCE_NOTA_CREDITO_B];
+const FCE_C: readonly number[] = [CbteTipo.FCE_FACTURA_C, CbteTipo.FCE_NOTA_DEBITO_C, CbteTipo.FCE_NOTA_CREDITO_C];
+
+/** CbteTipo que NO discriminan IVA (Monotributista - tipo C) */
+const TIPOS_C = new Set<number>([...CLASE_C, ...FCE_C]);
 
 export function isTipoC(cbteTipo: number): boolean {
   return TIPOS_C.has(cbteTipo);
@@ -298,31 +308,115 @@ export function isTipoE(cbteTipo: number): boolean {
  * Comprobantes clase A y "A con leyenda operación sujeta a retención" (M):
  * receptor identificado con CUIT (validación 10013) y RI o monotributista
  * (tabla "Condición frente al IVA del receptor", columna A/ALEY). Lista de la
- * validación 10007 del manual de WSFEv1 (v4.7): 01-05, 34, 39, 60, 63 y
+ * validación 10007 del manual de WSFEv1 (v4.8): 01-05, 34, 39, 60, 63 y
  * 201-203 (clase A); 51-54 (ALEY).
  */
-const TIPOS_A = new Set<number>([
-  CbteTipo.FACTURA_A,
-  CbteTipo.NOTA_DEBITO_A,
-  CbteTipo.NOTA_CREDITO_A,
-  CbteTipo.RECIBO_A,
-  CbteTipo.NOTA_VENTA_CONTADO_A,
-  CbteTipo.CBTE_A_ANEXO_I_RG1415,
-  CbteTipo.OTROS_CBTE_A_RG1415,
-  CbteTipo.CTA_VTA_LIQ_PROD_A,
-  CbteTipo.LIQUIDACION_A,
-  CbteTipo.FACTURA_M,
-  CbteTipo.NOTA_DEBITO_M,
-  CbteTipo.NOTA_CREDITO_M,
-  CbteTipo.RECIBO_M,
-  CbteTipo.FCE_FACTURA_A,
-  CbteTipo.FCE_NOTA_DEBITO_A,
-  CbteTipo.FCE_NOTA_CREDITO_A,
-]);
+const TIPOS_A = new Set<number>([...CLASE_A, ...CLASE_M, ...FCE_A]);
 
 export function isTipoA(cbteTipo: number): boolean {
   return TIPOS_A.has(cbteTipo);
 }
+
+/** Comprobantes clase B: 06-10, 35, 40, 61, 64 y 206-208. */
+const TIPOS_B = new Set<number>([...CLASE_B, ...FCE_B]);
+
+export function isTipoB(cbteTipo: number): boolean {
+  return TIPOS_B.has(cbteTipo);
+}
+
+// ============================================================
+// Comprobantes asociados y mapeos Comprobante → Nota Crédito / Nota Débito
+// ============================================================
+
+/**
+ * Comprobantes de otros regímenes (remitos) que la validación 10040 admite
+ * asociar: 88 (remito electrónico de tabaco) y 991 a las facturas y notas A,
+ * B y M; 91 (remito R), 990, 991, 993/994 (remitos harineros) y 995 (remito
+ * cárnico) a las facturas FCE. Las NC/ND FCE que no son de anulación asocian
+ * además 88, 91, 988, 990, 991 y 993 a 997 (validación 10157).
+ */
+const REMITOS_ASOCIABLES: readonly number[] = [88, 991];
+const REMITOS_ASOCIABLES_FCE: readonly number[] = [91, 990, 991, 993, 994, 995];
+const REMITOS_ASOCIABLES_NOTA_FCE: readonly number[] = [88, 91, 988, 990, 991, 993, 994, 995, 996, 997];
+
+/** `true` si el tipo no es un comprobante de WSFEv1 (un remito u otro comprobante asociable). */
+export function isRemito(tipo: number): boolean {
+  return CbteTipo[tipo] === undefined;
+}
+
+const asociables = (tipos: readonly number[], asociables: readonly number[]) =>
+  tipos.map((t) => [t, asociables] as const);
+
+/**
+ * Tipos de comprobante que se pueden asociar (`CbtesAsoc`) a cada tipo, según
+ * la validación 10040 del manual de WSFEv1 (v4.8). Un tipo que no está en la
+ * tabla no admite comprobantes asociados.
+ */
+export const CBTES_ASOCIABLES: Readonly<Record<number, readonly number[]>> = Object.fromEntries([
+  ...asociables([CbteTipo.FACTURA_A, CbteTipo.FACTURA_B, CbteTipo.FACTURA_M], REMITOS_ASOCIABLES),
+  ...asociables([CbteTipo.NOTA_DEBITO_A, CbteTipo.NOTA_CREDITO_A], [...CLASE_A, ...REMITOS_ASOCIABLES]),
+  ...asociables([CbteTipo.NOTA_DEBITO_B, CbteTipo.NOTA_CREDITO_B], [...CLASE_B, ...REMITOS_ASOCIABLES]),
+  ...asociables([CbteTipo.NOTA_DEBITO_C, CbteTipo.NOTA_CREDITO_C], CLASE_C),
+  ...asociables([CbteTipo.NOTA_DEBITO_M, CbteTipo.NOTA_CREDITO_M], [...CLASE_M, ...REMITOS_ASOCIABLES]),
+  ...asociables([CbteTipo.FCE_FACTURA_A, CbteTipo.FCE_FACTURA_B, CbteTipo.FCE_FACTURA_C], REMITOS_ASOCIABLES_FCE),
+  ...asociables([CbteTipo.FCE_NOTA_DEBITO_A, CbteTipo.FCE_NOTA_CREDITO_A], [...FCE_A, ...REMITOS_ASOCIABLES_NOTA_FCE]),
+  ...asociables([CbteTipo.FCE_NOTA_DEBITO_B, CbteTipo.FCE_NOTA_CREDITO_B], [...FCE_B, ...REMITOS_ASOCIABLES_NOTA_FCE]),
+  ...asociables([CbteTipo.FCE_NOTA_DEBITO_C, CbteTipo.FCE_NOTA_CREDITO_C], [...FCE_C, ...REMITOS_ASOCIABLES_NOTA_FCE]),
+]);
+
+/** Notas de crédito y de débito de WSFEv1 (incluidas FCE; las de clase E van por WSFEX). */
+const NOTAS_CREDITO: readonly number[] = [
+  CbteTipo.NOTA_CREDITO_A,
+  CbteTipo.NOTA_CREDITO_B,
+  CbteTipo.NOTA_CREDITO_C,
+  CbteTipo.NOTA_CREDITO_M,
+  CbteTipo.FCE_NOTA_CREDITO_A,
+  CbteTipo.FCE_NOTA_CREDITO_B,
+  CbteTipo.FCE_NOTA_CREDITO_C,
+];
+const NOTAS_DEBITO: readonly number[] = [
+  CbteTipo.NOTA_DEBITO_A,
+  CbteTipo.NOTA_DEBITO_B,
+  CbteTipo.NOTA_DEBITO_C,
+  CbteTipo.NOTA_DEBITO_M,
+  CbteTipo.FCE_NOTA_DEBITO_A,
+  CbteTipo.FCE_NOTA_DEBITO_B,
+  CbteTipo.FCE_NOTA_DEBITO_C,
+];
+
+/**
+ * Comprobante original → la nota (de las `notas`, todas NC o todas ND) que lo
+ * puede asociar según `CBTES_ASOCIABLES`. Quedan afuera los remitos (no son
+ * tipos de WSFEv1) y, en FCE, las notas del mismo tipo: una NC FCE no asocia
+ * otra NC FCE ni una ND FCE otra ND FCE (validaciones 10157 y 10183).
+ */
+function notaPorOriginal(notas: readonly number[]): Record<number, number> {
+  const map: Record<number, number> = {};
+  for (const nota of notas) {
+    for (const original of CBTES_ASOCIABLES[nota]) {
+      if (isRemito(original) || (isFCE(nota) && notas.includes(original))) continue;
+      map[original] ??= nota;
+    }
+  }
+  return map;
+}
+
+/**
+ * Comprobante original → Nota de Crédito de su clase (facturas, notas,
+ * recibos y demás comprobantes que la validación 10040 admite asociar).
+ * Incluye la Factura E (exportación) como referencia, pero esas notas se
+ * emiten por WSFEX (`facturarExpo`), no con `notaCredito`.
+ */
+export const NOTA_CREDITO_MAP: Record<number, number> = {
+  ...notaPorOriginal(NOTAS_CREDITO),
+  [CbteTipo.FACTURA_E]: CbteTipo.NOTA_CREDITO_E,
+};
+
+/** Comprobante original → Nota de Débito de su clase (ver `NOTA_CREDITO_MAP`). */
+export const NOTA_DEBITO_MAP: Record<number, number> = {
+  ...notaPorOriginal(NOTAS_DEBITO),
+  [CbteTipo.FACTURA_E]: CbteTipo.NOTA_DEBITO_E,
+};
 
 /** Facturas de Crédito Electrónica MiPyME (FCE), cualquier clase. */
 export function isFCE(cbteTipo: number): boolean {
@@ -348,13 +442,49 @@ export const RECEPTORES_CLASE_A: ReadonlySet<number> = new Set<number>([
   CondicionIva.MONOTRIBUTO_INDEPENDIENTE_PROMOVIDO,
 ]);
 
-/** Notas de crédito y débito (WSFEv1, incluidas FCE). */
-const NOTAS = new Set<number>(
-  [...Object.values(NOTA_CREDITO_MAP), ...Object.values(NOTA_DEBITO_MAP)].filter((t) => !TIPOS_E.has(t)),
-);
+/**
+ * Receptores válidos para comprobantes clase B (manual WSFEv1, tabla
+ * "Condición frente al IVA del receptor"): 4 (Exento), 5 (Consumidor Final),
+ * 7 (No Categorizado), 8 (Proveedor del Exterior), 9 (Cliente del Exterior),
+ * 10 (IVA Liberado Ley 19.640) y 15 (IVA No Alcanzado).
+ */
+export const RECEPTORES_CLASE_B: ReadonlySet<number> = new Set<number>([
+  CondicionIva.EXENTO,
+  CondicionIva.CONSUMIDOR_FINAL,
+  CondicionIva.NO_CATEGORIZADO,
+  CondicionIva.PROVEEDOR_EXTERIOR,
+  CondicionIva.CLIENTE_EXTERIOR,
+  CondicionIva.IVA_LIBERADO,
+  CondicionIva.IVA_NO_ALCANZADO,
+]);
+
+/** Receptor del tipo 49 (Compra de Bienes Usados): solo Consumidor Final. */
+const RECEPTORES_BIENES_USADOS: ReadonlySet<number> = new Set<number>([CondicionIva.CONSUMIDOR_FINAL]);
+
+/**
+ * Condiciones frente al IVA del receptor que admite un tipo de comprobante
+ * (tabla "Condición frente al IVA del receptor" del manual de WSFEv1,
+ * validación 10243), o `undefined` si admite todas (clase C).
+ */
+export function receptoresAdmitidos(cbteTipo: number): ReadonlySet<number> | undefined {
+  if (isTipoA(cbteTipo)) return RECEPTORES_CLASE_A;
+  if (isTipoB(cbteTipo)) return RECEPTORES_CLASE_B;
+  if (cbteTipo === CbteTipo.COMPRA_BIENES_USADOS) return RECEPTORES_BIENES_USADOS;
+  return undefined;
+}
+
+/** Nota de crédito de WSFEv1 (incluidas FCE; no las de clase E). */
+export function isNotaCredito(cbteTipo: number): boolean {
+  return NOTAS_CREDITO.includes(cbteTipo);
+}
+
+/** Nota de débito de WSFEv1 (incluidas FCE; no las de clase E). */
+export function isNotaDebito(cbteTipo: number): boolean {
+  return NOTAS_DEBITO.includes(cbteTipo);
+}
 
 export function isNotaCreditoODebito(cbteTipo: number): boolean {
-  return NOTAS.has(cbteTipo);
+  return isNotaCredito(cbteTipo) || isNotaDebito(cbteTipo);
 }
 
 // ============================================================

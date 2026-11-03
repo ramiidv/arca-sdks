@@ -133,6 +133,16 @@ describe('facturarExpo: request', () => {
     });
   });
 
+  it('canMisMonExt S sin cotización: no se envía Moneda_ctz (ARCA usa la oficial, 1602)', async () => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({ FEXAuthorize: autorizado({ id: 7, nro: 2 }) });
+    await arca.facturarExpo({ ...BIENES, cotizacion: undefined, canMisMonExt: 'S', id: 7, cbteNro: 2 });
+    const cmp = mock.last('FEXAuthorize').params.Cmp;
+    expect(cmp).not.toHaveProperty('Moneda_ctz');
+    expect(cmp.CanMisMonExt).toBe('S');
+    expect(cmp.Moneda_Id).toBe('DOL');
+  });
+
   it('servicios: Permiso_existente vacío y Fecha_pago obligatoria (default fecha del comprobante)', async () => {
     const arca = await arcaDePrueba();
     const mock = mockArcaFetch({ FEXAuthorize: autorizado({ id: 7, nro: 2 }) });

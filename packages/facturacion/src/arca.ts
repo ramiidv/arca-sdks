@@ -219,7 +219,8 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     if (cbteTipo === undefined) {
       fail(
         'comprobanteOriginal.tipo',
-        `No se puede inferir el tipo de Nota de Crédito para CbteTipo ${opts.comprobanteOriginal?.tipo}`,
+        `No se puede inferir el tipo de Nota de Crédito para CbteTipo ${opts.comprobanteOriginal?.tipo}: ` +
+          'no es un comprobante que una Nota de Crédito de WSFEv1 pueda asociar (validaciones 10040, 10157 y 10183)',
         opts.comprobanteOriginal?.tipo,
       );
     }
@@ -235,7 +236,8 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     if (cbteTipo === undefined) {
       fail(
         'comprobanteOriginal.tipo',
-        `No se puede inferir el tipo de Nota de Débito para CbteTipo ${opts.comprobanteOriginal?.tipo}`,
+        `No se puede inferir el tipo de Nota de Débito para CbteTipo ${opts.comprobanteOriginal?.tipo}: ` +
+          'no es un comprobante que una Nota de Débito de WSFEv1 pueda asociar (validaciones 10040, 10157 y 10183)',
         opts.comprobanteOriginal?.tipo,
       );
     }
@@ -274,7 +276,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    * descuento inválido no gasta una consulta.
    */
   private async prepararComprobante(opts: FacturarOpts, call?: CallOptions, ahora: Date = this.wsaa.now()) {
-    validateFacturarOpts(opts);
+    validateFacturarOpts(opts, { cuitEmisor: this.cuitNum, ahora });
     const totales = totalesDe(opts);
     const cbteNro = opts.cbteNro ?? (await this.siguienteComprobante(opts.ptoVta, opts.cbteTipo, call));
     return buildInvoiceDetail(opts, cbteNro, ahora, totales);

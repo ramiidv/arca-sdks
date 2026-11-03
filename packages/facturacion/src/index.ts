@@ -129,6 +129,7 @@ export {
   TributoTipo,
   NOTA_CREDITO_MAP,
   NOTA_DEBITO_MAP,
+  CBTES_ASOCIABLES,
 } from './constants.js';
 
 // Low-level clients (for advanced usage)
