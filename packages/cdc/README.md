@@ -74,26 +74,27 @@ if (r.resultado === 'A') {
 
 `ArcaCdcConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`:
 
-| Opción                            | Tipo                            | Default      | Descripción                                                                       |
-| --------------------------------- | ------------------------------- | ------------ | --------------------------------------------------------------------------------- |
-| `cuit`                            | `number \| string`              | --           | CUIT representada (se valida el dígito verificador)                               |
-| `cert` / `key`                    | `string`                        | --           | Certificado y clave privada (PEM)                                                 |
-| `production`                      | `boolean`                       | `false`      | Producción u homologación                                                         |
-| `timeout`                         | `number`                        | `30000`      | Timeout HTTP (ms)                                                                 |
-| `retries`                         | `number`                        | `1`          | Reintentos ante errores transitorios (todas las operaciones son consultas)        |
-| `retryDelayMs`                    | `number`                        | `1000`       | Delay inicial del backoff exponencial                                             |
-| `tokenTTLMinutes`                 | `number`                        | `720`        | Vigencia pedida a WSAA                                                            |
-| `ticketStorage`                   | `TicketStorage`                 | memoria      | Persistencia del ticket WSAA (recomendado en producción; ver `FileTicketStorage`) |
-| `keyPassphrase`                   | `string`                        | --           | Contraseña de la clave, si está encriptada                                        |
-| `clockOffsetMs` / `autoClockSkew` |                                 | `0` / `true` | Ajuste de reloj para WSAA                                                         |
-| `loginErrorCooldownMs`            | `number`                        | `60000`      | Espera tras un login WSAA fallido                                                 |
-| `permanentErrorCooldownMs`        | `number`                        | `Infinity`   | Espera tras un error de WSAA no reintentable; `0` la desactiva                    |
-| `fetch`                           | `typeof fetch`                  | global       | `fetch` propio (proxy, tests)                                                     |
-| `legacyTls`                       | `'auto' \| 'never' \| 'always'` | `'auto'`     | Transporte TLS legacy (ver abajo)                                                 |
-| `endpoints`                       | `{ wscdc?, wsaa? }`             | --           | Sobrescribe las URLs                                                              |
-| `onEvent`                         | `(e: ArcaEvent) => void`        | --           | Eventos (auth, requests, reintentos)                                              |
-| `wsaa`                            | `WsaaClient`                    | --           | `WsaaClient` compartido con otros SDKs (mismo certificado y entorno)              |
-| `signal`                          | `AbortSignal`                   | --           | Cancela todas las llamadas de la instancia; se combina con el de cada llamada     |
+| Opción                            | Tipo                            | Default        | Descripción                                                                          |
+| --------------------------------- | ------------------------------- | -------------- | ------------------------------------------------------------------------------------ |
+| `cuit`                            | `number \| string`              | --             | CUIT representada (se valida el dígito verificador)                                  |
+| `cert` / `key`                    | `string`                        | --             | Certificado y clave privada (PEM)                                                    |
+| `production`                      | `boolean`                       | `false`        | Producción u homologación                                                            |
+| `timeout`                         | `number`                        | `30000`        | Timeout HTTP (ms)                                                                    |
+| `retries`                         | `number`                        | `1`            | Reintentos ante errores transitorios (todas las operaciones son consultas)           |
+| `retryDelayMs`                    | `number`                        | `1000`         | Delay inicial del backoff exponencial                                                |
+| `tokenTTLMinutes`                 | `number`                        | `720`          | Vigencia pedida a WSAA                                                               |
+| `ticketStorage`                   | `TicketStorage`                 | memoria        | Persistencia del ticket WSAA (recomendado en producción; ver `FileTicketStorage`)    |
+| `keyPassphrase`                   | `string`                        | --             | Contraseña de la clave, si está encriptada                                           |
+| `clockOffsetMs` / `autoClockSkew` |                                 | `0` / `true`   | Ajuste de reloj para WSAA                                                            |
+| `loginErrorCooldownMs`            | `number`                        | `60000`        | Espera tras un login WSAA fallido                                                    |
+| `permanentErrorCooldownMs`        | `number`                        | `Infinity`     | Espera tras un error de WSAA no reintentable; `0` la desactiva                       |
+| `alreadyAuthenticatedCooldownMs`  | `number`                        | 2 min / 10 min | Espera tras `coe.alreadyAuthenticated` (producción / homologación); `0` la desactiva |
+| `fetch`                           | `typeof fetch`                  | global         | `fetch` propio (proxy, tests)                                                        |
+| `legacyTls`                       | `'auto' \| 'never' \| 'always'` | `'auto'`       | Transporte TLS legacy (ver abajo)                                                    |
+| `endpoints`                       | `{ wscdc?, wsaa? }`             | --             | Sobrescribe las URLs                                                                 |
+| `onEvent`                         | `(e: ArcaEvent) => void`        | --             | Eventos (auth, requests, reintentos)                                                 |
+| `wsaa`                            | `WsaaClient`                    | --             | `WsaaClient` compartido con otros SDKs (mismo certificado y entorno)                 |
+| `signal`                          | `AbortSignal`                   | --             | Cancela todas las llamadas de la instancia; se combina con el de cada llamada        |
 
 ## API
 
@@ -123,10 +124,10 @@ interface ConstatarInput {
   ptoVta: number; // 1..99998
   cbteTipo: number; // ver getTiposCbte()
   cbteNro: number; // 1..99999999
-  cbteFch: string | Date; // se envía YYYYMMDD
-  impTotal: number; // >= 0, se redondea a 2 decimales; 0 si el comprobante no tiene total
+  cbteFch: string | Date; // se envía YYYYMMDD; desde el 01/01/2013 (101)
+  impTotal: number; // >= 0, se redondea a 2 decimales (mitad al par); 0 si el comprobante no tiene total
   codAutorizacion: string; // 14 dígitos
-  docTipoReceptor?: number | string; // ver getDocTipos(); se informa junto con docNroReceptor
+  docTipoReceptor?: number | string; // ver getDocTipos(); junto con docNroReceptor (117); 80 obligatorio en A, A con leyenda y MiPyME (113, 114); en los T (195-197), 80, 91, 94 o 96 (118)
   docNroReceptor?: number | string; // solo dígitos (CUIT validado si docTipoReceptor = 80)
   opcionales?: { id: string; valor: string }[]; // ver getTiposOpcionales()
 }
@@ -154,7 +155,12 @@ Cómo interpretar la respuesta (manual WSCDC, 2.2.3):
 
 Receptor (`docTipoReceptor` y `docNroReceptor`, se informan juntos: 117): obligatorio y con CUIT en
 comprobantes A, A con leyenda "operación sujeta a retención" y MiPyME/FCE (113, 114); en B, C, R,
-30, 31, 37, 38, 41 y 49, solo cuando el importe supera $10.000.000 (115, 116).
+30, 31, 37, 38, 41 y 49, solo cuando el importe supera $10.000.000 (115, 116); en los comprobantes T
+(195, 196, 197), solo los documentos 80, 91, 94 o 96 (118).
+
+`constatar()` valida localmente la fecha (no anterior al 01/01/2013, 101) y las reglas 113, 114,
+117 y 118, además del dígito verificador del CUIT del receptor y que los `id` de `opcionales` no se
+repitan. Las 115 y 116 dependen del importe a partir del que son obligatorias y las valida ARCA.
 
 Los errores de autenticación `600`-`602` de WSCDC llegan como `ArcaServiceError` (con `errors`), no
 como `ArcaAuthError`: a diferencia de `@ramiidv/arca-facturacion`, donde los `600`/`601` de WSFEv1 son
@@ -223,7 +229,7 @@ try {
   if (e instanceof ArcaValidationError) {
     e.details; // [{ field, message, value }] — no se llamó a ARCA
   } else if (e instanceof ArcaTicketVigenteError) {
-    // WSAA ya emitió un ticket para este certificado: configurá ticketStorage
+    // WSAA ya emitió un ticket que no está en el storage: reintentá después de e.retryAfterMs (y configurá ticketStorage)
   } else if (e instanceof ArcaAuthError) {
     // login WSAA fallido
   } else if (e instanceof ArcaServiceError) {
