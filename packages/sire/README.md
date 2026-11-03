@@ -30,6 +30,8 @@ npm install @ramiidv/arca-sire
 
 ## Inicio rápido
 
+La carpeta `certs/` del ejemplo (certificado y clave privada) tiene que estar en el `.gitignore` del proyecto: la clave nunca se versiona.
+
 ```typescript
 import { readFileSync } from 'node:fs';
 import { ArcaSire, Condicion, TipoComprobante } from '@ramiidv/arca-sire';
@@ -72,7 +74,7 @@ const { certificadoNro, codigoSeguridad } = await sire.emitirCertificado({
 | `signal`                                                                                                                                                   | `AbortSignal` global: cancela todas las llamadas de la instancia.                            |
 | `timeout`, `retries`, `retryDelayMs`                                                                                                                       | Transporte. Los reintentos solo aplican a `status()`; `emitir`/`anular` nunca se reintentan. |
 | `ticketStorage`, `tokenTTLMinutes`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs`, `alreadyAuthenticatedCooldownMs` | WSAA (ver `@ramiidv/arca-common`). Usá `ticketStorage` en producción.                        |
-| `fetch`, `legacyTls`                                                                                                                                       | `fetch` propio y transporte TLS legacy.                                                      |
+| `fetch`, `legacyTls`, `maxResponseBytes`                                                                                                                   | `fetch` propio, TLS legacy y tamaño máximo de respuesta (50 MB).                             |
 | `onEvent`                                                                                                                                                  | Eventos `auth:*` y `request:*`.                                                              |
 
 ## API

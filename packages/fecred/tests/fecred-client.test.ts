@@ -847,6 +847,41 @@ describe('emisiones', () => {
     await expect(client(fetch).consultarCtasCtes(AUTH, { rol: 'Emisor' })).rejects.toThrow(ArcaAuthError);
   });
 
+  it('un faultcode wscommon_* (con prefijo de namespace) también es ArcaAuthError', async () => {
+    const fetch = mockFetch(soapFaultResponse('ns1:wscommon_003', 'Token vencido'));
+    const err = await client(fetch)
+      .aceptarFECred(AUTH, ACEPTAR)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaAuthError);
+    expect(err.message).toBe('WSFECRED: Token vencido');
+  });
+
+  // Solo el faultcode o el inicio del faultstring identifican un Fault de auth:
+  // una mención en el medio del texto no evita que la emisión quede incierta.
+  it.each([
+    ['soap:Server', 'Error al procesar la operación (ver wscommon_1 en el log del servidor)'],
+    ['soap:Server', 'java.lang.IllegalStateException: wscommon_005'],
+    ['soap:Server', 'Error interno.wscommon_1'],
+  ])('un Fault %s que menciona wscommon_N en el medio (%s) no es ArcaAuthError', async (faultCode, faultString) => {
+    const fetch = mockFetch(soapFaultResponse(faultCode, faultString));
+    const err = await client(fetch)
+      .aceptarFECred(AUTH, ACEPTAR)
+      .catch((e) => e);
+    expect(err).not.toBeInstanceOf(ArcaAuthError);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err.uncertain).toBe(true);
+    expect(fetch.calls).toHaveLength(1);
+  });
+
+  it('un Fault Client de negocio que menciona wscommon_N en el medio no es ArcaAuthError', async () => {
+    const fetch = mockFetch(soapFaultResponse('soap:Client', 'La CUIT no está habilitada (código wscommon_1)'));
+    const err = await client(fetch)
+      .aceptarFECred(AUTH, ACEPTAR)
+      .catch((e) => e);
+    expect(err).not.toBeInstanceOf(ArcaAuthError);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+  });
+
   it('otro Fault Server en una emisión sigue siendo ArcaSoapError uncertain', async () => {
     const fetch = mockFetch(soapFaultResponse('soap:Server', 'java.lang.NullPointerException'));
     const err = await client(fetch)

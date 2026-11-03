@@ -332,6 +332,30 @@ describe('emitirCertificado', () => {
     );
   });
 
+  it('Fault soapenv:Server de request mal formado → ArcaSireServiceError', async () => {
+    const sire = makeSire(mockFetch(xmlResponse(homoFault('soapenv:Server', 'Request mal formado'), 500)));
+    const err = await sire.emitirCertificado(FACTURA).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSireServiceError);
+    expect(err.errors[0].msg).toBe('Request mal formado');
+  });
+
+  // Los patrones de rechazo están anclados al inicio: un Fault de sistema que
+  // los menciona en el medio sigue siendo incierto (no se debe reintentar).
+  it.each([
+    'Error interno: la respuesta generada no cumple el schema',
+    'Error al procesar: XML invalido en la respuesta del servicio de padrón',
+    'Timeout de base de datos. Request mal formado en el log',
+  ])('Fault soapenv:Server de sistema que menciona un patrón de rechazo (%s) → incierto', async (msg) => {
+    const m = mockFetch(xmlResponse(homoFault('soapenv:Server', msg), 500));
+    const err = await makeSire(m, { retries: 3 })
+      .emitirCertificado(FACTURA)
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err).not.toBeInstanceOf(ArcaSireServiceError);
+    expect(err.uncertain).toBe(true);
+    expect(m.calls).toHaveLength(1);
+  });
+
   it('un código en mayúsculas desconocido de soapenv:Server sigue siendo incierto', async () => {
     const sire = makeSire(mockFetch(xmlResponse(homoFault('soapenv:Server', 'INTERNAL_ERROR'), 500)));
     const err = await sire.emitirCertificado(FACTURA).catch((e) => e);
