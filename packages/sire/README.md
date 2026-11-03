@@ -22,7 +22,7 @@ npm install @ramiidv/arca-sire
 
 ## Requisitos
 
-- Node >= 20.19. Solo ESM; también funciona desde CommonJS porque Node ≥ 20.19 permite cargar módulos ESM con `require()`.
+- Node >= 22.12. Solo ESM; también funciona desde CommonJS porque Node ≥ 22.12 permite cargar módulos ESM con `require()`.
 - Certificado digital X.509 y clave privada de ARCA asociados al web service **SIRE** (servicio WSAA `sire-ws`), para la CUIT del agente de retención. Cómo generarlo y asociar el servicio: [`@ramiidv/arca-common`, Primeros pasos](https://github.com/ramiidv/arca-sdks/tree/main/packages/common#primeros-pasos).
   - **Homologación**: [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx)
   - **Producción**: [Administración de Certificados Digitales](https://www.afip.gob.ar/ws/documentacion/certificados.asp)
@@ -159,20 +159,40 @@ El manual no publica la tabla REGIMEN completa: los regímenes válidos los vali
 
 `sire.client` (`SireClient`) expone `dummy()`, `emitir(auth, cuitAgente, certificado)` y `anular(auth, cuitAgente, certificadoAnulacion)` con datos ya serializados (`buildCertificadoRequest`/`buildAnulacionRequest` los arman y validan). `sire.wsaa` es el `WsaaClient`.
 
+Para crearlo a mano se usa `{ endpoint, transport? }` (`ServiceClientConfig` de `@ramiidv/arca-common`, igual que en los demás SDKs); el namespace lo fija el cliente (`SIRE_NAMESPACE`). Las opciones de transporte van dentro de `transport`:
+
+```typescript
+import { ENDPOINTS, SireClient } from '@ramiidv/arca-sire';
+
+const client = new SireClient({
+  endpoint: ENDPOINTS.sire.testing,
+  transport: { timeout: 30_000, retries: 1 }, // los reintentos solo aplican a dummy()
+});
+console.log(await client.dummy());
+```
+
 ## Manejo de errores
 
 | Error                                                | Cuándo                                                                                                                                                                                                                                                                 | ¿Se emitió/anuló? |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | `ArcaValidationError`                                | Datos inválidos detectados localmente (antes de autenticar). `details` tiene un ítem por campo.                                                                                                                                                                        | No                |
 | `ArcaAuthError` / `ArcaTicketVigenteError`           | Falla de WSAA, o SIRE rechazó el token/sign (ej: `MISSING_AUTHENTICATION_TOKEN`). El SDK no borra el ticket cacheado (WSAA rechaza los pedidos repetidos durante un lapso de retención); si está dañado, `clearAuthCache()`.                                           | No                |
-| `ArcaSireServiceError` (extiende `ArcaServiceError`) | ARCA rechazó el request con un SOAP Fault de negocio (`soapenv:Client`, aunque no traiga `faultstring`), de schema o de request mal formado. `message`/`errors[0].msg` tienen el texto de ARCA, `faultCode` el código del Fault y `cause` el `ArcaSoapError` original. | No                |
-| `ArcaSoapError` con `uncertain: true`                | Timeout, error de red después de enviar, HTTP 5xx sin Fault, respuesta ilegible o sin `certificadoNro`/`codigoSeguridad`, o un Fault `soapenv:Server` de sistema (ej: "Error de conexión a la base de datos").                                                         | **No se sabe**    |
+| `ArcaSireServiceError` (extiende `ArcaRechazoError`) | ARCA rechazó `emitir`/`anular` con un SOAP Fault de negocio (`soapenv:Client`, aunque no traiga `faultstring`), de schema o de request mal formado. `operacion` es `'emitir'` o `'anular'`, `message`/`errors[0].msg` tienen el texto de ARCA, `faultCode` el código del Fault y `cause` el `ArcaSoapError` original. Un `catch` de `ArcaRechazoError` (o `ArcaServiceError`) también lo cubre. | No                |
+| `ArcaResponseError` con `uncertain: true`            | `emitir`/`anular` respondió sin `certificadoNro`/`codigoSeguridad` (o vacíos). En `status()`, una respuesta incompleta lanza `ArcaResponseError` sin `uncertain`.                                                                                                     | **No se sabe**    |
+| `ArcaSoapError` con `uncertain: true`                | Timeout, error de red después de enviar, HTTP 5xx sin Fault, respuesta ilegible, o un Fault `soapenv:Server` de sistema (ej: "Error de conexión a la base de datos").                                                                                                  | **No se sabe**    |
 | `ArcaSoapError` con `uncertain: false`               | El request no llegó a enviarse (DNS, conexión rechazada, abort antes de enviar).                                                                                                                                                                                       | No                |
 
-Criterio para los SOAP Faults: el manual (sección 4) define `soapenv:Client` como error de negocio y `soapenv:Server` como error de sistema. En homologación, además, el servidor responde `soapenv:Server` para rechazos previos a procesar (XML que no cumple el schema, operación inexistente, `MISSING_AUTHENTICATION_TOKEN`); esos también se informan como rechazo. Cualquier otro `soapenv:Server` en `emitir`/`anular` se deja como `ArcaSoapError` incierto. El manual no publica la lista de Faults de autenticación: el SDK trata como tal un `faultstring` del estilo `XXX_TOKEN`/`XXX_SIGN`.
+Criterio para los SOAP Faults: el manual (sección 4) define `soapenv:Client` como error de negocio y `soapenv:Server` como error de sistema. En homologación, además, el servidor responde `soapenv:Server` para rechazos previos a procesar (XML que no cumple el schema, operación inexistente, `MISSING_AUTHENTICATION_TOKEN`); esos también se informan como rechazo. Cualquier otro `soapenv:Server` en `emitir`/`anular` se deja como `ArcaSoapError` incierto. `status()` (`dummy`) no es una emisión: sus Faults quedan siempre como `ArcaSoapError`. El manual no publica la lista de Faults de autenticación: el SDK trata como tal un `faultstring` del estilo `XXX_TOKEN`/`XXX_SIGN`.
 
 ```typescript
-import { ArcaAuthError, ArcaSire, ArcaSireServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-sire';
+import {
+  ArcaAuthError,
+  ArcaResponseError,
+  ArcaSire,
+  ArcaSireServiceError,
+  ArcaSoapError,
+  ArcaValidationError,
+} from '@ramiidv/arca-sire';
 import type { EmitirCertificadoParams } from '@ramiidv/arca-sire';
 
 declare const sire: ArcaSire;
@@ -184,10 +204,10 @@ try {
   if (err instanceof ArcaValidationError) {
     console.error(err.details); // [{ field, message, value }]
   } else if (err instanceof ArcaSireServiceError) {
-    console.error('Rechazado por ARCA:', err.message); // seguro: no se emitió
+    console.error(`ARCA rechazó ${err.operacion}:`, err.message); // seguro: no se emitió
   } else if (err instanceof ArcaAuthError) {
     console.error('Autenticación:', err.message); // no se emitió
-  } else if (err instanceof ArcaSoapError && err.uncertain) {
+  } else if ((err instanceof ArcaSoapError || err instanceof ArcaResponseError) && err.uncertain) {
     // Ver "Resultado incierto"
   }
 }
@@ -227,7 +247,7 @@ const sire = new ArcaSire({
 
 El manual v1.0.3 publica los hosts `ws-aplicativos-reca.homo.arca.gob.ar` y `ws-aplicativos-reca.arca.gob.ar`, que sirven el mismo WSDL (cada uno con su propio `soap:address`). El SDK usa los hosts `afip.gob.ar` del WSDL. El host `ws-aplicativos-reca.arca.gob.ar` presenta un certificado TLS emitido para `*.afip.gob.ar`, así que una conexión que valida el certificado falla.
 
-Se elige con `production` y se puede sobrescribir con `endpoints.sire` (ej: `endpoints: { sire: 'https://ws-aplicativos-reca.homo.arca.gob.ar/sire/ws/v1/c2005/2005' }`). `status().headerInfo.ambiente` indica en qué ambiente respondió el servicio (ej: `"homologacion - 207"`).
+`ENDPOINTS` tiene solo `{ sire: { testing, production } }` (como el `ENDPOINTS` de los demás SDKs); las URLs de WSAA están en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`. Se elige con `production` y se puede sobrescribir con `endpoints.sire` (y WSAA con `endpoints.wsaa`) (ej: `endpoints: { sire: 'https://ws-aplicativos-reca.homo.arca.gob.ar/sire/ws/v1/c2005/2005' }`). `status().headerInfo.ambiente` indica en qué ambiente respondió el servicio (ej: `"homologacion - 207"`).
 
 ## Ejemplos
 

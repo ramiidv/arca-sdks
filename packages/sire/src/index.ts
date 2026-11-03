@@ -9,10 +9,13 @@ export {
   ArcaAuthError,
   ArcaSoapError,
   ArcaServiceError,
+  ArcaRechazoError,
+  ArcaResponseError,
   ArcaValidationError,
   ArcaTicketVigenteError,
 } from '@ramiidv/arca-common';
 export { ArcaSireServiceError } from './errors.js';
+export type { SireOperacion } from './errors.js';
 
 // Constantes y tablas
 export {
@@ -53,6 +56,8 @@ export type {
   ArcaEvent,
   CallOptions,
   ServerStatus,
+  ServiceEndpoints,
+  ServiceTransport,
   TicketStorage,
   ValidationErrorDetail,
   ServiceErrorDetail,

@@ -7,6 +7,8 @@
 import { ArcaAuthError } from '@ramiidv/arca-common';
 import { ArcaError } from '@ramiidv/arca-common';
 import { ArcaEvent } from '@ramiidv/arca-common';
+import { ArcaRechazoError } from '@ramiidv/arca-common';
+import { ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { ArcaSdkConfig } from '@ramiidv/arca-common';
 import { ArcaServiceError } from '@ramiidv/arca-common';
@@ -14,10 +16,11 @@ import { ArcaSoapError } from '@ramiidv/arca-common';
 import { ArcaTicketVigenteError } from '@ramiidv/arca-common';
 import { ArcaValidationError } from '@ramiidv/arca-common';
 import { CallOptions } from '@ramiidv/arca-common';
-import type { LegacyTlsMode } from '@ramiidv/arca-common';
 import { ServerStatus } from '@ramiidv/arca-common';
+import type { ServiceClientConfig } from '@ramiidv/arca-common';
+import { ServiceEndpoints } from '@ramiidv/arca-common';
 import { ServiceErrorDetail } from '@ramiidv/arca-common';
-import type { ServiceTransport } from '@ramiidv/arca-common';
+import { ServiceTransport } from '@ramiidv/arca-common';
 import { SoapServiceClient } from '@ramiidv/arca-common';
 import { TicketStorage } from '@ramiidv/arca-common';
 import { ValidationErrorDetail } from '@ramiidv/arca-common';
@@ -34,6 +37,10 @@ export { ArcaAuthError }
 export { ArcaError }
 
 export { ArcaEvent }
+
+export { ArcaRechazoError }
+
+export { ArcaResponseError }
 
 export { ArcaServiceError }
 
@@ -55,14 +62,19 @@ export interface ArcaSireConfig extends ArcaSdkConfig {
 }
 
 // @public
-export class ArcaSireServiceError extends ArcaServiceError {
-    constructor(message: string, errors: ServiceErrorDetail[], options?: {
+export class ArcaSireServiceError extends ArcaRechazoError {
+    constructor(message: string, detalle: {
+        operacion: SireOperacion;
+        errors?: ServiceErrorDetail[];
+        observaciones?: ServiceErrorDetail[];
+    }, options?: {
         cause?: unknown;
         faultCode?: string;
     });
     // (undocumented)
     static readonly code: string;
     readonly faultCode?: string;
+    readonly operacion: SireOperacion;
 }
 
 export { ArcaSoapError }
@@ -190,10 +202,6 @@ export interface EmitirCertificadoParams {
 
 // @public
 export const ENDPOINTS: {
-    readonly wsaa: {
-        readonly testing: 'https://wsaahomo.afip.gov.ar/ws/services/LoginCms';
-        readonly production: 'https://wsaa.afip.gov.ar/ws/services/LoginCms';
-    };
     readonly sire: {
         readonly testing: 'https://ws-aplicativos-reca.homo.afip.gob.ar/sire/ws/v1/c2005/2005';
         readonly production: 'https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005';
@@ -229,7 +237,11 @@ export const REGIMENES_CON_CONDICION: readonly number[];
 
 export { ServerStatus }
 
+export { ServiceEndpoints }
+
 export { ServiceErrorDetail }
+
+export { ServiceTransport }
 
 // @public
 export const SIRE_NAMESPACE = "http://www.afip.gob.ar/sire/c2005/";
@@ -249,19 +261,7 @@ export class SireClient extends SoapServiceClient {
 }
 
 // @public
-export interface SireClientConfig {
-    endpoint: string;
-    // (undocumented)
-    fetch?: typeof fetch;
-    // (undocumented)
-    legacyTls?: LegacyTlsMode;
-    // (undocumented)
-    onEvent?: (event: ArcaEvent) => void;
-    retries?: number;
-    retryDelayMs?: number;
-    timeout?: number;
-    transport?: ServiceTransport;
-}
+export type SireClientConfig = ServiceClientConfig;
 
 // @public
 export interface SireHeaderInfo {
@@ -270,6 +270,9 @@ export interface SireHeaderInfo {
     v2005?: string;
     vCore?: string;
 }
+
+// @public
+export type SireOperacion = 'emitir' | 'anular';
 
 // @public
 export interface SireServerStatus extends ServerStatus {
