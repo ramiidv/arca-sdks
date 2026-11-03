@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ArcaRechazoError, ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaResultadoIncierto } from '../src/errors.js';
 import { CbteTipo, CondicionIva, DocTipo, IvaTipo } from '../src/constants.js';
 import type { IntentoComprobante } from '../src/types.js';
@@ -55,7 +56,6 @@ describe('recuperarComprobante', () => {
     expect(res.estado).toBe('autorizado');
     if (res.estado !== 'autorizado') return;
     expect(res.resultado).toMatchObject({
-      aprobada: true,
       cae: '76999999999999',
       caeVencimiento: '20261109',
       cbteNro: 151,
@@ -88,6 +88,41 @@ describe('recuperarComprobante', () => {
     const res = await arca.recuperarComprobante(intento);
     expect(res.estado).toBe('conflicto');
     if (res.estado === 'conflicto') expect(res.encontrado.resultGet.cbteDesde).toBe(151);
+  });
+
+  it('existe con los datos del intento pero rechazado → ArcaRechazoError (FECompConsultar)', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FECompUltimoAutorizado: ultimoAutorizado(1, 1, 151),
+      FECompConsultar: comprobanteConsultado({ ...consultado, resultado: 'R' }),
+    });
+    const err = await arca.recuperarComprobante(intento).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err.operacion).toBe('FECompConsultar');
+    expect(err.message).toContain('1-1-151');
+  });
+
+  it.each([
+    ['otro Resultado', { resultado: 'X' }],
+    ['sin CodAutorizacion', { cae: '' }],
+  ])('existe con los datos del intento y %s → ArcaResponseError (no autorizado ni rechazo)', async (_, cambio) => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FECompUltimoAutorizado: ultimoAutorizado(1, 1, 151),
+      FECompConsultar: comprobanteConsultado({ ...consultado, ...cambio }),
+    });
+    const err = await arca.recuperarComprobante(intento).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaResponseError);
+    expect(err).not.toBeInstanceOf(ArcaRechazoError);
+  });
+
+  it('rechazado con otros datos → conflicto (el número lo usó otra emisión)', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FECompUltimoAutorizado: ultimoAutorizado(1, 1, 151),
+      FECompConsultar: comprobanteConsultado({ ...consultado, total: 999, resultado: 'R' }),
+    });
+    expect((await arca.recuperarComprobante(intento)).estado).toBe('conflicto');
   });
 
   it('flujo completo: emitir → incierto → recuperar → autorizado', async () => {
@@ -135,7 +170,7 @@ describe('recuperarComprobante', () => {
     expect(res.estado).toBe('no_emitido');
 
     const ok = await arca.facturar(opts);
-    expect(ok.aprobada).toBe(true);
+    expect(ok.cae).toBe('76123456789012');
     expect(
       mock.calls.filter((c) => c.method === 'FECAESolicitar').map((c) => /<CbteDesde>(\d+)/.exec(c.body)![1]),
     ).toEqual(['151', '151']);

@@ -1,13 +1,12 @@
 import { ArcaResponseError, SoapServiceClient, ensureArray, parseServerStatus } from '@ramiidv/arca-common';
-import type { CallOptions, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
-import { ENDPOINTS, WSFEX_ERRORES_AUTH, WSFEX_ERRORES_INTERNOS, WSFEX_NAMESPACE } from './constants.js';
+import type { CallOptions, ServerStatus, ServiceClientConfig, SoapOperationKind } from '@ramiidv/arca-common';
+import { WSFEX_ERRORES_AUTH, WSFEX_ERRORES_INTERNOS, WSFEX_NAMESPACE } from './constants.js';
 import { encodeRequest } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import { decodeArca, sinCampo } from './decode.js';
 import { ArcaConflictoExpo, ArcaResultadoInciertoExpo, ArcaSoapError, ArcaWSFEError, authErrorDe } from './errors.js';
 import * as S from './schemas.js';
-import { authXml, transportDe } from './wsfe.js';
-import type { WsClientOptions } from './wsfe.js';
+import { authXml } from './wsfe.js';
 import type {
   WsfeAuth,
   WsfexInvoice,
@@ -115,14 +114,20 @@ export function buildFexCmp(inv: WsfexInvoice): R {
   return encodeRequest(cmp, S.FEX_CMP_REQ, 'FEXAuthorize.Cmp');
 }
 
-/** Cliente de bajo nivel de WSFEX (Factura electrónica de exportación). */
+/**
+ * Cliente de bajo nivel de WSFEX (Factura electrónica de exportación).
+ *
+ * Devuelve las respuestas de ARCA tal cual (un `Resultado` "R" no lanza): el
+ * manejo de rechazos lo hace `ArcaFacturacion.facturarExpo`.
+ *
+ * @example
+ * ```ts
+ * const wsfex = new WsfexClient({ endpoint: ENDPOINTS.wsfex.testing });
+ * ```
+ */
 export class WsfexClient extends SoapServiceClient {
-  constructor(production: boolean, opts: WsClientOptions = {}) {
-    super({
-      endpoint: opts.endpoint ?? (production ? ENDPOINTS.wsfex.production : ENDPOINTS.wsfex.testing),
-      namespace: WSFEX_NAMESPACE,
-      transport: transportDe(opts),
-    });
+  constructor(config: ServiceClientConfig) {
+    super({ ...config, namespace: WSFEX_NAMESPACE });
   }
 
   /**

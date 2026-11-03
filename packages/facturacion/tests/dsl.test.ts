@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ArcaResponseError, ArcaValidationError } from '@ramiidv/arca-common';
 import { ArcaResultadoIncierto, ArcaResultadoInciertoExpo } from '../src/errors.js';
+import { ENDPOINTS } from '../src/constants.js';
 import { WsfeClient } from '../src/wsfe.js';
 import { WsfexClient, buildFexCmp } from '../src/wsfex.js';
 import type { InvoiceDetail, WsfexInvoice } from '../src/types.js';
@@ -52,7 +53,12 @@ const consulta = (extra: string) =>
 describe('WSFEv1: respuestas decodificadas con el schema', () => {
   it('xs:string conserva ceros y los long quedan como number', async () => {
     mockArcaFetch({ FECompConsultar: consulta('') });
-    const { resultGet: r } = await new WsfeClient(false).consultarComprobante(AUTH, 1, 1, 12345678);
+    const { resultGet: r } = await new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing }).consultarComprobante(
+      AUTH,
+      1,
+      1,
+      12345678,
+    );
     expect(r.monId).toBe('060');
     expect(r.codAutorizacion).toBe('06123456789012');
     expect(r.docNro).toBe(30712345671);
@@ -78,7 +84,7 @@ describe('WSFEv1: respuestas decodificadas con el schema', () => {
           '</Observaciones></FECAEDetResponse></FeDetResp>',
       ),
     });
-    const client = new WsfeClient(false);
+    const client = new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing });
 
     const conIva = await client.consultarComprobante(AUTH, 1, 1, 12345678);
     expect(conIva.resultGet.iva).toEqual([{ id: 5, baseImp: 100.41, importe: 21.09 }]);
@@ -105,7 +111,7 @@ describe('WSFEv1: respuestas decodificadas con el schema', () => {
         '<ResultGet><Moneda><Id>060</Id><Desc>Euro</Desc><FchDesde>20090403</FchDesde><FchHasta>NULL</FchHasta></Moneda></ResultGet>',
       ),
     });
-    expect(await new WsfeClient(false).getMonedas(AUTH)).toEqual([
+    expect(await new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing }).getMonedas(AUTH)).toEqual([
       { id: '060', desc: 'Euro', fchDesde: '20090403', fchHasta: 'NULL' },
     ]);
   });
@@ -117,7 +123,9 @@ describe('WSFEv1: respuestas decodificadas con el schema', () => {
         '<PtoVta>1</PtoVta><CbteTipo>1</CbteTipo><CbteNro>abc</CbteNro>',
       ),
     });
-    const err = await new WsfeClient(false).ultimoComprobante(AUTH, 1, 1).catch((e) => e);
+    const err = await new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing })
+      .ultimoComprobante(AUTH, 1, 1)
+      .catch((e) => e);
     expect(err).toBeInstanceOf(ArcaResponseError);
     expect(err.uncertain).toBe(false);
   });
@@ -133,7 +141,11 @@ describe('WSFEv1: respuestas decodificadas con el schema', () => {
       ),
     });
     await expect(
-      new WsfeClient(false).solicitarCAE(AUTH, { ptoVta: 1, cbteTipo: 1, invoices: [DETALLE] }),
+      new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing }).solicitarCAE(AUTH, {
+        ptoVta: 1,
+        cbteTipo: 1,
+        invoices: [DETALLE],
+      }),
     ).rejects.toThrow(ArcaResultadoIncierto);
   });
 });
@@ -142,7 +154,11 @@ describe('WSFEv1: requests con encodeRequest', () => {
   /** `FECAEDetRequest` enviado por `solicitarCAE`, como texto (sin convertir números). */
   async function detalleEnviado(inv: InvoiceDetail): Promise<Record<string, any>> {
     const mock = mockArcaFetch({ FECAESolicitar: caeAprobado({ ptoVta: 1, cbteTipo: 1, cbteNro: 12345678 }) });
-    await new WsfeClient(false).solicitarCAE(AUTH, { ptoVta: 1, cbteTipo: 1, invoices: [inv] });
+    await new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing }).solicitarCAE(AUTH, {
+      ptoVta: 1,
+      cbteTipo: 1,
+      invoices: [inv],
+    });
     return mock.last('FECAESolicitar').params.FeCAEReq.FeDetReq.FECAEDetRequest;
   }
 
@@ -185,7 +201,7 @@ describe('WSFEv1: requests con encodeRequest', () => {
 
   it('redondea los importes a 2 decimales y MonCotiz a 6 (Double 13+2 y 4+6 del manual)', async () => {
     const mock = mockArcaFetch({ FECAESolicitar: caeAprobado({ ptoVta: 1, cbteTipo: 1, cbteNro: 12345678 }) });
-    await new WsfeClient(false).solicitarCAE(AUTH, {
+    await new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing }).solicitarCAE(AUTH, {
       ptoVta: 1,
       cbteTipo: 1,
       invoices: [
@@ -211,7 +227,7 @@ describe('WSFEv1: requests con encodeRequest', () => {
   it('un tipo inválido lanza ArcaValidationError con la ruta del campo, sin llamar a ARCA', async () => {
     const mock = mockArcaFetch({});
     const bad = { ...DETALLE, docNro: 'abc' as unknown as number, impNeto: Number.NaN };
-    const err = await new WsfeClient(false)
+    const err = await new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing })
       .solicitarCAE(AUTH, { ptoVta: 1, cbteTipo: 1, invoices: [bad] })
       .catch((e) => e);
     expect(err).toBeInstanceOf(ArcaValidationError);
@@ -226,7 +242,7 @@ describe('WSFEv1: requests con encodeRequest', () => {
         '<ResultGet><MonId>DOL</MonId><MonCotiz>1015.5</MonCotiz><FchCotiz>20261029</FchCotiz></ResultGet>',
       ),
     });
-    const client = new WsfeClient(false);
+    const client = new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing });
     await expect(client.getCotizacion(AUTH, 'DOL', { fchCotiz: '2026-10-29' })).resolves.toEqual({
       monId: 'DOL',
       monCotiz: 1015.5,
@@ -306,7 +322,7 @@ describe('WSFEX sobre el DSL', () => {
           '<FEXErr><ErrCode>0</ErrCode><ErrMsg>OK</ErrMsg></FEXErr>',
       ),
     });
-    const { fexResultGet: r } = await new WsfexClient(false).getCmp(AUTH, 19, 1, 1);
+    const { fexResultGet: r } = await new WsfexClient({ endpoint: ENDPOINTS.wsfex.testing }).getCmp(AUTH, 19, 1, 1);
     expect(r).toMatchObject({
       cae: '06123456789012',
       cuitPaisCliente: '55000002206',
@@ -324,13 +340,18 @@ describe('WSFEX sobre el DSL', () => {
           '<Cbte_nro>uno</Cbte_nro><Cae>76123456789012</Cae><Resultado>A</Resultado></FEXResultAuth>',
       ),
     });
-    await expect(new WsfexClient(false).authorize(AUTH, CMP_EXPO)).rejects.toThrow(ArcaResultadoInciertoExpo);
+    await expect(new WsfexClient({ endpoint: ENDPOINTS.wsfex.testing }).authorize(AUTH, CMP_EXPO)).rejects.toThrow(
+      ArcaResultadoInciertoExpo,
+    );
   });
 
   it('un Cmp inválido lanza ArcaValidationError sin llamar a ARCA', async () => {
     const mock = mockArcaFetch({});
     await expect(
-      new WsfexClient(false).authorize(AUTH, { ...CMP_EXPO, idiomaCbte: 'es' as unknown as number }),
+      new WsfexClient({ endpoint: ENDPOINTS.wsfex.testing }).authorize(AUTH, {
+        ...CMP_EXPO,
+        idiomaCbte: 'es' as unknown as number,
+      }),
     ).rejects.toThrow(ArcaValidationError);
     expect(mock.calls).toHaveLength(0);
   });

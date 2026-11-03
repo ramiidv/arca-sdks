@@ -8,13 +8,13 @@ npm install @ramiidv/arca-facturacion
 
 ## Requisitos
 
-Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (Node >= 20.19 permite cargar módulos ESM con `require()`). Depende de `@ramiidv/arca-common` (WSAA, transporte SOAP, validadores, QR). Certificado de ARCA asociado a `wsfe` (y `wsfex` para exportación).
+Node >= 22.12. Solo ESM; desde CommonJS se carga con `require()` (Node >= 22.12 permite cargar módulos ESM con `require()`). Depende de `@ramiidv/arca-common` (WSAA, transporte SOAP, validadores, QR). Certificado de ARCA asociado a `wsfe` (y `wsfex` para exportación).
 
 ## Inicio rápido
 
 ```typescript
 import { readFileSync } from 'node:fs';
-import { ArcaFacturacion, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/arca-facturacion';
+import { ArcaFacturacion, ArcaRechazoError, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/arca-facturacion';
 
 const arca = new ArcaFacturacion({
   cuit: 20123456786,
@@ -24,13 +24,19 @@ const arca = new ArcaFacturacion({
   ticketStorage: new FileTicketStorage('./.arca-tickets'),
 });
 
-const r = await arca.facturar({
-  ptoVta: 1,
-  cbteTipo: CbteTipo.FACTURA_B,
-  items: [{ neto: 1000, iva: IvaTipo.IVA_21 }],
-});
-if (r.aprobada) console.log(r.cae, r.caeVencimiento, r.cbteNro, r.importes.total, arca.urlQR(r));
-else console.error(r.observaciones);
+try {
+  // Siempre un comprobante aprobado (con CAE).
+  const r = await arca.facturar({
+    ptoVta: 1,
+    cbteTipo: CbteTipo.FACTURA_B,
+    items: [{ neto: 1000, iva: IvaTipo.IVA_21 }],
+  });
+  console.log(r.cae, r.caeVencimiento, r.cbteNro, r.importes.total, arca.urlQR(r));
+} catch (e) {
+  // Resultado "R": no se emitió; en WSFEv1 los motivos están en observaciones.
+  if (e instanceof ArcaRechazoError) console.error(e.operacion, e.observaciones);
+  else throw e;
+}
 ```
 
 ## Configuración
@@ -67,10 +73,10 @@ Todos los métodos aceptan como último parámetro `{ signal }`. Campos en camel
 
 ### Facturación WSFEv1 (API simplificada)
 
-- `facturar(opts: FacturarOpts): Promise<FacturaResult>`
+- `facturar(opts: FacturarOpts): Promise<FacturaResult>`: siempre aprobado; un rechazo (`Resultado` "R") lanza `ArcaRechazoError` (`operacion: 'FECAESolicitar'`).
 - `notaCredito(opts)` / `notaDebito(opts)`: como `facturar` sin `cbteTipo`, con `comprobanteOriginal: { tipo, ptoVta, nro, cuit?, fecha? }`; el tipo se infiere (`FACTURA_B` → `NOTA_CREDITO_B`). Las de clase E van por `facturarExpo`.
 - `armarComprobante(opts & { cbteNro })`: `{ request, importes, intento }` sin red.
-- `recuperarComprobante(intento)`: `{ estado: 'autorizado', resultado } | { estado: 'no_emitido' } | { estado: 'conflicto', encontrado }`.
+- `recuperarComprobante(intento)`: `{ estado: 'autorizado', resultado } | { estado: 'no_emitido' } | { estado: 'conflicto', encontrado }`. Si el número existe con los datos del intento pero rechazado, lanza `ArcaRechazoError` (`operacion: 'FECompConsultar'`); con otro `Resultado` o sin `CodAutorizacion`, `ArcaResponseError`.
 - `urlQR(factura, datos?, options?)`: URL del QR con el CUIT de la instancia.
 
 `FacturarOpts`:
@@ -98,7 +104,7 @@ Todos los métodos aceptan como último parámetro `{ signal }`. Campos en camel
 }
 ```
 
-`FacturaResult`: `aprobada`, `cae?`, `caeVencimiento?`, `cbteNro`, `ptoVta`, `cbteTipo`, `importes` (`total`, `neto`, `iva`, `exento`, `noGravado`, `tributos`, `descuento?`), `observaciones` y `eventos` (`{ code, msg }[]`), `fecha?`, `docTipo?`, `docNro?`, `moneda?`, `cotizacion?`, `tipoCodAut?` ('E' CAE, 'A' CAEA), `raw`.
+`FacturaResult` (siempre autorizado; no tiene `aprobada`): `cae` (el CAEA con `tipoCodAut` 'A'), `caeVencimiento?`, `cbteNro`, `ptoVta`, `cbteTipo`, `importes` (`total`, `neto`, `iva`, `exento`, `noGravado`, `tributos`, `descuento?`), `observaciones` y `eventos` (`{ code, msg }[]`), `fecha?`, `docTipo?`, `docNro?`, `moneda?`, `cotizacion?`, `tipoCodAut?` ('E' CAE, 'A' CAEA), `raw`.
 
 Reglas validadas localmente (el mensaje cita el código del manual WSFEv1 v4.8 o WSFEX 3.1.1):
 
@@ -117,15 +123,15 @@ Reglas validadas localmente (el mensaje cita el código del manual WSFEv1 v4.8 o
 
 ### Facturación WSFEv1 (API raw)
 
-- `crearFactura(request: InvoiceRequest): Promise<FECAESolicitarResult>`: `{ ptoVta, cbteTipo, invoices: InvoiceDetail[] }`. En lotes, `feCabResp.resultado` puede ser 'P' (parcial) y cada `feDetResp[i]` trae su resultado.
+- `crearFactura(request: InvoiceRequest): Promise<FECAESolicitarResult>`: `{ ptoVta, cbteTipo, invoices: InvoiceDetail[] }`. Devuelve la respuesta tal cual: un comprobante con resultado 'R' no lanza. En lotes, `feCabResp.resultado` puede ser 'P' (parcial) y cada `feDetResp[i]` trae su resultado.
 - `crearFacturaAuto(ptoVta, cbteTipo, invoice)`, `ultimoComprobante(ptoVta, cbteTipo)`, `siguienteComprobante(...)`, `consultarComprobante(cbteTipo, ptoVta, cbteNro)`.
 - Valida: `ImpTotal` = `ImpTotConc + ImpNeto + ImpOpEx + ImpTrib + ImpIVA` (10048), `ImpIVA` = suma de `iva[].importe` (10023), `ImpTrib` = suma de `tributos[].importe` (10029), con el margen del manual (0,01 por elemento o 0,01 %); `condicionIvaReceptorId` obligatorio también con DocTipo 99 (10246). Importes redondeados a 2 decimales y `monCotiz` a 6, mitad al par (Round Half Even, criterio del manual; también en la API simplificada).
 - Los campos de respuesta que ARCA puede omitir son opcionales en los tipos (ej: `feCabResp.fchProceso`, `resultGet.codAutorizacion`, `resultGet.monId`).
 
 ### Exportación WSFEX
 
-- `facturarExpo(opts: FacturarExpoOpts): Promise<FacturaExpoResult>`: Factura, NC o ND E. `Id` (último + 1), número y `Imp_total` calculados.
-- `crearFacturaExportacion(invoice: WsfexInvoice)`: API raw (`FEXAuthorize`).
+- `facturarExpo(opts: FacturarExpoOpts): Promise<FacturaExpoResult>`: Factura, NC o ND E. `Id` (último + 1), número y `Imp_total` calculados. Siempre autorizado; un rechazo lanza `ArcaRechazoError` (`operacion: 'FEXAuthorize'`, `Motivos_Obs` en `observaciones` con `code` 0).
+- `crearFacturaExportacion(invoice: WsfexInvoice)`: API raw (`FEXAuthorize`); devuelve la respuesta tal cual (un 'R' no lanza).
 - `ultimoComprobanteExpo`, `siguienteComprobanteExpo`, `ultimoIdExpo`, `consultarComprobanteExpo`, `checkPermisoExpo(idPermiso, dstMerc)`.
 - Tablas: `getTiposCbteExpo`, `getMonedasExpo`, `getMonedasConCotizacionExpo({ fecha? })`, `getCotizacionExpo(monId, { fecha? })`, `getPaisesExpo`, `getCuitsPaisExpo`, `getIdiomasExpo`, `getIncotermsExpo`, `getUMedExpo`, `getTiposExpo`, `getPuntosVentaExpo`, `getOpcionalesExpo`, `getActividadesExpo`.
 
@@ -146,14 +152,14 @@ await arca.facturarExpo({
 });
 ```
 
-`FacturaExpoResult`: `aprobada`, `id`, `reproceso`, `fecha`, `cae?`, `caeVencimiento?`, `cbteNro`, `ptoVta`, `cbteTipo`, `obs?`, `eventos`, `raw`. Sin `cuitPais` se envía `Cuit_pais_cliente` 0. El `Id` es único por CUIT: serializar todas las emisiones de exportación de la CUIT.
+`FacturaExpoResult` (siempre autorizado; no tiene `aprobada`): `id`, `reproceso`, `fecha`, `cae`, `caeVencimiento?`, `cbteNro`, `ptoVta`, `cbteTipo`, `obs?`, `eventos`, `raw`. Sin `cuitPais` se envía `Cuit_pais_cliente` 0. El `Id` es único por CUIT: serializar todas las emisiones de exportación de la CUIT.
 
 ### CAEA (contingencia, RG 5782)
 
 - `solicitarCAEA(periodo 'YYYYMM', orden 1 | 2)`, `consultarCAEA(...)`: `{ caea, periodo, orden, fchVigDesde, fchVigHasta, fchTopeInf, fchProceso, eventos? }`.
-- `registrarFacturaCAEA(caea, opts & { fechaHoraGeneracion: Date | 'yyyymmddhhmmss' })`: como `facturar`; la fecha del comprobante default es la de generación. `CbteFchHsGen` es obligatorio (1440).
-- `registrarCAEA(request)`: API raw, cada comprobante con `caea` y `cbteFchHsGen`.
-- `sinMovimientoCAEA(caea, ptoVta)`, `consultarSinMovimientoCAEA(caea, ptoVta)`.
+- `registrarFacturaCAEA(caea, opts & { fechaHoraGeneracion: Date | 'yyyymmddhhmmss' })`: como `facturar`; la fecha del comprobante default es la de generación. `CbteFchHsGen` es obligatorio (1440). Un rechazo lanza `ArcaRechazoError` (`operacion: 'FECAEARegInformativo'`).
+- `registrarCAEA(request)`: API raw, cada comprobante con `caea` y `cbteFchHsGen`; devuelve la respuesta tal cual.
+- `sinMovimientoCAEA(caea, ptoVta)` (un 'R' lanza `ArcaRechazoError`, `operacion: 'FECAEASinMovimientoInformar'`), `consultarSinMovimientoCAEA(caea, ptoVta)`.
 
 ### Parámetros y estado (WSFEv1)
 
@@ -165,23 +171,25 @@ await arca.facturarExpo({
 - Enums: `CbteTipo`, `Concepto`, `DocTipo`, `CondicionIva`, `IvaTipo` (`IVA_RATES`), `Moneda`, `TributoTipo`, `TipoExpo`, `NOTA_CREDITO_MAP`, `NOTA_DEBITO_MAP` (original → NC/ND), `CBTES_ASOCIABLES` (`Record<cbteTipo, cbteTipo[]>`: tipos asociables a cada tipo, validación 10040).
 - `Moneda`: PES, DOL, '060' euro, '012' real, '011' peso uruguayo, '033' peso chileno, '029' guaraní, '031' peso boliviano, '032' peso colombiano, '010' peso mexicano, '021' libra, '019' yen, '009' franco suizo, '018' dólar canadiense, '064' yuan. Tabla completa: `getMonedas()`.
 - Códigos: `WSFE_ERRORES_INTERNOS` [500, 501, 502], `WSFEX_ERRORES_INTERNOS` [500, 501, 502, 505], `WSFE_ERRORES_AUTH` [600, 601], `WSFEX_ERRORES_AUTH` [1000, 1001], `WSFE_NUMERO_NO_CORRESPONDE` 10016, `WSFE_CAEA_NUMERO_NO_CORRESPONDE` 703.
-- Clientes de bajo nivel: `WsfeClient`, `WsfexClient`, `WsaaClient`.
+- `ENDPOINTS`: `{ wsfe, wsfex }`, cada uno `{ testing, production }` (`ServiceEndpoints`); mismas claves que `config.endpoints`.
+- Clientes de bajo nivel: `WsfeClient`, `WsfexClient`, `WsaaClient`. `new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing, transport?: { timeout?, retries?, retryDelayMs?, onEvent?, fetch?, legacyTls? } })` (`ServiceClientConfig`; lo mismo `WsfexClient` con `ENDPOINTS.wsfex`). Devuelven las respuestas de ARCA tal cual (un 'R' no lanza).
 
 ## Manejo de errores
 
 - `ArcaValidationError` (`field`, `details`): datos inválidos, no se envió nada.
-- `ArcaWSFEError` (extiende `ArcaServiceError`; `errors: { code, msg }[]`, `tieneCodigo(code)`): ARCA rechazó el request, no se emitió.
+- `ArcaRechazoError` (`code` `ARCA_RECHAZO`, extiende `ArcaServiceError`; `operacion`, `errors`, `observaciones`: `{ code, msg }[]`): ARCA rechazó el comprobante (`Resultado` "R"), no se emitió. Lo lanzan `facturar`, `notaCredito`, `notaDebito`, `registrarFacturaCAEA`, `sinMovimientoCAEA`, `facturarExpo` y `recuperarComprobante`. En WSFEv1 los motivos vienen en `observaciones` (`errors` vacío); en WSFEX, `Motivos_Obs` como `{ code: 0, msg }`.
+- `ArcaWSFEError` (extiende `ArcaServiceError`; `errors: { code, msg }[]`, `tieneCodigo(code)`): ARCA rechazó el request (`Errors`/`FEXErr`), no se emitió.
 - `ArcaResultadoIncierto` (`intento`, `intentos`, `operacion`): emisión WSFEv1 sin respuesta confiable (timeout, red, HTTP 5xx, errores 500/501/502, respuesta ilegible). Resolver con `recuperarComprobante(e.intento)`.
 - `ArcaResultadoInciertoExpo` (`intento: { id, cbteNro, fecha }`, `request`): igual en `FEXAuthorize` (y 500/501/502/505). Reenviar la misma solicitud con el mismo `Id`: `facturarExpo({ ...opts, ...e.intento })` o `crearFacturaExportacion(e.request)`; si ya estaba autorizada vuelve con `reproceso: true`.
 - `ArcaConflictoExpo` (`id`, `request`, `respuesta`): el `Id` ya lo usaba otra solicitud y WSFEX devolvió otro comprobante (o `Reproceso = "S"` con un `Id` calculado). El del request no se autorizó: reintentar sin `id`.
 - `ArcaAuthError` (`faultCode`, `retryable`, `cause`): login WSAA fallido, o ARCA rechazó el ticket (WSFEv1 600/601, WSFEX 1000/1001; no reintentable). El SDK no borra el ticket: WSAA no emite otro mientras siga vigente. El 602 ("no existen datos") sigue siendo `ArcaWSFEError`.
 - `ArcaTicketVigenteError`: WSAA ya emitió un ticket vigente que no está en memoria ni en el storage.
 - `ArcaSoapError` (`statusCode`, `faultCode`, `uncertain`, `aborted`): HTTP, timeout, SOAP Fault.
-- `ArcaResponseError` (`uncertain`): respuesta con forma inesperada.
+- `ArcaResponseError` (`uncertain`): respuesta con forma inesperada. En una emisión simplificada, una respuesta aprobada sin CAE o con un `Resultado` desconocido llega como resultado incierto (`ArcaResultadoIncierto`/`ArcaResultadoInciertoExpo`), no como rechazo.
 
-`requiereRecuperacion(resultadoOError)`: `true` ante la validación 10016 por número (no por fecha) de `FECAESolicitar` y la 703 de `FECAEARegInformativo`: el número pudo usarlo un intento anterior, verificar con `recuperarComprobante`.
+`requiereRecuperacion(error: unknown)`: `true` ante la validación 10016 por número (no por fecha) en un `ArcaRechazoError` de `FECAESolicitar`, la 703 en uno de `FECAEARegInformativo`, o esos códigos en un `ArcaWSFEError`: el número pudo usarlo un intento anterior, verificar con `recuperarComprobante`.
 
-Receta para emisiones: fijar `cbteNro` y `fecha`, persistir `armarComprobante(opts).intento` antes de enviar, y ante `ArcaResultadoIncierto` o `requiereRecuperacion` llamar a `recuperarComprobante(intento)`: `autorizado` → guardar el CAE; `no_emitido` → reintentar con el mismo `cbteNro` (seguro: ARCA rechaza duplicados); `conflicto` → revisión manual. En `sinMovimientoCAEA`, un error con `uncertain: true` se verifica con `consultarSinMovimientoCAEA`.
+Receta para emisiones: fijar `cbteNro` y `fecha`, persistir `armarComprobante(opts).intento` antes de enviar, y ante `ArcaResultadoIncierto` o `requiereRecuperacion(error)` llamar a `recuperarComprobante(intento)`: `autorizado` → guardar el CAE; `ArcaRechazoError` → rechazado; `no_emitido` → reintentar con el mismo `cbteNro` (seguro: ARCA rechaza duplicados); `conflicto` → revisión manual. En `sinMovimientoCAEA`, un error con `uncertain: true` se verifica con `consultarSinMovimientoCAEA`.
 
 ## Eventos
 

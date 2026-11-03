@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ArcaResultadoIncierto, ArcaWSFEError } from '../src/errors.js';
-import { ArcaAuthError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import {
+  ArcaAuthError,
+  ArcaRechazoError,
+  ArcaResponseError,
+  ArcaSoapError,
+  ArcaValidationError,
+} from '@ramiidv/arca-common';
 import { CbteTipo, CondicionIva, DocTipo, IvaTipo } from '../src/constants.js';
 import { requiereRecuperacion } from '../src/facturacion.js';
 import {
@@ -28,7 +34,7 @@ describe('facturar con cbteNro explícito', () => {
 
     expect(mock.count('FECompUltimoAutorizado')).toBe(0);
     expect(mock.calls[0].body).toContain('<CbteDesde>151</CbteDesde>');
-    expect(res.aprobada).toBe(true);
+    expect(res).not.toHaveProperty('aprobada');
     expect(res.cae).toBe('76123456789012');
     expect(res.cbteNro).toBe(151);
   });
@@ -142,23 +148,79 @@ describe('emisiones: nunca se reintentan', () => {
     expect(err.cause).toBeInstanceOf(ArcaWSFEError);
   });
 
-  it('10016 llega como observación con Resultado R → requiereRecuperacion', async () => {
+  /** Respuesta de FECAESolicitar de un comprobante 6-1-151 con el `Resultado` y el contenido del detalle indicados. */
+  const respuestaSolicitar = (resultado: string, det = '') =>
+    wsfeResponse(
+      'FECAESolicitar',
+      '<FeCabResp><Cuit>20123456786</Cuit><PtoVta>1</PtoVta><CbteTipo>6</CbteTipo><FchProceso>20261030120000</FchProceso>' +
+        `<CantReg>1</CantReg><Resultado>${resultado}</Resultado><Reproceso>N</Reproceso></FeCabResp>` +
+        '<FeDetResp><FECAEDetResponse><Concepto>1</Concepto><DocTipo>99</DocTipo><DocNro>0</DocNro>' +
+        `<CbteDesde>151</CbteDesde><CbteHasta>151</CbteHasta><CbteFch>20261030</CbteFch><Resultado>${resultado}</Resultado>` +
+        `${det}</FECAEDetResponse></FeDetResp>`,
+    );
+
+  it('Resultado R → ArcaRechazoError (FECAESolicitar) con las observaciones; 10016 requiere recuperación', async () => {
     const arca = await arcaDePrueba();
     mockArcaFetch({
-      FECAESolicitar: wsfeResponse(
-        'FECAESolicitar',
-        '<FeCabResp><Cuit>20123456786</Cuit><PtoVta>1</PtoVta><CbteTipo>6</CbteTipo><FchProceso>20261030120000</FchProceso>' +
-          '<CantReg>1</CantReg><Resultado>R</Resultado><Reproceso>N</Reproceso></FeCabResp>' +
-          '<FeDetResp><FECAEDetResponse><Concepto>1</Concepto><DocTipo>99</DocTipo><DocNro>0</DocNro>' +
-          '<CbteDesde>151</CbteDesde><CbteHasta>151</CbteHasta><CbteFch>20261030</CbteFch><Resultado>R</Resultado>' +
-          '<Observaciones><Obs><Code>10016</Code><Msg>El numero o fecha del comprobante no se corresponde con el proximo a autorizar.</Msg></Obs></Observaciones>' +
-          '</FECAEDetResponse></FeDetResp>',
+      FECAESolicitar: respuestaSolicitar(
+        'R',
+        '<Observaciones><Obs><Code>10016</Code><Msg>El numero o fecha del comprobante no se corresponde con el proximo a autorizar.</Msg></Obs></Observaciones>',
       ),
     });
-    const res = await arca.facturar({ ...B, cbteNro: 151 });
-    expect(res.aprobada).toBe(false);
-    expect(res.cae).toBeUndefined();
-    expect(requiereRecuperacion(res)).toBe(true);
+    const err = await arca.facturar({ ...B, cbteNro: 151 }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err).not.toBeInstanceOf(ArcaWSFEError);
+    expect(err.code).toBe('ARCA_RECHAZO');
+    expect(err.operacion).toBe('FECAESolicitar');
+    expect(err.errors).toEqual([]);
+    expect(err.observaciones).toEqual([
+      { code: 10016, msg: 'El numero o fecha del comprobante no se corresponde con el proximo a autorizar.' },
+    ]);
+    expect(err.message).toContain('6-1-151');
+    expect(err.message).toContain('[10016]');
+    expect(requiereRecuperacion(err)).toBe(true);
+  });
+
+  it('Resultado R por otro motivo → ArcaRechazoError que no requiere recuperación', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FECAESolicitar: respuestaSolicitar(
+        'R',
+        '<Observaciones><Obs><Code>10048</Code><Msg>Campo ImpTotal incorrecto</Msg></Obs></Observaciones>',
+      ),
+    });
+    const err = await arca.facturar({ ...B, cbteNro: 151 }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err.observaciones).toEqual([{ code: 10048, msg: 'Campo ImpTotal incorrecto' }]);
+    expect(requiereRecuperacion(err)).toBe(false);
+  });
+
+  it('notaCredito y notaDebito rechazadas → ArcaRechazoError', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FECAESolicitar: respuestaSolicitar(
+        'R',
+        '<Observaciones><Obs><Code>10040</Code><Msg>x</Msg></Obs></Observaciones>',
+      ),
+    });
+    const original = { tipo: CbteTipo.FACTURA_B, ptoVta: 1, nro: 150 };
+    const nc = await arca.notaCredito({ ...B, cbteNro: 151, comprobanteOriginal: original }).catch((e) => e);
+    const nd = await arca.notaDebito({ ...B, cbteNro: 151, comprobanteOriginal: original }).catch((e) => e);
+    for (const err of [nc, nd]) {
+      expect(err).toBeInstanceOf(ArcaRechazoError);
+      expect(err.operacion).toBe('FECAESolicitar');
+      expect(err.observaciones[0].code).toBe(10040);
+    }
+  });
+
+  it('aprobado sin CAE → ArcaResultadoIncierto (no un resultado sin CAE)', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({ FECAESolicitar: respuestaSolicitar('A') });
+    const err = await arca.facturar({ ...B, cbteNro: 151 }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaResultadoIncierto);
+    expect(err.operacion).toBe('FECAESolicitar');
+    expect(err.intento).toMatchObject({ ptoVta: 1, cbteTipo: 6, cbteNro: 151, importeTotal: 1210 });
+    expect(err.cause).toBeInstanceOf(ArcaResponseError);
   });
 
   it('un listener que lanza no convierte un CAE otorgado en error', async () => {
@@ -265,7 +327,6 @@ describe('CAEA', () => {
       cbteNro: 10,
       fechaHoraGeneracion: '20261030101500',
     });
-    expect(res.aprobada).toBe(true);
     expect(res.cae).toBe('36123456789012');
     expect(res.caeVencimiento).toBeUndefined();
   });
@@ -306,7 +367,7 @@ describe('FCE MiPyME con concepto 1 (productos)', () => {
     expect(String(det.FchVtoPago)).toBe('20261129');
     expect(det).not.toHaveProperty('FchServDesde');
     expect(det).not.toHaveProperty('FchServHasta');
-    expect(res.aprobada).toBe(true);
+    expect(res.cae).toBeTruthy();
   });
 });
 

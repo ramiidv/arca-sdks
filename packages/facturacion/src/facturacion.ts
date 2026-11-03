@@ -1,4 +1,12 @@
-import { formatDate, formatDateTimeAR, normalizeCuit, roundHalfEven } from '@ramiidv/arca-common';
+import {
+  ArcaRechazoError,
+  ArcaResponseError,
+  formatDate,
+  formatDateTimeAR,
+  formatServiceErrors,
+  normalizeCuit,
+  roundHalfEven,
+} from '@ramiidv/arca-common';
 import {
   IVA_RATES,
   Concepto,
@@ -10,6 +18,7 @@ import {
   WSFE_NUMERO_NO_CORRESPONDE,
 } from './constants.js';
 import { ArcaWSFEError } from './errors.js';
+import type { OperacionEmision } from './errors.js';
 import { fail, validateFacturarOpts, validateItems } from './validation.js';
 import type {
   LineItem,
@@ -36,7 +45,8 @@ function toCents(n: number): number {
   return Math.round(roundHalfEven(n, 2) * 100);
 }
 
-const optString = (v: unknown): string | undefined =>
+/** `undefined` si el valor no vino (o vino vacío); si no, como string. */
+export const optString = (v: unknown): string | undefined =>
   v === undefined || v === null || v === '' ? undefined : String(v);
 
 function fromCents(c: number): number {
@@ -417,9 +427,14 @@ export function intentoDesdeComprobante(ptoVta: number, cbteTipo: number, detail
  */
 export function coincideConIntento(consulta: FECompConsultarResult, intento: IntentoComprobante): boolean {
   const r = consulta.resultGet;
+  return !!r && (r.resultado === undefined || r.resultado === 'A') && coincidenDatos(consulta, intento);
+}
+
+/** Como `coincideConIntento`, sin mirar el resultado (lo usa `recuperarComprobante`). */
+export function coincidenDatos(consulta: FECompConsultarResult, intento: IntentoComprobante): boolean {
+  const r = consulta.resultGet;
   if (!r) return false;
   return (
-    (r.resultado === undefined || r.resultado === 'A') &&
     Math.abs(Number(r.impTotal) - intento.importeTotal) <= 0.01 + 1e-9 &&
     Number(r.docTipo) === Number(intento.docTipo) &&
     Number(r.docNro) === Number(intento.docNro) &&
@@ -437,37 +452,71 @@ function mensajes(list?: MensajeArca[]): MensajeArca[] {
 }
 
 /**
- * Parsea el resultado crudo de FECAESolicitar (o FECAEARegInformativo)
- * a un FacturaResult limpio.
+ * `ArcaRechazoError` para un comprobante de WSFEv1 con `Resultado` "R". En
+ * WSFEv1 los motivos del rechazo de un comprobante vienen como observaciones
+ * (`Obs`); los `Errors` del request llegan antes como `ArcaWSFEError`.
+ */
+function rechazoWsfe(
+  operacion: OperacionEmision | 'FECompConsultar',
+  cbte: { cbteTipo: number; ptoVta: number; cbteNro: number },
+  observaciones: MensajeArca[] = [],
+): ArcaRechazoError {
+  const obs = mensajes(observaciones);
+  const motivos = obs.length > 0 ? `: ${formatServiceErrors(obs)}` : '';
+  return new ArcaRechazoError(
+    `${operacion}: ARCA rechazó el comprobante ${cbte.cbteTipo}-${cbte.ptoVta}-${cbte.cbteNro}${motivos}`,
+    { operacion, observaciones: obs },
+  );
+}
+
+/**
+ * Parsea la respuesta de FECAESolicitar (o FECAEARegInformativo) de **un**
+ * comprobante a un `FacturaResult` (siempre aprobado).
  *
- * @param enviado - Moneda y cotización enviadas (no vienen en la respuesta), para el QR.
+ * @param enviado - Operación (define `tipoCodAut`: "A" en FECAEARegInformativo),
+ *   y moneda y cotización enviadas (no vienen en la respuesta, para el QR).
+ *   `caea`: el CAEA informado, por si la respuesta no lo repite.
+ * @throws ArcaRechazoError si ARCA rechazó el comprobante (`Resultado` "R").
+ * @throws ArcaResponseError (`uncertain: true`) si la respuesta no tiene el
+ *   comprobante, trae otro `Resultado` o lo aprueba sin CAE.
  */
 export function parseFacturaResult(
   result: FECAESolicitarResult | CaeaRegInfResult,
   importes: Importes,
-  enviado?: { moneda?: string; cotizacion?: number; tipoCodAut?: 'E' | 'A' },
+  enviado: {
+    operacion: OperacionEmision;
+    moneda?: string;
+    cotizacion?: number;
+    caea?: string;
+  },
 ): FacturaResult {
+  const op = enviado.operacion;
   const det = result.feDetResp[0];
-  if (!det) throw new TypeError('Respuesta sin FECAEDetResponse');
-  const aprobada = det.resultado === 'A';
+  if (!det) throw new ArcaResponseError(`Respuesta de ${op} sin FECAEDetResponse`, true);
+  const cbte = {
+    cbteTipo: Number(result.feCabResp.cbteTipo),
+    ptoVta: Number(result.feCabResp.ptoVta),
+    cbteNro: Number(det.cbteDesde),
+  };
+  if (det.resultado === 'R') throw rechazoWsfe(op, cbte, det.observaciones);
+  if (det.resultado !== 'A') throw new ArcaResponseError(`${op}: Resultado inesperado "${det.resultado}"`, true);
+  // En FECAEARegInformativo el código es el CAEA y no hay vencimiento por comprobante.
+  const cae = optString(det.cae ?? det.caea) ?? optString(enviado.caea);
+  if (cae === undefined) throw new ArcaResponseError(`${op} aprobó el comprobante sin informar el CAE`, true);
 
   return {
-    aprobada,
-    // En FECAEARegInformativo el código es el CAEA y no hay vencimiento por comprobante.
-    cae: aprobada ? optString(det.cae ?? det.caea) : undefined,
-    caeVencimiento: aprobada ? optString(det.caeFchVto) : undefined,
-    cbteNro: Number(det.cbteDesde),
-    ptoVta: Number(result.feCabResp.ptoVta),
-    cbteTipo: Number(result.feCabResp.cbteTipo),
+    cae,
+    caeVencimiento: optString(det.caeFchVto),
+    ...cbte,
     importes,
     observaciones: mensajes(det.observaciones),
     eventos: eventosWsfe(result),
     fecha: optString(det.cbteFch),
     docTipo: det.docTipo === undefined ? undefined : Number(det.docTipo),
     docNro: det.docNro === undefined ? undefined : Number(det.docNro),
-    moneda: enviado?.moneda,
-    cotizacion: enviado?.cotizacion,
-    tipoCodAut: enviado?.tipoCodAut ?? (det.caea !== undefined ? 'A' : 'E'),
+    moneda: enviado.moneda,
+    cotizacion: enviado.cotizacion,
+    tipoCodAut: op === 'FECAEARegInformativo' ? 'A' : 'E',
     raw: result,
   };
 }
@@ -475,17 +524,28 @@ export function parseFacturaResult(
 /**
  * Arma un FacturaResult a partir de un comprobante consultado con FECompConsultar
  * (lo usa `recuperarComprobante`).
+ *
+ * @throws ArcaRechazoError (`operacion: "FECompConsultar"`) si ARCA informa el
+ *   comprobante como rechazado (`Resultado` "R").
+ * @throws ArcaResponseError si trae otro `Resultado` o no tiene código de autorización.
  */
 export function facturaResultDesdeConsulta(consulta: FECompConsultarResult): FacturaResult {
   const r = consulta.resultGet;
-  const aprobada = r.resultado === undefined || r.resultado === 'A';
+  const cbte = { cbteTipo: Number(r.cbteTipo), ptoVta: Number(r.ptoVta), cbteNro: Number(r.cbteDesde) };
+  if (r.resultado === 'R') throw rechazoWsfe('FECompConsultar', cbte, r.observaciones);
+  if (r.resultado !== undefined && r.resultado !== 'A') {
+    throw new ArcaResponseError(`FECompConsultar: Resultado inesperado "${r.resultado}"`);
+  }
+  const cae = optString(r.codAutorizacion);
+  if (cae === undefined) {
+    throw new ArcaResponseError(
+      `FECompConsultar: el comprobante ${cbte.cbteTipo}-${cbte.ptoVta}-${cbte.cbteNro} no tiene CodAutorizacion`,
+    );
+  }
   return {
-    aprobada,
-    cae: aprobada ? optString(r.codAutorizacion) : undefined,
-    caeVencimiento: aprobada ? optString(r.fchVto) : undefined,
-    cbteNro: Number(r.cbteDesde),
-    ptoVta: Number(r.ptoVta),
-    cbteTipo: Number(r.cbteTipo),
+    cae,
+    caeVencimiento: optString(r.fchVto),
+    ...cbte,
     importes: {
       total: Number(r.impTotal),
       neto: Number(r.impNeto),
@@ -533,28 +593,42 @@ function es703(e: { code: number | string }): boolean {
 }
 
 /**
- * `true` si el resultado de una emisión indica que el número ya fue usado:
- * ARCA rechazó este envío, pero un intento anterior con el mismo número pudo
+ * `true` si el error de una emisión indica que el número ya fue usado: ARCA
+ * rechazó este envío, pero un intento anterior con el mismo número pudo
  * haberse autorizado. Resolverlo con `recuperarComprobante` antes de marcar el
  * comprobante como rechazado.
  *
- * - FECAESolicitar: validación 10016 por número. El 10016 por fecha (`CbteFch`
- *   fuera de rango o anterior al último emitido) devuelve `false`: no hay nada
- *   que recuperar, hay que corregir la fecha. Si el mensaje es ambiguo
- *   (menciona número y fecha) devuelve `true`, porque `recuperarComprobante`
- *   es solo una consulta.
- * - FECAEARegInformativo (`registrarFacturaCAEA`, `tipoCodAut: "A"`):
- *   validación 703 ("debe ser mayor en 1 al último informado").
+ * - `ArcaRechazoError` de FECAESolicitar (`facturar`, `notaCredito`,
+ *   `notaDebito`): validación 10016 por número en las observaciones. El 10016
+ *   por fecha (`CbteFch` fuera de rango o anterior al último emitido) devuelve
+ *   `false`: no hay nada que recuperar, hay que corregir la fecha. Si el
+ *   mensaje es ambiguo (menciona número y fecha) devuelve `true`, porque
+ *   `recuperarComprobante` es solo una consulta.
+ * - `ArcaRechazoError` de FECAEARegInformativo (`registrarFacturaCAEA`):
+ *   además, la validación 703 ("debe ser mayor en 1 al último informado").
+ * - `ArcaWSFEError`: los mismos códigos en `errors`.
  *
- * Acepta un `FacturaResult` (rechazo con observaciones) o el error lanzado.
+ * Cualquier otro valor (incluido un rechazo de WSFEX o de `recuperarComprobante`)
+ * devuelve `false`.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   await arca.facturar(opts);
+ * } catch (e) {
+ *   if (requiereRecuperacion(e)) await arca.recuperarComprobante(intento);
+ * }
+ * ```
  */
-export function requiereRecuperacion(resultadoOError: FacturaResult | unknown): boolean {
-  if (resultadoOError instanceof ArcaWSFEError) {
+export function requiereRecuperacion(error: unknown): boolean {
+  if (error instanceof ArcaWSFEError) {
     // Los códigos 7xx son exclusivos de las validaciones de CAEA.
-    return resultadoOError.errors.some((e) => es10016PorNumero(e) || es703(e));
+    return error.errors.some((e) => es10016PorNumero(e) || es703(e));
   }
-  const r = resultadoOError as Partial<FacturaResult> | null;
-  if (r?.aprobada !== false || !Array.isArray(r.observaciones)) return false;
-  const caea = r.tipoCodAut === 'A';
-  return r.observaciones.some((o) => es10016PorNumero(o) || (caea && es703(o)));
+  if (error instanceof ArcaRechazoError) {
+    if (error.operacion !== 'FECAESolicitar' && error.operacion !== 'FECAEARegInformativo') return false;
+    const caea = error.operacion === 'FECAEARegInformativo';
+    return [...error.errors, ...error.observaciones].some((o) => es10016PorNumero(o) || (caea && es703(o)));
+  }
+  return false;
 }

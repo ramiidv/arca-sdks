@@ -3,7 +3,7 @@
  */
 
 import fs from 'node:fs';
-import { ArcaFacturacion, CbteTipo, FileTicketStorage, Moneda } from '@ramiidv/arca-facturacion';
+import { ArcaFacturacion, CbteTipo, ENDPOINTS, FileTicketStorage, Moneda, WsfeClient } from '@ramiidv/arca-facturacion';
 
 async function main() {
   const arca = new ArcaFacturacion({
@@ -74,6 +74,15 @@ async function main() {
 
   const tiposExpo = await arca.getTiposExpo();
   console.log('Tipos de exportación:', tiposExpo);
+
+  // ============================================================
+  // Cliente de bajo nivel (uso avanzado)
+  // ============================================================
+
+  // Endpoint explícito (ENDPOINTS.wsfe.testing / .production, o un proxy) y transporte opcional.
+  // Las operaciones autenticadas reciben el Auth ({ token, sign, cuit }) en cada llamada.
+  const wsfe = new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing, transport: { timeout: 10_000 } });
+  console.log('FEDummy:', await wsfe.dummy());
 }
 
 main().catch(console.error);

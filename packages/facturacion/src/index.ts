@@ -23,6 +23,7 @@ export {
   ArcaWSFEError,
   ArcaSoapError,
   ArcaServiceError,
+  ArcaRechazoError,
   ArcaValidationError,
   ArcaResultadoIncierto,
   ArcaResultadoInciertoExpo,
@@ -30,6 +31,7 @@ export {
 } from './errors.js';
 export { ArcaResponseError } from '@ramiidv/arca-common';
 export type { OperacionEmision } from './errors.js';
+export type { ServiceErrorDetail } from '@ramiidv/arca-common';
 
 // Persistencia de tickets (desde arca-common)
 export { MemoryTicketStorage, FileTicketStorage } from '@ramiidv/arca-common';
@@ -133,7 +135,7 @@ export {
 } from './constants.js';
 
 // Low-level clients (for advanced usage)
+export type { ServiceClientConfig, ServiceEndpoints, ServiceTransport } from '@ramiidv/arca-common';
 export { WsaaClient } from './wsaa.js';
 export { WsfeClient } from './wsfe.js';
-export type { WsClientOptions } from './wsfe.js';
 export { WsfexClient } from './wsfex.js';

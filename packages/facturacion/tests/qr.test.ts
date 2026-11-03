@@ -91,7 +91,6 @@ describe('generarUrlQR / ArcaFacturacion.generateQRUrl', () => {
 
 describe('urlQRDesdeFactura', () => {
   const factura: FacturaResult = {
-    aprobada: true,
     cae: '76123456789012',
     caeVencimiento: '20261109',
     cbteNro: 151,
@@ -128,10 +127,8 @@ describe('urlQRDesdeFactura', () => {
     });
   });
 
-  it('rechaza un comprobante no aprobado', () => {
-    expect(() => urlQRDesdeFactura({ ...factura, aprobada: false, cae: undefined }, { cuit: 20123456786 })).toThrow(
-      ArcaValidationError,
-    );
+  it('rechaza un resultado sin CAE (armado a mano)', () => {
+    expect(() => urlQRDesdeFactura({ ...factura, cae: '' }, { cuit: 20123456786 })).toThrow(ArcaValidationError);
   });
 
   it('moneda extranjera sin cotización conocida exige datos.ctz', () => {

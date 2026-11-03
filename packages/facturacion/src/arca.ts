@@ -1,20 +1,22 @@
-import { ArcaResponseError, ArcaSdkBase, formatDate, statusOf } from '@ramiidv/arca-common';
+import { ArcaRechazoError, ArcaResponseError, ArcaSdkBase, formatDate, statusOf } from '@ramiidv/arca-common';
 import type { CallOptions, ServiceStatus } from '@ramiidv/arca-common';
 import { WsfeClient } from './wsfe.js';
-import type { WsClientOptions } from './wsfe.js';
 import { WsfexClient } from './wsfex.js';
 import {
   armarComprobante,
   buildInvoiceDetail,
-  coincideConIntento,
+  coincidenDatos,
   facturaResultDesdeConsulta,
+  intentoDesdeComprobante,
+  optString,
   parseFacturaResult,
   formatFechaHora,
   redondear2,
   totalesDe,
 } from './facturacion.js';
 import { eventosWsfex } from './wsfex.js';
-import { ArcaConflictoExpo, ArcaResultadoInciertoExpo } from './errors.js';
+import { ArcaConflictoExpo, ArcaResultadoIncierto, ArcaResultadoInciertoExpo } from './errors.js';
+import type { OperacionEmision } from './errors.js';
 import { fail, validateFacturarOpts, validateFacturarExpoOpts, validateInvoiceRequest } from './validation.js';
 import type {
   ArcaConfig,
@@ -54,6 +56,7 @@ import type {
   ResultadoRecuperacion,
   QROptions,
   FacturarCAEAOpts,
+  Importes,
 } from './types.js';
 import { generarUrlQR, urlQRDesdeFactura } from './qr.js';
 import type { DatosQR } from './qr.js';
@@ -98,17 +101,9 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     this.paramCacheTTLMs = config.paramCacheTTLMs ?? DEFAULT_PARAM_CACHE_TTL_MS;
 
     const endpoints = config.endpoints ?? {};
-    const { timeout: timeoutMs, ...transport } = this.transport;
-    const clientOpts: WsClientOptions = { ...transport, timeoutMs };
-
-    this.wsfe = new WsfeClient(this.production, {
-      ...clientOpts,
-      endpoint: this.endpoint(ENDPOINTS.wsfe, endpoints.wsfe),
-    });
-    this.wsfex = new WsfexClient(this.production, {
-      ...clientOpts,
-      endpoint: this.endpoint(ENDPOINTS.wsfex, endpoints.wsfex),
-    });
+    const transport = this.transport;
+    this.wsfe = new WsfeClient({ endpoint: this.endpoint(ENDPOINTS.wsfe, endpoints.wsfe), transport });
+    this.wsfex = new WsfexClient({ endpoint: this.endpoint(ENDPOINTS.wsfex, endpoints.wsfex), transport });
   }
 
   // ============================================================
@@ -140,8 +135,12 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
   /**
    * Solicita CAE para uno o más comprobantes (API raw).
    *
+   * Devuelve la respuesta de ARCA tal cual, con el `resultado` de cada
+   * comprobante ("A", "R", o "P" en la cabecera si el lote se aprobó en
+   * parte): un comprobante rechazado **no** lanza `ArcaRechazoError`.
+   *
    * No se reintenta. Si el resultado es incierto lanza `ArcaResultadoIncierto`;
-   * si ARCA rechaza el request, `ArcaWSFEError`.
+   * si ARCA rechaza el request (`Errors`), `ArcaWSFEError`.
    */
   async crearFactura(request: InvoiceRequest, call?: CallOptions): Promise<FECAESolicitarResult> {
     validateInvoiceRequest(request);
@@ -201,10 +200,14 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    * Calcula automáticamente IVA y totales. Si no viene `cbteNro`, usa el
    * último autorizado + 1 (sin lock: serializá las emisiones por ptoVta y cbteTipo).
    *
-   * - `ArcaWSFEError`: ARCA rechazó el comprobante (no se emitió).
+   * Devuelve siempre un comprobante autorizado (con `cae`). Si no:
+   *
+   * - `ArcaRechazoError`: ARCA rechazó el comprobante (`Resultado` "R", no se
+   *   emitió); los motivos están en `observaciones`. Si `requiereRecuperacion(error)`,
+   *   el número ya se usó: resolver con `recuperarComprobante`.
+   * - `ArcaWSFEError`: ARCA rechazó el request (`Errors`, no se emitió).
    * - `ArcaAuthError`: ARCA rechazó el ticket (errores 600 y 601).
    * - `ArcaResultadoIncierto`: no se sabe si se emitió; usar `recuperarComprobante(error.intento)`.
-   * - `aprobada: false`: ARCA respondió con resultado "R" (no se emitió), ver `observaciones`.
    */
   async facturar(opts: FacturarOpts, call?: CallOptions): Promise<FacturaResult> {
     return this.emitirComprobante(opts, call);
@@ -212,6 +215,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
 
   /**
    * Crea una nota de crédito. Tipo de NC inferido del comprobante original.
+   * Mismos errores que `facturar` (un rechazo lanza `ArcaRechazoError`).
    */
   async notaCredito(opts: NotaCreditoOpts, call?: CallOptions): Promise<FacturaResult> {
     this.rechazarClaseE(opts, 'Crédito');
@@ -229,6 +233,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
 
   /**
    * Crea una nota de débito. Tipo de ND inferido del comprobante original.
+   * Mismos errores que `facturar` (un rechazo lanza `ArcaRechazoError`).
    */
   async notaDebito(opts: NotaDebitoOpts, call?: CallOptions): Promise<FacturaResult> {
     this.rechazarClaseE(opts, 'Débito');
@@ -267,7 +272,37 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
   private async emitirComprobante(opts: FacturarOpts, call?: CallOptions): Promise<FacturaResult> {
     const { detail, importes } = await this.prepararComprobante(opts, call);
     const result = await this.crearFactura({ ptoVta: opts.ptoVta, cbteTipo: opts.cbteTipo, invoices: [detail] }, call);
-    return parseFacturaResult(result, importes, { moneda: detail.monId, cotizacion: detail.monCotiz, tipoCodAut: 'E' });
+    return this.resultadoEmision('FECAESolicitar', result, opts, detail, importes);
+  }
+
+  /**
+   * `FacturaResult` de una emisión simplificada (un comprobante). Un rechazo
+   * lanza `ArcaRechazoError`; una respuesta que no permite saber si se emitió
+   * (sin el comprobante, con otro `Resultado` o aprobada sin CAE),
+   * `ArcaResultadoIncierto`.
+   */
+  private resultadoEmision(
+    operacion: OperacionEmision,
+    result: FECAESolicitarResult | CaeaRegInfResult,
+    opts: { ptoVta: number; cbteTipo: number },
+    detail: InvoiceDetail & { caea?: string },
+    importes: Importes,
+  ): FacturaResult {
+    try {
+      return parseFacturaResult(result, importes, {
+        operacion,
+        moneda: detail.monId,
+        cotizacion: detail.monCotiz,
+        caea: detail.caea,
+      });
+    } catch (err) {
+      if (err instanceof ArcaResponseError) {
+        throw new ArcaResultadoIncierto(operacion, [intentoDesdeComprobante(opts.ptoVta, opts.cbteTipo, detail)], {
+          cause: err,
+        });
+      }
+      throw err;
+    }
   }
 
   /**
@@ -291,6 +326,13 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    * - Si no, consulta el comprobante y compara ImpTotal (tolerancia 0,01),
    *   DocTipo, DocNro y CbteFch: si coinciden → `autorizado` con el CAE; si no
    *   → `conflicto` (ese número lo usó otra emisión).
+   * - Si coinciden pero ARCA lo informa rechazado (`Resultado` "R"), lanza
+   *   `ArcaRechazoError` (`operacion: "FECompConsultar"`), como la emisión: el
+   *   comprobante del intento no está autorizado. No debería pasar (el último
+   *   autorizado ya incluye ese número), pero no se informa como `autorizado`
+   *   ni como `no_emitido` (reintentar con ese número no es seguro).
+   * - Si coinciden pero la consulta trae otro `Resultado` o no trae el
+   *   `CodAutorizacion`, lanza `ArcaResponseError`.
    *
    * Tip: si la respuesta se perdió por timeout, esperar unos segundos antes de
    * llamar: ARCA puede seguir procesando el request original.
@@ -300,10 +342,9 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     if (ultimo < intento.cbteNro) return { estado: 'no_emitido' };
 
     const encontrado = await this.consultarComprobante(intento.cbteTipo, intento.ptoVta, intento.cbteNro, call);
-    if (coincideConIntento(encontrado, intento)) {
-      return { estado: 'autorizado', resultado: facturaResultDesdeConsulta(encontrado) };
-    }
-    return { estado: 'conflicto', encontrado };
+    if (!coincidenDatos(encontrado, intento)) return { estado: 'conflicto', encontrado };
+    // Lanza ArcaRechazoError si ARCA lo informa rechazado.
+    return { estado: 'autorizado', resultado: facturaResultDesdeConsulta(encontrado) };
   }
 
   /** Consulta un comprobante previamente autorizado. */
@@ -324,6 +365,8 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
 
   /**
    * Autoriza un comprobante de exportación (WSFEX, API raw). No se reintenta.
+   * Devuelve la respuesta de WSFEX tal cual: un `Resultado` "R" **no** lanza
+   * `ArcaRechazoError` (sí `facturarExpo`).
    *
    * - `ArcaResultadoInciertoExpo`: no se sabe si se autorizó. Reenviar el mismo
    *   request con el mismo `Id` (`crearFacturaExportacion(error.request)`):
@@ -459,8 +502,12 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    *   `fecha`): WSFEX responde `reproceso: true` si ya estaba autorizado.
    * - `ArcaConflictoExpo`: el `Id` ya lo usaba otra solicitud (emisiones
    *   concurrentes): este comprobante no se autorizó; reintentar sin `id`.
-   * - `ArcaWSFEError`: WSFEX rechazó el comprobante.
-   * - `aprobada: false`: resultado "R", ver `obs`.
+   * - `ArcaRechazoError` (`operacion: "FEXAuthorize"`): WSFEX rechazó el
+   *   comprobante (`Resultado` "R", no se autorizó); `Motivos_Obs` queda en
+   *   `observaciones`.
+   * - `ArcaWSFEError`: WSFEX rechazó el request (`FEXErr`).
+   *
+   * Devuelve siempre un comprobante autorizado (con `cae`).
    */
   async facturarExpo(opts: FacturarExpoOpts, call?: CallOptions): Promise<FacturaExpoResult> {
     validateFacturarExpoOpts(opts);
@@ -542,26 +589,32 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     if (opts.id === undefined && r.reproceso === 'S') {
       throw new ArcaConflictoExpo(invoice, result, 'WSFEX respondió Reproceso="S" con un Id nuevo');
     }
-    const aprobada = r.resultado === 'A';
-    const cae = aprobada && r.cae !== undefined && r.cae !== null && r.cae !== '' ? String(r.cae) : undefined;
-    if (aprobada && cae === undefined) {
+    const obs = optString(r.motivosObs);
+    if (r.resultado === 'R') {
+      // Motivos_Obs es texto libre (sin código): va como observación con code 0.
+      throw new ArcaRechazoError(
+        `FEXAuthorize: WSFEX rechazó el comprobante ${invoice.cbteTipo}-${invoice.puntoVta}-${invoice.cbteNro} ` +
+          `(Id ${invoice.id})${obs ? `: ${obs}` : ''}`,
+        { operacion: 'FEXAuthorize', observaciones: obs ? [{ code: 0, msg: obs }] : [] },
+      );
+    }
+    const cae = optString(r.cae);
+    if (cae === undefined) {
       throw new ArcaResultadoInciertoExpo(invoice, {
         cause: new ArcaResponseError('FEXAuthorize aprobó el comprobante sin informar el CAE', true),
       });
     }
 
     return {
-      aprobada,
       id: Number(r.id ?? id),
       reproceso: r.reproceso === 'S',
       fecha,
       cae,
-      caeVencimiento: aprobada && r.fchVencCae ? String(r.fchVencCae) : undefined,
+      caeVencimiento: optString(r.fchVencCae),
       cbteNro: Number(r.cbteNro),
       ptoVta: Number(r.puntoVta),
       cbteTipo: Number(r.cbteTipo),
-      obs:
-        r.motivosObs === undefined || r.motivosObs === null || r.motivosObs === '' ? undefined : String(r.motivosObs),
+      obs,
       eventos: eventosWsfex(result),
       raw: result,
     };
@@ -601,6 +654,8 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
   /**
    * Informa comprobantes emitidos con un CAEA (API raw). Cada comprobante
    * lleva `CAEA` y `CbteFchHsGen` (yyyymmddhhmmss, obligatorio desde la RG 5782).
+   * Devuelve la respuesta de ARCA tal cual: un comprobante con `resultado` "R"
+   * **no** lanza `ArcaRechazoError` (sí `registrarFacturaCAEA`).
    */
   async registrarCAEA(request: CaeaRegInfRequest, call?: CallOptions): Promise<CaeaRegInfResult> {
     validateInvoiceRequest(request);
@@ -620,7 +675,10 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
 
   /**
    * Informa un comprobante emitido en contingencia con CAEA (API simplificada).
-   * Calcula IVA y totales igual que `facturar()`.
+   * Calcula IVA y totales igual que `facturar()`, y tiene los mismos errores:
+   * si ARCA rechaza el comprobante lanza `ArcaRechazoError`
+   * (`operacion: "FECAEARegInformativo"`; si `requiereRecuperacion(error)`, por
+   * ejemplo 703, el número ya se informó).
    *
    * - `fechaHoraGeneracion` (obligatorio): cuándo se generó el comprobante en
    *   contingencia (`CbteFchHsGen`). Un `Date` se formatea en hora de Argentina.
@@ -650,31 +708,37 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     const { fechaHoraGeneracion: _, ...facturarOpts } = opts;
     const fecha = opts.fecha ?? hsGen.slice(0, 8);
     const { detail, importes } = await this.prepararComprobante({ ...facturarOpts, fecha }, call);
+    const enviado = { ...detail, caea: caea, cbteFchHsGen: hsGen };
 
     const result = await this.registrarCAEA(
-      {
-        ptoVta: opts.ptoVta,
-        cbteTipo: opts.cbteTipo,
-        invoices: [{ ...detail, caea: caea, cbteFchHsGen: hsGen }],
-      },
+      { ptoVta: opts.ptoVta, cbteTipo: opts.cbteTipo, invoices: [enviado] },
       call,
     );
-
-    return parseFacturaResult(result, importes, {
-      moneda: detail.monId,
-      cotizacion: detail.monCotiz,
-      tipoCodAut: 'A',
-    });
+    return this.resultadoEmision('FECAEARegInformativo', result, opts, enviado, importes);
   }
 
   /**
    * Informa que no hubo movimientos para un CAEA en un punto de venta (emisión,
    * no se reintenta). Si el error es incierto, verificar con `consultarSinMovimientoCAEA`.
+   *
+   * @throws ArcaRechazoError (`operacion: "FECAEASinMovimientoInformar"`) si ARCA
+   *   responde `Resultado` "R".
    */
-  async sinMovimientoCAEA(caea: string, ptoVta: number, call?: CallOptions): Promise<CaeaSinMovResult> {
+  async sinMovimientoCAEA(
+    caea: string,
+    ptoVta: number,
+    call?: CallOptions,
+  ): Promise<CaeaSinMovResult & { resultado: 'A' }> {
     const callOpts = this.opts(call);
     const auth = await this.getAuth('wsfe', callOpts);
-    return this.wsfe.sinMovimientoCAEA(auth, caea, ptoVta, callOpts);
+    const result = await this.wsfe.sinMovimientoCAEA(auth, caea, ptoVta, callOpts);
+    if (result.resultado === 'R') {
+      throw new ArcaRechazoError(
+        `FECAEASinMovimientoInformar: ARCA rechazó el informe sin movimiento del CAEA ${caea} (punto de venta ${ptoVta})`,
+        { operacion: 'FECAEASinMovimientoInformar' },
+      );
+    }
+    return result as CaeaSinMovResult & { resultado: 'A' };
   }
 
   /** Consulta los puntos de venta informados "sin movimiento" para un CAEA. */
@@ -841,8 +905,8 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
 
   /**
    * URL del QR de un comprobante emitido con `facturar`, `notaCredito`,
-   * `notaDebito`, `registrarFacturaCAEA` o recuperado con `recuperarComprobante`,
-   * usando el CUIT de esta instancia.
+   * `notaDebito`, `registrarFacturaCAEA` o recuperado con `recuperarComprobante`
+   * (siempre autorizado), usando el CUIT de esta instancia.
    */
   urlQR(factura: FacturaResult, datos?: Omit<DatosQR, 'cuit'>, options?: QROptions): string {
     return urlQRDesdeFactura(factura, { ...datos, cuit: this.cuitNum }, options);

@@ -3,7 +3,7 @@
 [![CI](https://github.com/ramiidv/arca-sdks/actions/workflows/ci.yml/badge.svg)](https://github.com/ramiidv/arca-sdks/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@ramiidv/arca-facturacion)](https://www.npmjs.com/package/@ramiidv/arca-facturacion)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Node >= 20.19](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen)](https://nodejs.org)
+[![Node >= 22.12](https://img.shields.io/badge/node-%3E%3D22.12-brightgreen)](https://nodejs.org)
 
 SDK de TypeScript para la factura electrónica de **ARCA** (ex AFIP): WSFEv1 (mercado interno, CAE y CAEA) y WSFEX (exportación), con cálculo de IVA y totales, QR y emisión sin estados ambiguos.
 
@@ -20,7 +20,7 @@ npm install @ramiidv/arca-facturacion
 
 ## Requisitos
 
-- Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (Node ≥ 20.19 permite cargar módulos ESM con `require()`).
+- Node >= 22.12. Solo ESM; desde CommonJS se carga con `require()` (Node ≥ 22.12 permite cargar módulos ESM con `require()`).
 - Certificado digital de ARCA asociado a los servicios `wsfe` (y `wsfex` para exportación):
   - Homologación: [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx).
   - Producción: [Administración de Certificados Digitales](https://www.afip.gob.ar/ws/documentacion/certificados.asp) (con clave fiscal).
@@ -42,7 +42,7 @@ Glosario:
 
 ```ts
 import { readFileSync } from 'node:fs';
-import { ArcaFacturacion, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/arca-facturacion';
+import { ArcaFacturacion, ArcaRechazoError, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/arca-facturacion';
 
 const arca = new ArcaFacturacion({
   cuit: 20123456786,
@@ -53,23 +53,28 @@ const arca = new ArcaFacturacion({
 });
 
 // Factura B a consumidor final
-const result = await arca.facturar({
-  ptoVta: 1,
-  cbteTipo: CbteTipo.FACTURA_B,
-  items: [
-    { neto: 1000, iva: IvaTipo.IVA_21 },
-    { neto: 500, iva: IvaTipo.IVA_10_5 },
-  ],
-});
-
-if (result.aprobada) {
+try {
+  const result = await arca.facturar({
+    ptoVta: 1,
+    cbteTipo: CbteTipo.FACTURA_B,
+    items: [
+      { neto: 1000, iva: IvaTipo.IVA_21 },
+      { neto: 500, iva: IvaTipo.IVA_10_5 },
+    ],
+  });
+  // Siempre aprobada: tiene CAE.
   console.log(result.cae, result.caeVencimiento, result.cbteNro);
   console.log(result.importes.total); // 1762.5
   console.log(arca.urlQR(result)); // URL del QR para el comprobante impreso
-} else {
-  console.error(result.observaciones);
+} catch (e) {
+  // ARCA rechazó el comprobante (Resultado "R"): no se emitió. Los motivos, en observaciones.
+  if (e instanceof ArcaRechazoError) console.error(e.observaciones);
+  else throw e;
 }
 ```
+
+Una emisión devuelve **siempre** un comprobante aprobado; si ARCA la rechaza, lanza
+`ArcaRechazoError` (ver [Manejo de errores](#manejo-de-errores)).
 
 El SDK completa el número (último autorizado + 1), la fecha (hora de Argentina, con el reloj de ARCA), el concepto, la moneda (`PES`) y, para consumidor final sin identificar (`docTipo` 99), `CondicionIVAReceptorId = 5`. Agrupa el IVA por alícuota y calcula todo en centavos: la suma de bases, IVA, exento, no gravado y tributos es exactamente el total.
 
@@ -137,9 +142,13 @@ arrays sin el contenedor del XML (`resultGet.iva` en lugar de `ResultGet.Iva.Ali
 | `ultimoComprobante(ptoVta, cbteTipo)`             | Último número autorizado (`siguienteComprobante`: + 1)                                                                                                                                                                                            |
 | `consultarComprobante(cbteTipo, ptoVta, cbteNro)` | Consulta un comprobante (`FECompConsultar`)                                                                                                                                                                                                       |
 
-`FacturaResult`: `aprobada`, `cae?`, `caeVencimiento?`, `cbteNro`, `ptoVta`, `cbteTipo`, `importes`
-(`total`, `neto`, `iva`, `exento`, `noGravado`, `tributos`, `descuento?`), `observaciones`,
-`eventos`, `fecha?`, `docTipo?`, `docNro?`, `moneda?`, `cotizacion?`, `tipoCodAut?` y `raw`.
+`FacturaResult` (siempre un comprobante autorizado): `cae`, `caeVencimiento?`, `cbteNro`, `ptoVta`,
+`cbteTipo`, `importes` (`total`, `neto`, `iva`, `exento`, `noGravado`, `tributos`, `descuento?`),
+`observaciones`, `eventos`, `fecha?`, `docTipo?`, `docNro?`, `moneda?`, `cotizacion?`,
+`tipoCodAut?` y `raw`. Si ARCA rechaza el comprobante, `facturar`, `notaCredito` y `notaDebito`
+lanzan `ArcaRechazoError` (`operacion: 'FECAESolicitar'`). La API raw (`crearFactura`,
+`crearFacturaAuto`) devuelve la respuesta de ARCA tal cual, con el `resultado` de cada comprobante
+(`A`/`R`, y `P` en la cabecera de un lote aprobado en parte): no lanza por un rechazo.
 
 #### Opciones de `facturar`
 
@@ -384,6 +393,12 @@ const opts: FacturarExpoOpts = {
 const res = await arca.facturarExpo(opts); // Imp_total: 950
 ```
 
+`facturarExpo` devuelve `FacturaExpoResult` (siempre autorizado): `id`, `reproceso`, `fecha`, `cae`,
+`caeVencimiento?`, `cbteNro`, `ptoVta`, `cbteTipo`, `obs?`, `eventos` y `raw`. Si WSFEX rechaza el
+comprobante (`Resultado` "R") lanza `ArcaRechazoError` (`operacion: 'FEXAuthorize'`, con
+`Motivos_Obs` en `observaciones` y `code` 0). `crearFacturaExportacion` (raw) devuelve la respuesta
+tal cual.
+
 Reglas de WSFEX que aplica el SDK:
 
 - Moneda: con `PES` la cotización es 1 (1601); en moneda extranjera es obligatoria (hasta 4 enteros,
@@ -433,8 +448,13 @@ const informado = await arca.registrarFacturaCAEA(caea.caea, {
   fechaHoraGeneracion: new Date('2026-11-03T14:32:10-03:00'), // fecha del comprobante: la de generación
   items: [{ neto: 100, iva: IvaTipo.IVA_21 }],
 });
-console.log(informado.aprobada, informado.tipoCodAut); // true 'A'
+console.log(informado.cae, informado.tipoCodAut); // el CAEA, 'A'
 ```
+
+Si ARCA rechaza el comprobante, `registrarFacturaCAEA` lanza `ArcaRechazoError`
+(`operacion: 'FECAEARegInformativo'`; con la validación 703, `requiereRecuperacion(error)` es
+`true`), y `sinMovimientoCAEA`, con `operacion: 'FECAEASinMovimientoInformar'`. `registrarCAEA`
+(raw) devuelve la respuesta tal cual.
 
 ### Parámetros y estado
 
@@ -458,7 +478,7 @@ import type { FacturaResult } from '@ramiidv/arca-facturacion';
 declare const arca: ArcaFacturacion;
 declare const factura: FacturaResult;
 
-arca.urlQR(factura); // desde el resultado de facturar, notaCredito, registrarFacturaCAEA o recuperarComprobante
+arca.urlQR(factura); // desde el resultado (siempre autorizado) de facturar, notaCredito, registrarFacturaCAEA o recuperarComprobante
 
 generarUrlQR({
   fecha: '20261030',
@@ -490,7 +510,18 @@ cotización enviada, pasá `datos.ctz` a `urlQR`.
   `CBTES_ASOCIABLES` (tipos que se pueden asociar a cada tipo, validación 10040).
 - Códigos: `WSFE_ERRORES_INTERNOS`, `WSFEX_ERRORES_INTERNOS`, `WSFE_ERRORES_AUTH`,
   `WSFEX_ERRORES_AUTH`, `WSFE_NUMERO_NO_CORRESPONDE` (10016), `WSFE_CAEA_NUMERO_NO_CORRESPONDE` (703).
-- Clientes de bajo nivel: `WsfeClient`, `WsfexClient`, `WsaaClient`.
+- Endpoints: `ENDPOINTS` (`{ wsfe, wsfex }`, cada uno `{ testing, production }`; las mismas claves
+  que `config.endpoints`).
+- Clientes de bajo nivel: `WsfeClient`, `WsfexClient`, `WsaaClient`. Se construyen con
+  `{ endpoint, transport? }` (`ServiceClientConfig` de `@ramiidv/arca-common`; el namespace lo fija
+  cada cliente) y devuelven las respuestas de ARCA tal cual (un `Resultado` "R" no lanza):
+
+```ts
+import { ENDPOINTS, WsfeClient } from '@ramiidv/arca-facturacion';
+
+const wsfe = new WsfeClient({ endpoint: ENDPOINTS.wsfe.production, transport: { timeout: 60_000 } });
+await wsfe.dummy(); // { appserver, dbserver, authserver }
+```
 
 `Moneda` tiene los códigos más usados (la tabla completa sale de `getMonedas()`): `PES`, `DOL`,
 `060` euro, `012` real, `011` peso uruguayo, `033` peso chileno, `029` guaraní, `031` peso
@@ -502,6 +533,7 @@ boliviano, `032` peso colombiano, `010` peso mexicano, `021` libra, `019` yen, `
 | Clase                       | `code`                         | Cuándo                                                                                                                                             |
 | --------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ArcaValidationError`       | `ARCA_VALIDATION_ERROR`        | Datos inválidos (no se envió nada). `field`, `details`; el mensaje cita la validación del manual                                                   |
+| `ArcaRechazoError`          | `ARCA_RECHAZO`                 | ARCA procesó la emisión y rechazó el comprobante (`Resultado` "R"): no se emitió. `operacion`, `errors`, `observaciones` (`{ code, msg }[]`). Extiende `ArcaServiceError` |
 | `ArcaWSFEError`             | `ARCA_WSFE_ERROR`              | ARCA rechazó el request (`Errors`/`FEXErr`): no se emitió. `errors: { code, msg }[]`, `tieneCodigo(code)`. Extiende `ArcaServiceError`             |
 | `ArcaResultadoIncierto`     | `ARCA_RESULTADO_INCIERTO`      | Emisión WSFEv1 sin respuesta confiable (timeout, red, HTTP 5xx, error interno 500/501/502, respuesta ilegible). `intento`, `intentos`, `operacion` |
 | `ArcaResultadoInciertoExpo` | `ARCA_RESULTADO_INCIERTO_EXPO` | Lo mismo en `FEXAuthorize` (y errores 500/501/502/505). `intento` (`id`, `cbteNro`, `fecha`) y `request` para reenviar con el mismo `Id`           |
@@ -524,11 +556,18 @@ para un ticket dañado (ej: cambiaste de certificado).
 Las emisiones (`FECAESolicitar`, `FECAEARegInformativo`, `FECAEASinMovimientoInformar`,
 `FEXAuthorize`) **nunca se reintentan**. Cada una termina de una de tres formas:
 
-| Resultado     | Qué devuelve o lanza el SDK                                          | ¿Se emitió?             |
-| ------------- | -------------------------------------------------------------------- | ----------------------- |
-| ARCA autorizó | `aprobada: true` con `cae`                                           | Sí                      |
-| ARCA rechazó  | `aprobada: false` (observaciones), `ArcaWSFEError` o `ArcaAuthError` | No (ver 10016 y 703)    |
-| No se sabe    | `ArcaResultadoIncierto` / `ArcaResultadoInciertoExpo`                | **Hay que averiguarlo** |
+| Resultado     | Qué devuelve o lanza el SDK                                     | ¿Se emitió?             |
+| ------------- | --------------------------------------------------------------- | ----------------------- |
+| ARCA autorizó | El resultado, con `cae`                                         | Sí                      |
+| ARCA rechazó  | `ArcaRechazoError`, `ArcaWSFEError` o `ArcaAuthError`           | No (ver 10016 y 703)    |
+| No se sabe    | `ArcaResultadoIncierto` / `ArcaResultadoInciertoExpo`           | **Hay que averiguarlo** |
+
+`ArcaRechazoError` es el rechazo de un comprobante puntual (`Resultado` "R"): `operacion` es el
+método de ARCA (`FECAESolicitar`, `FECAEARegInformativo`, `FECAEASinMovimientoInformar`,
+`FEXAuthorize`) y los motivos están en `observaciones` (en WSFEv1, las `Obs` del comprobante; en
+WSFEX, `Motivos_Obs` con `code` 0). `ArcaWSFEError` es el rechazo del request entero (`Errors` /
+`FEXErr`). Los dos extienden `ArcaServiceError`. Una respuesta aprobada sin CAE, o con un
+`Resultado` desconocido, no se informa como rechazo sino como resultado incierto.
 
 Para WSFEv1, `recuperarComprobante(intento)` consulta ARCA y devuelve:
 
@@ -536,14 +575,19 @@ Para WSFEv1, `recuperarComprobante(intento)` consulta ARCA y devuelve:
 - `{ estado: 'no_emitido' }`: no existe; reintentar **con el mismo `cbteNro`** es seguro (si el
   intento original se autorizara después, ARCA rechaza el duplicado).
 - `{ estado: 'conflicto', encontrado }`: el número existe con otros datos (lo usó otra emisión).
+- Si el número existe con los datos del intento pero ARCA lo informa rechazado, lanza
+  `ArcaRechazoError` (`operacion: 'FECompConsultar'`), igual que la emisión: no quedó autorizado.
+  Si la consulta trae otro `Resultado` o no trae el `CodAutorizacion`, lanza `ArcaResponseError`.
 
 Un rechazo por número ya usado también puede esconder un intento anterior autorizado:
-`requiereRecuperacion(resultadoOError)` devuelve `true` para la validación 10016 por número (no
-por fecha) en `FECAESolicitar` y para la 703 en `FECAEARegInformativo`.
+`requiereRecuperacion(error)` devuelve `true` para la validación 10016 por número (no por fecha)
+en un `ArcaRechazoError` de `FECAESolicitar` y para la 703 en uno de `FECAEARegInformativo` (y para
+esos códigos en un `ArcaWSFEError`).
 
 ```ts
 import {
   ArcaFacturacion,
+  ArcaRechazoError,
   ArcaResultadoIncierto,
   ArcaWSFEError,
   CbteTipo,
@@ -570,12 +614,11 @@ async function emitir(ptoVta: number) {
   await guardar('enviando', { opts: { ...opts, fecha: intento.fecha }, intento });
 
   try {
-    const res = await arca.facturar(opts);
-    if (res.aprobada) return guardar('autorizado', res.cae);
-    if (requiereRecuperacion(res)) return guardar('incierto');
-    return guardar('rechazado', res.observaciones);
+    const res = await arca.facturar(opts); // siempre aprobada
+    return guardar('autorizado', res.cae);
   } catch (e) {
-    if (e instanceof ArcaResultadoIncierto) return guardar('incierto');
+    if (e instanceof ArcaResultadoIncierto || requiereRecuperacion(e)) return guardar('incierto');
+    if (e instanceof ArcaRechazoError) return guardar('rechazado', e.observaciones);
     if (e instanceof ArcaWSFEError) return guardar('rechazado', e.errors);
     throw e; // validación, auth o sin conexión: no se envió
   }
@@ -583,7 +626,11 @@ async function emitir(ptoVta: number) {
 
 // Al arrancar y cada tanto: resolver los "enviando" (proceso caído) y los "incierto".
 async function resolver(intento: IntentoComprobante) {
-  const r = await arca.recuperarComprobante(intento);
+  const r = await arca.recuperarComprobante(intento).catch((e) => {
+    if (e instanceof ArcaRechazoError) return null; // ARCA lo informa rechazado
+    throw e;
+  });
+  if (r === null) return guardar('rechazado');
   if (r.estado === 'autorizado') return guardar('autorizado', r.resultado.cae);
   if (r.estado === 'no_emitido') return guardar('reintentar'); // con el mismo cbteNro
   return guardar('conflicto', r.encontrado); // revisión manual
@@ -637,7 +684,8 @@ los handlers se ignoran.
 | Homologación | `wsaahomo.afip.gov.ar` | `wswhomo.afip.gov.ar`    |
 | Producción   | `wsaa.afip.gov.ar`     | `servicios1.afip.gov.ar` |
 
-Se elige con `production` y se puede reemplazar con `endpoints`.
+Se elige con `production` y se puede reemplazar con `endpoints`. Las URLs oficiales están en
+`ENDPOINTS` (`ENDPOINTS.wsfe.production`, `ENDPOINTS.wsfex.testing`, etc.).
 
 **TLS legacy.** La producción de WSFEv1 y WSFEX (`servicios1.afip.gov.ar`) negocia Diffie-Hellman
 de 1024 bits, que Node rechaza (`ERR_SSL_DH_KEY_TOO_SMALL`). Con `legacyTls: 'auto'` (default) el

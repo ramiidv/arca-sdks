@@ -41,12 +41,11 @@ async function main() {
     },
   });
 
-  if (result.aprobada) {
-    console.log(`CAE: ${result.cae}`);
-    console.log(`Neto: $${result.importes.neto}`);
-    console.log(`IVA: $${result.importes.iva}`);
-    console.log(`Total: $${result.importes.total}`);
-  }
+  // Siempre aprobada: un rechazo de ARCA lanza ArcaRechazoError (ver manejo-errores.ts).
+  console.log(`CAE: ${result.cae}`);
+  console.log(`Neto: $${result.importes.neto}`);
+  console.log(`IVA: $${result.importes.iva}`);
+  console.log(`Total: $${result.importes.total}`);
 }
 
 main().catch(console.error);

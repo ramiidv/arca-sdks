@@ -432,7 +432,7 @@ export interface WsfexInvoice {
   impTotal: number;
   /** Observaciones comerciales */
   obsComerciales?: string;
-  /** Observaciones */
+  /** Observaciones de WSFEX (`Motivos_Obs`), si vinieron */
   obs?: string;
   /** Idioma: 1=Español, 2=Inglés, 3=Portugués */
   idiomaCbte: number;
@@ -689,7 +689,7 @@ export interface FacturarExpoOpts {
   cbtesAsoc?: WsfexCmpAsoc[];
   /** Observaciones comerciales */
   obsComerciales?: string;
-  /** Observaciones */
+  /** Observaciones de WSFEX (`Motivos_Obs`), si vinieron */
   obs?: string;
   /**
    * Fecha del comprobante (Date o string YYYYMMDD / YYYY-MM-DD). Default: hoy
@@ -730,9 +730,11 @@ export interface IntentoExpo {
   fecha: string;
 }
 
+/**
+ * Comprobante de exportación **autorizado** (`facturarExpo`). Si WSFEX lo
+ * rechaza (`Resultado` "R"), `facturarExpo` lanza `ArcaRechazoError`.
+ */
 export interface FacturaExpoResult {
-  /** Si el comprobante fue aprobado */
-  aprobada: boolean;
   /** `Id` del request */
   id: number;
   /**
@@ -743,8 +745,8 @@ export interface FacturaExpoResult {
   /** Fecha del comprobante (YYYYMMDD) */
   fecha: string;
   /** CAE otorgado */
-  cae?: string;
-  /** Fecha de vencimiento del CAE */
+  cae: string;
+  /** Fecha de vencimiento del CAE (YYYYMMDD), si WSFEX la informó */
   caeVencimiento?: string;
   /** Número de comprobante */
   cbteNro: number;
@@ -752,7 +754,7 @@ export interface FacturaExpoResult {
   ptoVta: number;
   /** Tipo de comprobante */
   cbteTipo: number;
-  /** Observaciones */
+  /** Observaciones de WSFEX (`Motivos_Obs`), si vinieron */
   obs?: string;
   /** Eventos de ARCA (`FEXEvents` con código distinto de 0) */
   eventos: MensajeArca[];
@@ -956,12 +958,15 @@ export interface Importes {
   descuento?: number;
 }
 
+/**
+ * Comprobante **autorizado** por ARCA (`facturar`, `notaCredito`,
+ * `notaDebito`, `registrarFacturaCAEA`, `recuperarComprobante`). Si ARCA lo
+ * rechaza (`Resultado` "R"), esos métodos lanzan `ArcaRechazoError`.
+ */
 export interface FacturaResult {
-  /** Si el comprobante fue aprobado por ARCA */
-  aprobada: boolean;
-  /** CAE otorgado (solo si aprobada) */
-  cae?: string;
-  /** Fecha de vencimiento del CAE en formato YYYYMMDD */
+  /** CAE otorgado, o el CAEA si se informó con `registrarFacturaCAEA` (`tipoCodAut: "A"`) */
+  cae: string;
+  /** Fecha de vencimiento del CAE en formato YYYYMMDD (no viene con CAEA) */
   caeVencimiento?: string;
   /** Número de comprobante asignado */
   cbteNro: number;
@@ -971,7 +976,7 @@ export interface FacturaResult {
   cbteTipo: number;
   /** Importes calculados y enviados */
   importes: Importes;
-  /** Observaciones de ARCA (pueden existir incluso si fue aprobada) */
+  /** Observaciones de ARCA (avisos que vinieron con la aprobación) */
   observaciones: MensajeArca[];
   /** Eventos de ARCA (`Events`): avisos generales, no afectan el resultado */
   eventos: MensajeArca[];
@@ -1007,6 +1012,11 @@ export interface IntentoComprobante {
   fecha: string;
 }
 
+/**
+ * Resultado de `recuperarComprobante`. Si ARCA informa el comprobante del
+ * intento como rechazado, `recuperarComprobante` lanza `ArcaRechazoError`
+ * (igual que la emisión).
+ */
 export type ResultadoRecuperacion =
   /** ARCA autorizó el comprobante con los mismos datos del intento. */
   | { estado: 'autorizado'; resultado: FacturaResult }

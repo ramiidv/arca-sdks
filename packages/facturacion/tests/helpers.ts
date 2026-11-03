@@ -170,6 +170,8 @@ export function comprobanteConsultado(o: {
   neto: number;
   iva: number;
   cae?: string;
+  /** Default: `A`. */
+  resultado?: string;
 }): Response {
   return wsfeResponse(
     'FECompConsultar',
@@ -180,7 +182,7 @@ export function comprobanteConsultado(o: {
       `<ImpTrib>0</ImpTrib><ImpIVA>${o.iva}</ImpIVA><FchServDesde/><FchServHasta/><FchVtoPago/>` +
       '<MonId>PES</MonId><MonCotiz>1</MonCotiz>' +
       `<Iva><AlicIva><Id>5</Id><BaseImp>${o.neto}</BaseImp><Importe>${o.iva}</Importe></AlicIva></Iva>` +
-      `<Resultado>A</Resultado><CodAutorizacion>${o.cae ?? '76123456789012'}</CodAutorizacion>` +
+      `<Resultado>${o.resultado ?? 'A'}</Resultado><CodAutorizacion>${o.cae ?? '76123456789012'}</CodAutorizacion>` +
       '<EmisionTipo>CAE</EmisionTipo><FchVto>20261109</FchVto><FchProceso>20261030120000</FchProceso>' +
       `<PtoVta>${o.ptoVta}</PtoVta><CbteTipo>${o.cbteTipo}</CbteTipo>` +
       '</ResultGet>',

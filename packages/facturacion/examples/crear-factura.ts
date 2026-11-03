@@ -14,7 +14,7 @@
  */
 
 import fs from 'node:fs';
-import { ArcaFacturacion, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/arca-facturacion';
+import { ArcaFacturacion, ArcaRechazoError, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {
   // 1. Inicializar el SDK
@@ -30,28 +30,30 @@ async function main() {
   const status = await arca.status();
   console.log('Estado servidores:', status);
 
-  // 3. Crear la factura (número, fecha, totales e IVA se calculan automáticamente)
-  const result = await arca.facturar({
-    ptoVta: 1,
-    cbteTipo: CbteTipo.FACTURA_B,
-    items: [{ neto: 100, iva: IvaTipo.IVA_21 }],
-  });
+  // 3. Crear la factura (número, fecha, totales e IVA se calculan automáticamente).
+  //    El resultado siempre es un comprobante aprobado: si ARCA lo rechaza, lanza ArcaRechazoError.
+  try {
+    const result = await arca.facturar({
+      ptoVta: 1,
+      cbteTipo: CbteTipo.FACTURA_B,
+      items: [{ neto: 100, iva: IvaTipo.IVA_21 }],
+    });
 
-  // 4. Verificar resultado
-  if (result.aprobada) {
     console.log('Factura aprobada!');
     console.log(`  CAE: ${result.cae}`);
     console.log(`  Vencimiento: ${result.caeVencimiento}`);
     console.log(`  Comprobante #${result.cbteNro}`);
     console.log(`  Total: $${result.importes.total}`);
 
-    // 5. URL del QR oficial para imprimir en la factura (fecha, receptor,
+    // 4. URL del QR oficial para imprimir en la factura (fecha, receptor,
     //    moneda y CAE salen del resultado; el CUIT, de la instancia).
     const qrUrl = arca.urlQR(result);
     console.log(`  QR: ${qrUrl}`);
-  } else {
+  } catch (e) {
+    if (!(e instanceof ArcaRechazoError)) throw e;
+    // En WSFEv1 los motivos del rechazo vienen como observaciones.
     console.error('Factura rechazada:');
-    for (const obs of result.observaciones) {
+    for (const obs of e.observaciones) {
       console.error(`  [${obs.code}] ${obs.msg}`);
     }
   }

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ArcaResponseError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import {
+  ArcaRechazoError,
+  ArcaResponseError,
+  ArcaServiceError,
+  ArcaSoapError,
+  ArcaValidationError,
+} from '@ramiidv/arca-common';
 import { ArcaResultadoIncierto, ArcaWSFEError } from '../src/errors.js';
 import { CbteTipo, IvaTipo } from '../src/constants.js';
 import { formatFechaHora, requiereRecuperacion } from '../src/facturacion.js';
@@ -80,24 +86,33 @@ describe('CAEA: 703 (número ya informado) → requiereRecuperacion', () => {
       '</FECAEADetResponse></FeDetResp>',
   );
 
-  it('un rechazo 703 de registrarFacturaCAEA requiere recuperación', async () => {
+  it('un rechazo de registrarFacturaCAEA lanza ArcaRechazoError (FECAEARegInformativo) y el 703 requiere recuperación', async () => {
     const arca = await arcaDePrueba();
     mockArcaFetch({ FECAEARegInformativo: rechazo703 });
-    const res = await arca.registrarFacturaCAEA(CAEA, {
-      ptoVta: 5,
-      cbteTipo: CbteTipo.FACTURA_B,
-      cbteNro: 10,
-      fechaHoraGeneracion: '20261103143210',
-      items: [{ total: 121, iva: IvaTipo.IVA_21 }],
-    });
-    expect(res.aprobada).toBe(false);
-    expect(res.tipoCodAut).toBe('A');
-    expect(requiereRecuperacion(res)).toBe(true);
+    const err = await arca
+      .registrarFacturaCAEA(CAEA, {
+        ptoVta: 5,
+        cbteTipo: CbteTipo.FACTURA_B,
+        cbteNro: 10,
+        fechaHoraGeneracion: '20261103143210',
+        items: [{ total: 121, iva: IvaTipo.IVA_21 }],
+      })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err).toBeInstanceOf(ArcaServiceError);
+    expect(err.code).toBe('ARCA_RECHAZO');
+    expect(err.operacion).toBe('FECAEARegInformativo');
+    expect(err.errors).toEqual([]);
+    expect(err.observaciones).toEqual([
+      { code: 703, msg: 'El numero de comprobante informado debe ser mayor en 1 al ultimo informado' },
+    ]);
+    expect(err.message).toContain('6-5-10');
+    expect(requiereRecuperacion(err)).toBe(true);
   });
 
-  it('703 en un comprobante con CAE (otra operación) no se interpreta', () => {
-    const res = { aprobada: false, tipoCodAut: 'E', observaciones: [{ code: 703, msg: 'x' }] };
-    expect(requiereRecuperacion(res)).toBe(false);
+  it('703 en un rechazo de otra operación (FECAESolicitar) no se interpreta', () => {
+    const err = new ArcaRechazoError('x', { operacion: 'FECAESolicitar', observaciones: [{ code: 703, msg: 'x' }] });
+    expect(requiereRecuperacion(err)).toBe(false);
   });
 
   it('703 como ArcaWSFEError requiere recuperación', () => {
@@ -126,7 +141,43 @@ describe('CAEA: informar comprobantes (FECAEARegInformativo)', () => {
     expect(det.CAEA).toBe(CAEA);
     expect(det.CbteFchHsGen).toBe('20261103143210');
     expect(det.CbteFch).toBe('20261103');
-    expect(res).toMatchObject({ aprobada: true, cae: CAEA, tipoCodAut: 'A', cbteNro: 10 });
+    expect(res).toMatchObject({ cae: CAEA, tipoCodAut: 'A', cbteNro: 10 });
+    expect(res).not.toHaveProperty('aprobada');
+  });
+
+  it('aprobado sin CAEA en la respuesta → cae = el CAEA informado', async () => {
+    const arca = await arcaDePrueba();
+    const sinCaea = wsfeResponse(
+      'FECAEARegInformativo',
+      '<FeCabResp><Cuit>20123456786</Cuit><PtoVta>5</PtoVta><CbteTipo>6</CbteTipo><FchProceso>20261104120000</FchProceso>' +
+        '<CantReg>1</CantReg><Resultado>A</Resultado><Reproceso>N</Reproceso></FeCabResp>' +
+        '<FeDetResp><FECAEADetResponse><Concepto>1</Concepto><DocTipo>99</DocTipo><DocNro>0</DocNro>' +
+        '<CbteDesde>10</CbteDesde><CbteHasta>10</CbteHasta><CbteFch>20261103</CbteFch><Resultado>A</Resultado>' +
+        '</FECAEADetResponse></FeDetResp>',
+    );
+    mockArcaFetch({ FECAEARegInformativo: sinCaea });
+    const res = await arca.registrarFacturaCAEA(CAEA, { ...opts, fechaHoraGeneracion: '20261103143210' });
+    expect(res.cae).toBe(CAEA);
+  });
+
+  it('Resultado inesperado → ArcaResultadoIncierto (FECAEARegInformativo), no rechazo', async () => {
+    const arca = await arcaDePrueba();
+    const raro = wsfeResponse(
+      'FECAEARegInformativo',
+      '<FeCabResp><Cuit>20123456786</Cuit><PtoVta>5</PtoVta><CbteTipo>6</CbteTipo><FchProceso>20261104120000</FchProceso>' +
+        '<CantReg>1</CantReg><Resultado>X</Resultado><Reproceso>N</Reproceso></FeCabResp>' +
+        '<FeDetResp><FECAEADetResponse><Concepto>1</Concepto><DocTipo>99</DocTipo><DocNro>0</DocNro>' +
+        '<CbteDesde>10</CbteDesde><CbteHasta>10</CbteHasta><CbteFch>20261103</CbteFch><Resultado>X</Resultado>' +
+        '</FECAEADetResponse></FeDetResp>',
+    );
+    mockArcaFetch({ FECAEARegInformativo: raro });
+    const err = await arca
+      .registrarFacturaCAEA(CAEA, { ...opts, fechaHoraGeneracion: '20261103143210' })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaResultadoIncierto);
+    expect(err.operacion).toBe('FECAEARegInformativo');
+    expect(err.intento).toMatchObject({ ptoVta: 5, cbteNro: 10 });
+    expect(err.cause).toBeInstanceOf(ArcaResponseError);
   });
 
   it('sin fechaHoraGeneracion → error de validación sin llamar a ARCA', async () => {
@@ -231,6 +282,19 @@ describe('CAEA sin movimiento', () => {
       expect(mock.count('FECAEASinMovimientoInformar')).toBe(1);
     },
   );
+
+  it('FECAEASinMovimientoInformar: Resultado R → ArcaRechazoError', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FECAEASinMovimientoInformar: wsfeResponse(
+        'FECAEASinMovimientoInformar',
+        `<CAEA>${CAEA}</CAEA><FchProceso>20261116</FchProceso><PtoVta>5</PtoVta><Resultado>R</Resultado>`,
+      ),
+    });
+    const err = await arca.sinMovimientoCAEA(CAEA, 5).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err.operacion).toBe('FECAEASinMovimientoInformar');
+  });
 
   it('FECAEASinMovimientoInformar: rechazo de negocio → ArcaWSFEError', async () => {
     const arca = await arcaDePrueba();

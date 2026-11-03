@@ -14,6 +14,7 @@
 import fs from 'node:fs';
 import {
   ArcaFacturacion,
+  ArcaRechazoError,
   ArcaResultadoIncierto,
   ArcaWSFEError,
   CbteTipo,
@@ -40,19 +41,15 @@ const MAX_ENVIOS = 3;
 
 async function emitir(jobId: string, opts: FacturarOpts & { cbteNro: number }, envio = 1) {
   try {
-    const res = await arca.facturar(opts);
-    if (!res.aprobada && requiereRecuperacion(res)) {
-      // 10016: el número ya se usó; si fue un envío anterior nuestro, quedó autorizado.
-      db.set(jobId, { ...db.get(jobId)!, estado: 'incierto' });
-      return resolver(jobId, envio);
-    }
-    db.set(jobId, { ...db.get(jobId)!, estado: res.aprobada ? 'autorizado' : 'rechazado', cae: res.cae });
+    const res = await arca.facturar(opts); // siempre aprobada
+    db.set(jobId, { ...db.get(jobId)!, estado: 'autorizado', cae: res.cae });
   } catch (e) {
-    if (e instanceof ArcaResultadoIncierto) {
+    // 10016: el número ya se usó; si fue un envío anterior nuestro, quedó autorizado.
+    if (e instanceof ArcaResultadoIncierto || requiereRecuperacion(e)) {
       db.set(jobId, { ...db.get(jobId)!, estado: 'incierto' });
       return resolver(jobId, envio);
     }
-    if (e instanceof ArcaWSFEError) {
+    if (e instanceof ArcaRechazoError || e instanceof ArcaWSFEError) {
       db.set(jobId, { ...db.get(jobId)!, estado: 'rechazado' });
       return;
     }
@@ -66,7 +63,17 @@ async function resolver(jobId: string, envio = 1) {
   // ARCA puede seguir procesando el request original: esperar unos segundos.
   await new Promise((r) => setTimeout(r, 5_000));
 
-  const r = await arca.recuperarComprobante(job.intento);
+  let r: Awaited<ReturnType<typeof arca.recuperarComprobante>>;
+  try {
+    r = await arca.recuperarComprobante(job.intento);
+  } catch (e) {
+    // ARCA informa el comprobante del intento como rechazado: no quedó autorizado.
+    if (e instanceof ArcaRechazoError) {
+      db.set(jobId, { ...job, estado: 'rechazado' });
+      return;
+    }
+    throw e;
+  }
   switch (r.estado) {
     case 'autorizado':
       db.set(jobId, { ...job, estado: 'autorizado', cae: r.resultado.cae });
