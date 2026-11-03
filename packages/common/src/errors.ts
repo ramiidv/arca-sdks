@@ -230,6 +230,33 @@ export class ArcaServiceError extends ArcaError {
 }
 
 /**
+ * ARCA procesó una emisión y la rechazó (`resultado: 'R'` o equivalente): no
+ * se emitió nada. Todos los SDKs lo lanzan en lugar de devolver el rechazo,
+ * así que el resultado de una emisión siempre es una operación aprobada.
+ *
+ * `errors` son los motivos del rechazo (errores de ARCA) y `observaciones` las
+ * observaciones que vinieron con la respuesta; `operacion` es el método de
+ * ARCA. Como es un `ArcaServiceError`, un `catch` de esa clase cubre también
+ * los rechazos.
+ */
+export class ArcaRechazoError extends ArcaServiceError {
+  static override readonly code: string = 'ARCA_RECHAZO';
+  public readonly observaciones: ServiceErrorDetail[];
+  public readonly operacion: string;
+
+  constructor(
+    message: string,
+    detalle: { operacion: string; errors?: ServiceErrorDetail[]; observaciones?: ServiceErrorDetail[] },
+    options?: { cause?: unknown },
+  ) {
+    super(message, detalle.errors ?? [], options);
+    this.name = 'ArcaRechazoError';
+    this.operacion = detalle.operacion;
+    this.observaciones = detalle.observaciones ?? [];
+  }
+}
+
+/**
  * Error de validación de datos de entrada.
  * Se lanza cuando los datos proporcionados no cumplen con el formato esperado.
  */

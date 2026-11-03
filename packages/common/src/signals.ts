@@ -2,7 +2,7 @@
  * Combina varios AbortSignal en uno que se aborta cuando se aborta cualquiera.
  * Ignora los `undefined`; si queda uno solo, lo devuelve tal cual.
  *
- * Usa `AbortSignal.any` (disponible en todas las versiones de Node soportadas, >= 20.19).
+ * Usa `AbortSignal.any` (disponible en todas las versiones de Node soportadas, >= 22.12).
  */
 export function anySignal(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined {
   const present = signals.filter((s): s is AbortSignal => s !== undefined);

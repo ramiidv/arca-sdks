@@ -115,14 +115,6 @@ export function isValidCuit(cuit: string | number): boolean {
   }
 }
 
-// Aliases para backward compat (CUIL y CUIT usan el mismo algoritmo)
-/** @deprecated Usar `validateCuit` */
-export const validateCuil = validateCuit;
-/** @deprecated Usar `normalizeCuit` */
-export const normalizeCuil = normalizeCuit;
-/** @deprecated Usar `formatCuit` */
-export const formatCuil = formatCuit;
-
 // ---------------------------------------------------------------------------
 // CBU
 // ---------------------------------------------------------------------------
@@ -283,9 +275,6 @@ export function parseArcaDate(dateStr: string): Date {
   date.setUTCFullYear(y);
   return date;
 }
-
-/** @deprecated Usar `parseArcaDate` (mismo comportamiento). */
-export const parseAfipDate: (dateStr: string) => Date = parseArcaDate;
 
 /** Convierte un `Date` o un string `YYYYMMDD`/`YYYY-MM-DD` a `Date`, validando con las mismas reglas. */
 function toValidDate(date: Date | string, fieldName: string): Date {

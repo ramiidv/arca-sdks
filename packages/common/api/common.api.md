@@ -15,12 +15,6 @@ export interface AccessTicket {
     token: string;
 }
 
-// @public @deprecated (undocumented)
-export const afipSoapCall: typeof arcaSoapCall;
-
-// @public @deprecated (undocumented)
-export type AfipSoapCallOptions = ArcaSoapCallOptions;
-
 // @public
 export function anySignal(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined;
 
@@ -120,6 +114,23 @@ export type ArcaEvent = {
     endpoint: string;
     error: Error | string;
 };
+
+// @public
+export class ArcaRechazoError extends ArcaServiceError {
+    constructor(message: string, detalle: {
+        operacion: string;
+        errors?: ServiceErrorDetail[];
+        observaciones?: ServiceErrorDetail[];
+    }, options?: {
+        cause?: unknown;
+    });
+    // (undocumented)
+    static readonly code: string;
+    // (undocumented)
+    readonly observaciones: ServiceErrorDetail[];
+    // (undocumented)
+    readonly operacion: string;
+}
 
 // @public
 export class ArcaResponseError extends ArcaError {
@@ -416,9 +427,6 @@ export class FileTicketStorage implements TicketStorage {
     set(key: string, ticket: AccessTicket): Promise<void>;
 }
 
-// @public @deprecated (undocumented)
-export const formatCuil: typeof formatCuit;
-
 // @public
 export function formatCuit(cuit: string | number): string;
 
@@ -432,6 +440,9 @@ export function formatDateTimeAR(d: Date, options?: FormatDateTimeAROptions): st
 export interface FormatDateTimeAROptions {
     millis?: boolean;
 }
+
+// @public
+export function formatServiceErrors(details: readonly ServiceErrorDetail[]): string;
 
 // @public
 export function generarUrlQR(input: QRInput, options?: QROptions): string;
@@ -461,14 +472,8 @@ export class MemoryTicketStorage implements TicketStorage {
 // @public
 export function normalizeAccessTicket(raw: unknown): AccessTicket | null;
 
-// @public @deprecated (undocumented)
-export const normalizeCuil: typeof normalizeCuit;
-
 // @public
 export function normalizeCuit(cuit: string | number): string;
-
-// @public @deprecated (undocumented)
-export const parseAfipDate: (dateStr: string) => Date;
 
 // @public
 export function parseArcaDate(dateStr: string): Date;
@@ -590,6 +595,20 @@ export interface ServiceCallOptions extends Pick<ArcaSoapCallOptions, 'requestEl
 }
 
 // @public
+export interface ServiceClientConfig {
+    endpoint: string;
+    transport?: ServiceTransport;
+}
+
+// @public
+export interface ServiceEndpoints {
+    // (undocumented)
+    readonly production: string;
+    // (undocumented)
+    readonly testing: string;
+}
+
+// @public
 export interface ServiceErrorDetail {
     // (undocumented)
     code: number;
@@ -646,10 +665,8 @@ export abstract class SoapServiceClient {
 }
 
 // @public
-export interface SoapServiceClientConfig {
-    endpoint: string;
+export interface SoapServiceClientConfig extends ServiceClientConfig {
     namespace: string;
-    transport?: ServiceTransport;
 }
 
 // @public
@@ -674,9 +691,6 @@ export function transportOptions(config: Pick<ArcaBaseConfig, 'timeout' | 'retri
 
 // @public
 export function validateCBU(cbu: string): string;
-
-// @public @deprecated (undocumented)
-export const validateCuil: typeof validateCuit;
 
 // @public
 export function validateCuit(cuit: string | number, field?: string): string;

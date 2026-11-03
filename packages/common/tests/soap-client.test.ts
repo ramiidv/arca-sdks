@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { vi } from 'vitest';
-import { afipSoapCall, buildXml, soapCall } from '../src/soap-client.js';
+import { arcaSoapCall, buildXml, soapCall } from '../src/soap-client.js';
 import { ArcaSoapError, ArcaValidationError } from '../src/errors.js';
 import { mockFetch, soapEnvelope, soapFault, xmlResponse } from './helpers.js';
 
@@ -119,10 +119,10 @@ describe('soapCall: emisiones', () => {
   });
 });
 
-describe('afipSoapCall', () => {
+describe('arcaSoapCall', () => {
   it('envía los parámetros sin namespace (método prefijado)', async () => {
     const fetch = mockFetch(xmlResponse(OK));
-    await afipSoapCall(URL, 'http://a13.soap.ws.server.puc.sr/', 'dummy', { token: 't', sign: 's' });
+    await arcaSoapCall(URL, 'http://a13.soap.ws.server.puc.sr/', 'dummy', { token: 't', sign: 's' });
     const body = (fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string;
     expect(body).toContain('<ser:dummy xmlns:ser="http://a13.soap.ws.server.puc.sr/">');
     expect(body).toMatch(/<token>t<\/token>\s*<sign>s<\/sign>/);
@@ -138,14 +138,14 @@ describe('afipSoapCall', () => {
         ),
       ),
     );
-    const result = await afipSoapCall(URL, 'http://a13.soap.ws.server.puc.sr/', 'getPersona', {});
+    const result = await arcaSoapCall(URL, 'http://a13.soap.ws.server.puc.sr/', 'getPersona', {});
     expect(result).toHaveProperty('persona');
     expect((result['persona'] as Record<string, unknown>)['idPersona']).toBe('20123456789');
   });
 
   it('SOAP Fault con HTTP 200 se lanza como ArcaSoapError', async () => {
     mockFetch(xmlResponse(soapFault('soap:Server', 'Error interno')));
-    await expect(afipSoapCall(URL, 'http://x/', 'dummy', {})).rejects.toMatchObject({
+    await expect(arcaSoapCall(URL, 'http://x/', 'dummy', {})).rejects.toMatchObject({
       faultString: 'Error interno',
     });
   });
@@ -206,6 +206,7 @@ import {
   checkServiceErrors,
   extractMethodResult,
   extractServiceErrors,
+  formatServiceErrors,
   getNestedValue,
   parseXml,
 } from '../src/soap-client.js';
@@ -262,7 +263,7 @@ describe('soapCall: SOAP Faults y respuestas no SOAP', () => {
   });
 });
 
-describe('afipSoapCall: opciones', () => {
+describe('arcaSoapCall: opciones', () => {
   const NS = 'http://ar.gov.afip.dif.FEV1/';
 
   it('qualified: el wrapper declara el namespace por defecto', async () => {
@@ -273,7 +274,7 @@ describe('afipSoapCall: opciones', () => {
         ),
       ),
     );
-    const result = await afipSoapCall(URL, NS, 'FEDummy', { Auth: { Token: 't' } }, { qualified: true });
+    const result = await arcaSoapCall(URL, NS, 'FEDummy', { Auth: { Token: 't' } }, { qualified: true });
     expect(sentBody(fetch)).toContain(`<FEDummy xmlns="${NS}">`);
     expect(sentBody(fetch)).toMatch(/<Auth>\s*<Token>t<\/Token>\s*<\/Auth>/);
     expect(result).toEqual({ AppServer: 'OK' });
@@ -281,11 +282,11 @@ describe('afipSoapCall: opciones', () => {
 
   it('soapActionFromMethod arma la SOAPAction con o sin barra', async () => {
     let fetch = mockFetch(xmlResponse(soapEnvelope('<FEDummyResponse><FEDummyResult/></FEDummyResponse>')));
-    await afipSoapCall(URL, NS, 'FEDummy', {}, { soapActionFromMethod: true });
+    await arcaSoapCall(URL, NS, 'FEDummy', {}, { soapActionFromMethod: true });
     expect(sentHeaders(fetch).SOAPAction).toBe(`"${NS}FEDummy"`);
 
     fetch = mockFetch(xmlResponse(soapEnvelope('<dummyResponse/>')));
-    await afipSoapCall(
+    await arcaSoapCall(
       URL,
       'http://impl.service.wsmtxca.afip.gov.ar/service',
       'dummy',
@@ -295,11 +296,11 @@ describe('afipSoapCall: opciones', () => {
     expect(sentHeaders(fetch).SOAPAction).toBe('"http://impl.service.wsmtxca.afip.gov.ar/service/dummy"');
 
     fetch = mockFetch(xmlResponse(soapEnvelope('<dummyResponse/>')));
-    await afipSoapCall(URL, NS, 'dummy', {});
+    await arcaSoapCall(URL, NS, 'dummy', {});
     expect(sentHeaders(fetch).SOAPAction).toBe('""');
 
     fetch = mockFetch(xmlResponse(soapEnvelope('<dummyResponse/>')));
-    await afipSoapCall(URL, NS, 'dummy', {}, { soapAction: 'explicita', soapActionFromMethod: true });
+    await arcaSoapCall(URL, NS, 'dummy', {}, { soapAction: 'explicita', soapActionFromMethod: true });
     expect(sentHeaders(fetch).SOAPAction).toBe('"explicita"');
   });
 
@@ -309,7 +310,7 @@ describe('afipSoapCall: opciones', () => {
         soapEnvelope('<ns2:dummyResponse xmlns:ns2="x"><return><appserver>OK</appserver></return></ns2:dummyResponse>'),
       ),
     );
-    const r1 = await afipSoapCall(URL, NS, 'dummy', {}, { requestElement: null });
+    const r1 = await arcaSoapCall(URL, NS, 'dummy', {}, { requestElement: null });
     expect(sentBody(fetch)).toContain('<soapenv:Body></soapenv:Body>');
     expect(r1).toEqual({ appserver: 'OK' });
 
@@ -320,7 +321,7 @@ describe('afipSoapCall: opciones', () => {
         ),
       ),
     );
-    const r2 = await afipSoapCall(
+    const r2 = await arcaSoapCall(
       URL,
       NS,
       'consultar',
@@ -334,9 +335,9 @@ describe('afipSoapCall: opciones', () => {
     expect(r2).toEqual({ a: 1 });
   });
 
-  it('un Fault de afipSoapCall en consulta no es incierto', async () => {
+  it('un Fault de arcaSoapCall en consulta no es incierto', async () => {
     mockFetch(xmlResponse(soapFault('soap:Server', 'x')));
-    const err = await afipSoapCall(URL, NS, 'dummy', {}).catch((e) => e);
+    const err = await arcaSoapCall(URL, NS, 'dummy', {}).catch((e) => e);
     expect(err).toMatchObject({ faultString: 'x', uncertain: false });
   });
 });
@@ -532,13 +533,13 @@ describe('parseNumbers', () => {
 
   it('default (true): convierte los textos numéricos de menos de 8 dígitos', async () => {
     mockFetch(xmlResponse(RESPONSE));
-    const result = await afipSoapCall(URL, 'http://a/', 'getPersona', {});
+    const result = await arcaSoapCall(URL, 'http://a/', 'getPersona', {});
     expect(result).toMatchObject({ valor: 10.5, exp: 1000, entero: 42, cuit: '20111111112' });
   });
 
-  it('false: todos los valores de texto quedan como string (afipSoapCall)', async () => {
+  it('false: todos los valores de texto quedan como string (arcaSoapCall)', async () => {
     mockFetch(xmlResponse(RESPONSE));
-    const result = await afipSoapCall(URL, 'http://a/', 'getPersona', {}, { parseNumbers: false });
+    const result = await arcaSoapCall(URL, 'http://a/', 'getPersona', {}, { parseNumbers: false });
     expect(result).toEqual({
       valor: '10.50',
       exp: '1E3',
@@ -599,5 +600,20 @@ describe('testing.soapFault', () => {
     const err = await soapCall('https://example.test/ws', '<x/>').catch((e) => e);
     expect(err).toBeInstanceOf(ArcaSoapError);
     expect(err).toMatchObject({ faultCode: 'ns1:a<b', faultString: 'Tipo <x> & "y"' });
+  });
+});
+
+describe('formatServiceErrors', () => {
+  it('lista `[código] mensaje` separados por comas, con el código original si no era numérico', () => {
+    expect(
+      formatServiceErrors([
+        { code: 600, msg: 'No autorizado' },
+        { code: -1, msg: 'Fuera de servicio', rawCode: 'E-01' },
+      ]),
+    ).toBe('[600] No autorizado, [E-01] Fuera de servicio');
+  });
+
+  it('sin detalles, devuelve un string vacío', () => {
+    expect(formatServiceErrors([])).toBe('');
   });
 });

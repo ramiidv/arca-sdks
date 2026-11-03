@@ -20,7 +20,7 @@
 npm install @ramiidv/arca-common
 ```
 
-Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)). Usa `fetch` nativo.
+Node.js >= 22.12. Solo ESM; desde CommonJS se carga con `require()` (require(esm)). Usa `fetch` nativo.
 
 ## Arquitectura
 
@@ -30,14 +30,14 @@ src/
   wsaa.ts           — WsaaClient: TRA, firma CMS, login, cache, esperas tras errores, desfase de reloj
   certificate.ts    — parseo/validación de cert y clave (PKCS#1/PKCS#8, encriptadas), certificateInfo
   ticket-storage.ts — MemoryTicketStorage, FileTicketStorage, normalizeAccessTicket
-  soap-client.ts    — soapCall, arcaSoapCall (alias deprecado afipSoapCall), extractMethodResult,
-                      checkServiceErrors, extractServiceErrors, parseXml, buildXml, ensureArray, getNestedValue
+  soap-client.ts    — soapCall, arcaSoapCall, extractMethodResult,
+                      checkServiceErrors, extractServiceErrors, formatServiceErrors, parseXml, buildXml, ensureArray, getNestedValue
   legacy-tls.ts     — transporte node:https con SECLEVEL=1 para hosts con DH de 1024 bits
   signals.ts        — anySignal (AbortSignal.any)
   service.ts        — ArcaSdkBase, SoapServiceClient, createWsaaClient, transportOptions,
                       parseServerStatus, serverStatusOk, statusOf
   errors.ts         — jerarquía de errores
-  validators.ts     — CUIT/CUIL, CBU, formatDate, parseArcaDate (alias deprecado parseAfipDate), validateFecha(Rango), diasEntre
+  validators.ts     — CUIT/CUIL, CBU, formatDate, parseArcaDate, validateFecha(Rango), diasEntre
   dates.ts          — AR_TIMEZONE, formatDateTimeAR (único formateador Intl de hora argentina)
   rounding.ts       — roundHalfUp, roundHalfEven
   qr.ts             — generarUrlQR, QR_URL, QRInput, QROptions
@@ -108,6 +108,7 @@ Comportamiento:
 
 - `ArcaSdkBase<TService>` (abstracta): `constructor(config: ArcaSdkConfig, services: Record<TService, string>)`. Valida la CUIT (`cuit` normalizada), crea el `WsaaClient` (o usa `config.wsaa`; si su `production` no coincide con `config.production` y usa un endpoint oficial, lanza `ArcaValidationError`), arma `transport`, reparte eventos a `config.onEvent` y `on()/off()`. Protegidos: `endpoint(defaults, override?)`, `callOptions(opts?)` (combina `config.signal` con el de la llamada), `ticket(service, opts?)`. Público: `clearAuthCache()`, `wsaa`, `cuit`, `production`.
 - `ArcaSdkConfig` = `ArcaBaseConfig` + `wsaa?`, `signal?`, `endpoints?.wsaa`.
+- `ServiceClientConfig` = `{ endpoint, transport? }`: configuración de los clientes de bajo nivel de todos los SDKs (`new WsfeClient({ endpoint, transport })`, etc.). `ServiceEndpoints` = `{ testing, production }`: cada SDK exporta `ENDPOINTS: { <servicio>: ServiceEndpoints }`.
 - `SoapServiceClient` (abstracta): `constructor({ endpoint, namespace, transport? }: SoapServiceClientConfig)`; protegido `soapCall(method, params, opts?: ServiceCallOptions)` → `arcaSoapCall`.
 - `ServiceTransport`, `transportOptions(config, onEvent?)`, `createWsaaClient(config, onEvent?)`.
 - `parseServerStatus(result, method?)` → `ServerStatus` (valores tal cual; cualquier capitalización). Lanza `ArcaResponseError` si falta un campo.
@@ -119,7 +120,6 @@ Comportamiento:
 ```typescript
 function soapCall(endpoint: string, bodyContent: string, opts?: SoapCallOptions): Promise<Record<string, unknown>>;
 function arcaSoapCall(endpoint: string, namespace: string, method: string, params: Record<string, unknown>, opts?: ArcaSoapCallOptions): Promise<Record<string, unknown>>;
-/** @deprecated */ const afipSoapCall = arcaSoapCall;   // type AfipSoapCallOptions = ArcaSoapCallOptions (deprecado)
 
 interface ArcaSoapCallOptions extends SoapCallOptions {
   requestElement?: string | null; // wrapper del request (default: method; null = Body vacío)
@@ -130,6 +130,7 @@ interface ArcaSoapCallOptions extends SoapCallOptions {
 function extractMethodResult(parsed, method, options?: { kind?: SoapOperationKind; responseElement?: string }): Record<string, unknown>;
 function checkServiceErrors(result, serviceName): void;            // lanza ArcaServiceError
 function extractServiceErrors(result): ServiceErrorDetail[];       // sin lanzar
+function formatServiceErrors(details): string;                     // "[código] mensaje, ..." (el del mensaje de checkServiceErrors)
 function parseXml(xml: string, options?: { parseNumbers?: boolean }): Record<string, unknown>;
 function buildXml(obj: Record<string, unknown>): string;           // omite propiedades null/undefined; Date → xsd:dateTime -03:00
 function ensureArray<T>(val: T | T[] | undefined | null): T[];
@@ -154,7 +155,7 @@ function formatCuit(cuit): string;             // "XX-XXXXXXXX-X"
 function validateCBU(cbu: string): string;     // 22 dígitos + checksums; quita espacios y guiones; solo string
 function isValidCBU(cbu: string): boolean;
 function formatDate(date: Date | string): string;      // YYYYMMDD en hora de Argentina; strings YYYYMMDD/YYYY-MM-DD literales
-function parseArcaDate(s: string): Date;               // mediodía de Argentina (15:00 UTC); parseAfipDate = alias deprecado
+function parseArcaDate(s: string): Date;               // mediodía de Argentina (15:00 UTC)
 function validateFecha(date: Date | string, fieldName: string): void;
 function validateFechaRango(inicio, fin | undefined): void; // fin no puede ser anterior (puede ser igual); compara fechas calendario AR
 function diasEntre(desde: Date | string, hasta: Date | string): number; // días de calendario AR (hasta - desde)
@@ -201,6 +202,7 @@ class ArcaSoapError extends ArcaError {
   responseBody?: string; responseDate?: Date; uncertain: boolean; aborted: boolean;
 }
 class ArcaServiceError extends ArcaError { errors: { code: number; msg: string; rawCode?: string }[] }
+class ArcaRechazoError extends ArcaServiceError { operacion: string; observaciones: { code, msg, rawCode? }[] } // code ARCA_RECHAZO: emisión con resultado 'R'; los SDKs la lanzan en vez de devolver el rechazo. Errores de ARCA sin 'R' → ArcaServiceError (o subclase del SDK)
 class ArcaValidationError extends ArcaError { field?: string; details: { field; message; value? }[] }
 class ArcaResponseError extends ArcaError { uncertain: boolean }   // respuesta con forma inesperada
 ```

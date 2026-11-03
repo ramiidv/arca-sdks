@@ -1,14 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  afipSoapCall,
-  arcaSoapCall,
-  buildXml,
-  extractMethodResult,
-  parseAfipDate,
-  parseArcaDate,
-  parseXml,
-  soapCall,
-} from '../src/index.js';
+import { arcaSoapCall, buildXml, extractMethodResult, parseXml, soapCall } from '../src/index.js';
 import { ArcaSoapError } from '../src/errors.js';
 import type { ArcaEvent } from '../src/types.js';
 import { mockFetch, soapEnvelope, soapFault, xmlResponse } from './helpers.js';
@@ -170,9 +161,11 @@ describe('extractMethodResult', () => {
   });
 });
 
-describe('aliases deprecados', () => {
-  it('afipSoapCall y parseAfipDate son los mismos que arcaSoapCall y parseArcaDate', () => {
-    expect(afipSoapCall).toBe(arcaSoapCall);
-    expect(parseAfipDate).toBe(parseArcaDate);
+describe('aliases quitados en la major', () => {
+  it('ya no se exportan afipSoapCall, parseAfipDate ni los *Cuil', async () => {
+    const mod: Record<string, unknown> = await import('../src/index.js');
+    for (const nombre of ['afipSoapCall', 'parseAfipDate', 'validateCuil', 'normalizeCuil', 'formatCuil']) {
+      expect(mod[nombre]).toBeUndefined();
+    }
   });
 });

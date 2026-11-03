@@ -206,14 +206,22 @@ function checkSharedWsaa(wsaa: WsaaClient, production: boolean): void {
 // Clientes de bajo nivel
 // ---------------------------------------------------------------------------
 
-/** Configuración de un `SoapServiceClient`. */
-export interface SoapServiceClientConfig {
-  /** URL del servicio. */
+/**
+ * Configuración pública de los clientes de bajo nivel de todos los SDKs
+ * (`new WsfeClient({ endpoint, transport })`, `new CdcClient(...)`, etc.): el
+ * namespace lo fija cada cliente.
+ */
+export interface ServiceClientConfig {
+  /** URL del servicio (ver `ENDPOINTS` de cada SDK). */
   endpoint: string;
-  /** Namespace del WSDL. */
-  namespace: string;
   /** Opciones de transporte (timeout, reintentos, eventos, fetch, TLS legacy). */
   transport?: ServiceTransport;
+}
+
+/** Configuración de un `SoapServiceClient`: la de `ServiceClientConfig` más el namespace del WSDL. */
+export interface SoapServiceClientConfig extends ServiceClientConfig {
+  /** Namespace del WSDL. */
+  namespace: string;
 }
 
 /** Opciones de `SoapServiceClient.soapCall`. */
