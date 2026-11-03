@@ -1,8 +1,9 @@
 # @ramiidv/arca-empleados
 
-> SDK de TypeScript que genera el archivo TXT de "Ingreso masivo de datos - Relaciones laborales" del servicio Simplificación Registral de ARCA (ex AFIP): registros de ancho fijo de 130 caracteres, un único tipo de registro "01". Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
+> SDK de TypeScript que genera el archivo TXT de "Ingreso masivo de datos - Relaciones laborales" del servicio Simplificación Registral de ARCA (ex AFIP): registros de ancho fijo de 130 caracteres, un único tipo de registro "01". Node >= 20.19. Solo ESM; también funciona desde CommonJS porque Node >= 20.19 permite cargar módulos ESM con `require()`.
 
-No hace llamadas a web services: el archivo se sube a mano en Simplificación Registral > Relaciones laborales > Carga Masiva.
+No hace llamadas a web services: el archivo se sube a mano en Simplificación Registral > Relaciones laborales > Carga Masiva
+(la vía que presenta el manual para registrar varias relaciones laborales en un solo archivo).
 Fuente: https://www.arca.gob.ar/simplificacionregistral/ayuda/documentos/SR_Manual-de-Ayuda_20250218_definitivo.pdf (pág. 24, diseño de registro).
 
 No es "F935": las primeras versiones del paquete generaban un formato "F935" separado por `|` que no existe. No lo uses.
@@ -48,6 +49,7 @@ Códigos numéricos: entero no negativo o string de dígitos. Fechas: Date (fech
 
 new ArcaEmpleados({ strict?: boolean, fechaReferencia?: Date | string, serializacion?: { eol?: '\r\n'|'\n', eolFinal?: boolean,
   encoding?: 'latin1'|'ascii', noRepresentables?: 'error'|'transliterar', numericoVacio?: 'ceros'|'espacios' } })
+noRepresentables 'transliterar': solo los caracteres no representables en el encoding pierden el diacrítico (latin1 conserva Ñ/Ú; ascii: Ñ->N).
 
 strict (default true): CUIL con prefijo 20/23/24/27 y dígito verificador; obligatorios por movimiento
 (AT: cuil, fechaInicio, modalidadContrato, obraSocial, sucursal; BT: cuil, fechaInicio, fechaFin; MR/NA/NB: cuil, fechaInicio);
@@ -62,8 +64,10 @@ NA/NB y la marca de trabajador agropecuario se escriben tal cual (el manual no d
 
 ## Errores
 
-ArcaValidationError (de @ramiidv/arca-common): reglas de negocio, propiedades desconocidas, datos que no son objeto, movimiento inválido; details[] por campo.
-ArcaSerializationError: el valor no entra en su campo (nunca se trunca); field, desde, hasta, value, indice, cause.
+ArcaValidationError (de @ramiidv/arca-common): propiedades desconocidas, datos que no son objeto, movimiento inválido, generar() sin registros
+y, en modo strict (default), reglas de negocio y errores de formato; details[] por campo.
+ArcaSerializationError: el valor no entra en su campo (nunca se trunca), con strict: false o con serializarRegistro/serializarArchivo;
+field, desde, hasta, value, indice, cause.
 ArcaEmpleadosError: clase base.
 
 ## Exports avanzados

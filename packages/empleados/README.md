@@ -6,6 +6,8 @@ laborales en registros de ancho fijo de 130 posiciones.
 
 - No hace llamadas a servicios web: ARCA no expone un web service para esto. El archivo se sube a mano
   en Simplificación Registral → Relaciones laborales → Carga Masiva → Nuevo → Cargar Archivo → Enviar.
+  El manual presenta la Carga Masiva como la vía para registrar varias relaciones laborales en un solo
+  archivo (pág. 21).
 - Fuente del formato: [Manual de Ayuda de Simplificación Registral (ARCA, feb. 2025), pág. 24](https://www.arca.gob.ar/simplificacionregistral/ayuda/documentos/SR_Manual-de-Ayuda_20250218_definitivo.pdf).
 - Lo que el manual no define (relleno, codificación, fin de línea) sigue las
   [convenciones del formato](#convenciones-del-formato). Revisá el archivo cargado en Simplificación
@@ -19,7 +21,7 @@ npm install @ramiidv/arca-empleados
 
 ## Requisitos
 
-- Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
+- Node.js >= 20.19. Solo ESM; también funciona desde CommonJS porque Node ≥ 20.19 permite cargar módulos ESM con `require()`.
 - Clave fiscal con acceso al servicio **Simplificación Registral** para subir el archivo (el SDK no
   necesita certificado digital).
 - Los códigos (modalidad de contrato, obra social, situación de revista, sucursal, actividad, puesto,
@@ -63,28 +65,29 @@ const sr = new ArcaEmpleados({
     eol: '\r\n', // o '\n'
     eolFinal: true, // fin de línea después del último registro
     encoding: 'latin1', // o 'ascii'
-    noRepresentables: 'error', // o 'transliterar' (quita diacríticos: Ñ→N, Ú→U)
+    noRepresentables: 'error', // o 'transliterar' (con encoding 'ascii': Ñ→N, Ú→U)
     numericoVacio: 'ceros', // o 'espacios' (ver advertencia abajo)
   },
 });
 ```
 
-| Opción                           | Default         | Descripción                                                                                                        |
-| -------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `strict`                         | `true`          | Formato + reglas de negocio. `false`: solo formato.                                                                |
-| `fechaReferencia`                | hoy (Argentina) | Fecha de la novedad para validar que el alta no supere los 90 días de anticipación.                                |
-| `serializacion.eol`              | `'\r\n'`        | Fin de línea.                                                                                                      |
-| `serializacion.eolFinal`         | `true`          | Fin de línea después del último registro.                                                                          |
-| `serializacion.encoding`         | `'latin1'`      | ISO-8859-1 o `'ascii'`.                                                                                            |
-| `serializacion.noRepresentables` | `'error'`       | `'transliterar'` quita diacríticos; si aún no es representable, lanza.                                             |
-| `serializacion.numericoVacio`    | `'ceros'`       | Cómo se escribe un numérico no informado: `'ceros'` o `'espacios'` (salvo rectificación y marca 130, siempre `0`). |
+| Opción                           | Default         | Descripción                                                                                                                                     |
+| -------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `strict`                         | `true`          | Formato + reglas de negocio. `false`: solo formato.                                                                                             |
+| `fechaReferencia`                | hoy (Argentina) | Fecha de la novedad para validar que el alta no supere los 90 días de anticipación.                                                             |
+| `serializacion.eol`              | `'\r\n'`        | Fin de línea.                                                                                                                                   |
+| `serializacion.eolFinal`         | `true`          | Fin de línea después del último registro.                                                                                                       |
+| `serializacion.encoding`         | `'latin1'`      | ISO-8859-1 o `'ascii'`.                                                                                                                         |
+| `serializacion.noRepresentables` | `'error'`       | Con `'transliterar'`, un caracter no representable en el encoding pierde el diacrítico (con `'ascii'`: Ñ→N); si aún no es representable, lanza. |
+| `serializacion.numericoVacio`    | `'ceros'`       | Cómo se escribe un numérico no informado: `'ceros'` o `'espacios'` (salvo rectificación y marca 130, siempre `0`).                              |
 
 - `strict: true`: formato + reglas de negocio: CUIL con prefijo de persona física 20/23/24/27 y dígito
   verificador; campos obligatorios por movimiento (`CAMPOS_OBLIGATORIOS`); rectificación `00`–`05`;
   `fechaFin ≥ fechaInicio`; en un alta, `fechaInicio` como máximo 90 días después de `fechaReferencia`
-  (manual, pág. 18). Todos los errores se informan juntos en `ArcaValidationError.details`.
+  (manual, pág. 19). Todos los errores se informan juntos en `ArcaValidationError.details`, incluidos
+  los de formato.
 - `strict: false`: solo formato (que el registro entre en las 130 posiciones). Un valor que no entra en
-  su campo da `ArcaSerializationError`.
+  su campo da `ArcaSerializationError` (el primero que falla).
 - **En ambos modos** se rechaza (`ArcaValidationError`) una propiedad que no es del diseño de registro:
   un nombre mal escrito (`retribucon`, `obraSocal`) dejaría el campo vacío en silencio.
 
@@ -118,7 +121,7 @@ Campos obligatorios en modo `strict` (`CAMPOS_OBLIGATORIOS`):
 `fechaInicio` es obligatoria en todos los movimientos por la nota de la pantalla de ingreso masivo
 (manual, pág. 23): "fecha inicio de vínculo son obligatorios para todos los eventos". Los datos mínimos
 del alta son los de la RG 5508/2024. La fecha de fin es obligatoria en un alta a plazo fijo y ARCA la
-rechaza en un contrato por tiempo indeterminado (manual, pág. 18), pero el SDK no lo puede chequear sin
+rechaza en un contrato por tiempo indeterminado (manual, pág. 19), pero el SDK no lo puede chequear sin
 la tabla de modalidades.
 
 Funciones sueltas (uso avanzado): `serializarRegistro`, `serializarArchivo`, `codificarArchivo`,
@@ -159,7 +162,7 @@ Un único tipo de registro, `01`, de 130 posiciones. Tabla transcripta del manua
 los códigos `AT,BT,MR,NA,NB`; rectificación `00`–`05`; la marca de la posición 130 (`0`–`9`, default
 `0`); que la retribución se informa "con indicación de centavos"; que el CCT `9999/99` es "excluido de
 convenio"; los datos mínimos del alta (RG 5508/2024); que la fecha de inicio es obligatoria en todos los
-eventos (pág. 23); que el alta se puede comunicar hasta 90 días antes del inicio (pág. 18).
+eventos (pág. 23); que el alta se puede comunicar hasta 90 días antes del inicio (pág. 19).
 
 **Convención del SDK** (la habitual en los diseños de registro de ARCA, configurable donde se indica):
 numéricos con ceros a la izquierda; alfanuméricos con espacios a la derecha y sin cambiar mayúsculas;
@@ -168,7 +171,9 @@ string `AAAA-MM-DD` para fijarla literal).
 
 Nada se trunca en silencio: un valor que no entra en su campo, `NaN`, un número negativo o con decimales
 en un campo de código, un tipo incorrecto, una fecha inexistente, un salto de línea o un caracter no
-representable lanzan `ArcaSerializationError`.
+representable dan error. Con el builder en modo `strict` (default) llegan como `ArcaValidationError`
+(uno por campo en `details`); con `strict: false` o con `serializarRegistro`/`serializarArchivo`, como
+`ArcaSerializationError`.
 
 ## Convenciones del formato
 
@@ -187,22 +192,32 @@ El manual solo publica la tabla del diseño de registro. Lo que no define se res
 
 ## Manejo de errores
 
-| Clase                             | Cuándo                                                                                                                                                                                                                                                                            |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ArcaValidationError` (de common) | Reglas de negocio, propiedades desconocidas, datos que no son un objeto, movimiento inválido, `generar()` sin registros. `details[]` por campo; en las operaciones masivas el campo es `"[i].campo"` y `cause` es el error original (o un `AggregateError` con uno por registro). |
-| `ArcaSerializationError`          | Un valor no se puede escribir en el formato. `field`, `desde`, `hasta`, `value`, `indice` (en `serializarArchivo`), `cause`.                                                                                                                                                      |
-| `ArcaEmpleadosError`              | Base de los errores propios (acepta `{ cause }`).                                                                                                                                                                                                                                 |
+| Clase                             | Cuándo                                                                                                                                                                                                                                                                                                                               |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ArcaValidationError` (de common) | Propiedades desconocidas, datos que no son un objeto, movimiento inválido, `generar()` sin registros y, en modo `strict` (default), reglas de negocio y errores de formato. `details[]` por campo; en las operaciones masivas el campo es `"[i].campo"` y `cause` es el error original (o un `AggregateError` con uno por registro). |
+| `ArcaSerializationError`          | Un valor no se puede escribir en el formato, con `strict: false` o con `serializarRegistro`/`serializarArchivo`. `field`, `desde`, `hasta`, `value`, `indice` (en `serializarArchivo`), `cause`.                                                                                                                                     |
+| `ArcaEmpleadosError`              | Base de los errores propios (acepta `{ cause }`).                                                                                                                                                                                                                                                                                    |
 
 ```ts
 import { ArcaEmpleados, ArcaSerializationError, ArcaValidationError } from '@ramiidv/arca-empleados';
 
+const datos = { cuil: '20-12345678-7', fechaInicio: '2026-02-30', obraSocial: '1234567' };
+
+// strict (default): formato y reglas de negocio juntos en details.
 try {
-  new ArcaEmpleados().alta({ cuil: '20-12345678-7', fechaInicio: '2026-02-30', obraSocial: '1234567' });
+  new ArcaEmpleados().alta(datos);
 } catch (e) {
   if (e instanceof ArcaValidationError) {
-    for (const d of e.details) console.error(`${d.field}: ${d.message}`);
-  } else if (e instanceof ArcaSerializationError) {
-    console.error(e.field, e.desde, e.hasta, e.message);
+    for (const d of e.details) console.error(`${d.field}: ${d.message}`); // fechaInicio, obraSocial, cuil, ...
+  }
+}
+
+// strict: false: solo formato; el primer valor que no se puede escribir.
+try {
+  new ArcaEmpleados({ strict: false }).alta(datos);
+} catch (e) {
+  if (e instanceof ArcaSerializationError) {
+    console.error(e.field, e.desde, e.hasta, e.message); // fechaInicio 20 29 ...
   }
 }
 ```

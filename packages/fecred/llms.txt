@@ -69,7 +69,7 @@ await fecred.consultarTiposAjustesOperacion();  // { codigo, descripcion }[]
 
 ```typescript
 await fecred.aceptarFECred({
-  idCtaCte, saldoAceptado, codMoneda, cotizacionMonedaUlt,
+  idCtaCte, saldoAceptado, codMoneda, cotizacionMonedaUlt, // cotizacionMonedaUlt: la de consultarCtaCte (ctaCte.cotizacionMonedaUlt); 1 solo en PES
   confirmarNotasDC?, formasCancelacion?, retenciones?, ajustesOperacion?, tipoCancelacion?: 'PAR' | 'TOT',
   importeCancelado?, importeTotalRetPesos?, importeEmbargoPesos?, informaCBU?: boolean, cbuComprador?,
 });
@@ -88,11 +88,13 @@ await fecred.informarFacturaAgtDptoCltv({ idCtaCte, ctaAgente: { cuitAgente, idC
 - `ArcaSoapError`: HTTP / timeout / SOAP Fault / respuesta que no cumple el XSD. `uncertain = true` solo en emisiones (respuesta perdida, Fault Server, sin `resultado`): pudo haberse registrado → verificar con `consultarCtaCte` o `consultarHistorialEstadosCtaCte` antes de reintentar.
 - `ArcaAuthError`: falla de WSAA o SOAP Fault `wscommon_*` de WSFECRED (auth rechazado; no se procesó). `ArcaTicketVigenteError`: TA vigente fuera del `ticketStorage`.
 
+`await fecred.clearAuthCache()` borra el ticket (memoria y storage): WSAA no emite otro mientras el anterior siga vigente, así que borrar un TA vigente deja sin acceso hasta 12 h. Ante ArcaAuthError no usarlo: corregir la causa en ARCA y llamar a `fecred.wsaa.resetLoginCooldown('wsfecred')`. Solo para un ticket dañado.
+
 ## Notas
 
 - Los códigos de formas de cancelación, motivos de rechazo, ajustes y retenciones salen de `consultarTipos*()`; no hay enums.
 - Enums del XSD (objeto + tipo literal): `RolCtaCte`, `EstadoCtaCte`, `EstadoComprobante`, `TipoFechaFiltro`, `OpcionTransferencia`, `TipoCancelacion`, `TipoAceptacion`, `Resultado`. Estrictos en los requests; en las respuestas (estados, `opcionTransferencia`, `tipoAcep`, `tipoCodAuto`) se acepta cualquier string (`ValorAbierto<T>`): un valor nuevo de ARCA no rompe la consulta.
 - `codCtaCte`, CUITs y `codAutorizacion` se devuelven como string; importes como number; S/N como boolean.
-- Cliente de bajo nivel: `fecred.client` (`FecredClient`), con `{ token, sign, cuitRepresentada }` como primer parámetro. `new FecredClient({ endpoint, namespace })` requiere el namespace (`ENDPOINTS.wsfecred.namespace`).
+- Cliente de bajo nivel: `fecred.client` (`FecredClient`), con un `WsAuthSource` como primer parámetro: `WsAuth` (`{ token, sign, cuitRepresentada }`) o `() => Promise<WsAuth>` (se llama después de validar los parámetros: un dato inválido no pide el TA). `new FecredClient({ endpoint, namespace })` requiere el namespace (`ENDPOINTS.wsfecred.namespace`).
 - Endpoints en `ENDPOINTS.wsfecred`: homologación `https://fwshomo.afip.gob.ar/wsfecred/FECredService`, producción `https://serviciosjava.afip.gob.ar/wsfecred/FECredService`. Namespace `http://ar.gob.afip.wsfecred/FECredService/`; SOAPAction = namespace + operación.
 - Ejemplos: https://github.com/ramiidv/arca-sdks/tree/main/packages/fecred/examples

@@ -63,8 +63,11 @@ async function main() {
     } else if (e instanceof ArcaTicketVigenteError) {
       console.error('WSAA ya emitió un ticket para este certificado; esperá a que venza o usá ticketStorage.');
     } else if (e instanceof ArcaAuthError) {
-      console.error('Error de autenticación:', e.message);
-      await cdc.clearAuthCache();
+      // Borrar el ticket no sirve: WSAA no emite otro mientras siga vigente. Corregí la causa
+      // (certificado vencido, servicio wscdc no asociado, etc.). Tras un error no reintentable
+      // (e.retryable === false) el SDK bloquea nuevos logins: después de corregirlo, llamá a
+      // cdc.wsaa.resetLoginCooldown('wscdc') para volver a intentar sin reiniciar el proceso.
+      console.error('Error de autenticación:', e.message, e.retryable ? '(transitorio)' : '(corregir la causa)');
     } else if (e instanceof ArcaServiceError) {
       for (const err of e.errors) console.error(`ARCA [${err.code}]: ${err.msg}`);
     } else if (e instanceof ArcaResponseError) {

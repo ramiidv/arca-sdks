@@ -12,7 +12,6 @@
  */
 
 import fs from 'node:fs';
-import { formatDate } from '@ramiidv/arca-common';
 import {
   ArcaFacturacion,
   ArcaResultadoIncierto,
@@ -99,7 +98,7 @@ async function main() {
     cbteTipo,
     cbteNro,
     // Fijar la fecha: así el intento guardado y lo que se envía coinciden aunque pase la medianoche.
-    fecha: formatDate(arca.wsaa.now()),
+    fecha: arca.wsaa.now(),
     items: [
       { total: 4500, iva: IvaTipo.IVA_21 }, // precios finales, IVA incluido
       { total: 1800.5, iva: IvaTipo.IVA_21 },
@@ -107,7 +106,8 @@ async function main() {
     descuentoGlobal: 300,
   };
   const { intento, importes } = arca.armarComprobante(opts);
-  db.set('job-1', { estado: 'enviando', opts, intento });
+  // La fecha se guarda como YYYYMMDD (intento.fecha): un Date pasado por JSON no se puede reenviar.
+  db.set('job-1', { estado: 'enviando', opts: { ...opts, fecha: intento.fecha }, intento });
   console.log('Total a facturar:', importes.total);
 
   // 2 y 3. Emitir y, si hace falta, recuperar.

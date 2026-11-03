@@ -1,6 +1,6 @@
 # @ramiidv/arca-sire
 
-> TypeScript SDK para el web service SIRE de ARCA (ex AFIP): emite y anula certificados de retención electrónicos de IVA (formulario C2005, RG 4523/2019). Autenticación WSAA automática (servicio "sire-ws"). Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
+> TypeScript SDK para el web service SIRE de ARCA (ex AFIP): emite y anula certificados de retención electrónicos de IVA (formulario C2005, RG 4523/2019). Autenticación WSAA automática (servicio "sire-ws"). Node >= 20.19. Solo ESM; también funciona desde CommonJS porque Node >= 20.19 permite cargar módulos ESM con `require()`.
 
 ## Operaciones (WSDL oficial: solo existen estas tres)
 
@@ -24,11 +24,11 @@ const sire = new ArcaSire({
   wsaa?: WsaaClient,         // compartido, del mismo entorno
   signal?: AbortSignal,      // cancela todas las llamadas de la instancia
   timeout?, retries?, retryDelayMs?, ticketStorage?, tokenTTLMinutes?, clockOffsetMs?,
-  autoClockSkew?, loginErrorCooldownMs?, fetch?, legacyTls?, onEvent?,
+  autoClockSkew?, loginErrorCooldownMs?, permanentErrorCooldownMs?, fetch?, legacyTls?, onEvent?,
 });
 ```
 
-Endpoints: homologación https://ws-aplicativos-reca.homo.afip.gob.ar/sire/ws/v1/c2005/2005 ; producción https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005 . Namespace: http://www.afip.gob.ar/sire/c2005/ (elementos hijos sin namespace).
+Endpoints: homologación https://ws-aplicativos-reca.homo.afip.gob.ar/sire/ws/v1/c2005/2005 ; producción https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005 (los hosts afip.gob.ar del WSDL). El manual v1.0.3 publica ws-aplicativos-reca.homo.arca.gob.ar / ws-aplicativos-reca.arca.gob.ar, que sirven el mismo WSDL; el de producción presenta un certificado TLS de *.afip.gob.ar, así que la validación TLS falla. Se sobrescriben con endpoints: { sire: '<url>' }. Namespace: http://www.afip.gob.ar/sire/c2005/ (elementos hijos sin namespace).
 
 ## emitirCertificado: campos
 
@@ -51,7 +51,7 @@ Importes: finitos, máximo 11 enteros, se envían con 2 decimales. El SDK exige 
 - ArcaSoapError con `uncertain: true`: timeout, red, 5xx, respuesta inválida o Fault soapenv:Server de sistema durante emitir/anular. El certificado PUDO emitirse. emitir/anular nunca se reintentan.
 - ArcaAuthError / ArcaTicketVigenteError: WSAA, o SIRE rechazó el token/sign (Fault tipo MISSING_AUTHENTICATION_TOKEN); en ese caso el SDK descarta el ticket cacheado. No se emitió.
 
-Resultado incierto: SIRE no tiene consulta y no documenta deduplicación por codigoTrazabilidad. No reenvíes automáticamente: verificá en el micrositio SIRE (clave fiscal); si quedó duplicado, anulalo con anularCertificado.
+Resultado incierto: SIRE no tiene consulta y no documenta deduplicación por codigoTrazabilidad. No reenvíes automáticamente: verificá en el micrositio SIRE (https://www.arca.gob.ar/sire/, clave fiscal); si quedó duplicado, anulalo con anularCertificado.
 
 ## Tablas exportadas (manual para el desarrollador v1.0.3, anexo)
 

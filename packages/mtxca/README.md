@@ -25,8 +25,22 @@ npm install @ramiidv/arca-mtxca
 
 ## Requisitos
 
-- Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
+- Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (Node ≥ 20.19 permite cargar módulos ESM con `require()`).
 - Certificado digital de ARCA asociado al servicio `wsmtxca` y empadronamiento en "Codificación de Productos – Factura con Detalle".
+
+Pasos previos (detalle del certificado en [`@ramiidv/arca-common`](https://github.com/ramiidv/arca-sdks/tree/main/packages/common#primeros-pasos)):
+
+1. Generá el certificado con la clave privada y asocialo al servicio `wsmtxca` en "Administrador de Relaciones de Clave Fiscal". En homologación, todo se hace en [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx).
+2. Dá de alta un punto de venta del sistema "Codificación de Productos - Web Services" en "Administración de puntos de venta y domicilios" (para CAEA, uno "CAEA - Codificación de Productos").
+
+Glosario:
+
+- **CAE**: código de autorización que ARCA devuelve por cada comprobante. **CAEA**: código anticipado por quincena, para contingencias; los comprobantes se informan después.
+- **Punto de venta**: número que identifica dónde se emite; la numeración es por punto de venta y tipo de comprobante.
+- **Homologación / producción**: entorno de prueba (sin validez fiscal, otro certificado) y entorno real.
+- **Clase A, B**: A de un responsable inscripto (RI) a otro RI o a un monotributista (IVA por ítem), B a consumidor final, exento o no categorizado (precio con IVA).
+- **FCE MiPyME**: Factura de Crédito Electrónica (tipos 201-208 en WSMTXCA), obligatoria para MiPyMEs que venden a grandes empresas por encima del monto mínimo.
+- **Código MTX**: código del producto (GTIN/EAN o propio) que identifica cada ítem.
 
 ## Inicio rápido
 
@@ -36,8 +50,8 @@ import { ArcaMtxca, CbteTipo, Concepto, CodigoCondicionIVA, Moneda } from '@rami
 import type { AutorizarRequest } from '@ramiidv/arca-mtxca';
 
 const mtxca = new ArcaMtxca({
-  cert: readFileSync('./cert.pem', 'utf-8'),
-  key: readFileSync('./key.pem', 'utf-8'),
+  cert: readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: readFileSync('./certs/clave.key', 'utf-8'),
   cuit: '20-12345678-6',
   production: false, // homologación
 });
@@ -91,20 +105,21 @@ if (res.resultado === 'R') {
 
 `ArcaMtxcaConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`:
 
-| Opción                                                                      | Descripción                                                                              |
-| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `cert`, `key`                                                               | Certificado y clave privada PEM.                                                         |
-| `cuit`                                                                      | CUIT representada (número o string, con o sin guiones). Se valida el dígito verificador. |
-| `production`                                                                | `false` (default) = homologación.                                                        |
-| `endpoints`                                                                 | `{ mtxca?, wsaa? }`: URLs propias (proxy, mock). Ignoran `production`.                   |
-| `wsaa`                                                                      | `WsaaClient` compartido con otros SDKs del mismo certificado.                            |
-| `signal`                                                                    | `AbortSignal` global: cancela todas las llamadas de la instancia.                        |
-| `timeout`, `retries`, `retryDelayMs`                                        | Transporte. `retries` solo aplica a consultas.                                           |
-| `ticketStorage`                                                             | Storage persistente de tickets WSAA (recomendado en producción).                         |
-| `tokenTTLMinutes`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs` | Opciones de WSAA.                                                                        |
-| `fetch`, `legacyTls`                                                        | `fetch` propio (proxy, tests) y transporte TLS legacy.                                   |
-| `onEvent`                                                                   | Callback de eventos (`auth:*`, `request:*`).                                             |
-| `onEvento`                                                                  | Recibe el `evento` (aviso de ARCA) de cualquier respuesta: `(evento, method) => void`.   |
+| Opción                                                                                                  | Descripción                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cert`, `key`                                                                                           | Certificado y clave privada PEM.                                                                                                                        |
+| `keyPassphrase`                                                                                         | Contraseña de la clave, si está encriptada.                                                                                                             |
+| `cuit`                                                                                                  | CUIT representada (número o string, con o sin guiones). Se valida el dígito verificador.                                                                |
+| `production`                                                                                            | `false` (default) = homologación.                                                                                                                       |
+| `endpoints`                                                                                             | `{ mtxca?, wsaa? }`: URLs propias (proxy, mock). Ignoran `production`.                                                                                  |
+| `wsaa`                                                                                                  | `WsaaClient` compartido con otros SDKs del mismo certificado. Con él se ignoran `cert`, `key`, `keyPassphrase`, `ticketStorage` y las opciones de WSAA. |
+| `signal`                                                                                                | `AbortSignal` global: cancela todas las llamadas de la instancia.                                                                                       |
+| `timeout`, `retries`, `retryDelayMs`                                                                    | Transporte. `retries` solo aplica a consultas.                                                                                                          |
+| `ticketStorage`                                                                                         | Storage persistente de tickets WSAA (recomendado en producción).                                                                                        |
+| `tokenTTLMinutes`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs` | Opciones de WSAA. `permanentErrorCooldownMs` (default `Infinity`): espera tras un error no reintentable; `0` la desactiva.                              |
+| `fetch`, `legacyTls`                                                                                    | `fetch` propio (proxy, tests) y transporte TLS legacy.                                                                                                  |
+| `onEvent`                                                                                               | Callback de eventos (`auth:*`, `request:*`).                                                                                                            |
+| `onEvento`                                                                                              | Recibe el `evento` (aviso de ARCA) de cualquier respuesta: `(evento, method) => void`.                                                                  |
 
 Todos los métodos aceptan un último parámetro `opts?: CallOptions` con `signal` para cancelar.
 
@@ -206,7 +221,7 @@ Los campos del request se llaman igual que en el XSD (`ComprobanteType`, `ItemTy
 | ND/NC 2, 3, 7, 8, 52, 53: `comprobantesAsociados` o `periodoComprobantesAsociados`, no ambos                   | 160, 161          | 778, 779                         |
 | `cancelaEnMismaMonedaExtranjera: 'S'` solo en 1, 6, 51, 201 y 206                                              | 118               | — (ARCA solo observa)            |
 | `compradores` solo con concepto 1; en FCE, uno solo                                                            | 432, 433          | no se admiten (753)              |
-| `fechaHoraGen` obligatoria en todo comprobante CAEA (desde el 01/08/2026)                                       | —                 | 754                              |
+| `fechaHoraGen` obligatoria en todo comprobante CAEA (desde el 01/08/2026)                                      | —                 | 754                              |
 
 En FCE (201-208) el ítem no exige `importeIVA` ni se valida su fórmula (514/515 aplican a 1, 2, 3, 51, 52, 53); el precio va sin IVA en FCE A y con IVA en FCE B, y los totales (110-116) se validan igual que en A y B.
 
@@ -227,7 +242,7 @@ subtotalesIVA: [{ codigo: 5, importe: 18.9 }],
 - `CbteTipo`: 1, 2, 3, 6, 7, 8, 51, 52, 53 (A con leyenda "OPERACIÓN SUJETA A RETENCIÓN") y FCE 201–203, 206–208.
 - `Concepto`: 1 productos, 2 servicios, 3 ambos.
 - `CodigoCondicionIVA`: 1 no gravado, 2 exento, 3 0%, 4 10,5%, 5 21%, 6 27% (y `ALICUOTAS_IVA`).
-- `UnidadMedidaEspecial`: 95, 97 (seña), 99 (bonificación).
+- `UnidadMedidaEspecial`: 95 (anulación/devolución), 97 (seña), 99 (bonificación).
 - `Moneda`: `PES`, `DOL`, `060` (euro). Lista completa: `getMonedas()`.
 
 ## Manejo de errores

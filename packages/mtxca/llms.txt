@@ -6,7 +6,7 @@
 
 npm install @ramiidv/arca-mtxca
 
-Requisitos: Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)). Depende de `@ramiidv/arca-common`.
+Requisitos: Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (Node >= 20.19 permite cargar módulos ESM con `require()`). Depende de `@ramiidv/arca-common`.
 
 ## Configuración
 
@@ -16,14 +16,16 @@ import { ArcaMtxca } from '@ramiidv/arca-mtxca';
 const mtxca = new ArcaMtxca({
   cert: string,              // PEM
   key: string,               // PEM
+  keyPassphrase?: string,    // si la clave está encriptada
   cuit: number | string,     // CUIT representada; se valida el dígito verificador
   production?: boolean,      // default false (homologación)
   endpoints?: { mtxca?: string, wsaa?: string }, // overrides
-  wsaa?: WsaaClient,         // WsaaClient compartido
+  wsaa?: WsaaClient,         // WsaaClient compartido; con él se ignoran cert, key, keyPassphrase, ticketStorage y las opciones de WSAA
   signal?: AbortSignal,      // cancela todas las llamadas
   timeout?: number, retries?: number, retryDelayMs?: number,
   ticketStorage?: TicketStorage, tokenTTLMinutes?: number,
   clockOffsetMs?: number, autoClockSkew?: boolean, loginErrorCooldownMs?: number,
+  permanentErrorCooldownMs?: number, // default Infinity: espera tras un error de WSAA no reintentable; 0 la desactiva
   fetch?: typeof fetch, legacyTls?: 'auto' | 'never' | 'always',
   onEvent?: (event: ArcaEvent) => void,
   onEvento?: (evento: { codigo, descripcion }, method: string) => void, // `evento` de ARCA de cualquier respuesta
@@ -103,7 +105,7 @@ Otras reglas validadas (código CAE / CAEA):
 - solicitarCAEA(periodo AAAAMM, orden 1|2, opts?) -> MtxcaCAEA { caea, fechaDesde, fechaHasta, fechaTopeInforme, ..., evento? }
 - consultarCAEA(caea, opts?) -> MtxcaCAEA
 - consultarCAEAEntreFechas(desde, hasta, opts?) -> MtxcaCAEA[]
-- informarComprobanteCAEA({ ...comprobante, numeroComprobante, caea, fechaHoraGen? }, opts?) -> MtxcaInformarCAEAResult
+- informarComprobanteCAEA({ ...comprobante, numeroComprobante, caea, fechaHoraGen }, opts?) -> MtxcaInformarCAEAResult. fechaHoraGen es obligatoria (754): Date (hora de Argentina) o 'YYYY-MM-DDTHH:MM:SS'.
 - informarAjusteIVACAEA(comp, opts?) -> MtxcaInformarCAEAResult
 - informarCAEANoUtilizado(caea, opts?) / informarCAEANoUtilizadoPtoVta(caea, ptoVta, opts?) -> { resultado, fechaProceso?, caea?, errores }
 - consultarPtosVtaCAEANoInformados(caea, opts?) -> PuntoVenta[]
@@ -120,7 +122,7 @@ Bajo nivel: `mtxca.client` / `new MtxcaClient({ endpoint })`, una función por o
 
 ## Enums
 
-CbteTipo (1,2,3,6,7,8,51,52,53,201,202,203,206,207,208), Concepto (1,2,3), CodigoCondicionIVA (1 no gravado, 2 exento, 3 0%, 4 10.5%, 5 21%, 6 27%), UnidadMedidaEspecial (95, 97 seña, 99 bonificación), Moneda (PES, DOL, 060).
+CbteTipo (1,2,3,6,7,8,51,52,53,201,202,203,206,207,208), Concepto (1,2,3), CodigoCondicionIVA (1 no gravado, 2 exento, 3 0%, 4 10.5%, 5 21%, 6 27%), UnidadMedidaEspecial (95 anulación/devolución, 97 seña, 99 bonificación), Moneda (PES, DOL, 060).
 
 ## Ejemplos
 

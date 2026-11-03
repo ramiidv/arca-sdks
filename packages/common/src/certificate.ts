@@ -94,7 +94,7 @@ function nameToString(attributes: forge.pki.CertificateField[]): string {
  *
  * @example
  * ```ts
- * const info = certificateInfo(fs.readFileSync('cert.pem', 'utf8'));
+ * const info = certificateInfo(fs.readFileSync('./certs/certificado.crt', 'utf8'));
  * if (info.notAfter.getTime() - Date.now() < 30 * 86_400_000) console.warn('El certificado vence pronto');
  * ```
  *

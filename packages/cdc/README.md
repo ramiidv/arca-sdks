@@ -21,10 +21,21 @@ npm install @ramiidv/arca-cdc
 
 ## Requisitos
 
-- Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
+- Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (Node ≥ 20.19 permite cargar módulos ESM con `require()`).
 - Certificado digital X.509 y clave privada de ARCA, con el servicio **`wscdc`** asociado
   - **Homologación**: [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx)
   - **Producción**: [Administración de Certificados Digitales](https://www.afip.gob.ar/ws/documentacion/certificados.asp)
+    y asociación al servicio en "Administrador de Relaciones de Clave Fiscal" (detalle en
+    [`@ramiidv/arca-common`](https://github.com/ramiidv/arca-sdks/tree/main/packages/common#primeros-pasos)).
+    No hace falta punto de venta: es solo consulta.
+
+Glosario:
+
+- **Constatación**: verificar contra ARCA que un comprobante existe y fue autorizado con los datos
+  informados (emisor, número, fecha, importe, receptor).
+- **CAE / CAEA / CAI**: código de autorización del comprobante: CAE (por comprobante, web services o
+  Comprobantes en línea), CAEA (anticipado, para contingencias) o CAI (comprobantes impresos).
+- **Homologación / producción**: entorno de prueba (sin validez fiscal, otro certificado) y entorno real.
 
 ## Inicio rápido
 
@@ -34,8 +45,8 @@ import { ArcaCdc } from '@ramiidv/arca-cdc';
 
 const cdc = new ArcaCdc({
   cuit: 20123456786, // CUIT representada (quien consulta)
-  cert: fs.readFileSync('./cert.crt', 'utf-8'),
-  key: fs.readFileSync('./key.key', 'utf-8'),
+  cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: fs.readFileSync('./certs/clave.key', 'utf-8'),
   production: false,
 });
 
@@ -48,7 +59,7 @@ const r = await cdc.constatar({
   cbteFch: '20260315', // YYYYMMDD, YYYY-MM-DD o Date
   impTotal: 12100,
   codAutorizacion: '73429843294823',
-  docTipoReceptor: 80, // opcional (obligatorio en comprobantes A)
+  docTipoReceptor: 80, // ver "Receptor" en constatar(input)
   docNroReceptor: 20123456786, // se informa junto con docTipoReceptor
 });
 
@@ -76,6 +87,7 @@ if (r.resultado === 'A') {
 | `keyPassphrase`                   | `string`                        | --           | Contraseña de la clave, si está encriptada                                        |
 | `clockOffsetMs` / `autoClockSkew` |                                 | `0` / `true` | Ajuste de reloj para WSAA                                                         |
 | `loginErrorCooldownMs`            | `number`                        | `60000`      | Espera tras un login WSAA fallido                                                 |
+| `permanentErrorCooldownMs`        | `number`                        | `Infinity`   | Espera tras un error de WSAA no reintentable; `0` la desactiva                    |
 | `fetch`                           | `typeof fetch`                  | global       | `fetch` propio (proxy, tests)                                                     |
 | `legacyTls`                       | `'auto' \| 'never' \| 'always'` | `'auto'`     | Transporte TLS legacy (ver abajo)                                                 |
 | `endpoints`                       | `{ wscdc?, wsaa? }`             | --           | Sobrescribe las URLs                                                              |
@@ -140,6 +152,14 @@ Cómo interpretar la respuesta (manual WSCDC, 2.2.3):
   llegó a constatar. ARCA en esos casos también responde `resultado: R`, pero no significa que el
   comprobante sea inválido.
 
+Receptor (`docTipoReceptor` y `docNroReceptor`, se informan juntos: 117): obligatorio y con CUIT en
+comprobantes A, A con leyenda "operación sujeta a retención" y MiPyME/FCE (113, 114); en B, C, R,
+30, 31, 37, 38, 41 y 49, solo cuando el importe supera $10.000.000 (115, 116).
+
+Los errores de autenticación `600`-`602` de WSCDC llegan como `ArcaServiceError` (con `errors`), no
+como `ArcaAuthError`: a diferencia de `@ramiidv/arca-facturacion`, donde los `600`/`601` de WSFEv1 son
+`ArcaAuthError`. `ArcaAuthError` queda para los errores de WSAA (login).
+
 El importe se compara con margen: error relativo <= 0,01% o absoluto <= 1 (manual, 2.8).
 
 El input se valida una sola vez, antes de autenticarse con WSAA: un input inválido lanza
@@ -154,8 +174,8 @@ import type { CdcAuth } from '@ramiidv/arca-cdc';
 
 const cdc = new ArcaCdc({
   cuit: 20123456786,
-  cert: fs.readFileSync('./cert.crt', 'utf-8'),
-  key: fs.readFileSync('./key.key', 'utf-8'),
+  cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: fs.readFileSync('./certs/clave.key', 'utf-8'),
 });
 
 const client = new CdcClient({ endpoint: WSCDC_ENDPOINTS.testing });
@@ -183,8 +203,8 @@ import type { ConstatarInput } from '@ramiidv/arca-cdc';
 
 const cdc = new ArcaCdc({
   cuit: 20123456786,
-  cert: fs.readFileSync('./cert.crt', 'utf-8'),
-  key: fs.readFileSync('./key.key', 'utf-8'),
+  cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: fs.readFileSync('./certs/clave.key', 'utf-8'),
 });
 const input: ConstatarInput = {
   cbteModo: 'CAE',

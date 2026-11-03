@@ -10,7 +10,7 @@ WSCTG (Código de Trazabilidad de Granos) no está incluido: se derogó el 1/11/
 npm install @ramiidv/arca-agro
 ```
 
-Requisitos: Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)). Depende de `@ramiidv/arca-common`. El certificado tiene que tener asociados los servicios `wscpe` y/o `wslpg` en WSAA.
+Requisitos: Node >= 20.19. Solo ESM; también funciona desde CommonJS porque Node >= 20.19 permite cargar módulos ESM con `require()`. Depende de `@ramiidv/arca-common`. El certificado tiene que tener asociados los servicios `wscpe` y/o `wslpg` en WSAA.
 
 ## Arquitectura
 
@@ -32,8 +32,8 @@ import { ArcaAgro, FileTicketStorage, TIPO_CPE } from '@ramiidv/arca-agro';
 
 const agro = new ArcaAgro({
   cuit: '20-12345678-6',
-  cert: fs.readFileSync('cert.pem', 'utf-8'),
-  key: fs.readFileSync('key.pem', 'utf-8'),
+  cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: fs.readFileSync('./certs/clave.key', 'utf-8'),
   production: false,
   ticketStorage: new FileTicketStorage('.arca-tickets'),
 });
@@ -62,13 +62,14 @@ Detalles SOAP (de los WSDL oficiales):
 
 ## CpeClient (agro.cpe)
 
-Constantes: `TIPO_CPE = { AUTOMOTOR: 74, FERROVIARIA: 75, AUTOMOTOR_FLETE_CORTO: 274 }`, `ESTADOS_CPE`. Los requests replican el contenido de `solicitud` del XSD. `CartaPorteId = { tipoCPE, sucursal, nroOrden }`.
+Constantes: `TIPO_CPE = { AUTOMOTOR: 74, FERROVIARIA: 75, AUTOMOTOR_FLETE_CORTO: 274 }`, `ESTADOS_CPE`. Los requests replican el contenido de `solicitud` del XSD. `CartaPorteId = { tipoCPE, sucursal, nroOrden }`. `cosecha` (y `campaniaPPal` en WSLPG): 4 dígitos, `2526` = campaña 2025/26 (códigos válidos: `campaniasConsultar()`).
 
 Emisiones (nunca se reintentan):
 - `autorizarCPEAutomotor(AutorizarCPEAutomotorParams)` → `CPEAutomotorDetalle` (exige `cabecera.nroCTG`)
   - params: `{ cabecera: { tipoCP, cuitSolicitante, sucursal, nroOrden }, origen: { operador? | productor? }, correspondeRetiroProductor, esSolicitanteCampo, retiroProductor?, intervinientes?, datosCarga: { codGrano, cosecha, semilla?, pesoBruto, pesoTara }, destino: { cuit, esDestinoCampo, codProvincia, codLocalidad, planta? }, destinatario: { cuit }, transporte: { cuitTransportista, dominio[], fechaHoraPartida, kmRecorrer, codigoTurno?, cuitChofer, tarifa?, cuitPagadorFlete, cuitIntermediarioFlete?, mercaderiaFumigada }, observaciones? }`
 - `autorizarCPEFerroviaria(AutorizarCPEFerroviariaParams)` → `CPEFerroviariaDetalle`
 - Devuelven `CPEResultado { cabecera?, pdf?, metadata?, advertencias? }`: `editarCPEAutomotor`, `editarCPEConfirmadaAutomotor`, `confirmarArriboCPE`, `confirmacionDefinitivaCPEAutomotor`, `descargadoDestinoCPE`, `rechazoCPE`, `anularCPE`, `nuevoDestinoDestinatarioCPEAutomotor`, `regresoOrigenCPEAutomotor`, `desvioCPEAutomotor`, `informarContingencia`, `cerrarContingenciaCPE`, `editarCPEFerroviaria`, `editarCPEConfirmadaFerroviaria`, `confirmacionDefinitivaCPEFerroviaria`, `nuevoDestinoDestinatarioCPEFerroviaria`, `regresoOrigenCPEFerroviaria`, `desvioCPEFerroviaria`
+- Comunes a automotor y ferroviaria (según `cartaPorte.tipoCPE`, manual §2.8): `confirmarArriboCPE`, `descargadoDestinoCPE`, `rechazoCPE`, `anularCPE`, `informarContingencia`, `cerrarContingenciaCPE`
 
 Consultas (se reintentan; listas vacías → `[]`):
 - `consultarCPEAutomotor({ cuitSolicitante?, cartaPorte? | nroCTG? })` → `CPEAutomotorDetalle`

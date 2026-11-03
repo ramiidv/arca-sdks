@@ -296,7 +296,10 @@ describe('FCE MiPyME con concepto 1 (productos)', () => {
       condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
       vtoPago: '2026-11-29',
       items: [{ neto: 1000, iva: IvaTipo.IVA_21 }],
-      opcionales: [{ id: '2101', valor: '0110599500000041817221' }],
+      opcionales: [
+        { id: '2101', valor: '0110599500000041817221' },
+        { id: '27', valor: 'SCA' },
+      ],
     });
     const det = mock.last('FECAESolicitar').params.FeCAEReq.FeDetReq.FECAEDetRequest;
     expect(det.Concepto).toBe(1);

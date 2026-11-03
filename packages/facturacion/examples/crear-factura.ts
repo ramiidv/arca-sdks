@@ -10,11 +10,11 @@
  *   https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx
  *
  * Para producción:
- *   https://auth.afip.gob.ar/contribuyente_/certificados/
+ *   https://www.afip.gob.ar/ws/documentacion/certificados.asp
  */
 
 import fs from 'node:fs';
-import { ArcaFacturacion, CbteTipo, IvaTipo } from '@ramiidv/arca-facturacion';
+import { ArcaFacturacion, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {
   // 1. Inicializar el SDK
@@ -23,6 +23,7 @@ async function main() {
     cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
     key: fs.readFileSync('./certs/clave.key', 'utf-8'),
     production: false, // true para producción
+    ticketStorage: new FileTicketStorage('./.arca-tickets'), // persiste el ticket entre reinicios
   });
 
   // 2. Verificar que los servidores estén activos

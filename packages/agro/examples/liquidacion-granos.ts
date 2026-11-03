@@ -12,8 +12,8 @@ const CUIT = '20123456786';
 
 const agro = new ArcaAgro({
   cuit: CUIT,
-  cert: fs.readFileSync('cert.pem', 'utf-8'),
-  key: fs.readFileSync('key.pem', 'utf-8'),
+  cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: fs.readFileSync('./certs/clave.key', 'utf-8'),
   production: false,
   ticketStorage: new FileTicketStorage('.arca-tickets'),
 });

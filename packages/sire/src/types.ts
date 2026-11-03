@@ -84,7 +84,8 @@ export interface EmitirCertificadoParams {
   /** Tipo de comprobante (tabla TIPO_COMPROBANTE). */
   tipoComprobante: TipoComprobante | number;
   /**
-   * Fecha del comprobante: menor o igual a `fechaRetencion` (igual para tipos 3, 19 y 20).
+   * Fecha del comprobante: menor o igual a `fechaRetencion`; en los tipos 3, 19 y 20 debe
+   * ser igual a `fechaRetencion`.
    * Se valida comparando fechas calendario de Argentina (la hora no se tiene en cuenta).
    */
   fechaComprobante: FechaHora;

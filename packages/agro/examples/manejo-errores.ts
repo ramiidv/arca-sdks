@@ -27,8 +27,8 @@ import type { AutorizarCPEAutomotorParams, CPEAutomotorDetalle } from '@ramiidv/
 
 const agro = new ArcaAgro({
   cuit: '20123456786',
-  cert: fs.readFileSync('cert.pem', 'utf-8'),
-  key: fs.readFileSync('key.pem', 'utf-8'),
+  cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: fs.readFileSync('./certs/clave.key', 'utf-8'),
 });
 
 const soloDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');

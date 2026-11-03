@@ -20,10 +20,23 @@ npm install @ramiidv/arca-facturacion
 
 ## Requisitos
 
-- Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
+- Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (Node ≥ 20.19 permite cargar módulos ESM con `require()`).
 - Certificado digital de ARCA asociado a los servicios `wsfe` (y `wsfex` para exportación):
   - Homologación: [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx).
   - Producción: [Administración de Certificados Digitales](https://www.afip.gob.ar/ws/documentacion/certificados.asp) (con clave fiscal).
+
+Pasos previos (detalle del certificado en [`@ramiidv/arca-common`](https://github.com/ramiidv/arca-sdks/tree/main/packages/common#primeros-pasos)):
+
+1. Generá el certificado con la clave privada y asocialo al servicio `wsfe` (y `wsfex`) en "Administrador de Relaciones de Clave Fiscal". En homologación, todo se hace en WSASS.
+2. Dá de alta un punto de venta en "Administración de puntos de venta y domicilios": "RECE para aplicativo y web services" para WSFEv1, "Comprobantes de Exportación - Web Services" para WSFEX.
+
+Glosario:
+
+- **CAE**: código de autorización que ARCA devuelve por cada comprobante emitido. **CAEA**: código anticipado por quincena, para contingencias; los comprobantes se informan después.
+- **Punto de venta**: número que identifica dónde se emite; la numeración es por punto de venta y tipo de comprobante.
+- **Homologación / producción**: entorno de prueba (sin validez fiscal, otro certificado) y entorno real.
+- **Clase A, B, C**: A de un responsable inscripto (RI) a otro RI o a un monotributista (discrimina IVA), B de un RI a consumidor final, exento o no categorizado, C la emite un monotributista o exento (sin IVA).
+- **FCE MiPyME**: Factura de Crédito Electrónica (tipos 201-213), obligatoria para MiPyMEs que venden a grandes empresas por encima del monto mínimo.
 
 ## Inicio rápido
 
@@ -33,8 +46,8 @@ import { ArcaFacturacion, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/
 
 const arca = new ArcaFacturacion({
   cuit: 20123456786,
-  cert: readFileSync('./cert.crt', 'utf-8'),
-  key: readFileSync('./key.key', 'utf-8'),
+  cert: readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: readFileSync('./certs/clave.key', 'utf-8'),
   production: false, // homologación
   ticketStorage: new FileTicketStorage('./.arca-tickets'), // recomendado: ver "Configuración"
 });
@@ -69,28 +82,33 @@ El SDK completa el número (último autorizado + 1), la fecha (hora de Argentina
 
 `ArcaConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`.
 
-| Parámetro              | Tipo                            | Default            | Descripción                                                                                          |
-| ---------------------- | ------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------- |
-| `cuit`                 | `number \| string`              | —                  | CUIT representada (con o sin guiones; se valida el dígito verificador)                               |
-| `cert`                 | `string`                        | —                  | Certificado X.509 (PEM)                                                                              |
-| `key`                  | `string`                        | —                  | Clave privada (PEM, PKCS#1 o PKCS#8)                                                                 |
-| `keyPassphrase`        | `string`                        | —                  | Contraseña de la clave, si está encriptada                                                           |
-| `production`           | `boolean`                       | `false`            | `true` para producción                                                                               |
-| `ticketStorage`        | `TicketStorage`                 | —                  | Persistencia del Ticket de Acceso entre reinicios (recomendado)                                      |
-| `wsaa`                 | `WsaaClient`                    | —                  | Cliente WSAA compartido con otros SDKs del mismo certificado (ej: `padron.wsaa`)                     |
-| `signal`               | `AbortSignal`                   | —                  | Cancela todas las llamadas de la instancia (ej: al apagar la app)                                    |
-| `timeout`              | `number`                        | `30000`            | Timeout HTTP en ms                                                                                   |
-| `retries`              | `number`                        | `1`                | Reintentos de las consultas ante errores transitorios. Las emisiones nunca se reintentan             |
-| `retryDelayMs`         | `number`                        | `1000`             | Delay base del backoff exponencial                                                                   |
-| `tokenTTLMinutes`      | `number`                        | `720`              | Vigencia del pedido de ticket (TRA) enviado a WSAA                                                   |
-| `clockOffsetMs`        | `number`                        | `0`                | Desfase `relojARCA - relojLocal` en ms                                                               |
-| `autoClockSkew`        | `boolean`                       | `true`             | Corrige el desfase si WSAA rechaza el login por el reloj                                             |
-| `loginErrorCooldownMs` | `number`                        | `60000`            | Espera tras un login WSAA fallido                                                                    |
-| `paramCacheTTLMs`      | `number`                        | `86400000`         | TTL del cache de tablas de parámetros (0 lo desactiva). Puntos de venta y cotizaciones no se cachean |
-| `endpoints`            | `{ wsaa?, wsfe?, wsfex? }`      | —                  | URLs propias (proxy, mock)                                                                           |
-| `legacyTls`            | `'auto' \| 'never' \| 'always'` | `'auto'`           | Transporte TLS para los hosts de producción con DH de 1024 bits (ver [Entornos](#entornos))          |
-| `fetch`                | `typeof fetch`                  | `globalThis.fetch` | `fetch` propio (proxy, mTLS, tests)                                                                  |
-| `onEvent`              | `(e: ArcaEvent) => void`        | —                  | Callback de eventos (ver [Eventos](#eventos))                                                        |
+| Parámetro                  | Tipo                            | Default            | Descripción                                                                                          |
+| -------------------------- | ------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------- |
+| `cuit`                     | `number \| string`              | —                  | CUIT representada (con o sin guiones; se valida el dígito verificador)                               |
+| `cert`                     | `string`                        | —                  | Certificado X.509 (PEM)                                                                              |
+| `key`                      | `string`                        | —                  | Clave privada (PEM, PKCS#1 o PKCS#8)                                                                 |
+| `keyPassphrase`            | `string`                        | —                  | Contraseña de la clave, si está encriptada                                                           |
+| `production`               | `boolean`                       | `false`            | `true` para producción                                                                               |
+| `ticketStorage`            | `TicketStorage`                 | —                  | Persistencia del Ticket de Acceso entre reinicios (recomendado)                                      |
+| `wsaa`                     | `WsaaClient`                    | —                  | Cliente WSAA compartido con otros SDKs del mismo certificado (ej: `padron.wsaa`)                     |
+| `signal`                   | `AbortSignal`                   | —                  | Cancela todas las llamadas de la instancia (ej: al apagar la app)                                    |
+| `timeout`                  | `number`                        | `30000`            | Timeout HTTP en ms                                                                                   |
+| `retries`                  | `number`                        | `1`                | Reintentos de las consultas ante errores transitorios. Las emisiones nunca se reintentan             |
+| `retryDelayMs`             | `number`                        | `1000`             | Delay base del backoff exponencial                                                                   |
+| `tokenTTLMinutes`          | `number`                        | `720`              | Vigencia del pedido de ticket (TRA) enviado a WSAA                                                   |
+| `clockOffsetMs`            | `number`                        | `0`                | Desfase `relojARCA - relojLocal` en ms                                                               |
+| `autoClockSkew`            | `boolean`                       | `true`             | Corrige el desfase si WSAA rechaza el login por el reloj                                             |
+| `loginErrorCooldownMs`     | `number`                        | `60000`            | Espera tras un login WSAA fallido                                                                    |
+| `permanentErrorCooldownMs` | `number`                        | `Infinity`         | Espera tras un error de WSAA no reintentable (certificado, servicio no autorizado); `0` la desactiva |
+| `paramCacheTTLMs`          | `number`                        | `86400000`         | TTL del cache de tablas de parámetros (0 lo desactiva). Puntos de venta y cotizaciones no se cachean |
+| `endpoints`                | `{ wsaa?, wsfe?, wsfex? }`      | —                  | URLs propias (proxy, mock)                                                                           |
+| `legacyTls`                | `'auto' \| 'never' \| 'always'` | `'auto'`           | Transporte TLS para los hosts de producción con DH de 1024 bits (ver [Entornos](#entornos))          |
+| `fetch`                    | `typeof fetch`                  | `globalThis.fetch` | `fetch` propio (proxy, mTLS, tests)                                                                  |
+| `onEvent`                  | `(e: ArcaEvent) => void`        | —                  | Callback de eventos (ver [Eventos](#eventos))                                                        |
+
+Con `wsaa` compartido se ignoran `cert`, `key`, `keyPassphrase`, `ticketStorage`, `tokenTTLMinutes`,
+`clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs` y `endpoints.wsaa`:
+valen los del cliente compartido.
 
 > **Persistí el Ticket de Acceso.** WSAA rechaza el login si ya existe un ticket vigente para el
 > certificado y el servicio. Sin `ticketStorage`, cada reinicio del proceso deja la instancia sin
@@ -118,9 +136,9 @@ arrays sin el contenedor del XML (`resultGet.iva` en lugar de `ResultGet.Iva.Ali
 | `ultimoComprobante(ptoVta, cbteTipo)`             | Último número autorizado (`siguienteComprobante`: + 1)                                      |
 | `consultarComprobante(cbteTipo, ptoVta, cbteNro)` | Consulta un comprobante (`FECompConsultar`)                                                 |
 
-`FacturaResult`: `aprobada`, `cae`, `caeVencimiento`, `cbteNro`, `ptoVta`, `cbteTipo`, `importes`
+`FacturaResult`: `aprobada`, `cae?`, `caeVencimiento?`, `cbteNro`, `ptoVta`, `cbteTipo`, `importes`
 (`total`, `neto`, `iva`, `exento`, `noGravado`, `tributos`, `descuento?`), `observaciones`,
-`eventos`, `fecha`, `docTipo`, `docNro`, `moneda`, `cotizacion`, `tipoCodAut` y `raw`.
+`eventos`, `fecha?`, `docTipo?`, `docNro?`, `moneda?`, `cotizacion?`, `tipoCodAut?` y `raw`.
 
 #### Opciones de `facturar`
 
@@ -243,7 +261,10 @@ await arca.facturar({
   condicionIva: CondicionIva.RESPONSABLE_INSCRIPTO,
   items: [{ neto: 100000, iva: IvaTipo.IVA_21 }],
   vtoPago: '2026-12-15',
-  opcionales: [{ id: '2101', valor: '0110599500000041817221' }], // CBU del emisor
+  opcionales: [
+    { id: '2101', valor: '0110599500000041817221' }, // CBU del emisor
+    { id: '27', valor: 'SCA' }, // transferencia: SCA (circulación abierta) o ADC (agente de depósito colectivo)
+  ],
 });
 
 // NC FCE: el asociado lleva CUIT del emisor y fecha; opcional 22 = anulación S/N
@@ -268,6 +289,10 @@ validación 10175).
 | Clase A y M (1-5, 34, 39, 51-54, 60, 63, 201-203): receptor con CUIT y condición RI o monotributo              | 10013, 10243        |
 | Servicios (concepto 2 y 3): `servicio.desde`/`hasta` y vencimiento de pago                                     | 10032, 10049        |
 | Facturas FCE (201, 206, 211): `vtoPago` obligatorio con cualquier concepto                                     | 10163               |
+| Facturas FCE: opcionales 2101 (CBU) y 27 (`SCA` o `ADC`) obligatorios; sin 22                                 | 10168, 10216, 10171 |
+| NC/ND FCE: opcional 22 (anulación `S` o `N`) obligatorio; sin 2101, 2102 ni 27                                 | 10173, 10167, 10172 |
+| FCE: 2101 de 22 dígitos; 2102 (alias) de 6 a 20 caracteres; 27 `SCA` o `ADC`                                   | 10165, 10166, 10215 |
+| Fuera de FCE: sin opcionales 2101, 2102, 22 ni 27                                                              | 10169               |
 | NC/ND FCE de productos: `vtoPago` solo si son de anulación                                                     | 10175               |
 | FCE: receptor con CUIT; NC/ND FCE con `cbtesAsoc` y sin `periodoAsoc`                                          | 10176, 10153, 10196 |
 | NC/ND: `cbtesAsoc` o `periodoAsoc`                                                                             | 10197               |
@@ -351,6 +376,8 @@ Reglas de WSFEX que aplica el SDK:
 - Cliente: `cuitPais` (ver `getCuitsPaisExpo`), `idImpositivo` o los dos (validación 1580). Sin
   `cuitPais` se envía `Cuit_pais_cliente` 0 (el WSDL lo declara obligatorio).
 - `formaPago` es obligatoria solo en la Factura E (19) (validación 1620).
+- `incoterms` es obligatorio en la Factura E (19) de bienes (`tipoExpo` 1); en el resto es opcional
+  (validación 1640, ver `getIncotermsExpo`). `incotermsDes` requiere `incoterms` (1641).
 - `Permiso_existente`: `S`/`N` solo en Factura E de bienes (default `N`); vacío en NC/ND y en
   servicios (validación 1720). Con `S`, los `permisos` son obligatorios.
 - `Fecha_pago`: solo en Factura E; para servicios y otros, si no se indica, se usa la fecha del
@@ -392,16 +419,16 @@ console.log(informado.aprobada, informado.tipoCodAut); // true 'A'
 
 ### Parámetros y estado
 
-| Método                                                                                                                                                                 | Descripción                                                                                          |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `status()`                                                                                                                                                             | Estado de WSFEv1 y WSFEX (`{ wsfe, wsfex }`, `ServiceStatus`)                                        |
-| `getTiposComprobante`, `getTiposConcepto`, `getTiposDocumento`, `getTiposIva`, `getMonedas`, `getTiposTributo`, `getTiposOpcional`, `getActividades`, `getTiposPaises` | Tablas de parámetros (cacheadas; las consultas simultáneas comparten un request)                     |
-| `getCondicionesIva({ claseCmp? })`                                                                                                                                     | Condiciones frente al IVA del receptor por clase                                                     |
-| `getPuntosVenta()`                                                                                                                                                     | Puntos de venta (no se cachea)                                                                       |
-| `getCotizacion(monedaId, { fecha? })`                                                                                                                                  | Cotización oficial: `{ monId, monCotiz, fchCotiz }` (no se cachea)                                   |
-| `getCantMaxRegistros()`                                                                                                                                                | Máximo de comprobantes por request                                                                   |
-| `clearParamCache()`                                                                                                                                                    | Vacía el cache de parámetros                                                                         |
-| `clearAuthCache()`                                                                                                                                                     | Borra los tickets (memoria y storage). Ver la advertencia en [Manejo de errores](#manejo-de-errores) |
+| Método                                                                                                                                                                 | Descripción                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `status()`                                                                                                                                                             | Estado de WSFEv1 y WSFEX (`{ wsfe, wsfex }`, `ServiceStatus`)                                                                 |
+| `getTiposComprobante`, `getTiposConcepto`, `getTiposDocumento`, `getTiposIva`, `getMonedas`, `getTiposTributo`, `getTiposOpcional`, `getActividades`, `getTiposPaises` | Tablas de parámetros (cacheadas; las consultas simultáneas comparten un request)                                              |
+| `getCondicionesIva({ claseCmp? })`                                                                                                                                     | Condiciones frente al IVA del receptor por clase                                                                              |
+| `getPuntosVenta()`                                                                                                                                                     | Puntos de venta (no se cachea)                                                                                                |
+| `getCotizacion(monedaId, { fecha? })`                                                                                                                                  | Cotización oficial: `{ monId, monCotiz, fchCotiz }` (no se cachea)                                                            |
+| `getCantMaxRegistros()`                                                                                                                                                | Máximo de comprobantes por request                                                                                            |
+| `clearParamCache()`                                                                                                                                                    | Vacía el cache de parámetros                                                                                                  |
+| `clearAuthCache()`                                                                                                                                                     | Borra los tickets (memoria y storage); async (`Promise<void>`). Ver la advertencia en [Manejo de errores](#manejo-de-errores) |
 
 ### QR
 
@@ -519,7 +546,8 @@ async function emitir(ptoVta: number) {
     items: [{ total: 1210, iva: IvaTipo.IVA_21 }],
   };
   const { intento } = arca.armarComprobante({ ...opts, cbteNro });
-  await guardar('enviando', { opts, intento });
+  // La fecha se guarda como YYYYMMDD (intento.fecha): un Date pasado por JSON no se puede reenviar.
+  await guardar('enviando', { opts: { ...opts, fecha: intento.fecha }, intento });
 
   try {
     const res = await arca.facturar(opts);

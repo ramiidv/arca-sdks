@@ -26,9 +26,44 @@ npm install @ramiidv/arca-common
 ## Requisitos
 
 - Node.js >= 20.19. El paquete es **solo ESM**; desde CommonJS se carga con `require()` (require(esm), disponible desde Node 20.19).
-- Certificado digital X.509 (RSA) y su clave privada de ARCA
-  - **Homologación**: generalo desde [WSASS Homologación](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx)
-  - **Producción**: generalo desde [Administración de Certificados Digitales](https://www.afip.gob.ar/ws/documentacion/certificados.asp) (requiere clave fiscal en [arca.gob.ar](https://arca.gob.ar))
+- Certificado digital X.509 (RSA) y su clave privada de ARCA, con cada web service asociado (ver
+  [Primeros pasos](#primeros-pasos)).
+
+## Primeros pasos
+
+Lo mismo para todos los SDKs (la documentación oficial está en
+[Certificados](https://www.afip.gob.ar/ws/documentacion/certificados.asp)):
+
+1. **Clave privada y pedido de certificado (CSR)**, con OpenSSL
+   ([instructivo oficial](https://www.afip.gob.ar/ws/WSAA/WSAA.ObtenerCertificado.pdf)):
+
+   ```bash
+   mkdir -p certs
+   openssl genrsa -out certs/clave.key 2048
+   openssl req -new -key certs/clave.key -subj "/C=AR/O=Mi Empresa/CN=miapp/serialNumber=CUIT 20123456786" -out pedido.csr
+   ```
+
+   `serialNumber` es el texto `CUIT`, un espacio y la CUIT sin guiones. Guardá la clave: el
+   certificado no sirve sin ella. Los ejemplos de este repo leen `./certs/clave.key` y
+   `./certs/certificado.crt`.
+2. **Certificado**: con el CSR, generalo en
+   - **Homologación**: [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx), que se
+     adhiere con clave fiscal de una persona física desde el "Administrador de Relaciones de Clave
+     Fiscal" ([cómo adherirse](https://www.afip.gob.ar/ws/WSASS/WSASS_como_adherirse.pdf),
+     [manual](https://www.afip.gob.ar/ws/WSASS/WSASS_manual.pdf)).
+   - **Producción**: "Administración de Certificados Digitales", con clave fiscal en
+     [arca.gob.ar](https://arca.gob.ar).
+3. **Asociá cada web service al certificado** (`wsfe`, `ws_sr_padron_a13`, `wsfecred`...): en
+   WSASS, creando una autorización para el servicio; en producción, con el "Administrador de
+   Relaciones de Clave Fiscal"
+   ([delegación de web services](https://www.afip.gob.ar/ws/WSAA/ADMINREL.DelegarWS.pdf)). Sin
+   esto, WSAA responde `coe.notAuthorized`, que el SDK trata como error no reintentable
+   (`ArcaAuthError` con `retryable: false`): después de asociarlo, llamá a
+   `resetLoginCooldown(servicio)` (ver [Login fallido](#login-fallido-esperas)).
+4. **Homologación o producción**: por defecto (`production: false`) se usan los endpoints de
+   homologación (testing), donde las operaciones no tienen validez fiscal y se usa el certificado
+   de WSASS. Con `production: true` se usan los de producción, con el certificado de producción.
+   Cada certificado sirve solo en su entorno.
 
 ## Qué incluye
 
@@ -55,8 +90,8 @@ import fs from 'node:fs';
 import { WsaaClient, FileTicketStorage } from '@ramiidv/arca-common';
 
 const wsaa = new WsaaClient({
-  cert: fs.readFileSync('./cert.crt', 'utf-8'),
-  key: fs.readFileSync('./key.key', 'utf-8'),
+  cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: fs.readFileSync('./certs/clave.key', 'utf-8'),
   // keyPassphrase: '...', // si la clave está encriptada
   production: false,
   ticketStorage: new FileTicketStorage('./.arca-tickets'), // recomendado
@@ -88,7 +123,7 @@ rechaza con `ArcaAuthError`.
 import { readFileSync } from 'node:fs';
 import { certificateInfo } from '@ramiidv/arca-common';
 
-const info = certificateInfo(readFileSync('./cert.crt', 'utf-8'));
+const info = certificateInfo(readFileSync('./certs/certificado.crt', 'utf-8'));
 // { subject: 'CN=miapp, SERIALNUMBER=CUIT 20123456786', issuer: '...', notBefore, notAfter, cuit: '20123456786' }
 if (info.notAfter.getTime() - Date.now() < 30 * 86_400_000) console.warn('El certificado vence pronto');
 ```
@@ -110,9 +145,17 @@ poder loguearte hasta que venza (hasta 12 horas). Para evitarlo, configurá un `
   por si otro proceso lo acaba de guardar), se lanza `ArcaTicketVigenteError`.
 - Si el storage falla, el SDK sigue funcionando con el ticket en memoria y emite `auth:storage-error`.
 
+`FileTicketStorage(directorio)` guarda un archivo JSON por ticket, con escritura atómica (archivo
+temporal + `fsync` + rename), permisos 0600 en los archivos y 0700 en el directorio. Un archivo
+corrupto se descarta (y se informa como `auth:storage-error`). Sirve para varios procesos que
+comparten el directorio. `MemoryTicketStorage` no sobrevive a un reinicio (útil en tests).
+
 La key que recibe el storage identifica entorno, certificado y servicio
 (`"prod:3f9a0c1b2d4e5f60:wsfe"`), así que el mismo storage sirve para varios CUITs y entornos.
-`AccessTicket` es JSON puro (fechas ISO-8601):
+`AccessTicket` es JSON puro (fechas ISO-8601). En un storage propio, `normalizeAccessTicket(raw)`
+valida lo leído (acepta `expirationTime` como ISO, epoch en ms o `Date`) y devuelve `null` si no es
+un ticket; `get` recibe un segundo parámetro opcional `{ onError }` para informar problemas que el
+storage resolvió sin lanzar:
 
 ```typescript
 import type { TicketStorage, AccessTicket } from '@ramiidv/arca-common';
@@ -151,14 +194,17 @@ más hasta corregir la causa cuando el error no es transitorio. `getAccessTicket
 `ArcaAuthError`, con el error original en `cause`, `faultCode`/`statusCode` de la respuesta de
 WSAA (si hubo) y `retryable`:
 
-- **Transitorios** (`retryable: true`): `wsaa.*`, `wsn.unavailable`, timeout, HTTP 5xx, respuesta
-  ilegible. Durante `loginErrorCooldownMs` (default `60000`) se rechaza sin llamar a WSAA.
+- **Transitorios** (`retryable: true`): `wsaa.*`, `wsn.unavailable`, timeout, HTTP 4xx/5xx sin
+  Fault, respuesta ilegible. Durante `loginErrorCooldownMs` (default `60000`) se rechaza sin
+  llamar a WSAA.
 - **No reintentables** (`retryable: false`): `cms.*` (certificado vencido o no confiable, firma
   inválida), `coe.notAuthorized`, `xml.*`, `wsn.notFound`, etc. **No se piden más TA para ese
   servicio** hasta `resetLoginCooldown(service)`, `clearTicket(service)` o `clearAllTickets()` (o
   hasta que pase `permanentErrorCooldownMs`, si se configura).
-- **Desfase de reloj** (`xml.generationTime.invalid`, `xml.expirationTime.expired`): se corrige solo
-  (ver abajo); si vuelve a fallar después de corregirlo, espera de `loginErrorCooldownMs`.
+- **Desfase de reloj** (`xml.generationTime.invalid`, `xml.expirationTime.expired`): con
+  `autoClockSkew` (default) el SDK ajusta el offset y reintenta una vez (ver abajo); si vuelve a
+  fallar después de corregirlo, espera de `loginErrorCooldownMs`. Con `autoClockSkew: false` se
+  lanza `ArcaAuthError` (`retryable: true`) sin espera: corregí el reloj o `clockOffsetMs`.
 - **Error de red sin enviar o abort**: sin espera.
 
 Durante una espera, si hay un ticket por vencer todavía utilizable, se devuelve ese ticket.
@@ -211,6 +257,7 @@ class ArcaMiServicio extends ArcaSdkBase<'mi'> {
 | API                                       | Descripción                                                                                                                                                                                                                                                                                                                                                  |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `ArcaSdkBase`                             | Valida la CUIT representada, crea (o reutiliza con `config.wsaa`) el `WsaaClient`, reparte eventos a `onEvent` y a `on()`/`off()`, combina el `signal` global con el de cada llamada, elige endpoints por entorno y expone `clearAuthCache()`. Si `config.wsaa` es de otro entorno que `production` (y usa un endpoint oficial), lanza `ArcaValidationError` |
+| `ArcaBaseConfig`                          | Config común a todos los SDKs (ver [Configuración de `WsaaClient`](#configuración-de-wsaaclient))                                                                                                                                                                                                                                                            |
 | `ArcaSdkConfig`                           | `ArcaBaseConfig` + `wsaa?` (cliente compartido), `signal?` (cancela todo), `endpoints?.wsaa`                                                                                                                                                                                                                                                                 |
 | `SoapServiceClient`                       | Guarda endpoint, namespace y transporte; `soapCall(method, params, opts)` llama a `arcaSoapCall`                                                                                                                                                                                                                                                             |
 | `SoapServiceClientConfig`                 | `{ endpoint, namespace, transport? }`                                                                                                                                                                                                                                                                                                                        |
@@ -221,6 +268,10 @@ class ArcaMiServicio extends ArcaSdkBase<'mi'> {
 | `statusOf(checks)` / `ServiceStatus`      | Consulta varios servicios en paralelo: `{ ok: true, status }` solo si respondió y todos los servidores están en `OK`; si no, `{ ok: false, error, status? }`                                                                                                                                                                                                 |
 | `ArcaResponseError`                       | Respuesta con forma inesperada; `uncertain: true` en emisiones                                                                                                                                                                                                                                                                                               |
 | `validateCuit`                            | Valida y normaliza la CUIT representada (ver Validadores)                                                                                                                                                                                                                                                                                                    |
+| `anySignal(...signals)`                   | Combina varios `AbortSignal` (ignora los `undefined`) en uno que se aborta con cualquiera                                                                                                                                                                                                                                                                    |
+| `safeEmit(onEvent, event)`                | Emite un `ArcaEvent` ignorando los errores del callback                                                                                                                                                                                                                                                                                                      |
+| `collectErrors(fn, errors)`               | Corre una validación y acumula los `details` de un `ArcaValidationError` en `errors` en vez de lanzar (re-lanza cualquier otro error)                                                                                                                                                                                                                        |
+| `collectErrorsWithPrefix(fn, errors, p)`  | Igual, prefijando `p.` al `field` de cada detalle                                                                                                                                                                                                                                                                                                            |
 
 ## SOAP
 
@@ -257,7 +308,8 @@ extractServiceErrors(data); // [{ code, msg, rawCode? }] sin lanzar
 ### Reintentos e incertidumbre
 
 Las **consultas** (`kind: 'consulta'`, default) reintentan (`retries`, default 1, backoff
-`retryDelayMs * 2^(intento-1)`) los errores transitorios: red, timeout y HTTP 5xx sin Fault.
+`retryDelayMs * 2^(intento-1)`) los errores transitorios: red, timeout, HTTP 5xx sin Fault y
+respuesta 2xx sin Envelope SOAP (ej: una página HTML de un proxy).
 No reintentan SOAP Faults, 4xx ni errores de negocio.
 
 Las **emisiones** (`kind: 'emision'`) nunca se reintentan. El error indica `uncertain: true`
@@ -286,6 +338,9 @@ isValidCuit('20123456789'); // false
 
 validateCBU('0110599-5 00000041817221'); // "0110599500000041817221" (quita espacios y guiones)
 ```
+
+`validateCuil`, `normalizeCuil` y `formatCuil` son alias de las funciones de CUIT. `isValidCBU`
+devuelve `boolean` sin lanzar.
 
 ## Fechas, redondeo y QR
 
@@ -327,11 +382,14 @@ decimales, `ctz` a 6, punto de venta de hasta 5 dígitos y número de comprobant
 | ------------------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `ArcaError`              | Clase base                                                           | `code`                                                                                                                |
 | `ArcaAuthError`          | Login WSAA fallido o en espera, respuesta de WSAA inválida           | `faultCode?`, `statusCode?`, `retryable`, `cause`                                                                     |
-| `ArcaTicketVigenteError` | WSAA ya emitió un TA vigente que no está en memoria ni en el storage | `service`                                                                                                             |
+| `ArcaTicketVigenteError` | WSAA ya emitió un TA vigente que no está en memoria ni en el storage | `service`; extiende `ArcaAuthError` (`retryable: false`)                                                              |
 | `ArcaSoapError`          | Error HTTP, timeout, SOAP Fault                                      | `statusCode?`, `faultCode?`, `faultString?`, `faultDetail?`, `responseBody?`, `responseDate?`, `uncertain`, `aborted` |
 | `ArcaServiceError`       | Error de negocio de ARCA (códigos funcionales)                       | `errors: { code, msg, rawCode? }[]`                                                                                   |
 | `ArcaValidationError`    | Datos de entrada inválidos (también cert/clave/config)               | `field?`, `details: ValidationErrorDetail[]`                                                                          |
 | `ArcaResponseError`      | Respuesta con forma inesperada                                       | `uncertain`                                                                                                           |
+
+`ArcaTicketVigenteError` extiende `ArcaAuthError` con `retryable: false`, pero no se corrige
+con `resetLoginCooldown`: chequealo **antes** que `ArcaAuthError`.
 
 ```typescript
 try {
@@ -401,6 +459,12 @@ contrato contra el WSDL oficial, además de `mockFetch`, `soapResponse`, `soapFa
 | `permanentErrorCooldownMs` | `number`                        | `Infinity`         | Espera tras un error no reintentable (`Infinity` = hasta limpiarla; `0` = sin espera) |
 | `fetch`                    | `typeof fetch`                  | `globalThis.fetch` | `fetch` propio (proxy, mTLS, tests)                                                   |
 | `legacyTls`                | `'auto' \| 'never' \| 'always'` | `'auto'`           | Transporte TLS legacy para hosts con DH de 1024 bits                                  |
+
+`ArcaBaseConfig`, la config común de los SDKs, tiene los mismos campos que esta tabla (incluidos
+`loginErrorCooldownMs` y `permanentErrorCooldownMs`) salvo `endpoint` (en los SDKs es
+`endpoints.wsaa`), más `cuit` (CUIT representada, se valida el dígito verificador). En un SDK,
+`timeout`, `retries`, `retryDelayMs`, `fetch` y `legacyTls` aplican también a las llamadas al web
+service: `retries` reintenta las consultas ante errores transitorios (las emisiones nunca).
 
 Métodos y propiedades: `getAccessTicket(service, { signal }?)`, `clearTicket(service)`,
 `clearAllTickets()`, `resetLoginCooldown(service?)`, `ticketKey(service)`, `clockOffsetMs`,

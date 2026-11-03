@@ -11,8 +11,8 @@ import { readFileSync } from 'node:fs';
 import { ArcaPadron, FileTicketStorage, condicionIvaDesdePadron } from '@ramiidv/arca-padron';
 
 const padron = new ArcaPadron({
-  cert: readFileSync('./cert.pem', 'utf-8'),
-  key: readFileSync('./key.pem', 'utf-8'),
+  cert: readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: readFileSync('./certs/clave.key', 'utf-8'),
   cuit: '20123456786',
   production: false,
   ticketStorage: new FileTicketStorage('./.arca-tickets'),

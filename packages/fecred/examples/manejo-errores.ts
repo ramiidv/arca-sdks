@@ -39,8 +39,11 @@ async function main() {
     } else if (e instanceof ArcaTicketVigenteError) {
       console.error('Hay un TA vigente que no está en el ticketStorage:', e.message);
     } else if (e instanceof ArcaAuthError) {
-      console.error('Error de autenticación:', e.message);
-      await fecred.clearAuthCache();
+      console.error('Error de autenticación:', e.faultCode, e.message);
+      // No borres el ticket (clearAuthCache): WSAA no emite otro mientras siga
+      // vigente. Si no es reintentable (ej: coe.notAuthorized), corregí la causa
+      // en ARCA (asociar wsfecred al certificado) y después:
+      if (!e.retryable) fecred.wsaa.resetLoginCooldown('wsfecred');
     } else if (e instanceof ArcaServiceError) {
       for (const err of e.errors) console.error(`ARCA [${err.rawCode ?? err.code}]: ${err.msg}`);
     } else if (e instanceof ArcaSoapError) {

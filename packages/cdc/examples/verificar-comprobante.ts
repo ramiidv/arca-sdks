@@ -27,7 +27,8 @@ async function main() {
     cbteFch: '2026-03-15',
     impTotal: 12100,
     codAutorizacion: '73429843294823',
-    docTipoReceptor: 80, // CUIT (obligatorio en comprobantes A)
+    // Receptor: obligatorio en A y MiPyME (CUIT); en B, C, R, 30, 31, 37, 38, 41 y 49, si el importe supera $10.000.000
+    docTipoReceptor: 80,
     docNroReceptor: 20123456786,
   });
 

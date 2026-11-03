@@ -5,11 +5,11 @@
  * web service de ARCA usando el WsaaClient.
  */
 import fs from 'node:fs';
-import { WsaaClient, FileTicketStorage } from '@ramiidv/arca-common';
+import { WsaaClient, FileTicketStorage, ArcaAuthError, ArcaTicketVigenteError } from '@ramiidv/arca-common';
 
 const wsaa = new WsaaClient({
-  cert: fs.readFileSync('./cert.pem', 'utf-8'),
-  key: fs.readFileSync('./key.pem', 'utf-8'),
+  cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: fs.readFileSync('./certs/clave.key', 'utf-8'),
   production: false,
   // Persistir el ticket: sin esto, al reiniciar el proceso WSAA rechaza el login
   // ("ya posee un TA válido") hasta que el ticket anterior venza.
@@ -35,15 +35,25 @@ async function main() {
   console.log('¿Mismo ticket?', ticket.token === ticket2.token); // true
 
   // Obtener ticket para otro servicio (login independiente)
-  const ticketPadron = await wsaa.getAccessTicket('ws_sr_padron_a13');
-  console.log('Token padrón:', `${ticketPadron.token.slice(0, 40)}...`);
-
-  // Si un login falló por un error que no se resuelve reintentando (ej: el
-  // certificado no estaba autorizado para el servicio), el cliente no vuelve a
-  // pedir un TA hasta que lo indiques, después de corregir la causa:
-  wsaa.resetLoginCooldown('ws_sr_padron_a13');
-  // clearTicket/clearAllTickets borran además los tickets: no los uses con un
-  // TA vigente, porque WSAA no emite otro hasta que venza (hasta 12 horas).
+  try {
+    const ticketPadron = await wsaa.getAccessTicket('ws_sr_padron_a13');
+    console.log('Token padrón:', `${ticketPadron.token.slice(0, 40)}...`);
+  } catch (e) {
+    if (e instanceof ArcaTicketVigenteError) {
+      // Hay un TA vigente que no está en memoria ni en el storage: esperar a que venza.
+      console.error('TA vigente inaccesible para', e.service);
+    } else if (e instanceof ArcaAuthError && !e.retryable) {
+      // Error que no se resuelve reintentando (ej: coe.notAuthorized, el
+      // certificado no está asociado al servicio): el cliente no vuelve a pedir
+      // un TA hasta que lo indiques. Corregí la causa en ARCA y después:
+      console.error('Login rechazado:', e.faultCode, e.message);
+      wsaa.resetLoginCooldown('ws_sr_padron_a13');
+      // clearTicket/clearAllTickets borran además los tickets: no los uses con un
+      // TA vigente, porque WSAA no emite otro hasta que venza (hasta 12 horas).
+    } else {
+      throw e;
+    }
+  }
 }
 
 main().catch(console.error);

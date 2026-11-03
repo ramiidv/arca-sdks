@@ -8,7 +8,14 @@ SDK en TypeScript para el web service **WSFECRED** (FECredService) de **ARCA** (
 
 Cubre todas las operaciones del WSDL: obligación de recepción, cuentas corrientes, comprobantes, historial de estados, remitos, aceptación, rechazo, cancelación total, rechazo de notas de débito/crédito, opción de transferencia, Agentes de Depósito Colectivo y tablas de parámetros.
 
-Fuente: WSDL de FECredService (`https://fwshomo.afip.gob.ar/wsfecred/FECredService?wsdl`). El manual de WSFECRED no está publicado: los tipos y las validaciones siguen el XSD embebido en el WSDL.
+Fuente: WSDL de FECredService (`https://fwshomo.afip.gob.ar/wsfecred/FECredService?wsdl`). El manual de WSFECRED no figura en el [catálogo oficial de ARCA](https://www.arca.gob.ar/ws/documentacion/catalogo.asp): el SDK sigue el WSDL y el XSD embebido en él (tipos y validaciones).
+
+## Glosario
+
+- **FCE** (Factura de Crédito Electrónica MiPyME): el comprobante que una MiPyME emite a una empresa grande en lugar de la factura, según el título I de la [Ley 27.440](https://www.argentina.gob.ar/normativa/nacional/ley-27440-310084/texto) (art. 1). Cumplidos los requisitos del art. 4, es título ejecutivo y valor no cartular. `consultarMontoObligadoRecepcion` indica si una CUIT está obligada a recibirla.
+- **Cuenta corriente de la FCE** (`codCtaCte`): lo que ARCA registra de cada FCE en el "Registro de Facturas de Crédito Electrónicas MiPyMEs" (art. 3): estado, saldo, notas de débito/crédito asociadas, cancelaciones y retenciones. Las operaciones del SDK se hacen sobre ella.
+- **Aceptación expresa / tácita** (`TipoAceptacion`): la expresa es la que registra el comprador (`aceptarFECred`); la tácita se produce si vence el plazo que fija la ley sin que se registre aceptación ni rechazo (Ley 27.440, art. 5 inc. i). El SDK informa cuál fue en `tipoAcep`.
+- **SCA** (Sistema de Circulación Abierta) y **ADC** (Agente de Depósito Colectivo): las dos opciones de transferencia de una FCE (`OpcionTransferencia`, definidas en el XSD). Con ADC, la FCE aceptada se informa a un Agente de Depósito Colectivo para negociarla (Ley 27.440, arts. 14 y 16; `informarFacturaAgtDptoCltv`).
 
 ## Instalación
 
@@ -22,6 +29,8 @@ npm install @ramiidv/arca-fecred
 - Certificado digital X.509 y clave privada de ARCA, con el servicio **`wsfecred`** asociado
   - **Homologación**: [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx)
   - **Producción**: [Administración de Certificados Digitales](https://www.afip.gob.ar/ws/documentacion/certificados.asp)
+  - Paso a paso (certificado, asociación del servicio, entornos) en
+    [arca-common: Primeros pasos](../common/README.md#primeros-pasos).
 
 ## Inicio rápido
 
@@ -30,8 +39,8 @@ import { readFileSync } from "node:fs";
 import { ArcaFecred, FileTicketStorage } from "@ramiidv/arca-fecred";
 
 const fecred = new ArcaFecred({
-  cert: readFileSync("./cert.pem", "utf-8"),
-  key: readFileSync("./key.pem", "utf-8"),
+  cert: readFileSync("./certs/certificado.crt", "utf-8"),
+  key: readFileSync("./certs/clave.key", "utf-8"),
   cuit: "20-12345678-6", // CUIT representada (number o string, con o sin guiones)
   production: false,
   ticketStorage: new FileTicketStorage("./.arca-tickets"),
@@ -51,14 +60,15 @@ const { ctasCtes, hayMas } = await fecred.consultarCtasCtes({
 });
 console.log(ctasCtes.length, hayMas);
 
-// Aceptar una FCE
+// Aceptar una FCE, con la moneda y la cotización de su cuenta corriente
 const [cta] = ctasCtes;
 if (cta) {
+  const { ctaCte } = await fecred.consultarCtaCte({ codCtaCte: cta.codCtaCte });
   const r = await fecred.aceptarFECred({
-    idCtaCte: { codCtaCte: cta.codCtaCte },
-    saldoAceptado: cta.saldo,
-    codMoneda: cta.codMoneda,
-    cotizacionMonedaUlt: 1,
+    idCtaCte: { codCtaCte: ctaCte.codCtaCte },
+    saldoAceptado: ctaCte.saldo,
+    codMoneda: ctaCte.codMoneda,
+    cotizacionMonedaUlt: ctaCte.cotizacionMonedaUlt, // 1 solo si codMoneda es PES
   });
   console.log(r.resultado); // 'A' u 'O' (un rechazo se lanza como ArcaServiceError)
 }
@@ -127,6 +137,10 @@ Todos los métodos aceptan un último parámetro opcional `opts?: CallOptions` (
 
 `aceptarFECred` acepta además los opcionales del XSD: `confirmarNotasDC` (`{ acepta, idNota }[]`), `formasCancelacion`, `retenciones` (`{ codTipo, importe, porcentaje, descMotivo? }[]`), `ajustesOperacion` (`{ codigo, importe }[]`), `tipoCancelacion` (`'PAR' | 'TOT'`), `importeCancelado`, `importeTotalRetPesos`, `importeEmbargoPesos`, `informaCBU` y `cbuComprador`.
 
+### Tickets de acceso
+
+`await fecred.clearAuthCache()` borra el ticket de `wsfecred` (memoria y `ticketStorage`). **Ojo:** WSAA no emite un ticket nuevo mientras el anterior siga vigente, así que borrar un TA vigente te deja sin acceso hasta que venza (hasta 12 horas). Ante un `ArcaAuthError` no lo uses: corregí la causa en ARCA y, si el error no era reintentable (`retryable: false`), llamá a `fecred.wsaa.resetLoginCooldown("wsfecred")`. `clearAuthCache()` es solo para un ticket dañado (ej: cambiaste de certificado).
+
 ### Identificadores
 
 ```typescript
@@ -135,8 +149,8 @@ import { ArcaFecred } from "@ramiidv/arca-fecred";
 import type { IdCtaCteInput } from "@ramiidv/arca-fecred";
 
 const fecred = new ArcaFecred({
-  cert: readFileSync("./cert.pem", "utf-8"),
-  key: readFileSync("./key.pem", "utf-8"),
+  cert: readFileSync("./certs/certificado.crt", "utf-8"),
+  key: readFileSync("./certs/clave.key", "utf-8"),
   cuit: "20123456786",
 });
 
@@ -171,15 +185,15 @@ En los requests solo se aceptan esos valores. En las respuestas, los estados, `o
 
 ### Cliente de bajo nivel
 
-`fecred.client` es un `FecredClient`: los mismos métodos con las credenciales (`WsAuth`) como primer parámetro y respuestas tipadas. Para crearlo a mano hay que pasar `endpoint` y `namespace` (`ENDPOINTS.wsfecred`).
+`fecred.client` es un `FecredClient`: los mismos métodos con las credenciales como primer parámetro y respuestas tipadas. Las credenciales son un `WsAuthSource`: un `WsAuth` (`{ token, sign, cuitRepresentada }`) o una función `() => Promise<WsAuth>`; con la función, el cliente valida los parámetros antes de llamarla, así que un dato inválido no llega a pedir el ticket. Para crearlo a mano hay que pasar `endpoint` y `namespace` (`ENDPOINTS.wsfecred`).
 
 ```typescript
 import { readFileSync } from "node:fs";
 import { ArcaFecred, ENDPOINTS, FecredClient } from "@ramiidv/arca-fecred";
 
 const fecred = new ArcaFecred({
-  cert: readFileSync("./cert.pem", "utf-8"),
-  key: readFileSync("./key.pem", "utf-8"),
+  cert: readFileSync("./certs/certificado.crt", "utf-8"),
+  key: readFileSync("./certs/clave.key", "utf-8"),
   cuit: "20123456786",
 });
 
@@ -203,13 +217,13 @@ Detalles del protocolo (verificados contra homologación): namespace `http://ar.
 
 ## Manejo de errores
 
-| Clase                    | Cuándo                                                                                                                                                                                                                                                    |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ArcaValidationError`    | Datos inválidos (CUIT con dígito verificador incorrecto, fechas inexistentes, importes NaN/negativos, textos fuera de 3..250, CBU inválido, etc.). No se llega a pedir el ticket ni a llamar a ARCA. `details[].field` indica el parámetro.               |
-| `ArcaServiceError`       | ARCA devolvió `arrayErrores` o `arrayErroresFormato`, o una emisión terminó con `resultado = 'R'`. `errors: { code, msg, rawCode? }[]`: primero los errores y después las observaciones. El mensaje incluye la operación (`WSFECRED aceptarFECred: ...`). |
-| `ArcaSoapError`          | HTTP, timeout, SOAP Fault o respuesta que no cumple el XSD (falta un campo obligatorio, S/N inválido, etc.). `uncertain` indica si ARCA pudo haber procesado el request.                                                                                  |
-| `ArcaAuthError`          | Falla de WSAA, o SOAP Fault `wscommon_*` de WSFECRED (token, sign o CUIT representada rechazados). La operación no se procesó; el Fault original está en `cause`.                                                                                         |
-| `ArcaTicketVigenteError` | WSAA ya emitió un TA para este certificado y servicio, y no está en el `ticketStorage`.                                                                                                                                                                   |
+| Clase                    | Cuándo                                                                                                                                                                                                                                                                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ArcaValidationError`    | Datos inválidos (CUIT con dígito verificador incorrecto, fechas inexistentes, importes NaN/negativos, textos fuera de 3..250, CBU inválido, etc.). No se llega a pedir el ticket ni a llamar a ARCA. `details[].field` indica el parámetro. Los importes con más de 2 decimales no se rechazan: se redondean a 2 (half-up). |
+| `ArcaServiceError`       | ARCA devolvió `arrayErrores` o `arrayErroresFormato`, o una emisión terminó con `resultado = 'R'`. `errors: { code, msg, rawCode? }[]`: primero los errores y después las observaciones. El mensaje incluye la operación (`WSFECRED aceptarFECred: ...`).                                                                   |
+| `ArcaSoapError`          | HTTP, timeout, SOAP Fault o respuesta que no cumple el XSD (falta un campo obligatorio, S/N inválido, etc.). `uncertain` indica si ARCA pudo haber procesado el request.                                                                                                                                                    |
+| `ArcaAuthError`          | Falla de WSAA, o SOAP Fault `wscommon_*` de WSFECRED (token, sign o CUIT representada rechazados). La operación no se procesó; el Fault original está en `cause`.                                                                                                                                                           |
+| `ArcaTicketVigenteError` | WSAA ya emitió un TA para este certificado y servicio, y no está en el `ticketStorage`.                                                                                                                                                                                                                                     |
 
 Las observaciones (`arrayObservaciones`/`arrayObservacion`) y el `evento` no son errores: vienen en el resultado.
 
@@ -224,8 +238,8 @@ import {
 } from "@ramiidv/arca-fecred";
 
 const fecred = new ArcaFecred({
-  cert: readFileSync("./cert.pem", "utf-8"),
-  key: readFileSync("./key.pem", "utf-8"),
+  cert: readFileSync("./certs/certificado.crt", "utf-8"),
+  key: readFileSync("./certs/clave.key", "utf-8"),
   cuit: "20123456786",
 });
 
@@ -235,7 +249,7 @@ try {
     idCtaCte,
     saldoAceptado: 121000,
     codMoneda: "PES",
-    cotizacionMonedaUlt: 1,
+    cotizacionMonedaUlt: 1, // en pesos; en otra moneda, la de consultarCtaCte
   });
 } catch (e) {
   if (e instanceof ArcaValidationError) {
@@ -271,7 +285,7 @@ No son inciertos: los Faults `Client` (el request se rechazó antes de procesars
 | Homologación | `https://fwshomo.afip.gob.ar/wsfecred/FECredService`       |
 | Producción   | `https://serviciosjava.afip.gob.ar/wsfecred/FECredService` |
 
-Los endpoints y el namespace están en `ENDPOINTS.wsfecred` (en otros SDKs la constante se llama `<SERVICIO>_ENDPOINTS`, ej: `MTXCA_ENDPOINTS`). Los de WSAA están en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
+Los endpoints y el namespace están en `ENDPOINTS.wsfecred` (en algunos SDKs la constante se llama `<SERVICIO>_ENDPOINTS`, ej: `MTXCA_ENDPOINTS`). Los de WSAA están en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
 
 ## Ejemplos
 

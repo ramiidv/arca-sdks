@@ -10,9 +10,9 @@ El servicio oficial tiene tres operaciones y el SDK las cubre todas:
 | `anular`       | `anularCertificado()` | Anula un certificado emitido y devuelve los datos del certificado de anulación. |
 | `dummy`        | `status()`            | Estado de los servidores y del ambiente (sin autenticación).                    |
 
-SIRE **no tiene operaciones de consulta** (ni de certificados emitidos ni de tablas de parámetros). Los certificados se consultan e imprimen desde el micrositio SIRE con clave fiscal.
+SIRE **no tiene operaciones de consulta** (ni de certificados emitidos ni de tablas de parámetros). Los certificados se consultan e imprimen desde el [micrositio SIRE](https://www.arca.gob.ar/sire/) con clave fiscal.
 
-Fuentes: [WSDL](https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005?wsdl), [XSD](https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/C2005_schema.xsd) y el [manual para el desarrollador v1.0.3](https://www.afip.gob.ar/sire/documentos/SOAP-SIRE-IVA-Manualparaeldesarrollador_V1_0_0.pdf).
+Fuentes: [WSDL](https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005?wsdl), [XSD](https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/C2005_schema.xsd) y el [manual para el desarrollador v1.0.3](https://www.afip.gob.ar/sire/documentos/SOAP-SIRE-IVA-Manualparaeldesarrollador_V1_0_0.pdf). El SDK usa los hosts `afip.gob.ar` del WSDL; el manual publica los equivalentes `arca.gob.ar` (ver [Entornos](#entornos)).
 
 ## Instalación
 
@@ -22,8 +22,11 @@ npm install @ramiidv/arca-sire
 
 ## Requisitos
 
-- Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)).
-- Certificado digital X.509 y clave privada de ARCA asociados al web service **SIRE** (servicio WSAA `sire-ws`), para la CUIT del agente de retención.
+- Node >= 20.19. Solo ESM; también funciona desde CommonJS porque Node ≥ 20.19 permite cargar módulos ESM con `require()`.
+- Certificado digital X.509 y clave privada de ARCA asociados al web service **SIRE** (servicio WSAA `sire-ws`), para la CUIT del agente de retención. Cómo generarlo y asociar el servicio: [`@ramiidv/arca-common`, Primeros pasos](https://github.com/ramiidv/arca-sdks/tree/main/packages/common#primeros-pasos).
+  - **Homologación**: [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx)
+  - **Producción**: [Administración de Certificados Digitales](https://www.afip.gob.ar/ws/documentacion/certificados.asp)
+- Acceso con clave fiscal al [micrositio SIRE](https://www.arca.gob.ar/sire/) para consultar e imprimir los certificados.
 
 ## Inicio rápido
 
@@ -32,8 +35,8 @@ import { readFileSync } from 'node:fs';
 import { ArcaSire, Condicion, TipoComprobante } from '@ramiidv/arca-sire';
 
 const sire = new ArcaSire({
-  cert: readFileSync('./cert.pem', 'utf-8'),
-  key: readFileSync('./key.pem', 'utf-8'),
+  cert: readFileSync('./certs/certificado.crt', 'utf-8'),
+  key: readFileSync('./certs/clave.key', 'utf-8'),
   cuit: '20123456786', // CUIT del agente de retención (cuitAgente)
   production: false, // homologación
 });
@@ -59,18 +62,18 @@ const { certificadoNro, codigoSeguridad } = await sire.emitirCertificado({
 
 `ArcaSireConfig` extiende `ArcaSdkConfig` de `@ramiidv/arca-common`:
 
-| Opción                                                                                       | Descripción                                                                                  |
-| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `cert`, `key`, `keyPassphrase`                                                               | Certificado y clave privada en PEM (y la contraseña de la clave, si está encriptada).        |
-| `cuit`                                                                                       | CUIT del agente de retención (se valida el dígito verificador y se envía como `cuitAgente`). |
-| `production`                                                                                 | `true` para producción (default: homologación).                                              |
-| `endpoints`                                                                                  | `{ sire?, wsaa? }` para usar otras URLs (proxy).                                             |
-| `wsaa`                                                                                       | `WsaaClient` compartido con otros SDKs (tiene que ser del mismo entorno que `production`).   |
-| `signal`                                                                                     | `AbortSignal` global: cancela todas las llamadas de la instancia.                            |
-| `timeout`, `retries`, `retryDelayMs`                                                         | Transporte. Los reintentos solo aplican a `status()`; `emitir`/`anular` nunca se reintentan. |
-| `ticketStorage`, `tokenTTLMinutes`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs` | WSAA (ver `@ramiidv/arca-common`). Usá `ticketStorage` en producción.                        |
-| `fetch`, `legacyTls`                                                                         | `fetch` propio y transporte TLS legacy.                                                      |
-| `onEvent`                                                                                    | Eventos `auth:*` y `request:*`.                                                              |
+| Opción                                                                                                                   | Descripción                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `cert`, `key`, `keyPassphrase`                                                                                           | Certificado y clave privada en PEM (y la contraseña de la clave, si está encriptada).        |
+| `cuit`                                                                                                                   | CUIT del agente de retención (se valida el dígito verificador y se envía como `cuitAgente`). |
+| `production`                                                                                                             | `true` para producción (default: homologación).                                              |
+| `endpoints`                                                                                                              | `{ sire?, wsaa? }` para usar otras URLs (proxy).                                             |
+| `wsaa`                                                                                                                   | `WsaaClient` compartido con otros SDKs (tiene que ser del mismo entorno que `production`).   |
+| `signal`                                                                                                                 | `AbortSignal` global: cancela todas las llamadas de la instancia.                            |
+| `timeout`, `retries`, `retryDelayMs`                                                                                     | Transporte. Los reintentos solo aplican a `status()`; `emitir`/`anular` nunca se reintentan. |
+| `ticketStorage`, `tokenTTLMinutes`, `clockOffsetMs`, `autoClockSkew`, `loginErrorCooldownMs`, `permanentErrorCooldownMs` | WSAA (ver `@ramiidv/arca-common`). Usá `ticketStorage` en producción.                        |
+| `fetch`, `legacyTls`                                                                                                     | `fetch` propio y transporte TLS legacy.                                                      |
+| `onEvent`                                                                                                                | Eventos `auth:*` y `request:*`.                                                              |
 
 ## API
 
@@ -80,29 +83,29 @@ Todos los métodos aceptan `opts?: { signal?: AbortSignal }`.
 
 `version` (100) e `impuesto` (216, IVA) se completan solos. Campos (`EmitirCertificadoParams`, en el orden del XSD):
 
-| Campo                               | Tipo                  | Obligatorio                 | Notas (manual)                                                                                                |
-| ----------------------------------- | --------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `codigoTrazabilidad`                | string ≤ 36           | no                          | Texto libre.                                                                                                  |
-| `regimen`                           | int ≤ 3 dígitos       | sí                          | Existente en la tabla REGIMEN del impuesto 216 (lo valida ARCA).                                              |
-| `fechaRetencion`                    | `FechaHora`           | sí                          | Desde el 01/12/2019.                                                                                          |
-| `condicion`                         | `Condicion`           | para el régimen 831         | 1 Inscripto, 2 No inscripto.                                                                                  |
-| `imposibilidadRetencion`            | boolean               | sí                          | `true` = retención no efectuada.                                                                              |
-| `motivoNoRetencion`                 | string ≤ 30           | si `imposibilidadRetencion` |                                                                                                               |
-| `importeRetencion`                  | number                | sí                          | 11 enteros + 2 decimales.                                                                                     |
-| `importeBaseCalculo`                | number                | sí                          |                                                                                                               |
-| `regimenExclusion`                  | boolean               | sí                          |                                                                                                               |
-| `porcentajeExclusion`               | 50 \| 100             | si `regimenExclusion`       |                                                                                                               |
-| `fechaPublicacion`                  | `FechaHora`           | si `regimenExclusion`       | Publicación del certificado de exclusión.                                                                     |
-| `tipoComprobante`                   | `TipoComprobante`     | sí                          | Tabla TIPO_COMPROBANTE.                                                                                       |
-| `fechaComprobante`                  | `FechaHora`           | sí                          | ≤ `fechaRetencion` (igual para tipos 3, 19 y 20).                                                             |
-| `numeroComprobante`                 | string                | sí (todos los tipos)        | `99999-99999999` para 1-4 y 17-20; hasta 16 caracteres (letras, dígitos, `-` `/` `.`) para 5, 9 y 11; hasta 12 para 6.                 |
-| `coe`, `coeOriginal`, `cae`         | string ≤ 12 / 12 / 14 | no                          | El manual dice "completar con espacios hasta que se incorporen los regímenes": si no corresponde, omitilos.   |
-| `importeComprobante`                | number                | sí                          | Negativo solo en los tipos 19 y 20 (liquidaciones "con valor negativo").                                      |
-| `motivoEmisionNotaCredito`          | string ≤ 30           | solo tipo 3                 |                                                                                                               |
-| `cuitRetenido`                      | CUIT/CUIL/CDI         | sí                          | Se valida el dígito verificador y el prefijo (20, 23, 24, 27, 30, 33, 34, 50, 51, 55) y se envía como número. |
-| `numeroCertificadoOriginal`         | string ≤ 25           | solo tipos 3, 19, 20        |                                                                                                               |
-| `fechaRetencionCertificadoOriginal` | `FechaHora`           | solo tipos 3, 19, 20        |                                                                                                               |
-| `importeCertificadoOriginal`        | number                | solo tipos 3, 19, 20        |                                                                                                               |
+| Campo                               | Tipo                  | Obligatorio                 | Notas (manual)                                                                                                                                           |
+| ----------------------------------- | --------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `codigoTrazabilidad`                | string ≤ 36           | no                          | Texto libre.                                                                                                                                             |
+| `regimen`                           | int ≤ 3 dígitos       | sí                          | Existente en la tabla REGIMEN del impuesto 216 (lo valida ARCA).                                                                                         |
+| `fechaRetencion`                    | `FechaHora`           | sí                          | Desde el 01/12/2019.                                                                                                                                     |
+| `condicion`                         | `Condicion`           | para el régimen 831         | 1 Inscripto, 2 No inscripto.                                                                                                                             |
+| `imposibilidadRetencion`            | boolean               | sí                          | `true` = retención no efectuada.                                                                                                                         |
+| `motivoNoRetencion`                 | string ≤ 30           | si `imposibilidadRetencion` |                                                                                                                                                          |
+| `importeRetencion`                  | number                | sí                          | 11 enteros + 2 decimales.                                                                                                                                |
+| `importeBaseCalculo`                | number                | sí                          |                                                                                                                                                          |
+| `regimenExclusion`                  | boolean               | sí                          |                                                                                                                                                          |
+| `porcentajeExclusion`               | 50 \                  | 100                         | si `regimenExclusion`                                                                                                                                    |
+| `fechaPublicacion`                  | `FechaHora`           | si `regimenExclusion`       | Publicación del certificado de exclusión.                                                                                                                |
+| `tipoComprobante`                   | `TipoComprobante`     | sí                          | Tabla TIPO_COMPROBANTE.                                                                                                                                  |
+| `fechaComprobante`                  | `FechaHora`           | sí                          | ≤ `fechaRetencion`; en los tipos 3, 19 y 20 debe ser igual a `fechaRetencion`.                                                                           |
+| `numeroComprobante`                 | string                | sí (todos los tipos)        | `99999-99999999` para 1-4 y 17-20; hasta 16 caracteres (letras, dígitos, `-` `/` `.`) para 5, 9 y 11; hasta 12 para 6.                                   |
+| `coe`, `coeOriginal`, `cae`         | string ≤ 12 / 12 / 14 | no                          | El manual dice "completar con espacios hasta que se incorporen los regímenes": si no corresponde, omitilos. Con solo espacios dan `ArcaValidationError`. |
+| `importeComprobante`                | number                | sí                          | Negativo solo en los tipos 19 y 20 (liquidaciones "con valor negativo").                                                                                 |
+| `motivoEmisionNotaCredito`          | string ≤ 30           | solo tipo 3                 |                                                                                                                                                          |
+| `cuitRetenido`                      | CUIT/CUIL/CDI         | sí                          | Se valida el dígito verificador y el prefijo (20, 23, 24, 27, 30, 33, 34, 50, 51, 55) y se envía como número.                                            |
+| `numeroCertificadoOriginal`         | string ≤ 25           | solo tipos 3, 19, 20        |                                                                                                                                                          |
+| `fechaRetencionCertificadoOriginal` | `FechaHora`           | solo tipos 3, 19, 20        |                                                                                                                                                          |
+| `importeCertificadoOriginal`        | number                | solo tipos 3, 19, 20        |                                                                                                                                                          |
 
 `FechaHora` es `Date` o string (`YYYY-MM-DD`, `YYYYMMDD`, `YYYY-MM-DDThh:mm[:ss[.SSS]]` en hora de Argentina, o con zona `Z`/`±hh:mm`). Se envía siempre como `AAAA-MM-DDThh:mm:ss.SSS-03:00`.
 
@@ -222,7 +225,9 @@ const sire = new ArcaSire({
 | Homologación | `https://ws-aplicativos-reca.homo.afip.gob.ar/sire/ws/v1/c2005/2005` |
 | Producción   | `https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005`      |
 
-Se elige con `production` y se puede sobrescribir con `endpoints.sire`. `status().headerInfo.ambiente` indica en qué ambiente respondió el servicio (ej: `"homologacion - 207"`).
+El manual v1.0.3 publica los hosts `ws-aplicativos-reca.homo.arca.gob.ar` y `ws-aplicativos-reca.arca.gob.ar`, que sirven el mismo WSDL (cada uno con su propio `soap:address`). El SDK usa los hosts `afip.gob.ar` del WSDL. El host `ws-aplicativos-reca.arca.gob.ar` presenta un certificado TLS emitido para `*.afip.gob.ar`, así que una conexión que valida el certificado falla.
+
+Se elige con `production` y se puede sobrescribir con `endpoints.sire` (ej: `endpoints: { sire: 'https://ws-aplicativos-reca.homo.arca.gob.ar/sire/ws/v1/c2005/2005' }`). `status().headerInfo.ambiente` indica en qué ambiente respondió el servicio (ej: `"homologacion - 207"`).
 
 ## Ejemplos
 
