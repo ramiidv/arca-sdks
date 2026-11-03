@@ -1,7 +1,8 @@
 import { testCert } from '@ramiidv/arca-common/testing';
 import { describe, it, expect, vi } from 'vitest';
-import { ArcaValidationError, type WsaaClient } from '@ramiidv/arca-common';
-import { ArcaFecred, ENDPOINTS } from '../src/index.js';
+import { ArcaValidationError, WSAA_ENDPOINTS, type WsaaClient } from '@ramiidv/arca-common';
+import * as sdk from '../src/index.js';
+import { ArcaFecred, ENDPOINTS, FECRED_NAMESPACE, FECRED_SERVICE_ID } from '../src/index.js';
 import { mockFetch, sentRequest, soapResponse, xmlResponse } from './helpers.js';
 
 function fakeWsaa() {
@@ -20,8 +21,8 @@ describe('ArcaFecred', () => {
     const fetch = mockFetch(
       xmlResponse(
         soapResponse(
-          'consultarObligadoRecepcion',
-          '<consultarObligadoRecepcionReturn><respuesta>S</respuesta></consultarObligadoRecepcionReturn>',
+          'consultarMontoObligadoRecepcion',
+          '<consultarMontoObligadoRecepcionReturn><obligado>S</obligado></consultarMontoObligadoRecepcionReturn>',
         ),
       ),
     );
@@ -31,11 +32,11 @@ describe('ArcaFecred', () => {
       wsaa,
       fetch: fetch,
     });
-    const r = await fecred.consultarObligadoRecepcion(30712345671);
+    const r = await fecred.consultarMontoObligadoRecepcion({ cuitConsultada: 30712345671, fechaEmision: '2026-11-01' });
     expect(r.obligado).toBe(true);
     expect(wsaa.getAccessTicket).toHaveBeenCalledWith('wsfecred', {});
     const { body } = sentRequest(fetch);
-    expect(body['ser:consultarObligadoRecepcionRequest'].authRequest).toEqual({
+    expect(body['ser:consultarMontoObligadoRecepcionRequest'].authRequest).toEqual({
       token: 'T',
       sign: 'S',
       cuitRepresentada: '20123456786',
@@ -122,6 +123,35 @@ describe('ArcaFecred', () => {
     expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'request:end', method: 'dummy' }));
     expect(handler).toHaveBeenCalledTimes(1);
     expect(fecred.cuit).toBe('20123456786');
+  });
+
+  it('ENDPOINTS solo tiene URLs por servicio; namespace e id de WSAA van aparte', () => {
+    expect(ENDPOINTS).toEqual({
+      wsfecred: {
+        testing: 'https://fwshomo.afip.gob.ar/wsfecred/FECredService',
+        production: 'https://serviciosjava.afip.gob.ar/wsfecred/FECredService',
+      },
+    });
+    expect(FECRED_NAMESPACE).toBe('http://ar.gob.afip.wsfecred/FECredService/');
+    expect(FECRED_SERVICE_ID).toBe('wsfecred');
+    expect(ENDPOINTS).not.toHaveProperty('wsaa');
+  });
+
+  it('endpoints.wsaa sobrescribe la URL de WSAA (por defecto, WSAA_ENDPOINTS de common)', () => {
+    expect(new ArcaFecred({ ...base, cuit: 20123456786 }).wsaa.endpoint).toBe(WSAA_ENDPOINTS.testing);
+    const fecred = new ArcaFecred({ ...base, cuit: 20123456786, endpoints: { wsaa: 'https://proxy.local/wsaa' } });
+    expect(fecred.wsaa.endpoint).toBe('https://proxy.local/wsaa');
+  });
+
+  it('consultarObligadoRecepcion (deprecada por el manual) ya no existe', () => {
+    const fecred = new ArcaFecred({ ...base, cuit: 20123456786, wsaa: fakeWsaa() });
+    expect('consultarObligadoRecepcion' in fecred).toBe(false);
+    expect('consultarObligadoRecepcion' in fecred.client).toBe(false);
+  });
+
+  it('exporta ArcaRechazoError y ArcaResponseError', () => {
+    expect(sdk.ArcaRechazoError).toBeTypeOf('function');
+    expect(sdk.ArcaResponseError).toBeTypeOf('function');
   });
 
   it('clearAuthCache descarta el ticket de wsfecred', async () => {

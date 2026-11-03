@@ -1,20 +1,25 @@
+import type { ServiceEndpoints } from '@ramiidv/arca-common';
+
 // ---------------------------------------------------------------------------
 // Endpoints
 // ---------------------------------------------------------------------------
 
 /**
- * Endpoints y datos del servicio WSFECRED (FECredService).
- * Fuente: WSDL de homologación (`soap:address`) y namespace `targetNamespace`.
- * Los endpoints de WSAA están en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
+ * URLs de FECredService por entorno (fuente: `soap:address` del WSDL). Los
+ * endpoints de WSAA están en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
  */
 export const ENDPOINTS = {
   wsfecred: {
     testing: 'https://fwshomo.afip.gob.ar/wsfecred/FECredService',
     production: 'https://serviciosjava.afip.gob.ar/wsfecred/FECredService',
-    namespace: 'http://ar.gob.afip.wsfecred/FECredService/',
-    serviceId: 'wsfecred',
   },
-} as const;
+} as const satisfies Record<string, ServiceEndpoints>;
+
+/** Namespace (`targetNamespace`) del WSDL de FECredService. */
+export const FECRED_NAMESPACE = 'http://ar.gob.afip.wsfecred/FECredService/';
+
+/** Id del servicio en WSAA. */
+export const FECRED_SERVICE_ID = 'wsfecred';
 
 // ---------------------------------------------------------------------------
 // Enumeraciones del XSD (xsd:simpleType con xsd:enumeration)

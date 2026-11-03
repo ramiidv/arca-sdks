@@ -9,6 +9,8 @@ import { ArcaAuthError } from '@ramiidv/arca-common';
 import { ArcaBaseConfig } from '@ramiidv/arca-common';
 import { ArcaError } from '@ramiidv/arca-common';
 import { ArcaEvent } from '@ramiidv/arca-common';
+import { ArcaRechazoError } from '@ramiidv/arca-common';
+import { ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { ArcaSdkConfig } from '@ramiidv/arca-common';
 import { ArcaServiceError } from '@ramiidv/arca-common';
@@ -19,9 +21,11 @@ import { CallOptions } from '@ramiidv/arca-common';
 import { FileTicketStorage } from '@ramiidv/arca-common';
 import { MemoryTicketStorage } from '@ramiidv/arca-common';
 import { ServerStatus } from '@ramiidv/arca-common';
+import type { ServiceClientConfig } from '@ramiidv/arca-common';
+import { ServiceEndpoints } from '@ramiidv/arca-common';
 import { ServiceErrorDetail } from '@ramiidv/arca-common';
+import { ServiceTransport } from '@ramiidv/arca-common';
 import { SoapServiceClient } from '@ramiidv/arca-common';
-import type { SoapServiceClientConfig } from '@ramiidv/arca-common';
 import { TicketStorage } from '@ramiidv/arca-common';
 import { ValidationErrorDetail } from '@ramiidv/arca-common';
 import { WsaaClient } from '@ramiidv/arca-common';
@@ -84,8 +88,6 @@ export class ArcaFecred extends ArcaSdkBase<'wsfecred'> {
     consultarHistorialEstadosComprobante(idComprobante: IdComprobanteInput, opts?: CallOptions): Promise<HistorialEstadosComprobanteResult>;
     consultarHistorialEstadosCtaCte(idCtaCte: IdCtaCteInput, opts?: CallOptions): Promise<HistorialEstadosCtaCteResult>;
     consultarMontoObligadoRecepcion(params: ConsultarMontoObligadoRecepcionParams, opts?: CallOptions): Promise<MontoObligadoRecepcionResult>;
-    // @deprecated
-    consultarObligadoRecepcion(cuitConsultada: number | string, opts?: CallOptions): Promise<ObligadoRecepcionResult>;
     consultarTiposAjustesOperacion(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarTiposFormasCancelacion(opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarTiposMotivosRechazo(opts?: CallOptions): Promise<CodigoDescripcion[]>;
@@ -106,6 +108,10 @@ export interface ArcaFecredConfig extends ArcaSdkConfig {
         wsaa?: string;
     };
 }
+
+export { ArcaRechazoError }
+
+export { ArcaResponseError }
 
 export { ArcaServiceError }
 
@@ -350,8 +356,6 @@ export const ENDPOINTS: {
     readonly wsfecred: {
         readonly testing: 'https://fwshomo.afip.gob.ar/wsfecred/FECredService';
         readonly production: 'https://serviciosjava.afip.gob.ar/wsfecred/FECredService';
-        readonly namespace: 'http://ar.gob.afip.wsfecred/FECredService/';
-        readonly serviceId: 'wsfecred';
     };
 };
 
@@ -404,6 +408,12 @@ export interface FacturaInformadaAgtDptoCltv {
 }
 
 // @public
+export const FECRED_NAMESPACE = "http://ar.gob.afip.wsfecred/FECredService/";
+
+// @public
+export const FECRED_SERVICE_ID = "wsfecred";
+
+// @public
 export class FecredClient extends SoapServiceClient {
     constructor(config: FecredClientConfig);
     aceptarFECred(auth: WsAuthSource, params: AceptarFecredParams, opts?: CallOptions): Promise<OperacionFecredResult>;
@@ -415,8 +425,6 @@ export class FecredClient extends SoapServiceClient {
     consultarHistorialEstadosComprobante(auth: WsAuthSource, idComprobante: IdComprobanteInput, opts?: CallOptions): Promise<HistorialEstadosComprobanteResult>;
     consultarHistorialEstadosCtaCte(auth: WsAuthSource, idCtaCte: IdCtaCteInput, opts?: CallOptions): Promise<HistorialEstadosCtaCteResult>;
     consultarMontoObligadoRecepcion(auth: WsAuthSource, params: ConsultarMontoObligadoRecepcionParams, opts?: CallOptions): Promise<MontoObligadoRecepcionResult>;
-    // @deprecated
-    consultarObligadoRecepcion(auth: WsAuthSource, cuitConsultada: number | string, opts?: CallOptions): Promise<ObligadoRecepcionResult>;
     consultarTiposAjustesOperacion(auth: WsAuthSource, opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarTiposFormasCancelacion(auth: WsAuthSource, opts?: CallOptions): Promise<CodigoDescripcion[]>;
     consultarTiposMotivosRechazo(auth: WsAuthSource, opts?: CallOptions): Promise<CodigoDescripcion[]>;
@@ -430,8 +438,8 @@ export class FecredClient extends SoapServiceClient {
     rechazarNotaDC(auth: WsAuthSource, params: RechazarNotaDCParams, opts?: CallOptions): Promise<RechazarNotaDCResult>;
 }
 
-// @public (undocumented)
-export type FecredClientConfig = SoapServiceClientConfig;
+// @public
+export type FecredClientConfig = ServiceClientConfig;
 
 export { FileTicketStorage }
 
@@ -648,12 +656,6 @@ export interface MotivoRechazo {
 }
 
 // @public
-export interface ObligadoRecepcionResult extends ObservacionesRespuesta {
-    desde?: string;
-    obligado?: boolean;
-}
-
-// @public
 export interface ObservacionesRespuesta {
     observaciones: CodigoDescripcion[];
 }
@@ -751,7 +753,11 @@ export type RolCtaCte = (typeof RolCtaCte)[keyof typeof RolCtaCte];
 
 export { ServerStatus }
 
+export { ServiceEndpoints }
+
 export { ServiceErrorDetail }
+
+export { ServiceTransport }
 
 // @public
 export interface SubtotalIva {

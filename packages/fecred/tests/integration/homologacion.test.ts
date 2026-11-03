@@ -5,7 +5,7 @@
  * ruta) y ARCA_TEST_CUIT. El estado del servicio no requiere autenticación;
  * las consultas autenticadas corren solo si ARCA_TEST_SERVICES (lista separada
  * por comas) incluye "wsfecred": el certificado tiene que estar autorizado en ese
- * servicio. Ver `.github/workflows/integracion.yml`.
+ * servicio. Ver "Desarrollo" en el README raíz (`.env` local).
  */
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

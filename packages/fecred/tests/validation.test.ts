@@ -102,9 +102,13 @@ describe('validación local', () => {
   });
 
   it('rechaza campos que no existen en el XSD', () => {
-    expect(() => encode({ cuitConsultada: 20123456786, otro: 1 }, REQ.consultarObligadoRecepcion, 'test')).toThrow(
-      /otro: campo desconocido/,
-    );
+    expect(() =>
+      encode(
+        { cuitConsultada: 20123456786, fechaEmision: '2026-11-01', otro: 1 },
+        REQ.consultarMontoObligadoRecepcion,
+        'test',
+      ),
+    ).toThrow(/otro: campo desconocido/);
   });
 
   it('CBU: 22 dígitos y dígitos verificadores', () => {

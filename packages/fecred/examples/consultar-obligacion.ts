@@ -27,8 +27,8 @@ async function main() {
     console.log('No obligada a recibir FCE');
   }
 
-  // `consultarObligadoRecepcion` (sin fecha) está deprecada por el manual (§2.4.13):
-  // su información es incompleta. Usá consultarMontoObligadoRecepcion.
+  // `consultarObligadoRecepcion` (sin fecha) fue discontinuada por el manual (§2.4.13)
+  // y el SDK no la incluye: consultarMontoObligadoRecepcion la reemplaza.
 }
 
 main().catch(console.error);

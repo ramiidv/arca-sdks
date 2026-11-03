@@ -3,7 +3,9 @@
  *
  *   - ArcaValidationError: datos de entrada inválidos (no se llega a llamar a ARCA)
  *   - ArcaAuthError / ArcaTicketVigenteError: falla de autenticación WSAA (o Fault wscommon_* de WSFECRED)
- *   - ArcaServiceError: ARCA rechazó la operación (arrayErrores, arrayErroresFormato o resultado R)
+ *   - ArcaRechazoError: ARCA rechazó la emisión (resultado R): `operacion`, `errors`, `observaciones`
+ *   - ArcaServiceError: otros errores de ARCA (arrayErrores, arrayErroresFormato sin resultado R)
+ *   - ArcaResponseError: respuesta que no cumple el XSD. En emisiones, `uncertain = true`.
  *   - ArcaSoapError: HTTP, timeout o SOAP Fault. `uncertain` indica si ARCA pudo haberla procesado.
  */
 
@@ -11,6 +13,8 @@ import fs from 'node:fs';
 import {
   ArcaFecred,
   ArcaAuthError,
+  ArcaRechazoError,
+  ArcaResponseError,
   ArcaServiceError,
   ArcaSoapError,
   ArcaTicketVigenteError,
@@ -45,12 +49,15 @@ async function main() {
       // durante un lapso de retención (minutos). Si no es reintentable (ej: coe.notAuthorized), corregí la causa
       // en ARCA (asociar wsfecred al certificado) y después:
       if (!e.retryable) fecred.wsaa.resetLoginCooldown('wsfecred');
+    } else if (e instanceof ArcaRechazoError) {
+      // Rechazada (resultado R): no se registró nada. Corregí los datos antes de volver a enviarla.
+      console.error(`${e.operacion} rechazada:`, e.errors, e.observaciones);
     } else if (e instanceof ArcaServiceError) {
       for (const err of e.errors) console.error(`ARCA [${err.rawCode ?? err.code}]: ${err.msg}`);
       // 1103 ("reinténtelo más tarde"): no se procesó, se puede reintentar más tarde.
       if (e.errors.some((err) => WSFECRED_ERRORES_REINTENTABLES.includes(err.code)))
         console.error('Reintentar más tarde');
-    } else if (e instanceof ArcaSoapError) {
+    } else if (e instanceof ArcaSoapError || e instanceof ArcaResponseError) {
       if (e.uncertain) {
         // No se sabe si ARCA aceptó la FCE: consultar el estado antes de reintentar.
         const { ctaCte } = await fecred.consultarCtaCte({ codCtaCte: '1234567890' });

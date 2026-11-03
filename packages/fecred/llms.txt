@@ -1,6 +1,6 @@
 # @ramiidv/arca-fecred
 
-> TypeScript SDK para el web service WSFECRED (FECredService) de ARCA (ex AFIP) - Factura de Crédito Electrónica MiPyME (Ley 27.440). Cubre todas las operaciones del WSDL.
+> TypeScript SDK para el web service WSFECRED (FECredService) de ARCA (ex AFIP) - Factura de Crédito Electrónica MiPyME (Ley 27.440). Cubre todas las operaciones vigentes del WSDL (`consultarObligadoRecepcion`, discontinuada por el manual, no está).
 
 ## Instalación
 
@@ -8,7 +8,7 @@
 npm install @ramiidv/arca-fecred
 ```
 
-Requisitos: Node >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)). Depende de `@ramiidv/arca-common`.
+Requisitos: Node >= 22.12. Solo ESM; desde CommonJS se carga con `require()` (require(esm)). Depende de `@ramiidv/arca-common`.
 
 ## Configuración
 
@@ -50,7 +50,7 @@ Fechas: `Date`, `'YYYY-MM-DD'` o `'YYYYMMDD'`. Importes: number finito, se redon
 ```typescript
 await fecred.status(); // dummy → { appserver, dbserver, authserver }
 await fecred.consultarMontoObligadoRecepcion({ cuitConsultada, fechaEmision }); // { obligado?: boolean, montoDesde?, observaciones }
-await fecred.consultarObligadoRecepcion(cuit);           // @deprecated (manual §2.4.13): usar consultarMontoObligadoRecepcion. { obligado?: boolean, desde?, observaciones }
+// consultarObligadoRecepcion (discontinuada, manual §2.4.13) no existe: usar consultarMontoObligadoRecepcion.
 await fecred.consultarCtasCtes({ rol: 'Emisor' | 'Receptor', cuitContraparte?, fecha?, estadoCtaCte?, nroPagina?, opcionTransferencia? });
 // → { ctasCtes: { codCtaCte, estadoCtaCte: { estado, fechaHoraEstado }, idFacturaCredito, importeTotalFC, saldo, saldoAceptado?, codMoneda, opcionTransferencia }[], nroPagina?, hayMas? }
 await fecred.consultarCtaCte(idCtaCte);                  // { ctaCte?: CuentaCorriente } (opcional en el XSD)
@@ -81,14 +81,16 @@ await fecred.informarCancelacionTotalFECred({ idCtaCte, formasCancelacion: { cod
 await fecred.rechazarNotaDC({ idComprobante, motivos });
 await fecred.modificarOpcionTransferencia({ idCtaCte, opcionTransferencia: 'SCA' | 'ADC' });
 await fecred.informarFacturaAgtDptoCltv({ idCtaCte, ctaAgente: { cuitAgente, idCuenta, razonSocialAgente?, denominacion? } });
-// → { resultado: 'A' | 'O', idCtaCte, evento?, observaciones }. resultado 'R' se lanza como ArcaServiceError (en arca-mtxca se devuelve).
+// → { resultado: 'A' | 'O', idCtaCte, evento?, observaciones }. resultado 'R' se lanza como ArcaRechazoError: lo devuelto siempre está aprobado.
 ```
 
 ## Errores
 
 - `ArcaValidationError`: parámetros inválidos (antes de pedir ticket o llamar a ARCA). `field`, `details`.
-- `ArcaServiceError`: `arrayErrores` / `arrayErroresFormato` o `resultado = 'R'`. `errors: { code, msg, rawCode? }[]` (errores y después observaciones). Mensaje `WSFECRED <operación>: ...`. `WSFECRED_ERRORES_REINTENTABLES` = [1103] ("reinténtelo más tarde"): no se procesó, se puede reintentar más tarde.
-- `ArcaSoapError`: HTTP / timeout / SOAP Fault / respuesta que no cumple el XSD. `uncertain = true` solo en emisiones (respuesta perdida, Fault Server, sin `resultado`): pudo haberse registrado → verificar con `consultarCtaCte` o `consultarHistorialEstadosCtaCte` antes de reintentar.
+- `ArcaRechazoError` (subclase de `ArcaServiceError`, `code` `ARCA_RECHAZO`): una emisión con `resultado = 'R'`. `operacion` (método de ARCA), `errors` (arrayErrores) y `observaciones`, `{ code, msg, rawCode? }[]`. No se registró nada.
+- `ArcaServiceError`: `arrayErrores` / `arrayErroresFormato` sin `resultado = 'R'`. `errors: { code, msg, rawCode? }[]` (errores y después observaciones). Mensaje `WSFECRED <operación>: ...`. `WSFECRED_ERRORES_REINTENTABLES` = [1103] ("reinténtelo más tarde"): no se procesó, se puede reintentar más tarde.
+- `ArcaResponseError`: respuesta que no cumple el XSD (falta un campo obligatorio, S/N inválido). `uncertain = true` en emisiones (ej: sin `resultado`).
+- `ArcaSoapError`: HTTP / timeout / SOAP Fault. `uncertain = true` solo en emisiones (respuesta perdida, Fault Server). Con `uncertain` (cualquiera de los dos): pudo haberse registrado → verificar con `consultarCtaCte` o `consultarHistorialEstadosCtaCte` antes de reintentar.
 - `ArcaAuthError`: falla de WSAA o SOAP Fault `wscommon_*` de WSFECRED (auth rechazado; no se procesó). `ArcaTicketVigenteError` (`retryable: true`, `retryAfterMs`): WSAA rechazó el login por el lapso de retención y no hay un TA utilizable en memoria ni en el `ticketStorage`.
 
 `await fecred.clearAuthCache()` borra el ticket (memoria y storage): WSAA rechaza los pedidos de un TA nuevo durante un lapso de retención (minutos), así que borrar un TA vigente puede dejar sin acceso durante ese lapso. Ante ArcaAuthError no usarlo: corregir la causa en ARCA y llamar a `fecred.wsaa.resetLoginCooldown('wsfecred')`. Solo para un ticket dañado.
@@ -100,6 +102,6 @@ await fecred.informarFacturaAgtDptoCltv({ idCtaCte, ctaAgente: { cuitAgente, idC
 - `codCtaCte`, CUITs y `codAutorizacion` se devuelven como string; importes como number; S/N como boolean.
 - Observaciones: el SDK lee `arrayObservaciones` o `arrayObservacion` (el manual y el XSD los cruzan en algunas operaciones); si vienen los dos, los une en `observaciones`.
 - Fuentes: WSDL/XSD de FECredService y manual del desarrollador de WSFECRED v2.0.3; donde no coinciden, se sigue al XSD.
-- Cliente de bajo nivel: `fecred.client` (`FecredClient`), con un `WsAuthSource` como primer parámetro: `WsAuth` (`{ token, sign, cuitRepresentada }`) o `() => Promise<WsAuth>` (se llama después de validar los parámetros: un dato inválido no pide el TA). `new FecredClient({ endpoint, namespace })` requiere el namespace (`ENDPOINTS.wsfecred.namespace`).
-- Endpoints en `ENDPOINTS.wsfecred`: homologación `https://fwshomo.afip.gob.ar/wsfecred/FECredService`, producción `https://serviciosjava.afip.gob.ar/wsfecred/FECredService`. Namespace `http://ar.gob.afip.wsfecred/FECredService/`; SOAPAction = namespace + operación.
+- Cliente de bajo nivel: `fecred.client` (`FecredClient`), con un `WsAuthSource` como primer parámetro: `WsAuth` (`{ token, sign, cuitRepresentada }`) o `() => Promise<WsAuth>` (se llama después de validar los parámetros: un dato inválido no pide el TA). `new FecredClient({ endpoint, transport? })` (`ServiceClientConfig`): el namespace lo fija el cliente.
+- Endpoints en `ENDPOINTS.wsfecred` (`{ testing, production }`, solo URLs): homologación `https://fwshomo.afip.gob.ar/wsfecred/FECredService`, producción `https://serviciosjava.afip.gob.ar/wsfecred/FECredService`. `FECRED_NAMESPACE` = `http://ar.gob.afip.wsfecred/FECredService/` (SOAPAction = namespace + operación); `FECRED_SERVICE_ID` = `wsfecred`. WSAA: `WSAA_ENDPOINTS` de common.
 - Ejemplos: https://github.com/ramiidv/arca-sdks/tree/main/packages/fecred/examples

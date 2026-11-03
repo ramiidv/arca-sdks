@@ -6,6 +6,8 @@ export type { FecredClientConfig, WsAuthSource } from './fecred-client.js';
 // Constantes y enumeraciones del XSD
 export {
   ENDPOINTS,
+  FECRED_NAMESPACE,
+  FECRED_SERVICE_ID,
   RolCtaCte,
   EstadoCtaCte,
   EstadoComprobante,
@@ -27,6 +29,8 @@ export {
   ArcaAuthError,
   ArcaSoapError,
   ArcaServiceError,
+  ArcaRechazoError,
+  ArcaResponseError,
   ArcaValidationError,
   ArcaTicketVigenteError,
   WsaaClient,
@@ -39,7 +43,9 @@ export type {
   AccessTicket,
   CallOptions,
   ServerStatus,
+  ServiceEndpoints,
   ServiceErrorDetail,
+  ServiceTransport,
   TicketStorage,
   ValidationErrorDetail,
 } from '@ramiidv/arca-common';
