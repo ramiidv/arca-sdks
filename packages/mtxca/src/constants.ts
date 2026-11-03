@@ -63,8 +63,9 @@ export enum Concepto {
 // ---------------------------------------------------------------------------
 
 /**
- * Condiciones de IVA de un ítem según el manual de WSMTXCA. Para la lista
- * vigente usá `getCondicionesIVA()`.
+ * Condiciones de IVA de un ítem según `consultarCondicionesIVA` (los códigos
+ * 8 y 9, 5% y 2,5%, no figuran en el manual pero ARCA los devuelve y los
+ * acepta). Para la lista vigente usá `getCondicionesIVA()`.
  */
 export enum CodigoCondicionIVA {
   NO_GRAVADO = 1,
@@ -73,6 +74,8 @@ export enum CodigoCondicionIVA {
   IVA_10_5 = 4,
   IVA_21 = 5,
   IVA_27 = 6,
+  IVA_5 = 8,
+  IVA_2_5 = 9,
 }
 
 /** Alícuota de cada condición de IVA (para validar y calcular importes). */
@@ -83,6 +86,8 @@ export const ALICUOTAS_IVA: Readonly<Record<number, number>> = {
   [CodigoCondicionIVA.IVA_10_5]: 0.105,
   [CodigoCondicionIVA.IVA_21]: 0.21,
   [CodigoCondicionIVA.IVA_27]: 0.27,
+  [CodigoCondicionIVA.IVA_5]: 0.05,
+  [CodigoCondicionIVA.IVA_2_5]: 0.025,
 };
 
 // ---------------------------------------------------------------------------

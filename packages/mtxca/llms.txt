@@ -76,16 +76,16 @@ res.resultado; // siempre 'A' u 'O' (con observaciones): un rechazo lanza ArcaRe
 res.comprobante.cae, res.comprobante.fechaVencimientoCAE, res.observaciones;
 ```
 
-Reglas validadas localmente (manual WSMTXCA): importeItem = (precio*cantidad - bonif)*(1+alícuota) en clase A (precio sin IVA) y precio*cantidad - bonif en clase B (precio con IVA); importeGravado = Σ(importeItem - IVA) de condiciones 3-6; importeNoGravado = Σ condición 1; importeExento = Σ condición 2; importeSubtotal = gravado + no gravado + exento; importeTotal = subtotal + otros tributos + Σ subtotalesIVA = otros tributos + Σ importeItem. Margen: relativo <= 0.01% o absoluto <= 0.01 por elemento. Bonificación (99) en clase A: |Σ IVA| <= IVA de los demás ítems de la condición (516). Redondeo Round Half Even (mitad al par, nota 4 del manual: 8.565 -> 8.56, 8.575 -> 8.58): importes 2 decimales, cantidad/precio/bonificación/cotización 6 (`roundImporte`, `roundDecimal`).
+Reglas validadas localmente (manual WSMTXCA): importeItem = (precio*cantidad - bonif)*(1+alícuota) en clase A (precio sin IVA) y precio*cantidad - bonif en clase B (precio con IVA); importeGravado = Σ(importeItem - IVA) de condiciones 3, 4, 5, 6, 8, 9; importeNoGravado = Σ condición 1; importeExento = Σ condición 2; importeSubtotal = gravado + no gravado + exento; importeTotal = subtotal + otros tributos + Σ subtotalesIVA = otros tributos + Σ importeItem. Margen: relativo <= 0.01% o absoluto <= 0.01 por elemento. Bonificación (99) en clase A: |Σ IVA| <= IVA de los demás ítems de la condición (516). Redondeo Round Half Even (mitad al par, nota 4 del manual: 8.565 -> 8.56, 8.575 -> 8.58): importes 2 decimales, cantidad/precio/bonificación/cotización 6 (`roundImporte`, `roundDecimal`).
 
 Otras reglas validadas (código CAE / CAEA):
 - condicionIVAReceptor obligatoria (190 / 390; ARCA hoy observa, el SDK la exige).
 - FCE 201/206: fechaVencimientoPago obligatoria cualquiera sea el concepto (148 / 764); FCE 202/203/207/208: no corresponde (149 / 765). Fuera de FCE: fechas de servicio y vencimiento solo con concepto 2/3 (122-124, solo CAE).
 - FCE: otrosTributos[].descripcion obligatoria (302); no admite compradores (433). compradores solo con concepto 1 (432); en informarComprobanteCAEA no se admiten (753). compradores (CAE): más de uno (420), receptor informado (421), 80/86/87 (422), sin repetir (423), 0 < porcentaje < 100 (424/425), distintos del emisor (426), suman 100 (427), el receptor está (428) y es uno de los de mayor porcentaje (429).
-- codigoConcepto 1-3 (121 / 713); clase A y FCE con receptor CUIT 80 (128/129 / 718/733); subtotalesIVA si hay condición 4-6 (403 / 715).
-- 23000000000 (No Categorizado): solo en 6/7/8 con condicionIVAReceptor 7 (342 / 889); con gravado + IVA > 0, tributo 13 con importe > 0 (145, solo CAE; en CAEA 749 observa).
+- codigoConcepto 1-3 (121 / 713); clase A y FCE con receptor CUIT 80 (128/129 / 718/733); subtotalesIVA si hay condición 4, 5, 6, 8 o 9 (403 / 715; 400 si el subtotal es de otra condición).
+- 23000000000 (No Categorizado): solo en 6/7/8 con condicionIVAReceptor 7 (342 / 889); con gravado + IVA > 0 y sin otrosTributos, tributo 13 (145, solo CAE; en CAEA 749 observa). Con otros tributos y sin el 13, ARCA autoriza con observación 150 y el SDK no lo rechaza.
 - Datos adicionales: 21/22/23 solo FCE (326; CAEA 923 observa) y con c1 (333/931); 22 S/N (327/925), obligatorio en notas FCE (329/927), no en 201/206 (330/928); 21 obligatorio en 201/206 (331/929), no en notas (332/930); 27 ADC/SCA (334/932), obligatorio en 201/206 (335/933), no en notas (336/934); 5 solo en 1,2,3,201,202,203 con c1 1-6 y sin c2-c6 (337-340 / 935-938).
-- Asociados FCE: factura asocia 88/91/990/995 (208/808); nota con un solo asociado FCE: 201/206, o en anulación 201-203/206-208 (212/812), con cuit (209/809; los remitos asociados no lo exigen) igual al del emisor (210/810, si se pasa ctx.cuitEmisor; ArcaMtxca lo pasa solo); anulación: NC revierte 201/202/206/207, ND 203/208 (214/814). Período: no en notas FCE (159/777) ni en 1, 51, 201, 206 (162/780).
+- Asociados FCE: factura asocia 88/91/990/995 (208/808); nota con un solo asociado FCE: 201/206, o en anulación 201-203/206-208 (212/812), con cuit (209/809; los remitos asociados no lo exigen) igual al del emisor (210/810, si se pasa ctx.cuitEmisor; ArcaMtxca lo pasa solo); anulación: NC revierte 201/202/206/207, ND 203/208 (214/814). Período: no en notas FCE (159/777) ni en las facturas 1, 6, 51, 201, 206 (162/780; ARCA rechaza también la 6, aunque el manual no la nombre).
 - En CAEA, importeIVA 0 para condiciones 1-3 solo observa (1122), no se valida; los mensajes de ítems citan los códigos de CAEA (1100-1121).
 - ND/NC 2,3,7,8,52,53: comprobantesAsociados o periodoComprobantesAsociados, no ambos (160/161 / 778/779).
 - cancelaEnMismaMonedaExtranjera 'S' solo en 1, 6, 51, 201, 206 (118, solo CAE).
@@ -131,7 +131,7 @@ Bajo nivel: `mtxca.client` / `new MtxcaClient({ endpoint, transport?, onEvento? 
 
 ## Enums
 
-CbteTipo (1,2,3,6,7,8,51,52,53,201,202,203,206,207,208), Concepto (1,2,3), CodigoCondicionIVA (1 no gravado, 2 exento, 3 0%, 4 10.5%, 5 21%, 6 27%), UnidadMedidaEspecial (95 anulación/devolución, 97 seña, 99 bonificación), Moneda (PES, DOL, 060).
+CbteTipo (1,2,3,6,7,8,51,52,53,201,202,203,206,207,208), Concepto (1,2,3), CodigoCondicionIVA (1 no gravado, 2 exento, 3 0%, 4 10.5%, 5 21%, 6 27%, 8 5%, 9 2.5%; 8 y 9 no están en el manual pero ARCA los devuelve y autoriza), UnidadMedidaEspecial (95 anulación/devolución, 97 seña, 99 bonificación), Moneda (PES, DOL, 060).
 
 ## Ejemplos
 

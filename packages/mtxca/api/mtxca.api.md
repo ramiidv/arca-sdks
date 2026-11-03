@@ -176,6 +176,10 @@ export enum CodigoCondicionIVA {
     // (undocumented)
     IVA_27 = 6,
     // (undocumented)
+    IVA_2_5 = 9,
+    // (undocumented)
+    IVA_5 = 8,
+    // (undocumented)
     NO_GRAVADO = 1
 }
 

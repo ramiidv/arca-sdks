@@ -203,8 +203,8 @@ Los campos del request se llaman igual que en el XSD (`ComprobanteType`, `ItemTy
 - `importeItem` = (`precioUnitario` × `cantidad` − `importeBonificacion`) × (1 + alícuota) en clase A; = `precioUnitario` × `cantidad` − `importeBonificacion` en clase B.
 - Unidad 99 (bonificación) y 97 (seña): sin `cantidad`, `precioUnitario` ni `importeBonificacion`; la bonificación tiene `importeItem` negativo y requiere otro ítem con la misma condición de IVA. En clase A, `importeIVA` = `importeItem` − `importeItem` / (1 + alícuota).
 - Fuera de 97/99, `unidadesMtx` y `codigoMtx` son obligatorios.
-- `importeGravado` = Σ (`importeItem` − IVA) de los ítems con condición 3–6; `importeNoGravado` = Σ ítems condición 1; `importeExento` = Σ ítems condición 2; `importeSubtotal` = gravado + no gravado + exento.
-- `subtotalesIVA`: uno por cada condición 4, 5 o 6 presente, con la suma del IVA de esos ítems.
+- `importeGravado` = Σ (`importeItem` − IVA) de los ítems con condición 3, 4, 5, 6, 8 o 9 (gravados); `importeNoGravado` = Σ ítems condición 1; `importeExento` = Σ ítems condición 2; `importeSubtotal` = gravado + no gravado + exento.
+- `subtotalesIVA`: uno por cada condición 4, 5, 6, 8 o 9 presente, con la suma del IVA de esos ítems.
 - `importeTotal` = `importeSubtotal` + `importeOtrosTributos` + Σ subtotales de IVA = `importeOtrosTributos` + Σ `importeItem`.
 - En una bonificación (99) de clase A, el IVA (en valor absoluto) no puede superar el IVA de los demás ítems de la misma condición (516).
 - Margen de error del manual: error relativo ≤ 0,01% o absoluto ≤ 0,01 × cantidad de elementos.
@@ -227,12 +227,12 @@ Los campos del request se llaman igual que en el XSD (`ComprobanteType`, `ItemTy
 | `compradores`: más de uno, con receptor informado, CUIT/CUIL/CDI, sin repetir, porcentaje entre 0 y 100 (exclusivo), distintos del emisor, suman 100, el receptor está y es uno de los de mayor porcentaje | 420-429                 | —                                |
 | `codigoConcepto` 1, 2 o 3                                                                                                                                                                                  | 121                     | 713                              |
 | Clase A y FCE: receptor con CUIT (80)                                                                                                                                                                      | 128, 129                | 718, 733                         |
-| `subtotalesIVA` si hay ítems con condición 4, 5 o 6                                                                                                                                                        | 403                     | 715                              |
-| Sujeto No Categorizado (23000000000): solo en 6, 7, 8 con `condicionIVAReceptor` 7; con gravado, tributo 13                                                                                                | 342, 145                | 889 (749 solo observa)           |
+| `subtotalesIVA` si hay ítems con condición 4, 5, 6, 8 o 9                                                                                                                                                  | 403                     | 715                              |
+| Sujeto No Categorizado (23000000000): solo en 6, 7, 8 con `condicionIVAReceptor` 7; con gravado y sin `otrosTributos`, tributo 13 (con otros tributos y sin el 13, ARCA autoriza con la observación 150)   | 342, 145                | 889 (749 solo observa)           |
 | Datos adicionales FCE: 21 (CBU) y 27 (`ADC`/`SCA`) en 201 y 206; 22 (`S`/`N`) en las notas; 21-23 solo en FCE y con `c1`                                                                                   | 326-336                 | 925-934 (923 solo observa)       |
 | Dato adicional 5: solo en 1, 2, 3, 201, 202, 203, con `c1` de 1 a 6 y sin `c2`-`c6`                                                                                                                        | 337-340                 | 935-938                          |
 | FCE: la factura asocia 88, 91, 990 o 995; la nota lleva un solo asociado FCE, con el `cuit` del emisor; en una anulación, la NC revierte 201/202/206/207 y la ND 203/208                                   | 208, 209, 210, 212, 214 | 808, 809, 810, 812, 814          |
-| Período de asociados: no en notas FCE ni en las facturas 1, 51, 201 y 206                                                                                                                                  | 159, 162                | 777, 780                         |
+| Período de asociados: no en notas FCE ni en las facturas 1, 6, 51, 201 y 206 (ARCA rechaza también la Factura B, aunque el manual no la nombre)                                                            | 159, 162                | 777, 780                         |
 | `fechaHoraGen` obligatoria en todo comprobante CAEA, también en `informarAjusteIVACAEA` (desde el 01/08/2026)                                                                                              | —                       | 754                              |
 
 En CAEA, la regla de `importeIVA` 0 en las condiciones 1 a 3 solo observa (1122): `informarComprobanteCAEA` no la
@@ -262,7 +262,7 @@ subtotalesIVA: [{ codigo: 5, importe: 18.9 }],
 
 - `CbteTipo`: 1, 2, 3, 6, 7, 8, 51, 52, 53 (A con leyenda "OPERACIÓN SUJETA A RETENCIÓN") y FCE 201–203, 206–208.
 - `Concepto`: 1 productos, 2 servicios, 3 ambos.
-- `CodigoCondicionIVA`: 1 no gravado, 2 exento, 3 0%, 4 10,5%, 5 21%, 6 27% (y `ALICUOTAS_IVA`).
+- `CodigoCondicionIVA`: 1 no gravado, 2 exento, 3 0%, 4 10,5%, 5 21%, 6 27%, 8 5%, 9 2,5% (y `ALICUOTAS_IVA`). El 8 y el 9 no figuran en el manual, pero `consultarCondicionesIVA` los devuelve y ARCA los autoriza.
 - `UnidadMedidaEspecial`: 95 (anulación/devolución), 97 (seña), 99 (bonificación).
 - `Moneda`: `PES`, `DOL`, `060` (euro). Lista completa: `getMonedas()`.
 
