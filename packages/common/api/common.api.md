@@ -52,6 +52,7 @@ export interface ArcaBaseConfig {
     keyPassphrase?: string;
     legacyTls?: LegacyTlsMode;
     loginErrorCooldownMs?: number;
+    maxResponseBytes?: number;
     onEvent?: (event: ArcaEvent) => void;
     permanentErrorCooldownMs?: number;
     production?: boolean;
@@ -102,6 +103,12 @@ export type ArcaEvent = {
     method: string;
     endpoint: string;
     durationMs: number;
+}
+/** El request va por el transporte TLS legacy (`SECLEVEL=1`, ver `LegacyTlsMode`). */
+| {
+    type: 'request:legacy-tls';
+    method: string;
+    endpoint: string;
 } | {
     type: 'request:retry';
     method: string;
@@ -629,7 +636,7 @@ export type ServiceStatus = {
 };
 
 // @public
-export type ServiceTransport = Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs' | 'onEvent' | 'fetch' | 'legacyTls'>;
+export type ServiceTransport = Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs' | 'onEvent' | 'fetch' | 'legacyTls' | 'maxResponseBytes'>;
 
 // @public
 export function soapCall(endpoint: string, bodyContent: string, opts?: SoapCallOptions): Promise<Record<string, unknown>>;
@@ -639,6 +646,7 @@ export interface SoapCallOptions {
     fetch?: typeof fetch;
     kind?: SoapOperationKind;
     legacyTls?: LegacyTlsMode;
+    maxResponseBytes?: number;
     methodName?: string;
     onEvent?: (event: ArcaEvent) => void;
     parseNumbers?: boolean;
@@ -687,7 +695,7 @@ export interface TicketStorageGetOptions {
 }
 
 // @public
-export function transportOptions(config: Pick<ArcaBaseConfig, 'timeout' | 'retries' | 'retryDelayMs' | 'onEvent' | 'fetch' | 'legacyTls'>, onEvent?: (event: ArcaEvent) => void): ServiceTransport;
+export function transportOptions(config: Pick<ArcaBaseConfig, 'timeout' | 'retries' | 'retryDelayMs' | 'onEvent' | 'fetch' | 'legacyTls' | 'maxResponseBytes'>, onEvent?: (event: ArcaEvent) => void): ServiceTransport;
 
 // @public
 export function validateCBU(cbu: string): string;
@@ -746,6 +754,7 @@ export interface WsaaClientConfig {
     keyPassphrase?: string;
     legacyTls?: LegacyTlsMode;
     loginErrorCooldownMs?: number;
+    maxResponseBytes?: number;
     onEvent?: (event: ArcaEvent) => void;
     permanentErrorCooldownMs?: number;
     production?: boolean;

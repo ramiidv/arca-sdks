@@ -207,7 +207,10 @@ export function soapFaultResponse(faultCode: string, faultString: string): Respo
   return xmlResponse(soapFault(faultCode, faultString), 500);
 }
 
-/** Respuesta de `loginCms` de WSAA con un TA para `token` que vence en `expiration`. */
+/**
+ * Respuesta de `loginCms` de WSAA con un TA para `token` (sign `sign-{token}`)
+ * que vence en `expiration`. `token` se escapa.
+ */
 export function loginResponse(token: string, expiration: Date, generation = new Date()): string {
   const ta =
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -218,7 +221,7 @@ export function loginResponse(token: string, expiration: Date, generation = new 
     `<generationTime>${generation.toISOString()}</generationTime>` +
     `<expirationTime>${expiration.toISOString()}</expirationTime>` +
     '</header><credentials>' +
-    `<token>${token}</token><sign>sign-${token}</sign>` +
+    `<token>${escapeText(token)}</token><sign>sign-${escapeText(token)}</sign>` +
     '</credentials></loginTicketResponse>';
   return soapEnvelope(
     `<loginCmsResponse xmlns="${WSAA_NAMESPACE}"><loginCmsReturn>${escapeText(ta)}</loginCmsReturn></loginCmsResponse>`,

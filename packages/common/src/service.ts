@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { WSAA_ENDPOINTS } from './constants.js';
+import { validateEndpoint } from './endpoint.js';
 import { ArcaResponseError, ArcaValidationError } from './errors.js';
 import { anySignal } from './signals.js';
 import { arcaSoapCall, safeEmit } from './soap-client.js';
@@ -23,7 +24,7 @@ import { WsaaClient } from './wsaa.js';
 /** Opciones de transporte que un SDK pasa a cada llamada SOAP. */
 export type ServiceTransport = Pick<
   SoapCallOptions,
-  'timeout' | 'retries' | 'retryDelayMs' | 'onEvent' | 'fetch' | 'legacyTls'
+  'timeout' | 'retries' | 'retryDelayMs' | 'onEvent' | 'fetch' | 'legacyTls' | 'maxResponseBytes'
 >;
 
 /** URLs de un servicio por entorno. */
@@ -49,7 +50,11 @@ export interface ArcaSdkConfig extends ArcaBaseConfig {
   wsaa?: WsaaClient;
   /** Signal global: cancela todas las llamadas de esta instancia (ej: al apagar la app). */
   signal?: AbortSignal;
-  /** URLs propias (proxy, mock). Las que no se indiquen usan las oficiales según `production`. */
+  /**
+   * URLs propias (proxy, mock). Las que no se indiquen usan las oficiales según
+   * `production`. Tienen que ser `https://` (`http://` solo en loopback: `localhost`,
+   * `127.0.0.0/8`, `::1`) y sin usuario ni contraseña.
+   */
   endpoints?: { wsaa?: string };
 }
 
@@ -77,12 +82,16 @@ export function createWsaaClient(
     alreadyAuthenticatedCooldownMs: config.alreadyAuthenticatedCooldownMs,
     fetch: config.fetch,
     legacyTls: config.legacyTls,
+    maxResponseBytes: config.maxResponseBytes,
   });
 }
 
 /** Opciones de transporte de una config de SDK. */
 export function transportOptions(
-  config: Pick<ArcaBaseConfig, 'timeout' | 'retries' | 'retryDelayMs' | 'onEvent' | 'fetch' | 'legacyTls'>,
+  config: Pick<
+    ArcaBaseConfig,
+    'timeout' | 'retries' | 'retryDelayMs' | 'onEvent' | 'fetch' | 'legacyTls' | 'maxResponseBytes'
+  >,
   onEvent?: (event: ArcaEvent) => void,
 ): ServiceTransport {
   return {
@@ -92,6 +101,7 @@ export function transportOptions(
     onEvent: onEvent ?? config.onEvent,
     fetch: config.fetch,
     legacyTls: config.legacyTls,
+    maxResponseBytes: config.maxResponseBytes,
   };
 }
 
@@ -127,10 +137,14 @@ export abstract class ArcaSdkBase<TService extends string = string> {
 
   /**
    * @throws ArcaValidationError si la CUIT es inválida, si el certificado o la
-   *   clave son inválidos, o si `config.wsaa` es de otro entorno que `production`.
+   *   clave son inválidos, si `config.wsaa` es de otro entorno que `production`
+   *   o si algún `endpoints.*` no es una URL https.
    */
   constructor(config: ArcaSdkConfig, services: Readonly<Record<TService, string>>) {
     this.cuit = validateCuit(config.cuit);
+    for (const [name, url] of Object.entries(config.endpoints ?? {})) {
+      if (url !== undefined) validateEndpoint(url, `endpoints.${name}`);
+    }
     this.production = config.production ?? false;
     if (config.wsaa) checkSharedWsaa(config.wsaa, this.production);
     this.#signal = config.signal;
@@ -212,9 +226,12 @@ function checkSharedWsaa(wsaa: WsaaClient, production: boolean): void {
  * namespace lo fija cada cliente.
  */
 export interface ServiceClientConfig {
-  /** URL del servicio (ver `ENDPOINTS` de cada SDK). */
+  /**
+   * URL del servicio (ver `ENDPOINTS` de cada SDK). Tiene que ser `https://`
+   * (`http://` solo en loopback) y sin usuario ni contraseña.
+   */
   endpoint: string;
-  /** Opciones de transporte (timeout, reintentos, eventos, fetch, TLS legacy). */
+  /** Opciones de transporte (timeout, reintentos, eventos, fetch, TLS legacy, tamaño máximo de respuesta). */
   transport?: ServiceTransport;
 }
 
@@ -244,7 +261,9 @@ export abstract class SoapServiceClient {
   public readonly namespace: string;
   protected readonly transport: ServiceTransport;
 
+  /** @throws ArcaValidationError si `endpoint` no es una URL https. */
   constructor(config: SoapServiceClientConfig) {
+    validateEndpoint(config.endpoint, 'endpoint');
     this.endpoint = config.endpoint;
     this.namespace = config.namespace;
     this.transport = config.transport ?? {};

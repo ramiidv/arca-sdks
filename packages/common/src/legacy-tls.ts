@@ -6,6 +6,9 @@ import { request as httpsRequest } from 'node:https';
  * Diffie-Hellman de 1024 bits (ej: `servicios1.afip.gov.ar`) y que `fetch`
  * (OpenSSL con SECLEVEL=2) rechaza con `ERR_SSL_DH_KEY_TOO_SMALL`.
  *
+ * No sigue redirecciones (un 3xx vuelve como respuesta, igual que `fetch` con
+ * `redirect: 'manual'`).
+ *
  * Uso interno de `soapCall`. Está en un módulo propio para poder reemplazarlo
  * en los tests (`vi.mock('../src/legacy-tls.js')`).
  */
@@ -15,6 +18,8 @@ export interface LegacyTlsRequest {
   headers: Record<string, string>;
   body: string;
   signal?: AbortSignal;
+  /** Tamaño máximo del body de la respuesta, en bytes. */
+  maxResponseBytes: number;
 }
 
 export interface LegacyTlsResponse {
@@ -41,6 +46,14 @@ export class LegacyTlsResponseError extends Error {
   }
 }
 
+/** El body de la respuesta supera `maxResponseBytes` (la lectura se cortó). */
+export class ResponseTooLargeError extends Error {
+  constructor(public readonly maxBytes: number) {
+    super(`La respuesta supera el tamaño máximo de ${maxBytes} bytes (maxResponseBytes)`);
+    this.name = 'ResponseTooLargeError';
+  }
+}
+
 export function legacyTlsRequest(url: string, init: LegacyTlsRequest): Promise<LegacyTlsResponse> {
   return new Promise<LegacyTlsResponse>((resolve, reject) => {
     const body = Buffer.from(init.body, 'utf8');
@@ -58,8 +71,25 @@ export function legacyTlsRequest(url: string, init: LegacyTlsRequest): Promise<L
           if (value !== undefined) headers[name.toLowerCase()] = Array.isArray(value) ? value.join(', ') : value;
         }
         const status = res.statusCode ?? 0;
+        const tooLarge = () => {
+          res.destroy();
+          reject(
+            new LegacyTlsResponseError('Respuesta demasiado grande', status, headers, {
+              cause: new ResponseTooLargeError(init.maxResponseBytes),
+            }),
+          );
+        };
+        if (Number(headers['content-length']) > init.maxResponseBytes) {
+          tooLarge();
+          return;
+        }
         const chunks: Buffer[] = [];
-        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        let size = 0;
+        res.on('data', (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > init.maxResponseBytes) tooLarge();
+          else chunks.push(chunk);
+        });
         res.on('end', () => {
           resolve({
             status,

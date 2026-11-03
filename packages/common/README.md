@@ -112,12 +112,19 @@ al certificado) y lanza `ArcaValidationError` si algo no está bien, sin llamar 
 PKCS#1 y PKCS#8, encriptadas con `keyPassphrase`. El nombre del servicio se valida en cada
 `getAccessTicket` (3 a 32 letras, dígitos, `_` o `-`, empezando con una letra).
 
-`tokenTTLMinutes` (1 a 1440, default 720) es la **vigencia del TRA** (el pedido firmado), no la del
+`tokenTTLMinutes` (1 a 1440, default 10) es la **vigencia del TRA** (el pedido firmado), no la del
 Ticket de Acceso: WSAA emite cada TA con su propio vencimiento, 12 horas desde su propia hora (sea cual
-sea la del TRA). Si la respuesta no trae `expirationTime`, se asume 12 horas. WSAA rechaza un
-`expirationTime` a más de 24 horas de su propia hora (`xml.expirationTime.invalid`), así que con 1440 el
-SDK lo deja 1438 minutos adelante: 2 minutos de margen para un reloj local adelantado. Un TA cuyo `expirationTime` ya pasó se
-rechaza con `ArcaAuthError`.
+sea la del TRA). El TRA solo se usa para un login, así que una vigencia larga no da un TA más largo:
+solo amplía el lapso en que un TRA firmado que se filtre serviría para pedir un TA. Si la respuesta
+no trae `expirationTime`, se asume 12 horas. WSAA rechaza un `expirationTime` a más de 24 horas de su
+propia hora (`xml.expirationTime.invalid`), así que con 1440 el SDK lo deja 1438 minutos adelante: 2
+minutos de margen para un reloj local adelantado. Un TA cuyo `expirationTime` ya pasó, o que vence a
+más de 24 horas (WSAA los emite por 12), se rechaza con `ArcaAuthError`; un ticket así leído del
+storage se descarta y se hace login.
+
+El `endpoint` propio tiene que ser `https://` (`http://` solo en `localhost`, `127.0.0.0/8` o `::1`,
+para servidores de prueba locales) y sin usuario ni contraseña; si no, el constructor lanza
+`ArcaValidationError`.
 
 ### Datos del certificado
 
@@ -152,10 +159,22 @@ loguearte durante ese lapso. Para evitarlo, configurá un `ticketStorage`:
   vuelve a ser rechazado.
 - Si el storage falla, el SDK sigue funcionando con el ticket en memoria y emite `auth:storage-error`.
 
-`FileTicketStorage(directorio)` guarda un archivo JSON por ticket, con escritura atómica (archivo
-temporal + `fsync` + rename), permisos 0600 en los archivos y 0700 en el directorio. Un archivo
-corrupto se descarta (y se informa como `auth:storage-error`). Sirve para varios procesos que
-comparten el directorio. `MemoryTicketStorage` no sobrevive a un reinicio (útil en tests).
+`FileTicketStorage(directorio)` guarda un archivo JSON por ticket, **en texto plano**, con escritura
+atómica (archivo temporal + `fsync` + rename), permisos 0600 en los archivos y 0700 en el directorio.
+Un archivo corrupto se descarta (y se informa como `auth:storage-error`, sin citar su contenido).
+Sirve para varios procesos que comparten el directorio. `MemoryTicketStorage` no sobrevive a un
+reinicio (útil en tests).
+
+En Linux y macOS, `FileTicketStorage` verifica el directorio antes de usarlo:
+
+- Si es un symlink o es de otro usuario, `get` y `set` lanzan (el SDK sigue con el ticket en memoria
+  y emite `auth:storage-error`). Usá la ruta real de un directorio propio.
+- Si el grupo u otros usuarios tienen permisos, se ajustan a 0700. El directorio actual, el home y
+  la raíz nunca se modifican: se rechazan si el grupo u otros pueden escribir en ellos.
+- Los archivos se abren sin seguir symlinks. Un symlink, un FIFO, un archivo de otro usuario o uno de
+  más de 1 MB se ignora (como si no existiera) y se informa como `auth:storage-error`.
+
+En Windows no se verifican dueño ni permisos.
 
 La key que recibe el storage identifica entorno, certificado y servicio
 (`"prod:3f9a0c1b2d4e5f60:wsfe"`), así que el mismo storage sirve para varios CUITs y entornos.
@@ -225,7 +244,8 @@ Durante una espera, si hay un ticket por vencer todavía utilizable, se devuelve
 
 Con `autoClockSkew: true` (default), si WSAA rechaza el TRA por el reloj, el SDK calcula el offset
 desde el header `Date` de la respuesta, reintenta el login una sola vez y emite `auth:clock-skew`.
-También se puede fijar a mano con `clockOffsetMs` (`relojARCA - relojLocal`, en ms).
+Un offset calculado de más de 24 horas (en cualquier sentido) no se aplica: indica un header `Date`
+absurdo, no un reloj corrido, y se lanza el error original. También se puede fijar a mano con `clockOffsetMs` (`relojARCA - relojLocal`, en ms).
 `wsaa.clockOffsetMs` y `wsaa.now()` exponen el offset vigente. `xml.expirationTime.invalid`
 (vigencia pedida mayor a 24 horas) es un error de configuración de `tokenTTLMinutes`, no de reloj.
 
@@ -272,7 +292,7 @@ class ArcaMiServicio extends ArcaSdkBase<'mi'> {
 | `SoapServiceClient`                       | Guarda endpoint, namespace y transporte; `soapCall(method, params, opts)` llama a `arcaSoapCall`                                                                                                                                                                                                                                                             |
 | `ServiceClientConfig`                     | `{ endpoint, transport? }`: la configuración de los clientes de bajo nivel de todos los SDKs (el namespace lo fija cada cliente)                                                                                                                                                                                                                             |
 | `SoapServiceClientConfig`                 | `ServiceClientConfig` más `namespace`                                                                                                                                                                                                                                                                                                                        |
-| `ServiceTransport` / `transportOptions()` | Opciones de transporte (timeout, reintentos, eventos, `fetch`, `legacyTls`) que se pasan a cada llamada                                                                                                                                                                                                                                                      |
+| `ServiceTransport` / `transportOptions()` | Opciones de transporte (timeout, reintentos, eventos, `fetch`, `legacyTls`, `maxResponseBytes`) a cada llamada                                                                                                                                                                                                                                                |
 | `createWsaaClient(config, onEvent?)`      | Arma un `WsaaClient` con las opciones de WSAA de una config de SDK                                                                                                                                                                                                                                                                                           |
 | `parseServerStatus(result, method?)`      | Respuesta de un `dummy` → `ServerStatus` (valores tal cual). Lanza `ArcaResponseError` si falta un campo                                                                                                                                                                                                                                                     |
 | `serverStatusOk(status)`                  | `true` si todos los servidores informados están en `OK` (sin distinguir mayúsculas)                                                                                                                                                                                                                                                                          |
@@ -315,7 +335,9 @@ formatServiceErrors(extractServiceErrors(data)); // '[600] ..., [601] ...' (el f
 ```
 
 - `buildXml` y `arcaSoapCall` **omiten** las propiedades `null`/`undefined` (no envían `<x/>`) y envían
-  un `Date` como `xsd:dateTime` en hora de Argentina (`2026-11-01T08:30:00-03:00`).
+  un `Date` como `xsd:dateTime` en hora de Argentina (`2026-11-01T08:30:00-03:00`). Las keys tienen
+  que ser nombres XML (`nombre` o `prefijo:nombre`), atributos `@_nombre` o `#text`; si no, lanzan
+  `ArcaValidationError`. Los valores se escapan.
 - El parser decodifica referencias numéricas (`&#243;` → `ó`) y entidades HTML.
 - Por defecto el parser convierte a `number` el texto numérico de menos de 8 dígitos (CUIT, CAE y
   fechas `YYYYMMDD` quedan como string). `parseNumbers: false` deja todo como string.
@@ -323,6 +345,16 @@ formatServiceErrors(extractServiceErrors(data)); // '[600] ..., [601] ...' (el f
   `faultDetail` (el `<detail>`/`<Detail>`, SOAP 1.1 y 1.2).
 - Un HTTP no-2xx sin Fault incluye un extracto del body (hasta 500 caracteres) en el mensaje y en
   `responseBody`.
+- El endpoint tiene que ser `https://` (`http://` solo en loopback) y sin usuario ni contraseña: si
+  no, `soapCall` lanza `ArcaValidationError` sin enviar nada.
+- Las **redirecciones no se siguen**: un 3xx es un `ArcaSoapError` (`uncertain: false`, sin reintento)
+  cuyo mensaje indica el host del `Location`. Un 307/308 reenviaría el body (token y sign, o el TRA
+  firmado) a otro host.
+- Una respuesta con `<!DOCTYPE` no se parsea (SOAP no admite DTDs): con HTTP 2xx es el mismo
+  `ArcaSoapError` que una respuesta sin SOAP Envelope. `parseXml` lanza `ArcaResponseError`.
+- `maxResponseBytes` (default 50 MB, alcanza para los PDF en base64 de los servicios agro) limita el
+  body de cada respuesta: se lee por streaming y, si lo supera, se corta y se lanza `ArcaSoapError`
+  (sin reintento; en emisiones, `uncertain: true`).
 
 ### Reintentos e incertidumbre
 
@@ -342,7 +374,9 @@ Algunos hosts de producción de ARCA (`servicios1.afip.gov.ar`: WSFEv1, WSFEX y 
 Diffie-Hellman de 1024 bits, que Node rechaza con `ERR_SSL_DH_KEY_TOO_SMALL`. Con
 `legacyTls: 'auto'` (default) el mismo request se reintenta una vez por `node:https` con
 `ciphers: 'DEFAULT@SECLEVEL=1'` (seguro incluso en emisiones: el request no se envió) y el host se
-recuerda. `'never'` lo desactiva y `'always'` lo usa siempre. Con un `fetch` inyectado no hay fallback.
+recuerda. El fallback solo aplica a `servicios1.afip.gov.ar`: con cualquier otro host el error se
+lanza tal cual. `'never'` lo desactiva y `'always'` lo usa siempre, con cualquier host. Cada request
+que va por el transporte legacy emite `request:legacy-tls`. Con un `fetch` inyectado no hay fallback.
 
 ## Validadores
 
@@ -477,8 +511,8 @@ contrato contra el WSDL oficial, además de `mockFetch`, `soapResponse`, `soapFa
 | `key`                            | `string`                        | —                   | Clave privada RSA en PEM (PKCS#1 o PKCS#8), tiene que corresponder al certificado     |
 | `keyPassphrase`                  | `string`                        | —                   | Contraseña de la clave, si está encriptada                                            |
 | `production`                     | `boolean`                       | `false`             | Usar WSAA de producción                                                               |
-| `endpoint`                       | `string`                        | —                   | URL propia de WSAA (proxy, mock)                                                      |
-| `tokenTTLMinutes`                | `number`                        | `720`               | Vigencia del TRA (1 a 1440). No es la vida del TA                                     |
+| `endpoint`                       | `string`                        | —                   | URL propia de WSAA (proxy, mock): `https://` (`http://` solo en loopback)             |
+| `tokenTTLMinutes`                | `number`                        | `10`                | Vigencia del TRA (1 a 1440). No es la vida del TA                                     |
 | `timeout`                        | `number`                        | `30000`             | Timeout HTTP en ms                                                                    |
 | `retries`                        | `number`                        | `1`                 | Reintentos del login, solo ante errores de red sin enviar                             |
 | `retryDelayMs`                   | `number`                        | `1000`              | Delay base del backoff exponencial                                                    |
@@ -491,11 +525,12 @@ contrato contra el WSDL oficial, además de `mockFetch`, `soapResponse`, `soapFa
 | `alreadyAuthenticatedCooldownMs` | `number`                        | `120000` / `600000` | Espera tras `coe.alreadyAuthenticated` (producción / homologación; `0` = sin espera)  |
 | `fetch`                          | `typeof fetch`                  | `globalThis.fetch`  | `fetch` propio (proxy, mTLS, tests)                                                   |
 | `legacyTls`                      | `'auto' \| 'never' \| 'always'` | `'auto'`            | Transporte TLS legacy para hosts con DH de 1024 bits                                  |
+| `maxResponseBytes`               | `number`                        | `52428800`          | Tamaño máximo del body de una respuesta (50 MB)                                       |
 
 `ArcaBaseConfig`, la config común de los SDKs, tiene los mismos campos que esta tabla (incluidos
 `loginErrorCooldownMs`, `permanentErrorCooldownMs` y `alreadyAuthenticatedCooldownMs`) salvo
 `endpoint` (en los SDKs es `endpoints.wsaa`), más `cuit` (CUIT representada, se valida el dígito verificador). En un SDK,
-`timeout`, `retries`, `retryDelayMs`, `fetch` y `legacyTls` aplican también a las llamadas al web
+`timeout`, `retries`, `retryDelayMs`, `fetch`, `legacyTls` y `maxResponseBytes` aplican también a las llamadas al web
 service: `retries` reintenta las consultas ante errores transitorios (las emisiones nunca).
 
 Métodos y propiedades: `getAccessTicket(service, { signal }?)`, `clearTicket(service)`,
@@ -514,6 +549,7 @@ Métodos y propiedades: `getAccessTicket(service, { signal }?)`, `clearTicket(se
 | `request:end`        | Llamada SOAP completada                               | `method`, `endpoint`, `durationMs`         |
 | `request:retry`      | Reintentando tras un error                            | `method`, `endpoint`, `attempt`, `error`   |
 | `request:error`      | Llamada SOAP fallida                                  | `method`, `endpoint`, `error`              |
+| `request:legacy-tls` | El request va por el transporte TLS legacy            | `method`, `endpoint`                       |
 
 ## Constantes
 
@@ -526,6 +562,26 @@ Métodos y propiedades: `getAccessTicket(service, { signal }?)`, `clearTicket(se
 | `DocTipo`        | Tipos de documento de `FEParamGetTiposDoc` (CUIT=80, CUIL=86, DNI=96, cédulas provinciales 0-24, etc.) |
 | `Provincia`      | Códigos de provincia de ARCA (0-24, sin 15: Chaco=16, Tierra del Fuego=24)                             |
 | `CondicionIva`   | Condición frente al IVA (`CondicionIVAReceptorId` de WSFEv1)                                           |
+
+## Seguridad
+
+- **Certificado y clave**: fuera del repositorio (agregá la carpeta a `.gitignore`) o desde variables
+  de entorno o un gestor de secretos. La clave firma los pedidos de acceso con tu CUIT.
+- **Endpoints propios** (`endpoint`, `endpoints.*`): siempre `https://`. `http://` se acepta solo en
+  `localhost`, `127.0.0.0/8` y `::1`, para servidores de prueba locales. Sin usuario ni contraseña en
+  la URL.
+- **Logs**: antes de loguear un error, redactá `ArcaValidationError.details[].value`,
+  `ArcaSoapError.faultDetail` y `ArcaSoapError.responseBody`: pueden traer CUITs y datos personales.
+- **Tickets**: el token y el sign son secretos. `FileTicketStorage` los guarda en texto plano, en
+  archivos 0600 dentro de un directorio 0700 propio; un storage propio (DB, Redis) tiene que
+  protegerlos igual. `WsaaClient` y `MemoryTicketStorage` los guardan en campos privados: no
+  aparecen en `console.log` ni `util.inspect`.
+- **TLS legacy**: `SECLEVEL=1` se usa en `auto` solo para `servicios1.afip.gov.ar`; el evento
+  `request:legacy-tls` permite auditarlo. `legacyTls: 'never'` lo desactiva.
+- **Respuestas**: las redirecciones no se siguen, una respuesta con `<!DOCTYPE` se rechaza y
+  `maxResponseBytes` (default 50 MB) acota la memoria de cada respuesta.
+- **TRA**: `tokenTTLMinutes` (default 10) acota el lapso en que un TRA firmado sirve; no hace falta
+  subirlo, el TA dura 12 horas igual.
 
 ## Ejemplos
 
