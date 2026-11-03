@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.0
+
+### Minor Changes
+
+- 9790ecd: Revisión contra el manual de WSCDC v0.4: nuevas validaciones locales de `constatar()`. El receptor es obligatorio y con CUIT (80) en los comprobantes A, A con leyenda y MiPyME (113, 114); en los comprobantes T (195, 196, 197) solo se admiten los documentos 80, 91, 94 o 96 (118), y la fecha no puede ser anterior al 01/01/2013 (101). `ImpTotal` se redondea mitad al par, como indica el manual (§2.8).
+
+### Patch Changes
+
+- 1cccecc: Documentación: glosario, cuándo es obligatorio el receptor (A y MiPyME con CUIT; B, C, R, 30, 31, 37, 38, 41 y 49 por encima de $10.000.000; validaciones 113-117), los errores 600-602 de WSCDC llegan como `ArcaServiceError` y `permanentErrorCooldownMs` en la configuración. El ejemplo de manejo de errores ya no llama a `clearAuthCache()` ante `ArcaAuthError`: indica corregir la causa y usar `wsaa.resetLoginCooldown('wscdc')`.
+- Updated dependencies [1cccecc]
+- Updated dependencies [bd57c86]
+  - @ramiidv/arca-common@0.8.0
+
 ## 0.6.0
 
 ### Minor Changes
