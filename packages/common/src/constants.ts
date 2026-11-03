@@ -2,10 +2,19 @@
 // WSAA
 // ---------------------------------------------------------------------------
 
+/**
+ * URLs de un servicio por entorno. Cada SDK exporta `ENDPOINTS` con la forma
+ * `{ <servicio>: ServiceEndpoints }`.
+ */
+export interface ServiceEndpoints {
+  readonly testing: string;
+  readonly production: string;
+}
+
 export const WSAA_ENDPOINTS = {
   testing: 'https://wsaahomo.afip.gov.ar/ws/services/LoginCms',
   production: 'https://wsaa.afip.gov.ar/ws/services/LoginCms',
-} as const;
+} as const satisfies ServiceEndpoints;
 
 export const WSAA_NAMESPACE = 'http://wsaa.view.sua.dvadac.desein.afip.gov';
 

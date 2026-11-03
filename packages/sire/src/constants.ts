@@ -1,4 +1,4 @@
-import { WSAA_ENDPOINTS } from '@ramiidv/arca-common';
+import type { ServiceEndpoints } from '@ramiidv/arca-common';
 
 // Fuentes:
 // - WSDL/XSD oficiales: https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005?wsdl
@@ -16,14 +16,16 @@ export const SIRE_SERVICE_ID = 'sire-ws';
 /** Namespace del WSDL (`targetNamespace`, `elementFormDefault="unqualified"`). */
 export const SIRE_NAMESPACE = 'http://www.afip.gob.ar/sire/c2005/';
 
-/** Endpoints del web service SIRE certificado C2005 (`soap:address` de los WSDL). */
+/**
+ * URLs del web service SIRE certificado C2005 por entorno (`soap:address` de
+ * los WSDL). Las de WSAA están en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
+ */
 export const ENDPOINTS = {
-  wsaa: WSAA_ENDPOINTS,
   sire: {
     testing: 'https://ws-aplicativos-reca.homo.afip.gob.ar/sire/ws/v1/c2005/2005',
     production: 'https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005',
   },
-} as const;
+} as const satisfies Record<string, ServiceEndpoints>;
 
 /** Valor fijo de `version` en `emitir` y `anular` (manual, 3.2.2 y 3.3.2). */
 export const SIRE_VERSION = 100;

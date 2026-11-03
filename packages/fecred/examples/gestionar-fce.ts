@@ -3,7 +3,13 @@
  */
 
 import fs from 'node:fs';
-import { ArcaFecred, ArcaSoapError, FileTicketStorage } from '@ramiidv/arca-fecred';
+import {
+  ArcaFecred,
+  ArcaRechazoError,
+  ArcaResponseError,
+  ArcaSoapError,
+  FileTicketStorage,
+} from '@ramiidv/arca-fecred';
 
 async function main() {
   const fecred = new ArcaFecred({
@@ -51,9 +57,12 @@ async function main() {
       importeCancelado: ctaCte.saldo,
       tipoCancelacion: 'TOT',
     });
+    // Siempre 'A' u 'O': un rechazo (resultado R) se lanza como ArcaRechazoError.
     console.log(`Aceptada: resultado ${r.resultado}`, r.observaciones);
   } catch (e) {
-    if (e instanceof ArcaSoapError && e.uncertain) {
+    if (e instanceof ArcaRechazoError) {
+      console.log(`ARCA rechazó ${e.operacion}:`, e.errors, e.observaciones);
+    } else if ((e instanceof ArcaSoapError || e instanceof ArcaResponseError) && e.uncertain) {
       // La aceptación pudo haberse registrado: verificar antes de reintentar.
       const { estados } = await fecred.consultarHistorialEstadosCtaCte({ codCtaCte: ctaCte.codCtaCte });
       console.log('Estado actual:', estados.at(-1));

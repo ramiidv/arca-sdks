@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import {
   ArcaConflictoExpo,
   ArcaFacturacion,
+  ArcaRechazoError,
   ArcaResultadoInciertoExpo,
   CbteTipo,
   FileTicketStorage,
@@ -76,6 +77,10 @@ async function main() {
     if (e instanceof ArcaConflictoExpo) {
       // Otra emisión usó el mismo Id: esta no se autorizó. Reintentar con Id y número nuevos.
       result = await arca.facturarExpo(opts);
+    } else if (e instanceof ArcaRechazoError) {
+      // WSFEX rechazó el comprobante (Resultado "R"): no se autorizó. Motivos_Obs está en observaciones.
+      console.error('Rechazada:', e.observaciones.map((o) => o.msg).join('; '));
+      return;
     } else if (e instanceof ArcaResultadoInciertoExpo) {
       // Persistí e.intento antes de reintentar. Reenviar con el mismo Id, número y fecha:
       result = await arca.facturarExpo({ ...opts, ...e.intento });
@@ -85,14 +90,11 @@ async function main() {
     }
   }
 
-  if (result.aprobada) {
-    console.log('Factura de exportación aprobada!');
-    console.log(`  CAE: ${result.cae}`);
-    console.log(`  Vencimiento: ${result.caeVencimiento}`);
-    console.log(`  Comprobante #${result.cbteNro}`);
-  } else {
-    console.error('Rechazada:', result.obs);
-  }
+  // Siempre aprobada: un rechazo lanza ArcaRechazoError.
+  console.log('Factura de exportación aprobada!');
+  console.log(`  CAE: ${result.cae}`);
+  console.log(`  Vencimiento: ${result.caeVencimiento}`);
+  console.log(`  Comprobante #${result.cbteNro}`);
 }
 
 main().catch(console.error);

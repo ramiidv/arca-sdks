@@ -1,9 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ArcaResponseError, ArcaServiceError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import {
+  ArcaRechazoError,
+  ArcaResponseError,
+  ArcaServiceError,
+  ArcaSoapError,
+  ArcaValidationError,
+} from '@ramiidv/arca-common';
 import { ArcaResultadoIncierto, ArcaWSFEError } from '../src/errors.js';
 import { CbteTipo, CondicionIva, DocTipo, IvaTipo, Moneda, TributoTipo } from '../src/constants.js';
 import { requiereRecuperacion } from '../src/facturacion.js';
-import { ArcaFacturacion } from '../src/index.js';
+import { ArcaFacturacion, ENDPOINTS, WsfeClient, WsfexClient } from '../src/index.js';
 import {
   arcaDePrueba,
   caeAprobado,
@@ -259,9 +265,9 @@ describe('10016: número vs fecha', () => {
         'El campo CbteFch podra ser nulo o comprendido en el rango N-5 y N+5 siendo N la fecha de envio del pedido de autorizacion.',
       ),
     });
-    const res = await arca.facturar(B);
-    expect(res.aprobada).toBe(false);
-    expect(requiereRecuperacion(res)).toBe(false);
+    const err = await arca.facturar(B).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(requiereRecuperacion(err)).toBe(false);
   });
 
   it('10016 por número sí requiere recuperación', async () => {
@@ -269,7 +275,19 @@ describe('10016: número vs fecha', () => {
     mockArcaFetch({
       FECAESolicitar: rechazo('El numero de comprobante informado debe ser mayor en 1 al ultimo informado'),
     });
-    expect(requiereRecuperacion(await arca.facturar(B))).toBe(true);
+    expect(requiereRecuperacion(await arca.facturar(B).catch((e) => e))).toBe(true);
+  });
+
+  it('un rechazo de WSFEX o de recuperarComprobante, u otro valor, no requiere recuperación', () => {
+    const obs = [{ code: 10016, msg: 'El numero no se corresponde con el proximo a autorizar' }];
+    expect(requiereRecuperacion(new ArcaRechazoError('x', { operacion: 'FEXAuthorize', observaciones: obs }))).toBe(
+      false,
+    );
+    expect(requiereRecuperacion(new ArcaRechazoError('x', { operacion: 'FECompConsultar', observaciones: obs }))).toBe(
+      false,
+    );
+    expect(requiereRecuperacion(new Error('x'))).toBe(false);
+    expect(requiereRecuperacion(undefined)).toBe(false);
   });
 
   it('en un ArcaWSFEError también distingue por mensaje', () => {
@@ -561,6 +579,38 @@ describe('config', () => {
     arca.off('request:end', handler);
     await arca.ultimoComprobante(1, 6);
     expect(eventos).toEqual(['request:end']);
+  });
+});
+
+describe('clientes de bajo nivel', () => {
+  it('ENDPOINTS: { wsfe, wsfex } con testing y production', () => {
+    expect(Object.keys(ENDPOINTS).sort()).toEqual(['wsfe', 'wsfex']);
+    for (const e of Object.values(ENDPOINTS)) {
+      expect(e.testing).toMatch(/^https:\/\/wswhomo\.afip\.gov\.ar\//);
+      expect(e.production).toMatch(/^https:\/\/servicios1\.afip\.gov\.ar\//);
+    }
+  });
+
+  it('WsfeClient y WsfexClient usan el endpoint y el transporte de ServiceClientConfig', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('no debería usarse');
+      }),
+    );
+    const urls: string[] = [];
+    const ok = '<AppServer>OK</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer>';
+    const fetchPropio = vi.fn(async (url: string) => {
+      urls.push(url);
+      return url.includes('wsfex') ? wsfexResponse('FEXDummy', ok) : wsfeResponse('FEDummy', ok);
+    }) as unknown as typeof fetch;
+
+    const wsfe = new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing, transport: { fetch: fetchPropio } });
+    const wsfex = new WsfexClient({ endpoint: 'https://proxy.local/wsfex', transport: { fetch: fetchPropio } });
+    const status = { appserver: 'OK', dbserver: 'OK', authserver: 'OK' };
+    expect(await wsfe.dummy()).toEqual(status);
+    expect(await wsfex.dummy()).toEqual(status);
+    expect(urls).toEqual([ENDPOINTS.wsfe.testing, 'https://proxy.local/wsfex']);
   });
 });
 

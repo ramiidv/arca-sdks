@@ -9,6 +9,11 @@ import type { ServiceErrorDetail } from '@ramiidv/arca-common';
  * (`respuesta` en WSCPE, `*Return` en WSLPG), por si trae datos además de los
  * errores.
  *
+ * WSCPE y WSLPG no tienen `resultado: 'R'`: ARCA rechaza una emisión
+ * informando `errores`, así que el rechazo llega con esta clase (este SDK no
+ * lanza `ArcaRechazoError`). Lo que devuelve una emisión es siempre una
+ * operación aceptada.
+ *
  * Los errores admitidos (WSCPE 550, WSLPG 1021: no se pudo generar el PDF) no
  * lanzan: van a `advertencias` del resultado.
  *

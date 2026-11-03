@@ -5,6 +5,9 @@
  * - ArcaAgroServiceError (extiende ArcaServiceError): ARCA rechazó la operación
  *   (`errores.error[]`, y en WSLPG también `erroresFormato`). `uncertain: true`
  *   si la respuesta de una emisión trae errores y también el resultado.
+ *   WSCPE y WSLPG no tienen `resultado: 'R'`: los rechazos llegan siempre así
+ *   (este SDK no lanza `ArcaRechazoError`) y lo que devuelve una emisión es
+ *   siempre una operación aceptada.
  * - ArcaSoapError: red, timeout, HTTP o SOAP Fault. `uncertain: true` en una
  *   emisión significa que ARCA pudo haberla procesado.
  * - ArcaAgroResponseError: respuesta sin un dato imprescindible (ej: nroCTG).

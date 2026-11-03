@@ -1,4 +1,4 @@
-import { ArcaValidationError, formatDate, parseAfipDate } from '@ramiidv/arca-common';
+import { ArcaValidationError, formatDate, parseArcaDate } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
 import { ALICUOTAS_IVA, Moneda, UnidadMedidaEspecial } from './constants.js';
 import { roundDecimal, roundImporte } from './format.js';
@@ -717,7 +717,7 @@ export function reglasComprobanteCAE(
   const fecha = (v: FechaInput | undefined) => {
     if (v === undefined) return undefined;
     try {
-      return parseAfipDate(formatDate(v)).getTime();
+      return parseArcaDate(formatDate(v)).getTime();
     } catch (e) {
       if (e instanceof ArcaValidationError) return undefined; // ya lo reporta la validación del XSD
       throw e;

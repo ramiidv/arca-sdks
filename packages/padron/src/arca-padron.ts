@@ -1,6 +1,6 @@
 import { ArcaSdkBase, statusOf } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
-import { ENDPOINTS } from './constants.js';
+import { ENDPOINTS, SERVICE_IDS } from './constants.js';
 import { PadronA4Client } from './padron-a4.js';
 import { PadronA5Client } from './padron-a5.js';
 import { PadronA10Client } from './padron-a10.js';
@@ -57,20 +57,11 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
 
   /** @throws ArcaValidationError si la CUIT representada es inválida. */
   constructor(config: ArcaPadronConfig) {
-    super(config, {
-      a5: ENDPOINTS.a5.serviceId,
-      a4: ENDPOINTS.a4.serviceId,
-      a10: ENDPOINTS.a10.serviceId,
-      a13: ENDPOINTS.a13.serviceId,
-      a100: ENDPOINTS.a100.serviceId,
-    });
+    super(config, SERVICE_IDS);
 
-    const { onEvent, ...soapOptions } = this.transport;
     const clientConfig = (svc: PadronServicio) => ({
       endpoint: this.endpoint(ENDPOINTS[svc], config.endpoints?.[svc]),
-      namespace: ENDPOINTS[svc].namespace,
-      soapOptions,
-      onEvent,
+      transport: this.transport,
     });
 
     this.a5 = new PadronA5Client(clientConfig('a5'));

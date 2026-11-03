@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ArcaResponseError } from '@ramiidv/arca-common';
-import { ArcaServiceError, ArcaSoapError, ArcaValidationError, CdcClient, WSCDC_ENDPOINTS } from '../src/index.js';
+import { ArcaServiceError, ArcaSoapError, ArcaValidationError, CdcClient, ENDPOINTS } from '../src/index.js';
 import type { ConstatarInput } from '../src/index.js';
 import * as validation from '../src/validation.js';
 import { asmxResponse, childOrder, CUIT, makeCdc, mockFetch, NS, requestBody } from './helpers.js';
@@ -36,7 +36,7 @@ describe('ComprobanteConstatar', () => {
 
     expect(fetch.calls).toHaveLength(1);
     const req = fetch.calls[0];
-    expect(req.url).toBe(WSCDC_ENDPOINTS.testing);
+    expect(req.url).toBe(ENDPOINTS.wscdc.testing);
     expect(req.soapAction).toBe(`${NS}ComprobanteConstatar`);
     expect(req.headers.soapaction).toBe(`"${NS}ComprobanteConstatar"`);
     // Wrapper calificado con namespace por defecto; hijos sin prefijo (heredan el ns).
@@ -121,7 +121,7 @@ describe('ComprobanteConstatar', () => {
       resultado: 'A',
       fchProceso: '20130724113214',
       observaciones: [{ code: 200, msg: 'Existe CAEA, no fue rendido.' }],
-      events: [
+      eventos: [
         { code: 1, msg: 'evento 1' },
         { code: 2, msg: 'evento 2' },
       ],
@@ -152,7 +152,7 @@ describe('ComprobanteConstatar', () => {
     const r = await makeCdc(fetch).constatar(input);
     expect(r.resultado).toBe('R');
     expect(r.observaciones.map((o) => o.code)).toEqual([100, 110]);
-    expect(r.events).toEqual([]);
+    expect(r.eventos).toEqual([]);
   });
 
   it('Resultado R con Errors (respuesta real ante token inválido) lanza ArcaServiceError', async () => {
@@ -222,7 +222,7 @@ describe('ComprobanteDummy', () => {
     );
     const status = await makeCdc(fetch, { production: true }).status();
     expect(status).toEqual({ appserver: 'OK', dbserver: 'OK', authserver: 'OK' });
-    expect(fetch.calls[0].url).toBe(WSCDC_ENDPOINTS.production);
+    expect(fetch.calls[0].url).toBe(ENDPOINTS.wscdc.production);
     expect(fetch.calls[0].soapAction).toBe(`${NS}ComprobanteDummy`);
     expect(fetch.calls[0].headers.soapaction).toBe(`"${NS}ComprobanteDummy"`);
     expect(fetch.calls[0].body).toContain(`<ComprobanteDummy xmlns="${NS}"`);
@@ -231,7 +231,40 @@ describe('ComprobanteDummy', () => {
 
   it('lanza si falta un campo de la respuesta', async () => {
     const fetch = mockFetch(asmxResponse('ComprobanteDummy', '<AppServer>OK</AppServer>'));
-    await expect(new CdcClient({ endpoint: 'https://x/', fetch }).dummy()).rejects.toBeInstanceOf(ArcaResponseError);
+    await expect(new CdcClient({ endpoint: 'https://x/', transport: { fetch } }).dummy()).rejects.toBeInstanceOf(
+      ArcaResponseError,
+    );
+  });
+});
+
+describe('CdcClient y ENDPOINTS', () => {
+  it('ENDPOINTS tiene la forma { wscdc: { testing, production } }', () => {
+    expect(Object.keys(ENDPOINTS)).toEqual(['wscdc']);
+    expect(ENDPOINTS.wscdc).toEqual({
+      testing: 'https://wswhomo.afip.gov.ar/WSCDC/service.asmx',
+      production: 'https://servicios1.afip.gov.ar/WSCDC/service.asmx',
+    });
+  });
+
+  it('CdcClient recibe { endpoint, transport } y usa el transporte (fetch, onEvent)', async () => {
+    const fetch = mockFetch(
+      asmxResponse('ComprobanteDummy', '<AppServer>OK</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer>'),
+    );
+    const onEvent = vi.fn();
+    const client = new CdcClient({ endpoint: 'https://proxy.local/wscdc', transport: { fetch, onEvent } });
+    expect(client.endpoint).toBe('https://proxy.local/wscdc');
+    expect(client.namespace).toBe(NS);
+    await client.dummy();
+    expect(fetch.calls[0].url).toBe('https://proxy.local/wscdc');
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'request:start' }));
+  });
+
+  it('config.endpoints.wscdc tiene prioridad sobre production', async () => {
+    const fetch = mockFetch(
+      asmxResponse('ComprobanteDummy', '<AppServer>OK</AppServer><DbServer>OK</DbServer><AuthServer>OK</AuthServer>'),
+    );
+    const cdc = makeCdc(fetch, { production: true, endpoints: { wscdc: 'https://proxy.local/wscdc' } });
+    expect(cdc.client.endpoint).toBe('https://proxy.local/wscdc');
   });
 });
 
@@ -469,7 +502,7 @@ describe('Decodificación de respuestas (texto, sin perder ceros)', () => {
       resultado: 'R',
       fchProceso: '20261101120000',
       observaciones: [{ code: 100, msg: '' }],
-      events: [],
+      eventos: [],
     });
   });
 
@@ -516,7 +549,7 @@ describe('Casos borde de las respuestas', () => {
       resultado: 'R',
       fchProceso: '20261101120000',
       observaciones: [{ code: 100, msg: 'El codigo de autorizacion no existe' }],
-      events: [],
+      eventos: [],
     });
   });
 
@@ -622,7 +655,7 @@ describe('Validación del input y de Auth', () => {
     const fetch = mockFetch(
       asmxResponse('DocumentosTipoConsultar', '<ResultGet><DocTipo><Id>80</Id><Desc>CUIT</Desc></DocTipo></ResultGet>'),
     );
-    const client = new CdcClient({ endpoint: 'https://x/', fetch });
+    const client = new CdcClient({ endpoint: 'https://x/', transport: { fetch } });
     await expect(client.getDocTipos({ token: 'T', sign: 'S', cuit: '20123456789' })).rejects.toBeInstanceOf(
       ArcaValidationError,
     );

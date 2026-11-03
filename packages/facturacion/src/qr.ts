@@ -36,10 +36,10 @@ export interface DatosQR {
  * Con moneda extranjera y `canMisMonExt: "S"` sin cotización enviada, pasar
  * `datos.ctz` (la cotización con la que ARCA autorizó el comprobante).
  *
- * @throws ArcaValidationError si el comprobante no está aprobado o faltan datos.
+ * @throws ArcaValidationError si faltan datos (ej: un `FacturaResult` armado a mano sin `cae`).
  */
 export function urlQRDesdeFactura(factura: FacturaResult, datos: DatosQR, options?: QROptions): string {
-  if (!factura.aprobada || !factura.cae) fail('factura', 'el comprobante no está aprobado: no tiene CAE para el QR');
+  if (!factura.cae) fail('factura.cae', 'el comprobante no tiene CAE para el QR');
   const fecha = datos.fecha ?? factura.fecha;
   if (fecha === undefined) fail('fecha', 'falta la fecha del comprobante (datos.fecha)');
   const moneda = datos.moneda ?? factura.moneda ?? Moneda.PESOS;

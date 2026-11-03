@@ -1,6 +1,6 @@
 # @ramiidv/arca-empleados
 
-> SDK de TypeScript que genera el archivo TXT de "Ingreso masivo de datos - Relaciones laborales" del servicio Simplificación Registral de ARCA (ex AFIP): registros de ancho fijo de 130 caracteres, un único tipo de registro "01". Node >= 20.19. Solo ESM; también funciona desde CommonJS porque Node >= 20.19 permite cargar módulos ESM con `require()`.
+> SDK de TypeScript que genera el archivo TXT de "Ingreso masivo de datos - Relaciones laborales" del servicio Simplificación Registral de ARCA (ex AFIP): registros de ancho fijo de 130 caracteres, un único tipo de registro "01". Node >= 22.12. Solo ESM; también funciona desde CommonJS porque Node >= 22.12 permite cargar módulos ESM con `require()`.
 
 No hace llamadas a web services: el archivo se sube a mano en Simplificación Registral > Relaciones laborales > Carga Masiva
 (la vía que presenta el manual para registrar varias relaciones laborales en un solo archivo).

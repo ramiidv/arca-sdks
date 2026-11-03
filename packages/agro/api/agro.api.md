@@ -8,6 +8,7 @@ import { AccessTicket } from '@ramiidv/arca-common';
 import { ArcaAuthError } from '@ramiidv/arca-common';
 import { ArcaError } from '@ramiidv/arca-common';
 import { ArcaEvent } from '@ramiidv/arca-common';
+import { ArcaRechazoError } from '@ramiidv/arca-common';
 import { ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { ArcaSdkConfig } from '@ramiidv/arca-common';
@@ -19,6 +20,7 @@ import { CallOptions } from '@ramiidv/arca-common';
 import { FileTicketStorage } from '@ramiidv/arca-common';
 import { MemoryTicketStorage } from '@ramiidv/arca-common';
 import { ServerStatus } from '@ramiidv/arca-common';
+import { ServiceEndpoints } from '@ramiidv/arca-common';
 import { ServiceErrorDetail } from '@ramiidv/arca-common';
 import type { ServiceStatus } from '@ramiidv/arca-common';
 import type { ServiceTransport } from '@ramiidv/arca-common';
@@ -289,17 +291,6 @@ export interface AnulacionContraDocumentoParams {
 }
 
 // @public
-export interface AnulacionLiquidacionResultado extends ConAdvertencias {
-    // (undocumented)
-    coe?: string;
-    // (undocumented)
-    eventos: CodigoDescripcion[];
-    // (undocumented)
-    pdf?: string;
-    resultado?: 'A' | 'R' | (string & {});
-}
-
-// @public
 export interface AnularCPEEmisionDestinoDGParams extends AnularCPEParams, ConCuitDestino {
 }
 
@@ -359,6 +350,10 @@ export { ArcaAuthError }
 export { ArcaError }
 
 export { ArcaEvent }
+
+export { ArcaRechazoError }
+
+export { ArcaResponseError }
 
 export { ArcaServiceError }
 
@@ -1072,12 +1067,6 @@ export interface CoordenadasGPSCPE {
     // (undocumented)
     ubicacionGeoreferencial?: string;
 }
-
-// @public
-export const CPE_ENDPOINTS: {
-    readonly testing: 'https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap';
-    readonly production: 'https://cpea-ws.afip.gob.ar/wscpe/services/soap';
-};
 
 // @public
 export const CPE_NAMESPACE = "https://serviciosjava.afip.gob.ar/wscpe/";
@@ -1920,6 +1909,18 @@ export interface EditarFleteCPEDG {
 }
 
 // @public
+export const ENDPOINTS: {
+    readonly cpe: {
+        readonly testing: 'https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap';
+        readonly production: 'https://cpea-ws.afip.gob.ar/wscpe/services/soap';
+    };
+    readonly lpg: {
+        readonly testing: 'https://fwshomo.afip.gov.ar/wslpg/LpgService';
+        readonly production: 'https://serviciosjava.afip.gob.ar/wslpg/LpgService';
+    };
+};
+
+// @public
 export const ESTADOS_CPE: {
     readonly AC: 'Activa';
     readonly AN: 'Anulada';
@@ -2474,12 +2475,6 @@ export interface LocalidadProductorCPE {
 }
 
 // @public
-export const LPG_ENDPOINTS: {
-    readonly testing: 'https://fwshomo.afip.gov.ar/wslpg/LpgService';
-    readonly production: 'https://serviciosjava.afip.gob.ar/wslpg/LpgService';
-};
-
-// @public
 export const LPG_NAMESPACE = "http://serviciosjava.afip.gob.ar/wslpg/";
 
 // @public
@@ -2515,8 +2510,6 @@ export class LpgClient extends SoapServiceClient {
     dummy(opts?: CallOptions): Promise<ServerStatus>;
     liquidacionAjustarContrato(params: AjusteContratoParams, opts?: CallOptions): Promise<AjusteContratoResultado>;
     liquidacionAjustarUnificado(params: AjusteUnificadoParams, opts?: CallOptions): Promise<AjusteUnificadoResultado>;
-    // @deprecated
-    liquidacionAnular(coe: string | number, opts?: CallOptions): Promise<AnulacionLiquidacionResultado>;
     liquidacionAutorizar(params: LiquidacionAutorizarParams, opts?: CallOptions): Promise<LiquidacionResultado>;
     liquidacionPorContratoConsultar(params: LiquidacionPorContratoParams, opts?: CallOptions): Promise<string[]>;
     liquidacionUltimoNroOrdenConsultar(ptoEmision: number, opts?: CallOptions): Promise<number>;
@@ -2530,10 +2523,6 @@ export class LpgClient extends SoapServiceClient {
     lpgCancelarAnticipo(params: CancelarAnticipoParams, opts?: CallOptions): Promise<LiquidacionConsultaResultado>;
     lsgAjustarXCoe(params: LsgAjustarXCoeParams, opts?: CallOptions): Promise<LsgAjusteResultado>;
     lsgAjustarXContrato(params: LsgAjustarXContratoParams, opts?: CallOptions): Promise<LsgAjusteResultado>;
-    // @deprecated
-    lsgAnular(coe: string | number, params?: {
-        pdf?: boolean;
-    }, opts?: CallOptions): Promise<AnulacionLiquidacionResultado>;
     lsgAnularContraDocumento(params: AnulacionContraDocumentoParams, opts?: CallOptions): Promise<LiquidacionConsultaResultado>;
     lsgAsociarAContrato(params: AsociarAContratoParams, opts?: CallOptions): Promise<LsgConsultaResultado>;
     lsgAutorizar(params: LsgAutorizarParams, opts?: CallOptions): Promise<LsgAutorizarResultado>;
@@ -2959,6 +2948,8 @@ export interface SemillaCPE {
 }
 
 export { ServerStatus }
+
+export { ServiceEndpoints }
 
 export { ServiceErrorDetail }
 

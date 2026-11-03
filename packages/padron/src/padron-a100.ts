@@ -2,8 +2,10 @@ import { ArcaValidationError } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
 import { Metadata, conMetadata, decode, list, must, obj, str, type Schema } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
+import { NAMESPACES } from './constants.js';
 import type { ListaPadron, PadronMetadata, ParameterAttribute, ParameterRecord, WsAuth } from './types.js';
 
+/** Configuración de `PadronA100Client`: `{ endpoint, transport? }` (ver `ENDPOINTS.a100`). */
 export type PadronA100ClientConfig = PadronClientConfig;
 
 const METHOD = 'getParameterCollectionByName';
@@ -45,6 +47,10 @@ interface ParameterCollectionReturn {
  * respuesta se parsea sin conversión a número (ver `BasePadronClient`).
  */
 export class PadronA100Client extends BasePadronClient {
+  constructor(config: PadronA100ClientConfig) {
+    super(config, NAMESPACES.a100);
+  }
+
   /**
    * Tabla de parámetros por nombre de colección (ver `CollectionName`).
    * @param collectionName - Nombre de la colección (ej: "SUPA.E_PROVINCIA")

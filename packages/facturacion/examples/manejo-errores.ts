@@ -3,7 +3,8 @@
  *
  * El SDK provee clases de error específicas para catch granular:
  *   - ArcaResultadoIncierto: no se sabe si la factura se emitió (ver emision-segura.ts)
- *   - ArcaWSFEError: ARCA rechazó el comprobante (no se emitió)
+ *   - ArcaRechazoError: ARCA rechazó el comprobante (Resultado "R", no se emitió)
+ *   - ArcaWSFEError: ARCA rechazó el request con errores (Errors, no se emitió)
  *   - ArcaValidationError: datos inválidos (no se envió nada)
  *   - ArcaTicketVigenteError: WSAA ya emitió un TA que no tenemos (falta ticketStorage)
  *   - ArcaAuthError: falla de autenticación WSAA, o ARCA rechazó el ticket (600/601)
@@ -17,6 +18,7 @@ import {
   CbteTipo,
   IvaTipo,
   ArcaAuthError,
+  ArcaRechazoError,
   ArcaTicketVigenteError,
   ArcaResultadoIncierto,
   ArcaValidationError,
@@ -43,20 +45,18 @@ async function main() {
       items: [{ neto: 100, iva: IvaTipo.IVA_21 }],
     });
 
-    if (!result.aprobada) {
-      if (requiereRecuperacion(result)) {
+    // Si llega acá, está aprobada.
+    console.log(`CAE: ${result.cae}`);
+  } catch (e) {
+    if (e instanceof ArcaRechazoError) {
+      // ARCA respondió pero rechazó el comprobante. En WSFEv1 los motivos vienen en observaciones.
+      if (requiereRecuperacion(e)) {
         // 10016: el número ya se usó; si hubo un intento previo, resolver con recuperarComprobante
         console.error('El número no es el próximo: quizá un intento anterior sí se autorizó.');
         return;
       }
-      // ARCA respondió pero rechazó el comprobante
-      console.error('Rechazada:', result.observaciones);
-      return;
-    }
-
-    console.log(`CAE: ${result.cae}`);
-  } catch (e) {
-    if (e instanceof ArcaResultadoIncierto) {
+      console.error(`Rechazada (${e.operacion}):`, e.observaciones);
+    } else if (e instanceof ArcaResultadoIncierto) {
       // No se sabe si se emitió: resolverlo consultando a ARCA
       const r = await arca.recuperarComprobante(e.intento);
       console.log('Recuperación:', r.estado);

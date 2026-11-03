@@ -489,18 +489,6 @@ export interface LiquidacionConsultaResultado extends ConAdvertencias {
   eventos: CodigoDescripcion[];
 }
 
-/**
- * Resultado de `liquidacionAnular` y `lsgAnular` (`LpgAnulacionReturnType`). Si
- * ARCA responde `resultado: 'R'` (rechazada), el método lanza `ArcaAgroServiceError`.
- */
-export interface AnulacionLiquidacionResultado extends ConAdvertencias {
-  coe?: string;
-  /** `A` aprobada. Opcional en el XSD. */
-  resultado?: 'A' | 'R' | (string & {});
-  pdf?: string;
-  eventos: CodigoDescripcion[];
-}
-
 /** `LpgImportesNetoAjustadoType`: importe ajustado por alícuota. */
 export interface ImporteAjustadoLpg {
   importe?: number;

@@ -10,7 +10,15 @@ import {
   testCert,
 } from '@ramiidv/arca-common/testing';
 import { ArcaPadron } from '../src/arca-padron.js';
+import { ENDPOINTS, NAMESPACES } from '../src/constants.js';
 import type { ArcaPadronConfig } from '../src/types.js';
+
+/** Namespace del servicio cuyo endpoint de homologación es `url`. */
+export function namespaceDe(url: string): string {
+  const svc = (Object.keys(ENDPOINTS) as Array<keyof typeof ENDPOINTS>).find((k) => ENDPOINTS[k].testing === url);
+  if (!svc) throw new Error(`URL desconocida: ${url}`);
+  return NAMESPACES[svc];
+}
 
 /** Respuesta con la forma que devuelve JAX-WS en Padrón: tag con prefijo y contenido sin namespace. */
 export function soapXml(ns: string, method: string, inner: string): string {

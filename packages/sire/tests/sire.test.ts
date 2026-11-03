@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   ArcaAuthError,
+  ArcaRechazoError,
+  ArcaResponseError,
   ArcaSireServiceError,
   ArcaSoapError,
   ArcaServiceError,
@@ -8,8 +10,11 @@ import {
   Condicion,
   ENDPOINTS,
   MotivoAnulacion,
+  SIRE_NAMESPACE,
+  SireClient,
   TipoComprobante,
 } from '../src/index.js';
+import { ArcaRechazoError as RechazoDeCommon, WSAA_ENDPOINTS } from '@ramiidv/arca-common';
 import type { EmitirCertificadoParams } from '../src/index.js';
 import { hangingReply, mockFetch, xmlResponse } from '@ramiidv/arca-common/testing';
 import { CUIT_AGENTE, HEADER_INFO, NS, envelope, fault, makeSire, sentBody } from './helpers.js';
@@ -196,16 +201,18 @@ describe('emitirCertificado', () => {
     const err = await makeSire(mockFetch(body))
       .emitirCertificado(FACTURA)
       .catch((e) => e);
-    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err).toBeInstanceOf(ArcaResponseError);
+    expect(err).not.toBeInstanceOf(ArcaSoapError);
     expect(err.uncertain).toBe(true);
-    expect(err.message).toContain('certificadoNro');
+    expect(err.message).toBe('SIRE emitir: Respuesta inválida: emitirResponse.certificadoNro vacío');
   });
 
   it('respuesta sin codigoSeguridad: error incierto', async () => {
     const body = envelope('<tns:emitirResponse><certificadoNro>1</certificadoNro></tns:emitirResponse>');
     const sire = makeSire(mockFetch(body));
     const err = await sire.emitirCertificado(FACTURA).catch((e) => e);
-    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err).toBeInstanceOf(ArcaResponseError);
+    expect(err.code).toBe('ARCA_RESPONSE_ERROR');
     expect(err.uncertain).toBe(true);
     expect(err.message).toContain('codigoSeguridad');
   });
@@ -215,7 +222,13 @@ describe('emitirCertificado', () => {
     const sire = makeSire(m);
     const err = await sire.emitirCertificado(FACTURA).catch((e) => e);
     expect(err).toBeInstanceOf(ArcaSireServiceError);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err).toBeInstanceOf(RechazoDeCommon);
     expect(err).toBeInstanceOf(ArcaServiceError);
+    expect(err.code).toBe('ARCA_SIRE_SERVICE_ERROR');
+    expect(err.name).toBe('ArcaSireServiceError');
+    expect(err.operacion).toBe('emitir');
+    expect(err.observaciones).toEqual([]);
     expect(err.message).toBe('SIRE emitir: No existe persona con id 30500010912.');
     expect(err.errors).toEqual([{ code: 0, msg: 'No existe persona con id 30500010912.' }]);
     expect(err.faultCode).toBe('soapenv:Client');
@@ -366,9 +379,11 @@ describe('anularCertificado', () => {
 
   it('Fault de negocio → ArcaSireServiceError; 503 → incierto sin reintento', async () => {
     const sire1 = makeSire(mockFetch(xmlResponse(fault('soapenv:Client', 'Certificado inexistente'), 500)));
-    await expect(sire1.anularCertificado({ numeroCertificado: '1', motivoAnulacion: 4 })).rejects.toBeInstanceOf(
-      ArcaSireServiceError,
-    );
+    const rechazo = await sire1.anularCertificado({ numeroCertificado: '1', motivoAnulacion: 4 }).catch((e) => e);
+    expect(rechazo).toBeInstanceOf(ArcaSireServiceError);
+    expect(rechazo).toBeInstanceOf(ArcaRechazoError);
+    expect(rechazo.operacion).toBe('anular');
+    expect(rechazo.errors).toEqual([{ code: 0, msg: 'Certificado inexistente' }]);
 
     const m = mockFetch(xmlResponse('', 503));
     const err = await makeSire(m, { retries: 2 })
@@ -377,6 +392,16 @@ describe('anularCertificado', () => {
     expect(err).toBeInstanceOf(ArcaSoapError);
     expect(err.uncertain).toBe(true);
     expect(m.calls).toHaveLength(1);
+  });
+
+  it('respuesta sin certificadoNro → ArcaResponseError incierto con la operación anular', async () => {
+    const body = envelope('<tns:anularResponse><codigoSeguridad>ABC</codigoSeguridad></tns:anularResponse>');
+    const err = await makeSire(mockFetch(body))
+      .anularCertificado({ numeroCertificado: '1', motivoAnulacion: 4 })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaResponseError);
+    expect(err.uncertain).toBe(true);
+    expect(err.message).toBe('SIRE anular: Respuesta inválida: falta anularResponse.certificadoNro');
   });
 
   it('valida motivoAnulacion y numeroCertificado', async () => {
@@ -429,9 +454,25 @@ describe('status (dummy)', () => {
     expect(dummy['@_xmlns:ser']).toBe(NS);
   });
 
-  it('dummyResponse incompleto lanza', async () => {
+  it('dummyResponse incompleto → ArcaResponseError', async () => {
     const body = envelope('<tns:dummyResponse><appserver>OK</appserver></tns:dummyResponse>');
-    await expect(makeSire(mockFetch(body)).status()).rejects.toThrow(/dbserver/);
+    const err = await makeSire(mockFetch(body))
+      .status()
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaResponseError);
+    expect(err.uncertain).toBe(false);
+    expect(err.message).toMatch(/dbserver/);
+  });
+
+  it('un Fault en dummy no es un rechazo: queda como ArcaSoapError', async () => {
+    for (const code of ['soapenv:Client', 'soapenv:Server']) {
+      const err = await makeSire(mockFetch(xmlResponse(fault(code, 'XML invalido, no cumple el schema'), 500)))
+        .status()
+        .catch((e) => e);
+      expect(err).toBeInstanceOf(ArcaSoapError);
+      expect(err).not.toBeInstanceOf(ArcaServiceError);
+      expect(err.faultCode).toBe(code);
+    }
   });
 
   it('es una consulta: reintenta un 503', async () => {
@@ -456,6 +497,43 @@ describe('config', () => {
     const m2 = mockFetch(ok);
     await makeSire(m2, { endpoints: { sire: 'https://proxy.local/sire' } }).status();
     expect(m2.calls[0].url).toBe('https://proxy.local/sire');
+  });
+
+  it('ENDPOINTS solo tiene el servicio sire (WSAA está en WSAA_ENDPOINTS de common)', () => {
+    expect(ENDPOINTS).toEqual({
+      sire: {
+        testing: 'https://ws-aplicativos-reca.homo.afip.gob.ar/sire/ws/v1/c2005/2005',
+        production: 'https://ws-aplicativos-reca.afip.gob.ar/sire/ws/v1/c2005/2005',
+      },
+    });
+    expect(ENDPOINTS).not.toHaveProperty('wsaa');
+  });
+
+  it('endpoints.wsaa sobrescribe WSAA (por defecto, WSAA_ENDPOINTS según production)', () => {
+    expect(makeSire(mockFetch('')).wsaa.endpoint).toBe(WSAA_ENDPOINTS.testing);
+    expect(makeSire(mockFetch(''), { production: true }).wsaa.endpoint).toBe(WSAA_ENDPOINTS.production);
+    expect(makeSire(mockFetch(''), { endpoints: { wsaa: 'https://proxy.local/wsaa' } }).wsaa.endpoint).toBe(
+      'https://proxy.local/wsaa',
+    );
+  });
+
+  it('SireClient se construye con { endpoint, transport? }', async () => {
+    const ok = envelope(
+      '<tns:dummyResponse><appserver>OK</appserver><authserver>OK</authserver><dbserver>OK</dbserver></tns:dummyResponse>',
+    );
+    const m = mockFetch(xmlResponse('', 503), ok);
+    const onEvent = vi.fn();
+    const client = new SireClient({
+      endpoint: 'https://proxy.local/sire',
+      transport: { fetch: m, retries: 1, retryDelayMs: 1, onEvent },
+    });
+    expect(client.namespace).toBe(SIRE_NAMESPACE);
+    await expect(client.dummy()).resolves.toMatchObject({ appserver: 'OK' });
+    expect(m.calls).toHaveLength(2);
+    expect(m.calls[0].url).toBe('https://proxy.local/sire');
+    expect(onEvent).toHaveBeenCalled();
+    // @ts-expect-error: las opciones de transporte sueltas (timeout, fetch...) ya no existen: van en `transport`
+    new SireClient({ endpoint: 'https://proxy.local/sire', timeout: 1000 });
   });
 
   it('rechaza un CUIT de agente inválido', () => {

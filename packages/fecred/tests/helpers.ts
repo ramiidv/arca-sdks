@@ -21,7 +21,6 @@ export function soapResponse(method: string, inner: string): string {
 export function client(fetch: MockFetch, extra: { retries?: number; timeout?: number } = {}) {
   return new FecredClient({
     endpoint: URL,
-    namespace: NS,
     transport: { fetch, retryDelayMs: 1, ...extra },
   });
 }

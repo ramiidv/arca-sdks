@@ -1,5 +1,18 @@
-import { ArcaSoapError, checkServiceErrors, parseServerStatus, SoapServiceClient } from '@ramiidv/arca-common';
-import type { ArcaEvent, CallOptions, LegacyTlsMode, ServerStatus, SoapOperationKind } from '@ramiidv/arca-common';
+import {
+  ArcaRechazoError,
+  ArcaResponseError,
+  checkServiceErrors,
+  formatServiceErrors,
+  parseServerStatus,
+  SoapServiceClient,
+} from '@ramiidv/arca-common';
+import type {
+  CallOptions,
+  ServerStatus,
+  ServiceClientConfig,
+  ServiceErrorDetail,
+  SoapOperationKind,
+} from '@ramiidv/arca-common';
 import { decodeResponse, encodeRequest } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import { MTXCA_NAMESPACE } from './constants.js';
@@ -53,18 +66,12 @@ import type {
 
 type R = Record<string, unknown>;
 
-export interface MtxcaClientConfig {
-  /** URL del servicio (ver `MTXCA_ENDPOINTS`). */
-  endpoint: string;
-  /** Timeout por request en ms (default: 30000). */
-  timeout?: number;
-  /** Reintentos de consultas ante errores transitorios (default: 1). Las emisiones nunca se reintentan. */
-  retries?: number;
-  /** Delay base del backoff en ms (default: 1000). */
-  retryDelayMs?: number;
-  onEvent?: (event: ArcaEvent) => void;
-  fetch?: typeof fetch;
-  legacyTls?: LegacyTlsMode;
+/**
+ * Configuración del cliente de bajo nivel: `{ endpoint, transport? }` (como en
+ * todos los SDKs; el namespace lo fija el cliente) más `onEvento`.
+ * `endpoint`: ver `ENDPOINTS.wsmtxca`.
+ */
+export interface MtxcaClientConfig extends ServiceClientConfig {
   /**
    * Recibe el `evento` (aviso informativo de ARCA) de cualquier respuesta que
    * lo traiga. Los errores del callback se ignoran.
@@ -74,22 +81,37 @@ export interface MtxcaClientConfig {
 
 const SERVICE = 'WSMTXCA';
 
-function isResultado(value: string): value is MtxcaResultado {
+function isResultado(value: string): value is MtxcaResultado | 'R' {
   return value === 'A' || value === 'O' || value === 'R';
 }
 
 /**
- * Respuesta ilegible: `ArcaSoapError` (`uncertain` en emisiones: el
+ * Respuesta ilegible: `ArcaResponseError` (`uncertain` en emisiones: el
  * comprobante pudo haberse procesado aunque la respuesta no se pueda leer).
- * No se usa `decodeResponse(..., { kind })` solo porque lanza
- * `ArcaResponseError`, y este SDK documenta `ArcaSoapError` para este caso.
  */
-function invalid(message: string, kind: SoapOperationKind): ArcaSoapError {
-  return new ArcaSoapError(message, { uncertain: kind === 'emision' });
+function invalid(message: string, kind: SoapOperationKind): ArcaResponseError {
+  return new ArcaResponseError(message, kind === 'emision');
 }
 
 function decode<T>(node: unknown, schema: Schema, path: string, kind: SoapOperationKind): T {
-  return decodeResponse<T>(node, schema, path, { error: (m) => invalid(m, kind) });
+  return decodeResponse<T>(node, schema, path, { kind });
+}
+
+const detalle = (list: CodigoDescripcion[]): ServiceErrorDetail[] =>
+  list.map((x) => ({ code: x.codigo, msg: x.descripcion }));
+
+/**
+ * Rechazo de una emisión: `ArcaRechazoError` con los errores y observaciones de
+ * ARCA. El mensaje lista los errores (o, si no vino ninguno, las observaciones).
+ */
+function rechazo(method: string, errores: CodigoDescripcion[], observaciones: CodigoDescripcion[]): never {
+  const errors = detalle(errores);
+  const motivos = formatServiceErrors(errors.length > 0 ? errors : detalle(observaciones));
+  throw new ArcaRechazoError(`${SERVICE} ${method}: rechazado${motivos ? `: ${motivos}` : ''}`, {
+    operacion: method,
+    errors,
+    observaciones: detalle(observaciones),
+  });
 }
 
 /**
@@ -104,7 +126,8 @@ function requerido(node: R, key: string, path: string, kind: SoapOperationKind, 
 
 interface ResultadoRaw {
   resultado?: string;
-  arrayObservaciones: CodigoDescripcion[];
+  /** Ausente en `informarCAEANoUtilizado*` (sus schemas no la tienen). */
+  arrayObservaciones?: CodigoDescripcion[];
   arrayErrores: CodigoDescripcion[];
   evento?: CodigoDescripcion;
 }
@@ -145,22 +168,20 @@ interface ComprobanteRaw
  *
  * - Valida los requests contra el XSD y redondea importes (`ArcaValidationError`).
  * - Las consultas lanzan `ArcaServiceError` si ARCA devuelve `arrayErrores`.
- * - Las emisiones (`autorizar*`, `informar*`, `solicitarCAEA`) usan
- *   `kind: 'emision'`: no se reintentan y, si no hay respuesta, el
- *   `ArcaSoapError` tiene `uncertain: true`.
+ * - Las emisiones (`autorizar*`, `informar*`, `solicitarCAEA`) devuelven
+ *   siempre una operación aprobada (`A` u `O`): `resultado: 'R'` lanza
+ *   `ArcaRechazoError`; `arrayErrores` sin `resultado` (ej. `solicitarCAEA`), `ArcaServiceError`. Usan
+ *   `kind: 'emision'`: no se reintentan; si no hay respuesta, el
+ *   `ArcaSoapError` tiene `uncertain: true`, y si la respuesta es ilegible, el
+ *   `ArcaResponseError` también.
  */
 export class MtxcaClient extends SoapServiceClient {
   readonly #onEvento?: MtxcaClientConfig['onEvento'];
 
   constructor(config: MtxcaClientConfig) {
     if (!config?.endpoint) throw new TypeError('MtxcaClient: endpoint es obligatorio');
-    const { endpoint, timeout, retries, retryDelayMs, onEvent, fetch, legacyTls, onEvento } = config;
-    super({
-      endpoint,
-      namespace: MTXCA_NAMESPACE,
-      transport: { timeout, retries, retryDelayMs, onEvent, fetch, legacyTls },
-    });
-    this.#onEvento = onEvento;
+    super({ endpoint: config.endpoint, transport: config.transport, namespace: MTXCA_NAMESPACE });
+    this.#onEvento = config.onEvento;
   }
 
   private async call(
@@ -231,8 +252,8 @@ export class MtxcaClient extends SoapServiceClient {
 
   /**
    * `autorizarComprobante`. Valida contra el XSD y redondea; no valida la
-   * coherencia de importes (eso lo hace `ArcaMtxca.autorizar`). Un rechazo
-   * devuelve `resultado: 'R'` con `errores` (no lanza).
+   * coherencia de importes (eso lo hace `ArcaMtxca.autorizar`).
+   * @throws ArcaRechazoError si ARCA rechaza el comprobante (`errors`, `observaciones`).
    */
   async autorizarComprobante(
     auth: MtxcaAuth,
@@ -242,7 +263,10 @@ export class MtxcaClient extends SoapServiceClient {
     return this.autorizarCAE('autorizarComprobante', auth, comprobante, opts);
   }
 
-  /** `autorizarAjusteIVA`: comprobante de ajuste de IVA con CAE (ND/NC 2, 3, 7, 8, 52, 53). */
+  /**
+   * `autorizarAjusteIVA`: comprobante de ajuste de IVA con CAE (ND/NC 2, 3, 7, 8, 52, 53).
+   * @throws ArcaRechazoError si ARCA lo rechaza.
+   */
   async autorizarAjusteIVA(
     auth: MtxcaAuth,
     comprobante: MtxcaComprobanteCAE,
@@ -259,8 +283,7 @@ export class MtxcaClient extends SoapServiceClient {
   ): Promise<MtxcaAutorizarResult> {
     const comprobanteCAERequest = buildComprobante(comprobante, 'cae');
     const result = await this.callAuth(method, auth, { comprobanteCAERequest }, 'emision', opts);
-    const { resultado, base } = this.resultado(result, method);
-    if (resultado === 'R') return { resultado, ...base };
+    const { resultado, observaciones, evento } = this.resultado(result, method);
     requerido(result, 'comprobanteResponse', method, 'emision', true);
     const { CAE, ...cr } = decode<Omit<MtxcaComprobanteCAEResponse, 'cae'> & { CAE: string }>(
       result['comprobanteResponse'],
@@ -268,23 +291,21 @@ export class MtxcaClient extends SoapServiceClient {
       `${method}.comprobanteResponse`,
       'emision',
     );
-    return { resultado, comprobante: { ...cr, cae: CAE }, ...base };
+    return { resultado, comprobante: { ...cr, cae: CAE }, observaciones, ...(evento ? { evento } : {}) };
   }
 
   /**
-   * Decodifica `resultado`, `arrayObservaciones`, `arrayErrores` y `evento`.
-   * `resultado` es obligatorio: si falta y hay `arrayErrores`, es un rechazo
-   * (`ArcaServiceError`); si falta sin errores, la respuesta es ilegible
-   * (`ArcaSoapError` con `uncertain`).
+   * Decodifica `resultado`, `arrayObservaciones`, `arrayErrores` y `evento` de
+   * una emisión y lanza si no fue aprobada:
+   * - `resultado: 'R'` → `ArcaRechazoError`.
+   * - sin `resultado` pero con `arrayErrores` → `ArcaServiceError` (no es un rechazo `R`).
+   * - sin `resultado` ni errores, o con un valor desconocido → `ArcaResponseError` con `uncertain`.
    */
   private resultado(
     result: R,
     method: string,
     schema: Schema = RESULTADO,
-  ): {
-    resultado: MtxcaResultado;
-    base: { observaciones: CodigoDescripcion[]; errores: CodigoDescripcion[]; evento?: CodigoDescripcion };
-  } {
+  ): { resultado: MtxcaResultado; observaciones: CodigoDescripcion[]; evento?: CodigoDescripcion } {
     const r = decode<ResultadoRaw>(result, schema, method, 'emision');
     if (!r.resultado) {
       checkServiceErrors(result, `${SERVICE} ${method}`);
@@ -293,10 +314,9 @@ export class MtxcaClient extends SoapServiceClient {
     if (!isResultado(r.resultado)) {
       throw invalid(`Respuesta inválida: valor "${r.resultado}" inesperado en ${method}.resultado`, 'emision');
     }
-    return {
-      resultado: r.resultado,
-      base: { observaciones: r.arrayObservaciones, errores: r.arrayErrores, evento: r.evento },
-    };
+    const observaciones = r.arrayObservaciones ?? [];
+    if (r.resultado === 'R') rechazo(method, r.arrayErrores, observaciones);
+    return { resultado: r.resultado, observaciones, evento: r.evento };
   }
 
   // =========================================================================
@@ -305,8 +325,9 @@ export class MtxcaClient extends SoapServiceClient {
 
   /**
    * `solicitarCAEA`. `periodo` AAAAMM, `orden` 1 (primera quincena) o 2.
-   * Lanza `ArcaServiceError` si ARCA lo rechaza. Es una emisión: si el
-   * resultado es incierto, recuperalo con `consultarCAEAEntreFechas`.
+   * Es una emisión: si el resultado es incierto, recuperalo con
+   * `consultarCAEAEntreFechas`.
+   * @throws ArcaServiceError si ARCA no otorga el CAEA (`arrayErrores`; no hay `resultado`).
    */
   async solicitarCAEA(auth: MtxcaAuth, periodo: number, orden: number, opts?: CallOptions): Promise<MtxcaCAEA> {
     const solicitudCAEA = encodeRequest({ periodo, orden }, SOLICITUD_CAEA, 'solicitarCAEA', (i, errors) => {
@@ -353,7 +374,10 @@ export class MtxcaClient extends SoapServiceClient {
     return arrayCAEAResponse.map(toCAEA);
   }
 
-  /** `informarComprobanteCAEA`. Un rechazo devuelve `resultado: 'R'` con `errores`. */
+  /**
+   * `informarComprobanteCAEA`.
+   * @throws ArcaRechazoError si ARCA rechaza el comprobante.
+   */
   async informarComprobanteCAEA(
     auth: MtxcaAuth,
     comprobante: MtxcaComprobanteCAEA,
@@ -362,7 +386,10 @@ export class MtxcaClient extends SoapServiceClient {
     return this.informarCAEA('informarComprobanteCAEA', auth, comprobante, opts);
   }
 
-  /** `informarAjusteIVACAEA`. Un rechazo devuelve `resultado: 'R'` con `errores`. */
+  /**
+   * `informarAjusteIVACAEA`.
+   * @throws ArcaRechazoError si ARCA rechaza el ajuste.
+   */
   async informarAjusteIVACAEA(
     auth: MtxcaAuth,
     comprobante: MtxcaComprobanteCAEA,
@@ -379,9 +406,8 @@ export class MtxcaClient extends SoapServiceClient {
   ): Promise<MtxcaInformarCAEAResult> {
     const comprobanteCAEARequest = buildComprobante(comprobante, 'caea');
     const result = await this.callAuth(method, auth, { comprobanteCAEARequest }, 'emision', opts);
-    const { resultado, base } = this.resultado(result, method);
+    const { resultado, observaciones, evento } = this.resultado(result, method);
     const { fechaProceso } = decode<{ fechaProceso?: string }>(result, FECHA_PROCESO, method, 'emision');
-    if (resultado === 'R') return { resultado, fechaProceso, ...base };
     if (fechaProceso === undefined) throw invalid(`Respuesta inválida: falta ${method}.fechaProceso`, 'emision');
     requerido(result, 'comprobanteCAEAResponse', method, 'emision', true);
     const { CAEA, ...cr } = decode<Omit<MtxcaComprobanteCAEAResponse, 'caea'> & { CAEA: string }>(
@@ -390,10 +416,19 @@ export class MtxcaClient extends SoapServiceClient {
       `${method}.comprobanteCAEAResponse`,
       'emision',
     );
-    return { resultado, fechaProceso, comprobante: { caea: CAEA, ...cr }, ...base };
+    return {
+      resultado,
+      fechaProceso,
+      comprobante: { caea: CAEA, ...cr },
+      observaciones,
+      ...(evento ? { evento } : {}),
+    };
   }
 
-  /** `informarCAEANoUtilizado`: informa que un CAEA no se usó en ningún punto de venta. */
+  /**
+   * `informarCAEANoUtilizado`: informa que un CAEA no se usó en ningún punto de venta.
+   * @throws ArcaRechazoError si ARCA lo rechaza.
+   */
   async informarCAEANoUtilizado(
     auth: MtxcaAuth,
     caea: string,
@@ -403,7 +438,10 @@ export class MtxcaClient extends SoapServiceClient {
     return this.caeaNoUtilizado(method, auth, encodeConCaea({ caea }, CON_CAEA, method), CAEA_NO_UTILIZADO, opts);
   }
 
-  /** `informarCAEANoUtilizadoPtoVta`: informa que un CAEA no se usó en un punto de venta. */
+  /**
+   * `informarCAEANoUtilizadoPtoVta`: informa que un CAEA no se usó en un punto de venta.
+   * @throws ArcaRechazoError si ARCA lo rechaza.
+   */
   async informarCAEANoUtilizadoPtoVta(
     auth: MtxcaAuth,
     caea: string,
@@ -423,7 +461,7 @@ export class MtxcaClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<MtxcaCAEANoUtilizadoResult> {
     const result = await this.callAuth(method, auth, params, 'emision', opts);
-    const { resultado, base } = this.resultado(result, method, schema);
+    const { resultado, evento } = this.resultado(result, method, schema);
     const r = decode<{ fechaProceso?: string; CAEA?: string; numeroPuntoVenta?: number }>(
       result,
       schema,
@@ -431,20 +469,21 @@ export class MtxcaClient extends SoapServiceClient {
       'emision',
     );
     const conPtoVta = 'numeroPuntoVenta' in params;
-    // Obligatorios en el XSD; en un rechazo se toleran ausentes.
+    // Obligatorios en el XSD (el schema los tiene opcionales para tolerarlos ausentes en un rechazo).
     const faltante = [
       r.fechaProceso === undefined && 'fechaProceso',
       r.CAEA === undefined && 'CAEA',
       conPtoVta && r.numeroPuntoVenta === undefined && 'numeroPuntoVenta',
     ].find(Boolean);
-    if (resultado !== 'R' && faltante) throw invalid(`Respuesta inválida: falta ${method}.${faltante}`, 'emision');
+    if (faltante || r.fechaProceso === undefined || r.CAEA === undefined) {
+      throw invalid(`Respuesta inválida: falta ${method}.${faltante}`, 'emision');
+    }
     return {
       resultado,
       fechaProceso: r.fechaProceso,
       caea: r.CAEA,
       ...(conPtoVta ? { numeroPuntoVenta: r.numeroPuntoVenta } : {}),
-      errores: base.errores,
-      evento: base.evento,
+      ...(evento ? { evento } : {}),
     };
   }
 

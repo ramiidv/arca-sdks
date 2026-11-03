@@ -6,6 +6,7 @@ export {
   ArcaAuthError,
   ArcaSoapError,
   ArcaServiceError,
+  ArcaRechazoError,
   ArcaValidationError,
   ArcaTicketVigenteError,
   ArcaResponseError,
@@ -53,15 +54,14 @@ export {
   getNestedValue,
   soapCall,
   arcaSoapCall,
-  afipSoapCall,
   extractMethodResult,
   safeEmit,
   checkServiceErrors,
   extractServiceErrors,
+  formatServiceErrors,
 } from './soap-client.js';
 export type {
   ArcaSoapCallOptions,
-  AfipSoapCallOptions,
   ExtractMethodResultOptions,
   ParseXmlOptions,
 } from './soap-client.js';
@@ -75,17 +75,12 @@ export {
   normalizeCuit,
   formatCuit,
   isValidCuit,
-  // Aliases (backward compat)
-  validateCuil,
-  normalizeCuil,
-  formatCuil,
   // CBU
   validateCBU,
   isValidCBU,
   // Fechas
   formatDate,
   parseArcaDate,
-  parseAfipDate,
   validateFecha,
   validateFechaRango,
   diasEntre,
@@ -113,6 +108,7 @@ export {
   Provincia,
   CondicionIva,
 } from './constants.js';
+export type { ServiceEndpoints } from './constants.js';
 
 // ---------------------------------------------------------------------------
 // Base de los SDKs
@@ -133,4 +129,5 @@ export type {
   ServiceCallOptions,
   ServiceStatus,
   SoapServiceClientConfig,
+  ServiceClientConfig,
 } from './service.js';

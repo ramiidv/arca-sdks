@@ -8,6 +8,8 @@ import { AccessTicket } from '@ramiidv/arca-common';
 import { ArcaAuthError } from '@ramiidv/arca-common';
 import { ArcaError } from '@ramiidv/arca-common';
 import { ArcaEvent } from '@ramiidv/arca-common';
+import { ArcaRechazoError } from '@ramiidv/arca-common';
+import { ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { ArcaSdkConfig } from '@ramiidv/arca-common';
 import { ArcaServiceError } from '@ramiidv/arca-common';
@@ -21,7 +23,10 @@ import { MemoryTicketStorage } from '@ramiidv/arca-common';
 import { QR_URL } from '@ramiidv/arca-common';
 import { QROptions } from '@ramiidv/arca-common';
 import { ServerStatus } from '@ramiidv/arca-common';
+import { ServiceClientConfig } from '@ramiidv/arca-common';
+import { ServiceEndpoints } from '@ramiidv/arca-common';
 import { ServiceErrorDetail } from '@ramiidv/arca-common';
+import { ServiceTransport } from '@ramiidv/arca-common';
 import { SoapServiceClient } from '@ramiidv/arca-common';
 import { TicketStorage } from '@ramiidv/arca-common';
 import { ValidationErrorDetail } from '@ramiidv/arca-common';
@@ -50,7 +55,7 @@ export { ArcaError }
 export { ArcaEvent }
 
 // @public
-export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
+export class ArcaMtxca extends ArcaSdkBase<'wsmtxca'> {
     constructor(config: ArcaMtxcaConfig);
     autorizar(request: AutorizarRequest, opts?: AutorizarOptions): Promise<MtxcaAutorizarResult>;
     autorizarAjusteIVA(request: AutorizarRequest, opts?: CallOptions): Promise<MtxcaAutorizarResult>;
@@ -98,11 +103,15 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
 // @public (undocumented)
 export interface ArcaMtxcaConfig extends ArcaSdkConfig {
     endpoints?: {
-        mtxca?: string;
+        wsmtxca?: string;
         wsaa?: string;
     };
     onEvento?: (evento: CodigoDescripcion, method: string) => void;
 }
+
+export { ArcaRechazoError }
+
+export { ArcaResponseError }
 
 export { ArcaServiceError }
 
@@ -215,6 +224,14 @@ export interface CotizacionResult {
 }
 
 // @public
+export const ENDPOINTS: {
+    readonly wsmtxca: {
+        readonly testing: 'https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService';
+        readonly production: 'https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService';
+    };
+};
+
+// @public
 export type FechaInput = Date | string;
 
 export { FileTicketStorage }
@@ -233,12 +250,6 @@ export enum Moneda {
     PESOS = "PES"
 }
 
-// @public (undocumented)
-export const MTXCA_ENDPOINTS: {
-    readonly testing: 'https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService';
-    readonly production: 'https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService';
-};
-
 // @public
 export const MTXCA_NAMESPACE = "http://impl.service.wsmtxca.afip.gov.ar/service/";
 
@@ -255,13 +266,14 @@ export interface MtxcaAuth {
 }
 
 // @public
-export type MtxcaAutorizarResult = (ResultadoBase & {
-    resultado: 'A' | 'O';
+export interface MtxcaAutorizarResult {
+    // (undocumented)
     comprobante: MtxcaComprobanteCAEResponse;
-}) | (ResultadoBase & {
-    resultado: 'R';
-    comprobante?: undefined;
-});
+    evento?: CodigoDescripcion;
+    observaciones: CodigoDescripcion[];
+    // (undocumented)
+    resultado: MtxcaResultado;
+}
 
 // @public
 export interface MtxcaCAEA {
@@ -284,14 +296,9 @@ export interface MtxcaCAEA {
 // @public
 export interface MtxcaCAEANoUtilizadoResult {
     // (undocumented)
-    caea?: string;
-    // (undocumented)
-    errores: CodigoDescripcion[];
-    // (undocumented)
+    caea: string;
     evento?: CodigoDescripcion;
-    // (undocumented)
-    fechaProceso?: string;
-    // (undocumented)
+    fechaProceso: string;
     numeroPuntoVenta?: number;
     // (undocumented)
     resultado: MtxcaResultado;
@@ -340,19 +347,9 @@ export class MtxcaClient extends SoapServiceClient {
     solicitarCAEA(auth: MtxcaAuth, periodo: number, orden: number, opts?: CallOptions): Promise<MtxcaCAEA>;
 }
 
-// @public (undocumented)
-export interface MtxcaClientConfig {
-    endpoint: string;
-    // (undocumented)
-    fetch?: typeof fetch;
-    // (undocumented)
-    legacyTls?: LegacyTlsMode;
-    // (undocumented)
-    onEvent?: (event: ArcaEvent) => void;
+// @public
+export interface MtxcaClientConfig extends ServiceClientConfig {
     onEvento?: (evento: CodigoDescripcion, method: string) => void;
-    retries?: number;
-    retryDelayMs?: number;
-    timeout?: number;
 }
 
 // @public
@@ -584,15 +581,15 @@ export interface MtxcaDatoAdicional {
 }
 
 // @public
-export type MtxcaInformarCAEAResult = (ResultadoBase & {
-    resultado: 'A' | 'O';
-    fechaProceso: string;
+export interface MtxcaInformarCAEAResult {
+    // (undocumented)
     comprobante: MtxcaComprobanteCAEAResponse;
-}) | (ResultadoBase & {
-    resultado: 'R';
-    fechaProceso?: string;
-    comprobante?: undefined;
-});
+    evento?: CodigoDescripcion;
+    fechaProceso: string;
+    observaciones: CodigoDescripcion[];
+    // (undocumented)
+    resultado: MtxcaResultado;
+}
 
 // @public
 export interface MtxcaItem {
@@ -654,7 +651,7 @@ export interface MtxcaPeriodo {
 }
 
 // @public
-export type MtxcaResultado = 'A' | 'O' | 'R';
+export type MtxcaResultado = 'A' | 'O';
 
 // @public
 export interface MtxcaSubtotalIVA {
@@ -685,7 +682,13 @@ export function roundImporte(value: number): number;
 
 export { ServerStatus }
 
+export { ServiceClientConfig }
+
+export { ServiceEndpoints }
+
 export { ServiceErrorDetail }
+
+export { ServiceTransport }
 
 export { TicketStorage }
 

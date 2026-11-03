@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import { ArcaRechazoError, ArcaResponseError } from '@ramiidv/arca-common';
 import { parseFacturaResult } from '../src/facturacion.js';
 import type { FECAESolicitarResult, Importes } from '../src/types.js';
+
+const OP = { operacion: 'FECAESolicitar' } as const;
 
 const importes: Importes = {
   total: 121,
@@ -38,9 +41,9 @@ describe('parseFacturaResult', () => {
       ],
     };
 
-    const result = parseFacturaResult(raw, importes);
+    const result = parseFacturaResult(raw, importes, OP);
 
-    expect(result.aprobada).toBe(true);
+    expect(result).not.toHaveProperty('aprobada');
     expect(result.cae).toBe('74512345678901');
     expect(result.caeVencimiento).toBe('20260407');
     expect(result.cbteNro).toBe(150);
@@ -51,7 +54,7 @@ describe('parseFacturaResult', () => {
     expect(result.raw).toBe(raw);
   });
 
-  it('parsea resultado rechazado con observaciones', () => {
+  it('resultado rechazado → ArcaRechazoError con las observaciones', () => {
     const raw: FECAESolicitarResult = {
       feCabResp: {
         cuit: 20123456789,
@@ -78,15 +81,37 @@ describe('parseFacturaResult', () => {
       ],
     };
 
-    const result = parseFacturaResult(raw, importes);
+    const err = (() => {
+      try {
+        parseFacturaResult(raw, importes, OP);
+      } catch (e) {
+        return e as ArcaRechazoError;
+      }
+    })();
 
-    expect(result.aprobada).toBe(false);
-    expect(result.cae).toBeUndefined();
-    expect(result.observaciones).toHaveLength(1);
-    expect(result.observaciones[0]).toEqual({
-      code: 10016,
-      msg: 'Error de test',
-    });
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err?.operacion).toBe('FECAESolicitar');
+    expect(err?.observaciones).toEqual([{ code: 10016, msg: 'Error de test' }]);
+    expect(err?.errors).toEqual([]);
+  });
+
+  it('resultado aprobado sin CAE o sin detalle → ArcaResponseError incierto', () => {
+    const raw: FECAESolicitarResult = {
+      feCabResp: {
+        cuit: 20123456789,
+        ptoVta: 1,
+        cbteTipo: 6,
+        fchProceso: '20260328120000',
+        cantReg: 1,
+        resultado: 'A',
+        reproceso: 'N',
+      },
+      feDetResp: [
+        { concepto: 1, docTipo: 99, docNro: 0, cbteDesde: 150, cbteHasta: 150, cbteFch: '20260328', resultado: 'A' },
+      ],
+    };
+    expect(() => parseFacturaResult(raw, importes, OP)).toThrow(ArcaResponseError);
+    expect(() => parseFacturaResult({ ...raw, feDetResp: [] }, importes, OP)).toThrow(ArcaResponseError);
   });
 
   it('maneja array de FECAEDetResponse', () => {
@@ -126,12 +151,12 @@ describe('parseFacturaResult', () => {
       ],
     };
 
-    const result = parseFacturaResult(raw, importes);
-    expect(result.aprobada).toBe(true);
+    const result = parseFacturaResult(raw, importes, OP);
+    expect(result.cae).toBe('11111111111111');
     expect(result.cbteNro).toBe(150); // first one
   });
 
-  it('maneja observaciones como array', () => {
+  it('rechazo con varias observaciones: todas en el error', () => {
     const raw: FECAESolicitarResult = {
       feCabResp: {
         cuit: 20123456789,
@@ -161,7 +186,8 @@ describe('parseFacturaResult', () => {
       ],
     };
 
-    const result = parseFacturaResult(raw, importes);
-    expect(result.observaciones).toHaveLength(2);
+    expect(() => parseFacturaResult(raw, importes, OP)).toThrow(
+      expect.objectContaining({ observaciones: [expect.anything(), expect.anything()] }),
+    );
   });
 });

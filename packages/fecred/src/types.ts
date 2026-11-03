@@ -137,14 +137,6 @@ export interface MontoObligadoRecepcionResult extends ObservacionesRespuesta {
   montoDesde?: number;
 }
 
-/** `consultarObligadoRecepcionReturn` (sin `evento`: usa `arrayObservacion`). */
-export interface ObligadoRecepcionResult extends ObservacionesRespuesta {
-  /** `respuesta` (S/N). `undefined` si ARCA no lo informa (ver `observaciones`). */
-  obligado?: boolean;
-  /** `desde`: fecha desde la cual está obligada, si ARCA la informa. */
-  desde?: string;
-}
-
 // ---------------------------------------------------------------------------
 // Cuentas corrientes
 // ---------------------------------------------------------------------------
@@ -387,7 +379,8 @@ export interface HistorialEstadosComprobanteResult {
 
 /**
  * `OperacionFECredReturnType`. Solo se devuelve con `resultado` `A` u `O`: un
- * resultado `R` o cualquier error de ARCA se lanza como `ArcaServiceError`.
+ * resultado `R` se lanza como `ArcaRechazoError` y cualquier otro error de
+ * ARCA como `ArcaServiceError`.
  */
 export interface OperacionFecredResult extends InfoRespuesta {
   resultado: Exclude<Resultado, 'R'>;

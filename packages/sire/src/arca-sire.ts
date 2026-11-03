@@ -59,9 +59,11 @@ export class ArcaSire extends ArcaSdkBase<'sire'> {
    * Emite un certificado de retención C2005 (`emitir`).
    *
    * Los datos se validan antes de autenticar (`ArcaValidationError`). Un
-   * rechazo de ARCA lanza `ArcaSireServiceError` (no se emitió nada). Un
-   * `ArcaSoapError` con `uncertain: true` significa que el certificado pudo
-   * haberse emitido: no reintentes a ciegas (ver README, "Resultado incierto").
+   * rechazo de ARCA lanza `ArcaSireServiceError` (un `ArcaRechazoError` con
+   * `operacion: 'emitir'`; no se emitió nada): lo devuelto siempre es un
+   * certificado emitido. Un `ArcaSoapError` o `ArcaResponseError` con
+   * `uncertain: true` significa que el certificado pudo haberse emitido: no
+   * reintentes a ciegas (ver README, "Resultado incierto").
    * Si SIRE rechaza el token/sign lanza `ArcaAuthError`. El ticket cacheado no
    * se borra: WSAA rechaza un pedido nuevo durante el lapso de retención y el
    * rechazo puede no deberse al ticket (CUIT no representada, request mal
@@ -76,7 +78,7 @@ export class ArcaSire extends ArcaSdkBase<'sire'> {
   /**
    * Anula un certificado C2005 ya emitido (`anular`). Devuelve el número y el
    * código de seguridad del certificado de anulación. Mismo manejo de errores
-   * que `emitirCertificado`.
+   * que `emitirCertificado` (el rechazo tiene `operacion: 'anular'`).
    */
   async anularCertificado(params: AnularCertificadoParams, opts?: CallOptions): Promise<CertificadoResult> {
     const certificadoAnulacion = buildAnulacionRequest(params);

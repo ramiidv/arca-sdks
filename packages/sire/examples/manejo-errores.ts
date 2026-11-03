@@ -2,14 +2,16 @@
  * Ejemplo: manejo de errores al emitir.
  *
  * - ArcaValidationError: datos inválidos (no se llamó a ARCA).
- * - ArcaSireServiceError: ARCA rechazó el certificado (no se emitió).
- * - ArcaSoapError con uncertain=true: no se sabe si se emitió. No reintentar a ciegas.
+ * - ArcaSireServiceError (un ArcaRechazoError): ARCA rechazó el certificado (no se emitió).
+ *   `operacion` es 'emitir' o 'anular'.
+ * - ArcaSoapError / ArcaResponseError con uncertain=true: no se sabe si se emitió. No reintentar a ciegas.
  * - ArcaAuthError: falla de WSAA o SIRE rechazó el token/sign (el SDK no borra el ticket cacheado;
  *   si está dañado, clearAuthCache()).
  */
 import { readFileSync } from 'node:fs';
 import {
   ArcaAuthError,
+  ArcaResponseError,
   ArcaSire,
   ArcaSireServiceError,
   ArcaSoapError,
@@ -51,8 +53,8 @@ async function main() {
     if (err instanceof ArcaValidationError) {
       for (const d of err.details) console.error(`Campo ${d.field}: ${d.message}`);
     } else if (err instanceof ArcaSireServiceError) {
-      console.error('ARCA rechazó el certificado:', err.message);
-    } else if (err instanceof ArcaSoapError && err.uncertain) {
+      console.error(`ARCA rechazó el certificado (${err.operacion}):`, err.errors[0]?.msg ?? err.message);
+    } else if ((err instanceof ArcaSoapError || err instanceof ArcaResponseError) && err.uncertain) {
       console.error(
         `Resultado incierto para ${datos.codigoTrazabilidad}: verificar en el micrositio SIRE antes de reintentar.`,
         err.message,

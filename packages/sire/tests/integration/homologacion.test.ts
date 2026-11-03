@@ -4,7 +4,7 @@
  * Corre solo si están definidas ARCA_TEST_CERT, ARCA_TEST_KEY (contenido PEM o
  * ruta) y ARCA_TEST_CUIT. Solo verifica el estado del servicio (no requiere
  * autenticación): SIRE no tiene consultas, y emitir o anular un certificado
- * cambia estado en ARCA. Ver `.github/workflows/integracion.yml`.
+ * cambia estado en ARCA. Ver "Desarrollo" en el README raíz (`.env` local).
  */
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

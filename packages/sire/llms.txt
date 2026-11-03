@@ -1,6 +1,6 @@
 # @ramiidv/arca-sire
 
-> TypeScript SDK para el web service SIRE de ARCA (ex AFIP): emite y anula certificados de retención electrónicos de IVA (formulario C2005, RG 4523/2019). Autenticación WSAA automática (servicio "sire-ws"). Node >= 20.19. Solo ESM; también funciona desde CommonJS porque Node >= 20.19 permite cargar módulos ESM con `require()`.
+> TypeScript SDK para el web service SIRE de ARCA (ex AFIP): emite y anula certificados de retención electrónicos de IVA (formulario C2005, RG 4523/2019). Autenticación WSAA automática (servicio "sire-ws"). Node >= 22.12. Solo ESM; también funciona desde CommonJS porque Node >= 22.12 permite cargar módulos ESM con `require()`.
 
 ## Operaciones (WSDL oficial: solo existen estas tres)
 
@@ -47,8 +47,9 @@ Importes: finitos, máximo 11 enteros, se envían con 2 decimales (redondeo mita
 ## Errores
 
 - ArcaValidationError: validación local (antes de autenticar). `details[]` por campo.
-- ArcaSireServiceError (extends ArcaServiceError): ARCA rechazó (SOAP Fault soapenv:Client, aun sin faultstring; XML fuera de schema; request mal formado). Seguro: no se emitió. `message`, `errors[0].msg`, `faultCode`, `cause`.
-- ArcaSoapError con `uncertain: true`: timeout, red, 5xx, respuesta inválida o Fault soapenv:Server de sistema durante emitir/anular. El certificado PUDO emitirse. emitir/anular nunca se reintentan.
+- ArcaSireServiceError (extends ArcaRechazoError → ArcaServiceError; code ARCA_SIRE_SERVICE_ERROR): ARCA rechazó emitir/anular (SOAP Fault soapenv:Client, aun sin faultstring; XML fuera de schema; request mal formado). Seguro: no se emitió. `operacion` ('emitir' | 'anular'), `message`, `errors[0].msg`, `observaciones` ([]), `faultCode`, `cause`.
+- ArcaResponseError con `uncertain: true`: emitir/anular respondió sin certificadoNro/codigoSeguridad. El certificado PUDO emitirse. (En status(), respuesta incompleta → ArcaResponseError sin uncertain.)
+- ArcaSoapError con `uncertain: true`: timeout, red, 5xx, respuesta ilegible o Fault soapenv:Server de sistema durante emitir/anular. El certificado PUDO emitirse. emitir/anular nunca se reintentan. Los Faults de status() (dummy) quedan siempre como ArcaSoapError.
 - ArcaAuthError / ArcaTicketVigenteError: WSAA, o SIRE rechazó el token/sign (Fault tipo MISSING_AUTHENTICATION_TOKEN). No se emitió. El SDK no borra el ticket cacheado (WSAA rechaza pedidos repetidos durante el lapso de retención); si está dañado, `clearAuthCache()`.
 
 Resultado incierto: SIRE no tiene consulta y no documenta deduplicación por codigoTrazabilidad. No reenvíes automáticamente: verificá en el micrositio SIRE (https://www.arca.gob.ar/sire/, clave fiscal); si quedó duplicado, anulalo con anularCertificado.
@@ -62,6 +63,7 @@ Resultado incierto: SIRE no tiene consulta y no documenta deduplicación por cod
 
 ## Bajo nivel
 
-- `sire.client: SireClient` con `dummy()`, `emitir(auth, cuitAgente, CertificadoRequest)`, `anular(auth, cuitAgente, CertificadoAnulacionRequest)`.
+- `sire.client: SireClient` con `dummy()`, `emitir(auth, cuitAgente, CertificadoRequest)`, `anular(auth, cuitAgente, CertificadoAnulacionRequest)`. `new SireClient({ endpoint, transport? })` (`ServiceClientConfig`; timeout/retries/fetch/etc. van en `transport`; el namespace lo fija el cliente).
+- `ENDPOINTS = { sire: { testing, production } }` (solo URLs). WSAA: `WSAA_ENDPOINTS` de @ramiidv/arca-common.
 - `buildCertificadoRequest(params)`, `buildAnulacionRequest(params)`, `formatSireDateTime(value)`, `formatImporte(n)`.
 - `sire.wsaa: WsaaClient` de @ramiidv/arca-common.

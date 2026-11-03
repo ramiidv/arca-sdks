@@ -8,7 +8,7 @@
  */
 
 import fs from 'node:fs';
-import { ArcaFacturacion, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/arca-facturacion';
+import { ArcaFacturacion, ArcaRechazoError, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/arca-facturacion';
 
 async function main() {
   const arca = new ArcaFacturacion({
@@ -20,20 +20,20 @@ async function main() {
   });
 
   // Nota de crédito B asociada a la factura B #150
-  const result = await arca.notaCredito({
-    ptoVta: 1,
-    comprobanteOriginal: {
-      tipo: CbteTipo.FACTURA_B,
+  try {
+    const result = await arca.notaCredito({
       ptoVta: 1,
-      nro: 150,
-    },
-    items: [{ neto: 100, iva: IvaTipo.IVA_21 }],
-  });
-
-  if (result.aprobada) {
+      comprobanteOriginal: {
+        tipo: CbteTipo.FACTURA_B,
+        ptoVta: 1,
+        nro: 150,
+      },
+      items: [{ neto: 100, iva: IvaTipo.IVA_21 }],
+    });
     console.log(`NC aprobada — CAE: ${result.cae}, Cbte #${result.cbteNro}`);
-  } else {
-    console.error('NC rechazada:', result.observaciones);
+  } catch (e) {
+    if (!(e instanceof ArcaRechazoError)) throw e;
+    console.error('NC rechazada:', e.observaciones);
   }
 }
 

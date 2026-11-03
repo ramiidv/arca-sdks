@@ -17,7 +17,14 @@
  */
 
 import fs from 'node:fs';
-import { ArcaFacturacion, CbteTipo, FileTicketStorage, IvaTipo, requiereRecuperacion } from '@ramiidv/arca-facturacion';
+import {
+  ArcaFacturacion,
+  ArcaRechazoError,
+  CbteTipo,
+  FileTicketStorage,
+  IvaTipo,
+  requiereRecuperacion,
+} from '@ramiidv/arca-facturacion';
 
 async function main() {
   const arca = new ArcaFacturacion({
@@ -37,22 +44,24 @@ async function main() {
   // 2-3. Informar un comprobante emitido offline con el CAEA.
   //    Misma interfaz que facturar() (calcula IVA y totales) más la fecha y
   //    hora de generación. La fecha del comprobante sale de esa fecha y hora.
-  const result = await arca.registrarFacturaCAEA(caea.caea, {
-    ptoVta: 5, // punto de venta CAEA (contingencia)
-    cbteTipo: CbteTipo.FACTURA_B,
-    cbteNro: 120, // el número que se usó al emitirlo offline
-    fechaHoraGeneracion: new Date('2026-11-03T14:32:10-03:00'),
-    items: [{ neto: 1000, iva: IvaTipo.IVA_21 }],
-  });
-
-  if (result.aprobada) {
+  try {
+    const result = await arca.registrarFacturaCAEA(caea.caea, {
+      ptoVta: 5, // punto de venta CAEA (contingencia)
+      cbteTipo: CbteTipo.FACTURA_B,
+      cbteNro: 120, // el número que se usó al emitirlo offline
+      fechaHoraGeneracion: new Date('2026-11-03T14:32:10-03:00'),
+      items: [{ neto: 1000, iva: IvaTipo.IVA_21 }],
+    });
     console.log(`Factura registrada — Cbte #${result.cbteNro}`);
     console.log(`Total: $${result.importes.total}`);
-  } else if (requiereRecuperacion(result)) {
-    // 703: el número no es el último informado + 1. Si hubo un intento anterior, quizá ya quedó informado.
-    console.error('Número ya informado: verificarlo con recuperarComprobante');
-  } else {
-    console.error('Error:', result.observaciones);
+  } catch (e) {
+    if (!(e instanceof ArcaRechazoError)) throw e;
+    if (requiereRecuperacion(e)) {
+      // 703: el número no es el último informado + 1. Si hubo un intento anterior, quizá ya quedó informado.
+      console.error('Número ya informado: verificarlo con recuperarComprobante');
+    } else {
+      console.error('Rechazado:', e.observaciones);
+    }
   }
 
   // 4. Si no hubo movimientos en el período para un punto de venta

@@ -4,10 +4,11 @@ export {
   ArcaAuthError,
   ArcaSoapError,
   ArcaServiceError,
+  ArcaRechazoError,
   ArcaValidationError,
   ArcaTicketVigenteError,
 } from '@ramiidv/arca-common';
-import { ArcaAuthError, ArcaError, ArcaServiceError } from '@ramiidv/arca-common';
+import { ArcaAuthError, ArcaError, ArcaServiceError, formatServiceErrors } from '@ramiidv/arca-common';
 import type { IntentoComprobante, IntentoExpo, WsfexAuthResult, WsfexInvoice } from './types.js';
 
 /**
@@ -20,9 +21,10 @@ import type { IntentoComprobante, IntentoExpo, WsfexAuthResult, WsfexInvoice } f
  * porque no garantizan nada; los de autenticación (WSFEv1: 600, 601;
  * WSFEX: 1000, 1001), como `ArcaAuthError`.
  *
- * Los rechazos de un comprobante puntual (como 10016, "el número no se
- * corresponde con el próximo a autorizar") llegan como `aprobada: false` con
- * observaciones, no como este error: ver `requiereRecuperacion`.
+ * Los rechazos de un comprobante puntual (`Resultado` "R", como 10016, "el
+ * número no se corresponde con el próximo a autorizar") llegan como
+ * `ArcaRechazoError` con los motivos en `observaciones`, no como este error:
+ * ver `requiereRecuperacion`.
  */
 export class ArcaWSFEError extends ArcaServiceError {
   static override readonly code: string = 'ARCA_WSFE_ERROR';
@@ -33,8 +35,7 @@ export class ArcaWSFEError extends ArcaServiceError {
    * @param servicio - Servicio que respondió (para el mensaje). Default: `WSFE`.
    */
   constructor(errors: { code: number; msg: string }[], servicio: 'WSFE' | 'WSFEX' = 'WSFE') {
-    const msg = errors.map((e) => `[${e.code}] ${e.msg}`).join('; ');
-    super(`${servicio} Error: ${msg}`, errors);
+    super(`${servicio} Error: ${formatServiceErrors(errors)}`, errors);
     this.name = 'ArcaWSFEError';
   }
 
@@ -110,7 +111,8 @@ export type OperacionEmision = 'FECAESolicitar' | 'FECAEARegInformativo';
  * devuelve si quedó autorizado, si no se emitió (y se puede reintentar con el
  * mismo número) o si hay un conflicto.
  *
- * Si ARCA respondió con errores de negocio, el error es `ArcaWSFEError` (no se emitió).
+ * Si ARCA respondió con errores de negocio, el error es `ArcaWSFEError` (no se
+ * emitió); si rechazó el comprobante (`Resultado` "R"), `ArcaRechazoError`.
  * Para exportación (WSFEX) el error es `ArcaResultadoInciertoExpo`.
  */
 export class ArcaResultadoIncierto extends ArcaError {

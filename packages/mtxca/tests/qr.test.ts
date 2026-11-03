@@ -21,7 +21,6 @@ const CAE: MtxcaAutorizarResult = {
     fechaVencimientoCAE: '2026-11-12',
   },
   observaciones: [],
-  errores: [],
 };
 
 describe('urlQR', () => {
@@ -50,7 +49,6 @@ describe('urlQR', () => {
       fechaProceso: '2026-11-20',
       comprobante: { caea: '36434058476543', codigoTipoComprobante: 6, numeroPuntoVenta: 5, numeroComprobante: 9 },
       observaciones: [],
-      errores: [],
     };
     const p = payload(
       urlQR(20123456786, facturaA({ codigoMoneda: 'DOL', cotizacionMoneda: 1050.5, fechaEmision: '20261103' }), res),
@@ -83,9 +81,10 @@ describe('urlQR', () => {
     );
   });
 
-  it('rechazado, sin cotización en moneda extranjera o con baseUrl propia', () => {
-    const rechazo: MtxcaAutorizarResult = { resultado: 'R', observaciones: [], errores: [] };
-    expect(() => urlQR('20123456786', facturaA(), rechazo)).toThrow(/rechazado/);
+  it('resultado sin comprobante, sin cotización en moneda extranjera o con baseUrl propia', () => {
+    // Desde JS se puede pasar cualquier cosa: un resultado sin comprobante no tiene CAE/CAEA.
+    const sinComprobante = { resultado: 'A', observaciones: [] } as unknown as MtxcaAutorizarResult;
+    expect(() => urlQR('20123456786', facturaA(), sinComprobante)).toThrow(/no tiene comprobante/);
     const err = (() => {
       try {
         urlQR('20123456786', facturaA({ codigoMoneda: 'DOL', cotizacionMoneda: undefined }), CAE);

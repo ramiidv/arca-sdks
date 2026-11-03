@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@ramiidv/arca-common)](https://www.npmjs.com/package/@ramiidv/arca-common)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Node >= 20.19](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen)](https://nodejs.org)
+[![Node >= 22.12](https://img.shields.io/badge/node-%3E%3D22.12-brightgreen)](https://nodejs.org)
 
 Utilidades compartidas para el ecosistema de SDKs de **ARCA** (ex AFIP) en TypeScript.
 
@@ -25,7 +25,7 @@ npm install @ramiidv/arca-common
 
 ## Requisitos
 
-- Node.js >= 20.19. El paquete es **solo ESM**; desde CommonJS se carga con `require()` (require(esm), disponible desde Node 20.19).
+- Node.js >= 22.12. El paquete es **solo ESM**; desde CommonJS se carga con `require()` (require(esm), disponible desde Node 22.12).
 - Certificado digital X.509 (RSA) y su clave privada de ARCA, con cada web service asociado (ver
   [Primeros pasos](#primeros-pasos)).
 
@@ -67,21 +67,21 @@ Lo mismo para todos los SDKs (la documentación oficial está en
 
 ## Qué incluye
 
-| Módulo                | Descripción                                                                                                                                       |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **WsaaClient**        | Cliente WSAA: firma CMS/PKCS#7, cache de tickets, persistencia (`ticketStorage`), deduplicación, ajuste de reloj y esperas tras logins fallidos   |
-| **Certificados**      | `certificateInfo` (vigencia, sujeto y CUIT de un certificado); `WsaaClient` valida cert y clave al construirse                                    |
-| **Ticket storage**    | `MemoryTicketStorage`, `FileTicketStorage` — implementaciones de referencia de `TicketStorage`                                                    |
-| **SOAP client**       | `soapCall`, `arcaSoapCall`, `extractMethodResult`, `checkServiceErrors`, `extractServiceErrors` — timeout, `signal`, reintentos solo en consultas |
-| **XML**               | `parseXml`, `buildXml`, `ensureArray`, `getNestedValue` — vía fast-xml-parser                                                                     |
-| **Base de los SDKs**  | `ArcaSdkBase`, `SoapServiceClient`, `createWsaaClient`, `transportOptions`, `parseServerStatus`, `statusOf`                                       |
-| **Validadores**       | `validateCuit`, `isValidCuit`, `validateCBU`, `isValidCBU`, `formatDate`, `parseArcaDate`, `validateFecha`, `validateFechaRango`, `diasEntre`     |
-| **Fechas y redondeo** | `formatDateTimeAR`, `AR_TIMEZONE`, `roundHalfUp`, `roundHalfEven`                                                                                 |
-| **QR**                | `generarUrlQR` — URL del QR de los comprobantes electrónicos                                                                                      |
-| **Errores**           | `ArcaError`, `ArcaAuthError`, `ArcaTicketVigenteError`, `ArcaSoapError`, `ArcaServiceError`, `ArcaValidationError`, `ArcaResponseError`           |
-| **Schemas del XSD**   | `@ramiidv/arca-common/schema` — DSL para validar/codificar requests y decodificar respuestas                                                      |
-| **Testing**           | `@ramiidv/arca-common/testing` — `fetch` simulado, envelopes, `testCert`, contratos contra el XSD                                                 |
-| **Constantes**        | `WSAA_ENDPOINTS`, `DocTipo`, `Provincia`, `CondicionIva`                                                                                          |
+| Módulo                | Descripción                                                                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **WsaaClient**        | Cliente WSAA: firma CMS/PKCS#7, cache de tickets, persistencia (`ticketStorage`), deduplicación, ajuste de reloj y esperas tras logins fallidos                          |
+| **Certificados**      | `certificateInfo` (vigencia, sujeto y CUIT de un certificado); `WsaaClient` valida cert y clave al construirse                                                           |
+| **Ticket storage**    | `MemoryTicketStorage`, `FileTicketStorage` — implementaciones de referencia de `TicketStorage`                                                                           |
+| **SOAP client**       | `soapCall`, `arcaSoapCall`, `extractMethodResult`, `checkServiceErrors`, `extractServiceErrors`, `formatServiceErrors` — timeout, `signal`, reintentos solo en consultas |
+| **XML**               | `parseXml`, `buildXml`, `ensureArray`, `getNestedValue` — vía fast-xml-parser                                                                                            |
+| **Base de los SDKs**  | `ArcaSdkBase`, `SoapServiceClient`, `createWsaaClient`, `transportOptions`, `parseServerStatus`, `statusOf`                                                              |
+| **Validadores**       | `validateCuit`, `isValidCuit`, `validateCBU`, `isValidCBU`, `formatDate`, `parseArcaDate`, `validateFecha`, `validateFechaRango`, `diasEntre`                            |
+| **Fechas y redondeo** | `formatDateTimeAR`, `AR_TIMEZONE`, `roundHalfUp`, `roundHalfEven`                                                                                                        |
+| **QR**                | `generarUrlQR` — URL del QR de los comprobantes electrónicos                                                                                                             |
+| **Errores**           | `ArcaError`, `ArcaAuthError`, `ArcaTicketVigenteError`, `ArcaSoapError`, `ArcaServiceError`, `ArcaRechazoError`, `ArcaValidationError`, `ArcaResponseError`              |
+| **Schemas del XSD**   | `@ramiidv/arca-common/schema` — DSL para validar/codificar requests y decodificar respuestas                                                                             |
+| **Testing**           | `@ramiidv/arca-common/testing` — `fetch` simulado, envelopes, `testCert`, contratos contra el XSD                                                                        |
+| **Constantes**        | `WSAA_ENDPOINTS`, `DocTipo`, `Provincia`, `CondicionIva` (tipo `ServiceEndpoints`: la forma de cada servicio en el `ENDPOINTS` de los SDKs)                              |
 
 ## Autenticación WSAA
 
@@ -270,7 +270,8 @@ class ArcaMiServicio extends ArcaSdkBase<'mi'> {
 | `ArcaBaseConfig`                          | Config común a todos los SDKs (ver [Configuración de `WsaaClient`](#configuración-de-wsaaclient))                                                                                                                                                                                                                                                            |
 | `ArcaSdkConfig`                           | `ArcaBaseConfig` + `wsaa?` (cliente compartido), `signal?` (cancela todo), `endpoints?.wsaa`                                                                                                                                                                                                                                                                 |
 | `SoapServiceClient`                       | Guarda endpoint, namespace y transporte; `soapCall(method, params, opts)` llama a `arcaSoapCall`                                                                                                                                                                                                                                                             |
-| `SoapServiceClientConfig`                 | `{ endpoint, namespace, transport? }`                                                                                                                                                                                                                                                                                                                        |
+| `ServiceClientConfig`                     | `{ endpoint, transport? }`: la configuración de los clientes de bajo nivel de todos los SDKs (el namespace lo fija cada cliente)                                                                                                                                                                                                                             |
+| `SoapServiceClientConfig`                 | `ServiceClientConfig` más `namespace`                                                                                                                                                                                                                                                                                                                        |
 | `ServiceTransport` / `transportOptions()` | Opciones de transporte (timeout, reintentos, eventos, `fetch`, `legacyTls`) que se pasan a cada llamada                                                                                                                                                                                                                                                      |
 | `createWsaaClient(config, onEvent?)`      | Arma un `WsaaClient` con las opciones de WSAA de una config de SDK                                                                                                                                                                                                                                                                                           |
 | `parseServerStatus(result, method?)`      | Respuesta de un `dummy` → `ServerStatus` (valores tal cual). Lanza `ArcaResponseError` si falta un campo                                                                                                                                                                                                                                                     |
@@ -286,7 +287,15 @@ class ArcaMiServicio extends ArcaSdkBase<'mi'> {
 ## SOAP
 
 ```typescript
-import { soapCall, arcaSoapCall, checkServiceErrors, extractServiceErrors, parseXml, buildXml } from '@ramiidv/arca-common';
+import {
+  soapCall,
+  arcaSoapCall,
+  checkServiceErrors,
+  extractServiceErrors,
+  formatServiceErrors,
+  parseXml,
+  buildXml,
+} from '@ramiidv/arca-common';
 
 // Bajo nivel (la respuesta parseada no tiene prefijos de namespace)
 const result = await soapCall('https://wswhomo.afip.gov.ar/wsfev1/service.asmx', '<FEDummy xmlns="http://ar.gov.afip.dif.FEV1/"/>', {
@@ -302,10 +311,9 @@ const data = await arcaSoapCall('https://wswhomo.afip.gov.ar/wsfev1/service.asmx
 });
 checkServiceErrors(data, 'WSFE'); // lanza ArcaServiceError
 extractServiceErrors(data); // [{ code, msg, rawCode? }] sin lanzar
+formatServiceErrors(extractServiceErrors(data)); // '[600] ..., [601] ...' (el formato de los mensajes de error)
 ```
 
-- `afipSoapCall` / `AfipSoapCallOptions` siguen exportados como alias **deprecados** de
-  `arcaSoapCall` / `ArcaSoapCallOptions`.
 - `buildXml` y `arcaSoapCall` **omiten** las propiedades `null`/`undefined` (no envían `<x/>`) y envían
   un `Date` como `xsd:dateTime` en hora de Argentina (`2026-11-01T08:30:00-03:00`).
 - El parser decodifica referencias numéricas (`&#243;` → `ó`) y entidades HTML.
@@ -350,8 +358,8 @@ isValidCuit('20123456789'); // false
 validateCBU('0110599-5 00000041817221'); // "0110599500000041817221" (quita espacios y guiones)
 ```
 
-`validateCuil`, `normalizeCuil` y `formatCuil` son alias de las funciones de CUIT. `isValidCBU`
-devuelve `boolean` sin lanzar.
+Las funciones de CUIT sirven también para CUIL (mismo algoritmo). `isValidCBU` devuelve `boolean` sin
+lanzar.
 
 ## Fechas, redondeo y QR
 
@@ -385,23 +393,23 @@ generarUrlQR({
 }); // "https://www.arca.gob.ar/fe/qr/?p=..."
 ```
 
-`parseAfipDate` sigue exportado como alias deprecado de `parseArcaDate`. `generarUrlQR` sigue la
-[especificación del QR](https://arca.gob.ar/fe/qr/documentos/QRespecificaciones.pdf): importe a 2
-decimales y `ctz` a 6 (mitad al par, hasta 13 enteros), punto de venta de hasta 5 dígitos, tipo de
-comprobante de hasta 3, número de comprobante de hasta 8, `moneda` de 3 caracteres, `tipoDocRec` de
-hasta 2 dígitos y `nroDocRec` de hasta 20 (como string si no entra en un `number`).
+`generarUrlQR` sigue la [especificación del QR](https://arca.gob.ar/fe/qr/documentos/QRespecificaciones.pdf):
+importe a 2 decimales y `ctz` a 6 (mitad al par, hasta 13 enteros), punto de venta de hasta 5 dígitos,
+tipo de comprobante de hasta 3, número de comprobante de hasta 8, `moneda` de 3 caracteres,
+`tipoDocRec` de hasta 2 dígitos y `nroDocRec` de hasta 20 (como string si no entra en un `number`).
 
 ## Errores
 
-| Clase                    | Cuándo se lanza                                                      | Propiedades extra                                                                                                     |
-| ------------------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `ArcaError`              | Clase base                                                           | `code`                                                                                                                |
-| `ArcaAuthError`          | Login WSAA fallido o en espera, respuesta de WSAA inválida           | `faultCode?`, `statusCode?`, `retryable`, `cause`                                                                     |
-| `ArcaTicketVigenteError` | WSAA ya emitió un TA vigente que no está en memoria ni en el storage | `service`, `retryAfterMs?`; extiende `ArcaAuthError` (`retryable: true`)                                              |
-| `ArcaSoapError`          | Error HTTP, timeout, SOAP Fault                                      | `statusCode?`, `faultCode?`, `faultString?`, `faultDetail?`, `responseBody?`, `responseDate?`, `uncertain`, `aborted` |
-| `ArcaServiceError`       | Error de negocio de ARCA (códigos funcionales)                       | `errors: { code, msg, rawCode? }[]`                                                                                   |
-| `ArcaValidationError`    | Datos de entrada inválidos (también cert/clave/config)               | `field?`, `details: ValidationErrorDetail[]`                                                                          |
-| `ArcaResponseError`      | Respuesta con forma inesperada                                       | `uncertain`                                                                                                           |
+| Clase                    | Cuándo se lanza                                                                                                                        | Propiedades extra                                                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `ArcaError`              | Clase base                                                                                                                             | `code`                                                                                                                |
+| `ArcaAuthError`          | Login WSAA fallido o en espera, respuesta de WSAA inválida                                                                             | `faultCode?`, `statusCode?`, `retryable`, `cause`                                                                     |
+| `ArcaTicketVigenteError` | WSAA ya emitió un TA vigente que no está en memoria ni en el storage                                                                   | `service`, `retryAfterMs?`; extiende `ArcaAuthError` (`retryable: true`)                                              |
+| `ArcaSoapError`          | Error HTTP, timeout, SOAP Fault                                                                                                        | `statusCode?`, `faultCode?`, `faultString?`, `faultDetail?`, `responseBody?`, `responseDate?`, `uncertain`, `aborted` |
+| `ArcaServiceError`       | Error de negocio de ARCA (códigos funcionales)                                                                                         | `errors: { code, msg, rawCode? }[]`                                                                                   |
+| `ArcaRechazoError`       | ARCA rechazó una emisión (`resultado: 'R'` o equivalente): no se emitió nada. Lo lanzan todos los SDKs en lugar de devolver el rechazo | `operacion`, `errors`, `observaciones`; extiende `ArcaServiceError`                                                   |
+| `ArcaValidationError`    | Datos de entrada inválidos (también cert/clave/config)                                                                                 | `field?`, `details: ValidationErrorDetail[]`                                                                          |
+| `ArcaResponseError`      | Respuesta con forma inesperada                                                                                                         | `uncertain`                                                                                                           |
 
 `ArcaTicketVigenteError` extiende `ArcaAuthError` con `retryable: true`: se resuelve esperando.
 `retryAfterMs` es lo que falta para que el cliente vuelva a llamar a WSAA (no viene con

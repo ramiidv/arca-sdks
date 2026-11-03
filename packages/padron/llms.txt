@@ -8,7 +8,7 @@
 npm install @ramiidv/arca-padron
 ```
 
-Requisitos: Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (require(esm)). Única dependencia: `@ramiidv/arca-common`.
+Requisitos: Node.js >= 22.12. Solo ESM; desde CommonJS se carga con `require()` (require(esm)). Única dependencia: `@ramiidv/arca-common`.
 
 ## Configuración
 
@@ -191,7 +191,7 @@ Todos extienden ArcaError (de @ramiidv/arca-common), tienen un `code` estable e 
 - ArcaAuthError: errores de autenticación WSAA.
 - ArcaTicketVigenteError (extiende ArcaAuthError; retryable: true, retryAfterMs): WSAA ya emitió un TA que no está en memoria ni en el storage y rechaza otro durante el lapso de retención (minutos).
 - ArcaPadronServiceError (extiende ArcaServiceError): errores de negocio. ARCA los informa como SOAP Fault; los textos conocidos se convierten con un `reason` tipado: 'inexistente' ("La Clave (CUIT/CUIL) consultada es inexistente", "No existe persona con ese Id"; en la constancia también desde errorConstancia), 'inactiva' ("... se encuentra INACTIVA"), 'id_invalido' ("El Id de la persona no es valido"), 'no_autorizado' ("No autorizado, par token/sign invalido.", "Falta token y/o sign.", "Debe enviar la CUIT representada", "Este token no le permite actuar en representacion de la CUIT ..."). Un Fault con otro texto queda como ArcaSoapError; el SDK no emite 'otro' (solo es el default del constructor). `errors[0].msg` tiene el texto de ARCA; `cause`, el ArcaSoapError original. Nunca se reintentan.
-- ArcaPadronError: respuesta de ARCA sin un elemento obligatorio (ej: personaReturn sin persona).
+- ArcaPadronError (extiende ArcaResponseError, como las respuestas inválidas del resto de los SDKs): respuesta de ARCA sin un elemento obligatorio (ej: personaReturn sin persona).
 - ArcaSoapError: errores HTTP/transporte, timeouts, cancelaciones y SOAP Faults no reconocidos (statusCode?, faultCode?, faultString?, uncertain, aborted).
 
 ```typescript
@@ -213,14 +213,14 @@ Unión discriminada: auth:login, auth:cache-hit (source: memory|storage), auth:c
 
 ## Entornos
 
-Hosts: homologación `https://awshomo.afip.gov.ar`, producción `https://aws.afip.gov.ar` (rutas `/sr-padron/webservices/personaServiceA5|A4|A10|A13` y `/sr-parametros/webservices/parameterServiceA100`). El manual de la constancia v4.1 publica `awshomo.arca.gob.ar` / `aws.arca.gob.ar`; el SDK usa los `soap:address` de los WSDL oficiales (afip.gov.ar), que responden igual. Constante `ENDPOINTS`; se pueden sobrescribir con `endpoints`.
+Hosts: homologación `https://awshomo.afip.gov.ar`, producción `https://aws.afip.gov.ar` (rutas `/sr-padron/webservices/personaServiceA5|A4|A10|A13` y `/sr-parametros/webservices/parameterServiceA100`). El manual de la constancia v4.1 publica `awshomo.arca.gob.ar` / `aws.arca.gob.ar`; el SDK usa los `soap:address` de los WSDL oficiales (afip.gov.ar), que responden igual. Constantes con claves a5, a4, a10, a13, a100: `ENDPOINTS` (solo URLs `{ testing, production }`, sin wsaa: ver `WSAA_ENDPOINTS` de @ramiidv/arca-common), `NAMESPACES` (namespace del WSDL) y `SERVICE_IDS` (id de WSAA: ws_sr_constancia_inscripcion, ws_sr_padron_a4...). Las URLs se pueden sobrescribir con `endpoints` (mismas claves, más wsaa).
 
 ## Enums
 
 - Provincia (0-24)
-- TipoDomicilio (FISCAL, LEGAL_REAL = 'LEGAL/REAL', LOCALES_Y_ESTABLECIMIENTOS (solo A4); LEGAL y REAL deprecados: los manuales informan 'LEGAL/REAL')
+- TipoDomicilio (FISCAL, LEGAL_REAL = 'LEGAL/REAL', LOCALES_Y_ESTABLECIMIENTOS (solo A4))
 - TipoPersona (FISICA, JURIDICA)
-- EstadoClave (ACTIVO, INACTIVO; LIMITADO deprecado: no figura en los manuales)
+- EstadoClave (ACTIVO, INACTIVO)
 - ImpuestoId (GANANCIAS_PH=11, MONOTRIBUTO=20, MONOTRIBUTO_AUTONOMO=21, IVA_RESPONSABLE_INSCRIPTO=30, BIENES_PERSONALES=180, EMPLEADOR=301, AUTONOMOS=308: de los manuales de ARCA; GANANCIAS_PJ=10, IVA_EXENTO=32, IVA_RESPONSABLE_NO_INSCRIPTO=33, IVA_NO_ALCANZADO=34 no figuran en los manuales del padrón). El monotributo social se identifica por categoría, no por id de impuesto.
 - DocTipo (códigos numéricos de WSFEv1, de common): NO es el `tipoDocumento` string del padrón ("DNI", "LC"...).
 - CondicionIva (reexportado de @ramiidv/arca-common)
@@ -228,8 +228,6 @@ Hosts: homologación `https://awshomo.afip.gov.ar`, producción `https://aws.afi
 
 ## Clientes de bajo nivel
 
-Propiedades públicas: padron.wsaa, padron.a5 (constancia: getPersona, getPersonaList), padron.a4, padron.a10, padron.a13 (getPersona, getPersonaV2, getIdPersonaListByDocumento), padron.a100 (getParameterCollectionByName). Reciben `auth: WsAuth = { token, sign, cuitRepresentada }` como primer argumento.
+Propiedades públicas: padron.wsaa, padron.a5 (constancia: getPersona, getPersonaList), padron.a4, padron.a10, padron.a13 (getPersona, getPersonaV2, getIdPersonaListByDocumento), padron.a100 (getParameterCollectionByName). Reciben `auth: WsAuth = { token, sign, cuitRepresentada }` como primer argumento (ticket: `padron.wsaa.getAccessTicket(SERVICE_IDS.a4)`).
 
-## Deprecados
-
-`ensureArray`, `parseXml` y `buildXml` se siguen exportando por compatibilidad: importarlos de @ramiidv/arca-common. `BasePadronClient.soapOptions` y `.onEvent` (protected) no se usan.
+Sueltos: `new PadronA4Client({ endpoint: ENDPOINTS.a4.testing, transport? })` (lo mismo PadronA5Client, PadronA10Client, PadronA13Client, PadronA100Client). Config = `ServiceClientConfig` de @ramiidv/arca-common (`{ endpoint, transport?: ServiceTransport }`, `ServiceTransport` = `{ timeout, retries, retryDelayMs, onEvent, fetch, legacyTls }`; los dos tipos y `ServiceEndpoints` se reexportan desde el paquete); el namespace lo fija cada cliente. `ensureArray`, `parseXml` y `buildXml` no se exportan: importarlos de @ramiidv/arca-common.

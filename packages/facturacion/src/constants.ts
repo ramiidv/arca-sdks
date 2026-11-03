@@ -1,9 +1,14 @@
 import { CondicionIva } from '@ramiidv/arca-common';
+import type { ServiceEndpoints } from '@ramiidv/arca-common';
 
 // ============================================================
 // Endpoints
 // ============================================================
 
+/**
+ * URLs de WSFEv1 y WSFEX por entorno. Las claves coinciden con las de
+ * `config.endpoints` (además de `wsaa`).
+ */
 export const ENDPOINTS = {
   wsfe: {
     testing: 'https://wswhomo.afip.gov.ar/wsfev1/service.asmx',
@@ -13,7 +18,7 @@ export const ENDPOINTS = {
     testing: 'https://wswhomo.afip.gov.ar/wsfexv1/service.asmx',
     production: 'https://servicios1.afip.gov.ar/wsfexv1/service.asmx',
   },
-} as const;
+} as const satisfies Record<string, ServiceEndpoints>;
 
 /** Tipos de exportación (WSFEX). */
 export enum TipoExpo {

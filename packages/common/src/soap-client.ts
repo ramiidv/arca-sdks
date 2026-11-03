@@ -662,9 +662,6 @@ export interface ExtractMethodResultOptions {
   responseElement?: string;
 }
 
-/** @deprecated Usar `ArcaSoapCallOptions` (mismo tipo). */
-export type AfipSoapCallOptions = ArcaSoapCallOptions;
-
 /**
  * Llamada SOAP de alto nivel para web services de ARCA.
  * Construye el body del método (ver `qualified` y `requestElement`), llama a
@@ -709,9 +706,6 @@ export async function arcaSoapCall(
 
   return extractMethodResult(parsed, method, { kind: opts?.kind, responseElement: opts?.responseElement });
 }
-
-/** @deprecated Usar `arcaSoapCall` (mismo comportamiento). */
-export const afipSoapCall: typeof arcaSoapCall = arcaSoapCall;
 
 /**
  * Extrae el resultado de un método de una respuesta SOAP parseada por
@@ -839,6 +833,14 @@ export function extractServiceErrors(result: Record<string, unknown>): ServiceEr
 }
 
 /**
+ * Lista de errores u observaciones de ARCA para un mensaje: `[código] mensaje`,
+ * separados por comas. Usa el código original (`rawCode`) si no era numérico.
+ */
+export function formatServiceErrors(details: readonly ServiceErrorDetail[]): string {
+  return details.map((d) => `[${d.rawCode ?? d.code}] ${d.msg}`).join(', ');
+}
+
+/**
  * Verifica si una respuesta de un WS de ARCA contiene errores de negocio.
  * Lanza ArcaServiceError si algún error tiene un código distinto de 0 (o un
  * código no numérico). Ver `extractServiceErrors` para los formatos soportados.
@@ -846,9 +848,6 @@ export function extractServiceErrors(result: Record<string, unknown>): ServiceEr
 export function checkServiceErrors(result: Record<string, unknown>, serviceName: string): void {
   const errors = extractServiceErrors(result);
   if (errors.some((e) => e.code !== 0 || e.rawCode !== undefined)) {
-    throw new ArcaServiceError(
-      `${serviceName}: ${errors.map((e) => `[${e.rawCode ?? e.code}] ${e.msg}`).join(', ')}`,
-      errors,
-    );
+    throw new ArcaServiceError(`${serviceName}: ${formatServiceErrors(errors)}`, errors);
   }
 }

@@ -13,12 +13,12 @@ de WSCDC v0.4 (https://www.afip.gob.ar/ws/WSCDCV1/WSCDC-manual-desarrollador-v4.
 npm install @ramiidv/arca-cdc
 ```
 
-Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (Node >= 20.19 permite cargar módulos ESM con `require()`). Depende de `@ramiidv/arca-common`.
+Node.js >= 22.12. Solo ESM; desde CommonJS se carga con `require()` (Node >= 22.12 permite cargar módulos ESM con `require()`). Depende de `@ramiidv/arca-common`.
 
 ## Arquitectura
 
 - `ArcaCdc`: clase de alto nivel; maneja la autenticación WSAA (servicio `wscdc`).
-- `CdcClient`: cliente de bajo nivel, un método por operación SOAP; el caller pasa `auth: CdcAuth = { token, sign, cuit }` (la CUIT se valida).
+- `CdcClient`: cliente de bajo nivel, un método por operación SOAP; se construye con `{ endpoint, transport? }` (`ServiceClientConfig` de common; `endpoint`: `ENDPOINTS.wscdc.testing`/`.production`) y el caller pasa `auth: CdcAuth = { token, sign, cuit }` (la CUIT se valida).
 - Transporte: `SoapServiceClient` de common con `qualified: true` (ASMX, elementFormDefault=qualified) y
   `soapActionFromMethod: true` (SOAPAction = `http://servicios1.afip.gob.ar/wscdc/<Método>`). Todas son consultas.
 - Namespace: `http://servicios1.afip.gob.ar/wscdc/`.
@@ -48,7 +48,7 @@ const r = await cdc.constatar({
   docTipoReceptor: 80,
   docNroReceptor: 20123456786,
 });
-// r.resultado: 'A' | 'R'; r.observaciones; r.fchProceso; r.cmpResp; r.events
+// r.resultado: 'A' | 'R'; r.observaciones; r.fchProceso; r.cmpResp; r.eventos
 ```
 
 ## Configuración
@@ -94,13 +94,13 @@ interface ConstatarResult {
               cbteFch: string; impTotal: number; codAutorizacion: string; docTipoReceptor?: string;
               docNroReceptor?: string; opcionales?: { id: string; valor: string }[] };
   observaciones: { code: number; msg: string }[];
-  events: { code: number; msg: string }[];
+  eventos: { code: number; msg: string }[]; // Events de ARCA
 }
 ```
 
 Semántica:
 - `A`: autorizado (puede traer observaciones no excluyentes, ej: 200).
-- `R`: rechazo funcional, motivos en `observaciones` (100, 102-118, 150-153). Si `CmpResp` viene incompleto en un `R`, se devuelve sin `cmpResp`.
+- `R`: no constatado (validaciones funcionales), motivos en `observaciones` (100, 102-118, 150-153). Si `CmpResp` viene incompleto en un `R`, se devuelve sin `cmpResp`. Es una consulta: un `R` se devuelve, NO lanza `ArcaRechazoError` (ese error es solo para emisiones, en los otros SDKs).
 - `Errors` de ARCA con código distinto de 0 (formato 1-10, auth 600-602, infraestructura 500-503, ej: 503 "No existen datos en nuestros registros.") => lanza `ArcaServiceError` (ARCA también pone Resultado=R, pero el comprobante no se llegó a constatar).
 - Respuesta sin `Resultado`/`FchProceso`, con un `Resultado` desconocido o con datos inválidos => `ArcaResponseError` (`uncertain: false`).
 
@@ -109,6 +109,7 @@ Semántica:
 Exportados: `ArcaError`, `ArcaAuthError`, `ArcaTicketVigenteError`, `ArcaSoapError` (HTTP/red/SOAP Fault),
 `ArcaServiceError` (`errors: { code, msg, rawCode? }[]`), `ArcaResponseError` (respuesta con forma inesperada),
 `ArcaValidationError` (`details: { field, message, value }[]`; input o CUIT inválidos, no se llamó a ARCA).
+También se reexporta `ArcaRechazoError` (común a todos los SDKs), pero WSCDC nunca lo lanza: solo tiene consultas.
 
 ## Eventos
 
@@ -127,7 +128,7 @@ Producción negocia DH de 1024 bits; funciona gracias al fallback TLS legacy de 
 ## Exports
 
 `ArcaCdc`, `CdcClient`, `WsaaClient`, `MemoryTicketStorage`, `FileTicketStorage`,
-`validateConstatarInput`, `WSCDC_ENDPOINTS`, `WSCDC_NAMESPACE`, `WSCDC_SERVICE_ID`, `CBTE_MODOS`,
+`validateConstatarInput`, `ENDPOINTS` (`{ wscdc: { testing, production } }`), `WSCDC_NAMESPACE`, `WSCDC_SERVICE_ID`, `CBTE_MODOS`,
 clases de error y tipos (`ArcaCdcConfig`, `ConstatarInput`, `ConstatarResult`,
 `ComprobanteConstatado`, `CdcMensaje`, `ListaCdc`, `ModalidadItem`, `TipoCbteItem`, `DocTipoItem`,
 `OpcionalTipoItem`, `CbteModo`, `Opcional`, `CdcAuth`, `CallOptions`, `TicketStorage`, ...).

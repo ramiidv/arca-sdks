@@ -1,11 +1,19 @@
+import type { ServiceEndpoints } from '@ramiidv/arca-common';
+
 // ---------------------------------------------------------------------------
 // Endpoints (manual WSMTXCA, "Dirección URL")
 // ---------------------------------------------------------------------------
 
-export const MTXCA_ENDPOINTS = {
-  testing: 'https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService',
-  production: 'https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService',
-} as const;
+/**
+ * Endpoints de los servicios del SDK, por entorno (las claves coinciden con
+ * las de `config.endpoints`).
+ */
+export const ENDPOINTS = {
+  wsmtxca: {
+    testing: 'https://fwshomo.afip.gov.ar/wsmtxca/services/MTXCAService',
+    production: 'https://serviciosjava.afip.gob.ar/wsmtxca/services/MTXCAService',
+  },
+} as const satisfies Record<string, ServiceEndpoints>;
 
 /** targetNamespace del WSDL de WSMTXCA (`elementFormDefault` unqualified). */
 export const MTXCA_NAMESPACE = 'http://impl.service.wsmtxca.afip.gov.ar/service/';

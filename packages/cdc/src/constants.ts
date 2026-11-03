@@ -1,9 +1,14 @@
+import type { ServiceEndpoints } from '@ramiidv/arca-common';
+
 // ---------------------------------------------------------------------------
-// WSCDC Endpoints
+// Endpoints
 // ---------------------------------------------------------------------------
 
 /**
- * Endpoints del WSCDC.
+ * Endpoints de los servicios del SDK, por entorno (las claves coinciden con
+ * las de `config.endpoints`).
+ *
+ * WSCDC (`ENDPOINTS.wscdc`):
  *
  * - Homologación: `soap:address` del WSDL oficial.
  * - Producción: `servicios1.afip.gov.ar` (el manual menciona `servicios1.arca.gob.ar`,
@@ -12,10 +17,12 @@
  *   1024 bits: funciona gracias al fallback TLS legacy de `@ramiidv/arca-common`
  *   (opción `legacyTls`, default `auto`).
  */
-export const WSCDC_ENDPOINTS = {
-  testing: 'https://wswhomo.afip.gov.ar/WSCDC/service.asmx',
-  production: 'https://servicios1.afip.gov.ar/WSCDC/service.asmx',
-} as const;
+export const ENDPOINTS = {
+  wscdc: {
+    testing: 'https://wswhomo.afip.gov.ar/WSCDC/service.asmx',
+    production: 'https://servicios1.afip.gov.ar/WSCDC/service.asmx',
+  },
+} as const satisfies Record<string, ServiceEndpoints>;
 
 // ---------------------------------------------------------------------------
 // SOAP Namespace

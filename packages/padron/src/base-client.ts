@@ -1,28 +1,19 @@
 import { SoapServiceClient, parseServerStatus, validateCuit } from '@ramiidv/arca-common';
-import type { ArcaEvent, CallOptions, ServerStatus, SoapCallOptions } from '@ramiidv/arca-common';
+import type { CallOptions, ServerStatus, ServiceClientConfig } from '@ramiidv/arca-common';
 import { toPadronError } from './errors.js';
 import type { WsAuth } from './types.js';
 
-/** Opciones de transporte que se pasan a cada llamada SOAP. */
-export type PadronSoapOptions = Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs' | 'fetch' | 'legacyTls'>;
-
-/** Configuración común de los clientes de Padrón. */
-export interface PadronClientConfig {
-  /** URL del endpoint SOAP. */
-  endpoint: string;
-  /** Namespace SOAP del servicio. */
-  namespace: string;
-  /** Opciones de transporte (timeout, reintentos, fetch, TLS legacy) */
-  soapOptions?: PadronSoapOptions;
-  /** Callback de eventos (`request:*`). */
-  onEvent?: (event: ArcaEvent) => void;
-}
+/**
+ * Configuración de los clientes de bajo nivel de Padrón (`ServiceClientConfig`
+ * de arca-common): `{ endpoint, transport? }`. El namespace lo fija cada cliente.
+ */
+export type PadronClientConfig = ServiceClientConfig;
 
 /**
  * Base de los clientes de Padrón.
  *
  * Los WS de Padrón declaran los parámetros sin namespace
- * (`elementFormDefault="unqualified"`) y `soapAction=""`: `afipSoapCall` de
+ * (`elementFormDefault="unqualified"`) y `soapAction=""`: `arcaSoapCall` de
  * arca-common prefija el método y deja los parámetros sin namespace. Todas las
  * operaciones son consultas: se reintentan ante errores transitorios (nunca
  * ante un SOAP Fault). Los Faults de negocio conocidos (CUIT inexistente,
@@ -37,24 +28,11 @@ export interface PadronClientConfig {
  */
 export abstract class BasePadronClient extends SoapServiceClient {
   /**
-   * @deprecated El SDK no lo usa: el transporte lo maneja `SoapServiceClient`.
-   * Se mantiene por compatibilidad con subclases y se va a quitar en una versión mayor.
+   * @param config - `endpoint` y `transport` opcional (ver `ENDPOINTS`).
+   * @param namespace - Namespace del WSDL del servicio (ver `NAMESPACES`): lo pasa cada subclase.
    */
-  protected readonly soapOptions?: PadronSoapOptions;
-  /**
-   * @deprecated El SDK no lo usa: los eventos los emite el transporte de `SoapServiceClient`.
-   * Se mantiene por compatibilidad con subclases y se va a quitar en una versión mayor.
-   */
-  protected readonly onEvent?: (event: ArcaEvent) => void;
-
-  constructor(config: PadronClientConfig) {
-    super({
-      endpoint: config.endpoint,
-      namespace: config.namespace,
-      transport: { ...config.soapOptions, onEvent: config.onEvent },
-    });
-    this.soapOptions = config.soapOptions;
-    this.onEvent = config.onEvent;
+  protected constructor(config: PadronClientConfig, namespace: string) {
+    super({ endpoint: config.endpoint, transport: config.transport, namespace });
   }
 
   /** Llama a un método del servicio y traduce los Faults de negocio. */

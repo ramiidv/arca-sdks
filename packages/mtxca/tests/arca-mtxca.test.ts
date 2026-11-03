@@ -1,8 +1,8 @@
 import { testCert } from '@ramiidv/arca-common/testing';
 import { describe, it, expect, vi } from 'vitest';
-import { ArcaSoapError, ArcaValidationError, ArcaServiceError } from '@ramiidv/arca-common';
+import { ArcaRechazoError, ArcaSoapError, ArcaValidationError, ArcaServiceError } from '@ramiidv/arca-common';
 import { ArcaMtxca } from '../src/arca-mtxca.js';
-import { MTXCA_ENDPOINTS } from '../src/constants.js';
+import { ENDPOINTS } from '../src/constants.js';
 import type { ArcaMtxcaConfig } from '../src/types.js';
 import { facturaA, hangingFetch, mockFetch, soapResponse } from './helpers.js';
 
@@ -48,13 +48,13 @@ describe('ArcaMtxca', () => {
     const a = mtxca(m.fetch);
     expect(a.cuit).toBe('20123456786');
     await a.ultimoComprobante(4000, 1);
-    expect(m.calls[0].url).toBe(MTXCA_ENDPOINTS.testing);
+    expect(m.calls[0].url).toBe(ENDPOINTS.wsmtxca.testing);
     expect(m.calls[0].body).toContain('<cuitRepresentada>20123456786</cuitRepresentada>');
   });
 
-  it('endpoints.mtxca y endpoints.wsaa reemplazan los oficiales', async () => {
+  it('endpoints.wsmtxca y endpoints.wsaa reemplazan los oficiales', async () => {
     const m = mockFetch(ultimo(1));
-    await mtxca(m.fetch, { endpoints: { mtxca: 'https://proxy.local/mtxca' } }).ultimoComprobante(4000, 1);
+    await mtxca(m.fetch, { endpoints: { wsmtxca: 'https://proxy.local/mtxca' } }).ultimoComprobante(4000, 1);
     expect(m.calls[0].url).toBe('https://proxy.local/mtxca');
     const a = new ArcaMtxca({
       ...testCert(),
@@ -117,6 +117,38 @@ describe('ArcaMtxca', () => {
     expect(m.fn).toHaveBeenCalledTimes(1);
   });
 
+  it('autorizar: un rechazo de ARCA lanza ArcaRechazoError (no devuelve resultado R)', async () => {
+    const m = mockFetch(
+      soapResponse(
+        'autorizarComprobanteResponse',
+        '<resultado>R</resultado><arrayErrores><codigoDescripcion><codigo>102</codigo>' +
+          '<descripcion>Numero no correlativo</descripcion></codigoDescripcion></arrayErrores>',
+      ),
+    );
+    const err = await mtxca(m.fetch)
+      .autorizar(facturaA())
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err).toMatchObject({ operacion: 'autorizarComprobante', errors: [{ code: 102 }] });
+  });
+
+  it('solicitarCAEA con arrayErrores lanza ArcaServiceError; informarCAEANoUtilizado R lanza ArcaRechazoError', async () => {
+    const errores =
+      '<arrayErrores><codigoDescripcion><codigo>1300</codigo><descripcion>Fuera de plazo</descripcion></codigoDescripcion></arrayErrores>';
+    const m = mockFetch(
+      soapResponse('solicitarCAEAResponse', errores),
+      soapResponse('informarCAEANoUtilizadoResponse', `<resultado>R</resultado>${errores}`),
+    );
+    const a = mtxca(m.fetch);
+    const err = await a.solicitarCAEA(202611, 1).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaServiceError);
+    expect(err).not.toBeInstanceOf(ArcaRechazoError);
+    await expect(a.informarCAEANoUtilizado('36434058476543')).rejects.toMatchObject({
+      operacion: 'informarCAEANoUtilizado',
+      errors: [{ code: 1300, msg: 'Fuera de plazo' }],
+    });
+  });
+
   it('autorizar con timeout: 1 solo fetch de autorización y error uncertain', async () => {
     const h = hangingFetch();
     const err = await mtxca(h.fetch, { timeout: 20, retries: 3 })
@@ -166,6 +198,16 @@ describe('ArcaMtxca', () => {
     });
     await a.clearAuthCache();
     expect(done).toBe(true);
+  });
+
+  it('pide y limpia el ticket del servicio wsmtxca', async () => {
+    const m = mockFetch(ultimo(1));
+    const a = mtxca(m.fetch);
+    const clear = vi.spyOn(a.wsaa, 'clearTicket').mockResolvedValue();
+    await a.ultimoComprobante(4000, 1);
+    expect(a.wsaa.getAccessTicket).toHaveBeenCalledWith('wsmtxca', expect.anything());
+    await a.clearAuthCache();
+    expect(clear).toHaveBeenCalledWith('wsmtxca');
   });
 });
 

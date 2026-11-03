@@ -1,6 +1,6 @@
 import { ArcaSdkBase, ArcaServiceError, formatDate } from '@ramiidv/arca-common';
 import type { CallOptions, QROptions, ServerStatus } from '@ramiidv/arca-common';
-import { MTXCA_ENDPOINTS, MTXCA_SERVICE_ID } from './constants.js';
+import { ENDPOINTS, MTXCA_SERVICE_ID } from './constants.js';
 import { MtxcaClient } from './mtxca-client.js';
 import { urlQR } from './qr.js';
 import type { ComprobanteQR } from './qr.js';
@@ -35,27 +35,31 @@ const SIN_COMPROBANTES = 1502;
  * @example
  * ```ts
  * const mtxca = new ArcaMtxca({ cert, key, cuit: '20123456786' });
- * const res = await mtxca.autorizar({ ...comprobante });
- * if (res.resultado === 'R') console.error(res.errores);
- * else console.log(res.comprobante.cae);
+ * try {
+ *   const res = await mtxca.autorizar({ ...comprobante }); // 'A' u 'O'
+ *   console.log(res.comprobante.cae, res.observaciones);
+ * } catch (e) {
+ *   if (e instanceof ArcaRechazoError) console.error(e.errors); // ARCA lo rechazó
+ *   else throw e;
+ * }
  * ```
  */
-export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
+export class ArcaMtxca extends ArcaSdkBase<'wsmtxca'> {
   /** Cliente SOAP de bajo nivel (acceso directo). */
   public readonly client: MtxcaClient;
 
   /** @throws ArcaValidationError si la CUIT es inválida. */
   constructor(config: ArcaMtxcaConfig) {
-    super(config, { mtxca: MTXCA_SERVICE_ID });
+    super(config, { wsmtxca: MTXCA_SERVICE_ID });
     this.client = new MtxcaClient({
-      endpoint: this.endpoint(MTXCA_ENDPOINTS, config.endpoints?.mtxca),
-      ...this.transport,
+      endpoint: this.endpoint(ENDPOINTS.wsmtxca, config.endpoints?.wsmtxca),
+      transport: this.transport,
       onEvento: config.onEvento,
     });
   }
 
   private async auth(opts?: CallOptions): Promise<MtxcaAuth> {
-    const ticket = await this.ticket('mtxca', opts);
+    const ticket = await this.ticket('wsmtxca', opts);
     return { token: ticket.token, sign: ticket.sign, cuitRepresentada: this.cuit };
   }
 
@@ -70,11 +74,16 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
    *   valida la coherencia de importes según el manual.
    * - Sin `numeroComprobante`, usa el último autorizado + 1. Las solicitudes
    *   para un mismo punto de venta y tipo deben ser secuenciales (error 135).
-   * - Un rechazo devuelve `resultado: 'R'` con `errores`; `O` es aprobado con
-   *   observaciones.
-   * - Si lanza `ArcaSoapError` con `uncertain: true`, el comprobante pudo
-   *   haberse autorizado: NO reintentes a ciegas; usá `ultimoComprobante()` y
-   *   `consultarComprobante()` para saber si quedó autorizado.
+   * - Devuelve siempre un comprobante aprobado: `A`, u `O` (aprobado con
+   *   observaciones). Un rechazo lanza `ArcaRechazoError`.
+   * - Si lanza `ArcaSoapError` o `ArcaResponseError` con `uncertain: true`, el
+   *   comprobante pudo haberse autorizado: NO reintentes a ciegas; usá
+   *   `ultimoComprobante()` y `consultarComprobante()` para saber si quedó autorizado.
+   *
+   * @throws ArcaValidationError si el comprobante es inválido (antes de llamar a ARCA).
+   * @throws ArcaRechazoError si ARCA rechaza el comprobante (`errors`, `observaciones`).
+   * @throws ArcaServiceError si falla la consulta del último número.
+   * @throws ArcaSoapError / ArcaResponseError (con `uncertain`) si no se puede confirmar el resultado.
    */
   async autorizar(request: AutorizarRequest, opts?: AutorizarOptions): Promise<MtxcaAutorizarResult> {
     return this.autorizarCAE('autorizarComprobante', request, opts);
@@ -85,6 +94,8 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
    * Tiene reglas propias (ej. importeSubtotal 0, sin gravado/no gravado/exento),
    * así que solo se valida contra el XSD. Misma numeración y manejo de errores
    * que `autorizar()`.
+   *
+   * @throws ArcaRechazoError si ARCA rechaza el ajuste.
    */
   async autorizarAjusteIVA(request: AutorizarRequest, opts?: CallOptions): Promise<MtxcaAutorizarResult> {
     return this.autorizarCAE('autorizarAjusteIVA', request, { ...opts, validarImportes: false });
@@ -154,10 +165,10 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
    * @example
    * ```ts
    * const res = await mtxca.autorizar(req);
-   * if (res.resultado !== 'R') console.log(mtxca.urlQR(req, res));
+   * console.log(mtxca.urlQR(req, res));
    * // Más tarde: mtxca.urlQR((await mtxca.consultarComprobante(1, 4000, 25)).comprobante)
    * ```
-   * @throws ArcaValidationError si el comprobante fue rechazado o falta algún dato (ver `urlQR`).
+   * @throws ArcaValidationError si falta algún dato (ver `urlQR`).
    */
   urlQR(
     comprobante: ComprobanteQR,
@@ -173,8 +184,10 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
 
   /**
    * Solicita un CAEA para `periodo` (AAAAMM) y `orden` (1: días 1-15, 2: 16
-   * a fin de mes). Lanza `ArcaServiceError` si ARCA lo rechaza. Si lanza
-   * `ArcaSoapError` con `uncertain`, consultá `consultarCAEAEntreFechas()`.
+   * a fin de mes). Si lanza `ArcaSoapError` o `ArcaResponseError` con
+   * `uncertain`, consultá `consultarCAEAEntreFechas()`.
+   *
+   * @throws ArcaServiceError si ARCA no otorga el CAEA (`arrayErrores`).
    */
   async solicitarCAEA(periodo: number, orden: number, opts?: CallOptions): Promise<MtxcaCAEA> {
     const auth = await this.auth(opts);
@@ -201,8 +214,10 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
    * Informa un comprobante emitido con CAEA (`informarComprobanteCAEA`). Valida
    * el XSD y las reglas excluyentes del manual (ítems, receptor, condición de
    * IVA del receptor, FCE, comprobantes asociados, datos adicionales,
-   * compradores, `fechaHoraGen`; ver `validateComprobanteCAEA`). Un rechazo devuelve
-   * `resultado: 'R'`. Ante `uncertain`, verificá con `consultarComprobante()`.
+   * compradores, `fechaHoraGen`; ver `validateComprobanteCAEA`). Ante
+   * `uncertain`, verificá con `consultarComprobante()`.
+   *
+   * @throws ArcaRechazoError si ARCA rechaza el comprobante.
    */
   async informarComprobanteCAEA(
     comprobante: MtxcaComprobanteCAEA,
@@ -216,6 +231,8 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
   /**
    * Informa un ajuste de IVA emitido con CAEA (`informarAjusteIVACAEA`). Valida
    * el XSD y `fechaHoraGen`, obligatoria en todo comprobante CAEA (754).
+   *
+   * @throws ArcaRechazoError si ARCA rechaza el ajuste.
    */
   async informarAjusteIVACAEA(comprobante: MtxcaComprobanteCAEA, opts?: CallOptions): Promise<MtxcaInformarCAEAResult> {
     buildComprobante(comprobante, 'caea', reglaFechaHoraGen);
@@ -223,13 +240,19 @@ export class ArcaMtxca extends ArcaSdkBase<'mtxca'> {
     return this.client.informarAjusteIVACAEA(auth, comprobante, this.callOptions(opts));
   }
 
-  /** Informa que un CAEA no se utilizó. Un rechazo devuelve `resultado: 'R'`. */
+  /**
+   * Informa que un CAEA no se utilizó.
+   * @throws ArcaRechazoError si ARCA lo rechaza.
+   */
   async informarCAEANoUtilizado(caea: string, opts?: CallOptions): Promise<MtxcaCAEANoUtilizadoResult> {
     const auth = await this.auth(opts);
     return this.client.informarCAEANoUtilizado(auth, caea, this.callOptions(opts));
   }
 
-  /** Informa que un CAEA no se utilizó en un punto de venta. Un rechazo devuelve `resultado: 'R'`. */
+  /**
+   * Informa que un CAEA no se utilizó en un punto de venta.
+   * @throws ArcaRechazoError si ARCA lo rechaza.
+   */
   async informarCAEANoUtilizadoPtoVta(
     caea: string,
     ptoVta: number,

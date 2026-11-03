@@ -5,13 +5,10 @@ import {
   diasEntre,
   formatCuit,
   isValidCuit,
-  validateCuil,
-  normalizeCuil,
-  formatCuil,
   validateCBU,
   isValidCBU,
   formatDate,
-  parseAfipDate,
+  parseArcaDate,
   validateFecha,
   validateFechaRango,
   ArcaValidationError,
@@ -122,20 +119,6 @@ describe('isValidCuit', () => {
   });
 });
 
-describe('backward compat aliases', () => {
-  it('validateCuil is validateCuit', () => {
-    expect(validateCuil).toBe(validateCuit);
-  });
-
-  it('normalizeCuil is normalizeCuit', () => {
-    expect(normalizeCuil).toBe(normalizeCuit);
-  });
-
-  it('formatCuil is formatCuit', () => {
-    expect(formatCuil).toBe(formatCuit);
-  });
-});
-
 // ---------------------------------------------------------------------------
 // CBU
 // ---------------------------------------------------------------------------
@@ -206,24 +189,24 @@ describe('formatDate', () => {
   });
 });
 
-describe('parseAfipDate', () => {
+describe('parseArcaDate', () => {
   it('parses YYYYMMDD', () => {
-    const date = parseAfipDate('20260315');
+    const date = parseArcaDate('20260315');
     expect(date.getFullYear()).toBe(2026);
     expect(date.getMonth()).toBe(2); // March = 2
     expect(date.getDate()).toBe(15);
   });
 
   it('parses YYYY-MM-DD', () => {
-    const date = parseAfipDate('2026-03-15');
+    const date = parseArcaDate('2026-03-15');
     expect(date.getFullYear()).toBe(2026);
     expect(date.getMonth()).toBe(2);
     expect(date.getDate()).toBe(15);
   });
 
   it('throws on invalid format', () => {
-    expect(() => parseAfipDate('15/03/2026')).toThrow(ArcaValidationError);
-    expect(() => parseAfipDate('abc')).toThrow(ArcaValidationError);
+    expect(() => parseArcaDate('15/03/2026')).toThrow(ArcaValidationError);
+    expect(() => parseArcaDate('abc')).toThrow(ArcaValidationError);
   });
 });
 
@@ -313,14 +296,14 @@ describe('formatDate (estricto)', () => {
   });
 });
 
-describe('parseAfipDate (estricto)', () => {
+describe('parseArcaDate (estricto)', () => {
   it('rechaza guiones fuera de lugar y fechas inexistentes', () => {
     for (const bad of ['2026-0315', '20-26-03-15', '2026--03-15', '20230230', '2023-13-01', '00000000']) {
-      expect(() => parseAfipDate(bad), bad).toThrow(ArcaValidationError);
+      expect(() => parseArcaDate(bad), bad).toThrow(ArcaValidationError);
     }
   });
 
-  it('formatDate(parseAfipDate(x)) === x en cualquier zona horaria', () => {
+  it('formatDate(parseArcaDate(x)) === x en cualquier zona horaria', () => {
     for (const tz of [
       'UTC',
       'America/Argentina/Buenos_Aires',
@@ -330,9 +313,9 @@ describe('parseAfipDate (estricto)', () => {
     ]) {
       withTZ(tz, () => {
         for (const x of ['20260315', '20240229', '20261231', '20260101']) {
-          expect(formatDate(parseAfipDate(x)), `${tz} ${x}`).toBe(x);
+          expect(formatDate(parseArcaDate(x)), `${tz} ${x}`).toBe(x);
         }
-        expect(formatDate(parseAfipDate('2026-03-15'))).toBe('20260315');
+        expect(formatDate(parseArcaDate('2026-03-15'))).toBe('20260315');
       });
     }
   });

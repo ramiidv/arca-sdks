@@ -16,14 +16,20 @@ import {
   type Schema,
 } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
+import { NAMESPACES } from './constants.js';
 import type { PersonaA4, WsAuth } from './types.js';
 
+/** Configuración de `PadronA4Client`: `{ endpoint, transport? }` (ver `ENDPOINTS.a4`). */
 export type PadronA4ClientConfig = PadronClientConfig;
 
 /**
  * Cliente de ws_sr_padron_a4: datos completos de un contribuyente.
  */
 export class PadronA4Client extends BasePadronClient {
+  constructor(config: PadronA4ClientConfig) {
+    super(config, NAMESPACES.a4);
+  }
+
   /**
    * Datos completos de un contribuyente.
    * @param auth - Credenciales: `token`, `sign` y `cuitRepresentada`

@@ -8,7 +8,7 @@
  *
  * @internal No se exporta desde `index.ts`.
  */
-import { ArcaSoapError, formatDate, validateCBU } from '@ramiidv/arca-common';
+import { ArcaResponseError, formatDate, validateCBU } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
 import {
   choice,
@@ -185,12 +185,12 @@ function conObservaciones(node: unknown, schema: Schema): unknown {
 
 /**
  * Decodifica una respuesta (pedida con `parseNumbers: false`). Una respuesta
- * que no cumple el schema lanza `ArcaSoapError`, con `uncertain` solo en las
+ * que no cumple el schema lanza `ArcaResponseError`, con `uncertain` solo en las
  * emisiones (la operación pudo haberse registrado aunque no se pueda leer).
  */
 export function decode<T>(node: unknown, schema: Schema, path: string, kind: SoapOperationKind): T {
   return decodeResponse<T>(conObservaciones(node, schema), schema, path, {
-    error: (message) => new ArcaSoapError(`${SERVICE}: ${message}`, { uncertain: kind === 'emision' }),
+    error: (message) => new ArcaResponseError(`${SERVICE}: ${message}`, kind === 'emision'),
   });
 }
 
@@ -283,7 +283,6 @@ const nroPagina = () => opt(int(1, 32767));
 
 export const REQ = {
   consultarMontoObligadoRecepcion: { cuitConsultada: cuit(), fechaEmision: date() },
-  consultarObligadoRecepcion: { cuitConsultada: cuit() },
   consultarCtasCtes: {
     rol: rol(),
     cuitContraparte: cuitContraparte(),
@@ -474,7 +473,6 @@ const INFO_OBSERVACION: Schema = { observaciones: as('arrayObservacion', codigos
 
 export const RESP = {
   consultarMontoObligadoRecepcion: { obligado: siNo(), montoDesde: importe(), ...INFO_OBSERVACION },
-  consultarObligadoRecepcion: { obligado: as('respuesta', siNo()), desde: date(), ...INFO_OBSERVACION },
   consultarCtasCtes: {
     ctasCtes: as('arrayInfosCtaCte', wrapped('infoCtaCte', obj(INFO_CTA_CTE))),
     nroPagina: int(),
@@ -535,7 +533,7 @@ export const RESP = {
 
 /**
  * Las observaciones con cualquiera de los dos nombres del XSD, para el detalle
- * de un `ArcaServiceError` (errores de negocio o resultado `R`).
+ * de un `ArcaServiceError` (errores de negocio) o un `ArcaRechazoError` (resultado `R`).
  */
 export const OBSERVACIONES: Schema = {
   observaciones: INFO['observaciones']!,

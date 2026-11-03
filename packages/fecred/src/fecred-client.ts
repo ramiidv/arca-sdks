@@ -1,18 +1,21 @@
 import {
   ArcaAuthError,
+  ArcaRechazoError,
   ArcaServiceError,
   ArcaSoapError,
   SoapServiceClient,
   extractServiceErrors,
+  formatServiceErrors,
   parseServerStatus,
 } from '@ramiidv/arca-common';
 import type {
   CallOptions,
   ServerStatus,
+  ServiceClientConfig,
   ServiceErrorDetail,
   SoapOperationKind,
-  SoapServiceClientConfig,
 } from '@ramiidv/arca-common';
+import { FECRED_NAMESPACE } from './constants.js';
 import { decode, encode, OBSERVACIONES, REQ, RESP, SERVICE } from './schemas.js';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import type {
@@ -36,7 +39,6 @@ import type {
   InformarFacturaAgtDptoCltvParams,
   ModificarOpcionTransferenciaParams,
   MontoObligadoRecepcionResult,
-  ObligadoRecepcionResult,
   OperacionFecredResult,
   RechazarFecredParams,
   RechazarNotaDCParams,
@@ -49,7 +51,11 @@ import type {
 // Client config
 // ---------------------------------------------------------------------------
 
-export type FecredClientConfig = SoapServiceClientConfig;
+/**
+ * Configuración de `FecredClient`: `endpoint` (ver `ENDPOINTS.wsfecred`) y
+ * `transport` opcional. El namespace lo fija el cliente (`FECRED_NAMESPACE`).
+ */
+export type FecredClientConfig = ServiceClientConfig;
 
 type Xml = Record<string, unknown>;
 
@@ -76,9 +82,6 @@ function authFault(e: unknown): ArcaAuthError | undefined {
   return new ArcaAuthError(`${SERVICE}: ${e.faultString}`, { cause: e });
 }
 
-const formatDetails = (details: ServiceErrorDetail[]) =>
-  details.map((d) => `[${d.rawCode ?? d.code}] ${d.msg}`).join(', ');
-
 // ---------------------------------------------------------------------------
 // FecredClient
 // ---------------------------------------------------------------------------
@@ -91,14 +94,21 @@ const formatDetails = (details: ServiceErrorDetail[]) =>
  *
  * Las operaciones que cambian estado en ARCA (aceptar, rechazar, informar,
  * modificar) se envían como `kind: 'emision'`: nunca se reintentan y, si la
- * respuesta se pierde, el `ArcaSoapError` tiene `uncertain = true`.
+ * respuesta se pierde, el `ArcaSoapError` tiene `uncertain = true`. Una
+ * emisión con `resultado` `R` se lanza como `ArcaRechazoError`; una respuesta
+ * con forma inesperada, como `ArcaResponseError` (`uncertain` en las emisiones).
  *
  * Un SOAP Fault `wscommon_*` (rechazo del `authRequest`) se lanza como
  * `ArcaAuthError`: la operación no se procesó.
+ *
+ * @example
+ * ```ts
+ * const client = new FecredClient({ endpoint: ENDPOINTS.wsfecred.testing });
+ * ```
  */
 export class FecredClient extends SoapServiceClient {
   constructor(config: FecredClientConfig) {
-    super(config);
+    super({ ...config, namespace: FECRED_NAMESPACE });
   }
 
   // -------------------------------------------------------------------------
@@ -107,8 +117,9 @@ export class FecredClient extends SoapServiceClient {
 
   /**
    * Llama a `method` con el wrapper `<method>Request` (o Body vacío si `auth`
-   * es `null`), `SOAPAction = namespace + method`, y chequea errores de negocio
-   * (`arrayErrores`/`arrayErroresFormato` → `ArcaServiceError`, con las
+   * es `null`), `SOAPAction = namespace + method`, y chequea errores de negocio:
+   * en una emisión, `resultado` `R` → `ArcaRechazoError` (con o sin errores);
+   * si no, `arrayErrores`/`arrayErroresFormato` → `ArcaServiceError` (con las
    * observaciones al final de `errors`). La respuesta queda como texto
    * (`parseNumbers: false`) para decodificarla con los schemas.
    */
@@ -140,9 +151,17 @@ export class FecredClient extends SoapServiceClient {
       throw authFault(e) ?? e;
     }
     const errors = extractServiceErrors(result);
+    if (kind === 'emision' && result['resultado'] === 'R') {
+      const observaciones = this.observaciones(result, method);
+      const details = [...errors, ...observaciones];
+      throw new ArcaRechazoError(
+        `${SERVICE} ${method}: operación rechazada (resultado R)${details.length ? `: ${formatServiceErrors(details)}` : ''}`,
+        { operacion: method, errors, observaciones },
+      );
+    }
     if (errors.some((e) => e.code !== 0 || e.rawCode !== undefined)) {
       const details = [...errors, ...this.observaciones(result, method)];
-      throw new ArcaServiceError(`${SERVICE} ${method}: ${formatDetails(details)}`, details);
+      throw new ArcaServiceError(`${SERVICE} ${method}: ${formatServiceErrors(details)}`, details);
     }
     return result;
   }
@@ -171,9 +190,9 @@ export class FecredClient extends SoapServiceClient {
   }
 
   /**
-   * Emisión con `resultado`: `R` sin errores informados (no debería pasar)
-   * también se lanza como `ArcaServiceError`, con las observaciones como detalle.
-   * Una respuesta sin `resultado` (o ilegible) lanza `ArcaSoapError` con `uncertain`.
+   * Emisión con `resultado`: `R` se lanza como `ArcaRechazoError` (en `call`),
+   * así que lo que se devuelve siempre es `A` u `O`. Una respuesta sin
+   * `resultado` (o ilegible) lanza `ArcaResponseError` con `uncertain`.
    */
   private async emision<T>(
     method: string,
@@ -184,13 +203,6 @@ export class FecredClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<T> {
     const r = await this.call(method, auth, encode(input, reqSchema, method), 'emision', opts);
-    if (r['resultado'] === 'R') {
-      const details = [...extractServiceErrors(r), ...this.observaciones(r, method)];
-      throw new ArcaServiceError(
-        `${SERVICE} ${method}: operación rechazada (resultado R)${details.length ? `: ${formatDetails(details)}` : ''}`,
-        details,
-      );
-    }
     return decode<T>(r, respSchema, method, 'emision');
   }
 
@@ -215,19 +227,6 @@ export class FecredClient extends SoapServiceClient {
   ): Promise<MontoObligadoRecepcionResult> {
     const m = 'consultarMontoObligadoRecepcion';
     return this.consulta(m, auth, [params, REQ[m]], RESP[m], opts);
-  }
-
-  /**
-   * `consultarObligadoRecepcion`: si la CUIT está obligada a recibir FCE (campo `respuesta`) y desde cuándo.
-   * @deprecated El manual (§2.4.13) la depreca porque la información es incompleta: usar `consultarMontoObligadoRecepcion`.
-   */
-  async consultarObligadoRecepcion(
-    auth: WsAuthSource,
-    cuitConsultada: number | string,
-    opts?: CallOptions,
-  ): Promise<ObligadoRecepcionResult> {
-    const m = 'consultarObligadoRecepcion';
-    return this.consulta(m, auth, [{ cuitConsultada }, REQ[m]], RESP[m], opts);
   }
 
   // -------------------------------------------------------------------------

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ArcaAuthError, ArcaError, ArcaSoapError, ArcaTicketVigenteError, ArcaValidationError } from '../src/errors.js';
+import {
+  ArcaAuthError,
+  ArcaError,
+  ArcaRechazoError,
+  ArcaServiceError,
+  ArcaSoapError,
+  ArcaTicketVigenteError,
+  ArcaValidationError,
+} from '../src/errors.js';
 
 /** Simula una segunda copia del paquete (ej: build CJS cargado junto al ESM). */
 async function loadSecondCopy() {
@@ -20,6 +28,23 @@ describe('errores', () => {
     expect(new ArcaValidationError('x', []).code).toBe('ARCA_VALIDATION_ERROR');
   });
 
+  it('ArcaRechazoError es un ArcaServiceError con operacion, errors y observaciones', () => {
+    const err = new ArcaRechazoError('rechazado', {
+      operacion: 'FECAESolicitar',
+      errors: [{ code: 10016, msg: 'x' }],
+      observaciones: [{ code: 10017, msg: 'y' }],
+    });
+    expect(err.code).toBe('ARCA_RECHAZO');
+    expect(err.name).toBe('ArcaRechazoError');
+    expect(err).toBeInstanceOf(ArcaServiceError);
+    expect(err.operacion).toBe('FECAESolicitar');
+    expect(err.errors).toEqual([{ code: 10016, msg: 'x' }]);
+    expect(err.observaciones).toEqual([{ code: 10017, msg: 'y' }]);
+    const sinDetalle = new ArcaRechazoError('r', { operacion: 'm' });
+    expect(sinDetalle.errors).toEqual([]);
+    expect(sinDetalle.observaciones).toEqual([]);
+  });
+
   it('ArcaSoapError acepta el statusCode posicional (compatibilidad)', () => {
     const err = new ArcaSoapError('HTTP 500', 500);
     expect(err.statusCode).toBe(500);
@@ -37,6 +62,11 @@ describe('errores', () => {
     expect(fromCopy).not.toBeInstanceOf(ArcaSoapError);
 
     expect(new ArcaSoapError('x')).toBeInstanceOf(copy.ArcaError);
+
+    const rechazo = new copy.ArcaRechazoError('r', { operacion: 'm' });
+    expect(rechazo).toBeInstanceOf(ArcaRechazoError);
+    expect(rechazo).toBeInstanceOf(ArcaServiceError);
+    expect(new copy.ArcaServiceError('x', [])).not.toBeInstanceOf(ArcaRechazoError);
   });
 
   it('instanceof no da falsos positivos con objetos ajenos', () => {
@@ -59,7 +89,7 @@ describe('errores: code estático', () => {
   });
 });
 
-describe('cause en ArcaServiceError y ArcaValidationError', async () => {
+describe('cause en ArcaServiceError, ArcaRechazoError y ArcaValidationError', async () => {
   const { ArcaServiceError } = await import('../src/errors.js');
 
   it('aceptan cause opcional manteniendo la firma anterior', () => {
@@ -68,6 +98,9 @@ describe('cause en ArcaServiceError y ArcaValidationError', async () => {
     expect(svc.cause).toBe(root);
     expect(svc.errors).toEqual([{ code: 1, msg: 'm' }]);
     expect(new ArcaServiceError('x', []).cause).toBeUndefined();
+
+    const rechazo = new ArcaRechazoError('x', { operacion: 'm' }, { cause: root });
+    expect(rechazo.cause).toBe(root);
 
     const val = new ArcaValidationError('x', [], 'campo', { cause: root });
     expect(val.cause).toBe(root);

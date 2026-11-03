@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   ArcaAgroResponseError,
   ArcaAgroServiceError,
+  ArcaRechazoError,
   ArcaServiceError,
   ArcaSoapError,
   ArcaValidationError,
-  CPE_ENDPOINTS,
+  ENDPOINTS,
   TIPO_CPE,
   cpeFaultException,
 } from '../src/index.js';
@@ -94,7 +95,7 @@ describe('WSCPE: transporte y forma del request', () => {
 
     expect(calls).toHaveLength(1);
     const c = calls[0];
-    expect(c.url).toBe(CPE_ENDPOINTS.testing);
+    expect(c.url).toBe(ENDPOINTS.cpe.testing);
     expect(c.url).toBe('https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap');
     expect(c.element).toBe('ser:AutorizarCPEAutomotorReq');
     expect(c.ns).toBe(CPE_NS);
@@ -419,6 +420,8 @@ describe.each(OPERACIONES)('WSCPE $method (emisión)', ({ method, run, order }) 
     const e1: any = await run(one.agro).catch((e: any) => e);
     expect(e1).toBeInstanceOf(ArcaAgroServiceError);
     expect(e1).toBeInstanceOf(ArcaServiceError);
+    // WSCPE no tiene `resultado`: los rechazos vienen sólo en `errores` (no son ArcaRechazoError).
+    expect(e1).not.toBeInstanceOf(ArcaRechazoError);
     expect(e1.errors).toEqual([{ code: 1501, msg: 'El número de orden ya fue utilizado.' }]);
     expect(e1.method).toBe(method);
 

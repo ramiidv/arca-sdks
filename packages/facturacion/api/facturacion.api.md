@@ -8,6 +8,7 @@ import { AccessTicket } from '@ramiidv/arca-common';
 import { ArcaAuthError } from '@ramiidv/arca-common';
 import { ArcaError } from '@ramiidv/arca-common';
 import { ArcaEvent } from '@ramiidv/arca-common';
+import { ArcaRechazoError } from '@ramiidv/arca-common';
 import { ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { ArcaSdkConfig } from '@ramiidv/arca-common';
@@ -26,7 +27,11 @@ import { QR_URL } from '@ramiidv/arca-common';
 import { QRInput } from '@ramiidv/arca-common';
 import { QROptions } from '@ramiidv/arca-common';
 import type { ServerStatus } from '@ramiidv/arca-common';
+import { ServiceClientConfig } from '@ramiidv/arca-common';
+import { ServiceEndpoints } from '@ramiidv/arca-common';
+import { ServiceErrorDetail } from '@ramiidv/arca-common';
 import type { ServiceStatus } from '@ramiidv/arca-common';
+import { ServiceTransport } from '@ramiidv/arca-common';
 import { SoapServiceClient } from '@ramiidv/arca-common';
 import { TicketStorage } from '@ramiidv/arca-common';
 import { WsaaClient } from '@ramiidv/arca-common';
@@ -136,7 +141,9 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     registrarFacturaCAEA(caea: string, opts: FacturarCAEAOpts, call?: CallOptions): Promise<FacturaResult>;
     siguienteComprobante(ptoVta: number, cbteTipo: number, call?: CallOptions): Promise<number>;
     siguienteComprobanteExpo(ptoVta: number, cbteTipo: number, call?: CallOptions): Promise<number>;
-    sinMovimientoCAEA(caea: string, ptoVta: number, call?: CallOptions): Promise<CaeaSinMovResult>;
+    sinMovimientoCAEA(caea: string, ptoVta: number, call?: CallOptions): Promise<CaeaSinMovResult & {
+        resultado: 'A';
+    }>;
     solicitarCAEA(periodo: string, orden: number, call?: CallOptions): Promise<CaeaSolicitarResult>;
     status(call?: CallOptions): Promise<{
         wsfe: ServiceStatus;
@@ -147,6 +154,8 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     ultimoIdExpo(call?: CallOptions): Promise<number>;
     urlQR(factura: FacturaResult, datos?: Omit<DatosQR, 'cuit'>, options?: QROptions): string;
 }
+
+export { ArcaRechazoError }
 
 export { ArcaResponseError }
 
@@ -454,7 +463,7 @@ export interface DatosQR {
 
 export { DocTipo }
 
-// @public (undocumented)
+// @public
 export const ENDPOINTS: {
     readonly wsfe: {
         readonly testing: 'https://wswhomo.afip.gov.ar/wsfev1/service.asmx';
@@ -477,10 +486,9 @@ export interface ExpoLineItem {
     unidad: number;
 }
 
-// @public (undocumented)
+// @public
 export interface FacturaExpoResult {
-    aprobada: boolean;
-    cae?: string;
+    cae: string;
     caeVencimiento?: string;
     cbteNro: number;
     cbteTipo: number;
@@ -499,10 +507,9 @@ export interface FacturarCAEAOpts extends FacturarOpts {
     fechaHoraGeneracion: Date | string;
 }
 
-// @public (undocumented)
+// @public
 export interface FacturaResult {
-    aprobada: boolean;
-    cae?: string;
+    cae: string;
     caeVencimiento?: string;
     cbteNro: number;
     cbteTipo: number;
@@ -949,12 +956,12 @@ export { QRInput }
 export { QROptions }
 
 // @public
-export function requiereRecuperacion(resultadoOError: FacturaResult | unknown): boolean;
+export function requiereRecuperacion(error: unknown): boolean;
 
 // @public
 export function resolverCbteTipo(emisor: CondicionIva, receptor: CondicionIva, clase?: ClaseComprobante): CbteTipo;
 
-// @public (undocumented)
+// @public
 export type ResultadoRecuperacion =
 /** ARCA autorizó el comprobante con los mismos datos del intento. */
     {
@@ -970,6 +977,14 @@ export type ResultadoRecuperacion =
     estado: 'conflicto';
     encontrado: FECompConsultarResult;
 };
+
+export { ServiceClientConfig }
+
+export { ServiceEndpoints }
+
+export { ServiceErrorDetail }
+
+export { ServiceTransport }
 
 export { TicketStorage }
 
@@ -1029,18 +1044,6 @@ export const WSAA_SERVICES: {
 export { WsaaClient }
 
 // @public
-export interface WsClientOptions {
-    endpoint?: string;
-    fetch?: typeof fetch;
-    legacyTls?: LegacyTlsMode;
-    // (undocumented)
-    onEvent?: (event: ArcaEvent) => void;
-    retries?: number;
-    retryDelayMs?: number;
-    timeoutMs?: number;
-}
-
-// @public
 export const WSFE_CAEA_NUMERO_NO_CORRESPONDE = 703;
 
 // @public
@@ -1067,7 +1070,7 @@ export interface WsfeAuth {
 
 // @public
 export class WsfeClient extends SoapServiceClient {
-    constructor(production: boolean, opts?: WsClientOptions);
+    constructor(config: ServiceClientConfig);
     // (undocumented)
     consultarCAEA(auth: WsfeAuth, periodo: string, orden: number, opts?: CallOptions): Promise<CaeaSolicitarResult>;
     // (undocumented)
@@ -1136,7 +1139,7 @@ export interface WsfexAuthResult {
 
 // @public
 export class WsfexClient extends SoapServiceClient {
-    constructor(production: boolean, opts?: WsClientOptions);
+    constructor(config: ServiceClientConfig);
     authorize(auth: WsfeAuth, invoice: WsfexInvoice, opts?: CallOptions): Promise<WsfexAuthResult>;
     checkPermiso(auth: WsfeAuth, idPermiso: string, dstMerc: number, opts?: CallOptions): Promise<string>;
     dummy(opts?: CallOptions): Promise<ServerStatus>;

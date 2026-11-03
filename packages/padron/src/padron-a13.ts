@@ -2,14 +2,20 @@ import { ArcaValidationError, validateCuit } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
 import { Metadata, conMetadata, decode, decodePersona, id, int, list, must, obj, str, type Schema } from './mapping.js';
 import { BasePadronClient, type PadronClientConfig } from './base-client.js';
+import { NAMESPACES } from './constants.js';
 import type { ListaPadron, PadronMetadata, PersonaA13, WsAuth } from './types.js';
 
+/** Configuración de `PadronA13Client`: `{ endpoint, transport? }` (ver `ENDPOINTS.a13`). */
 export type PadronA13ClientConfig = PadronClientConfig;
 
 /**
  * Cliente de ws_sr_padron_a13: datos básicos de un contribuyente (manual v1.4).
  */
 export class PadronA13Client extends BasePadronClient {
+  constructor(config: PadronA13ClientConfig) {
+    super(config, NAMESPACES.a13);
+  }
+
   /**
    * Datos de un contribuyente por CUIT (`getPersona`). Si la clave está
    * inactiva, ARCA responde con error (`reason: 'inactiva'`): usá `getPersonaV2`.

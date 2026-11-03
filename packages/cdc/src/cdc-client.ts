@@ -5,7 +5,7 @@ import {
   SoapServiceClient,
   validateCuit,
 } from '@ramiidv/arca-common';
-import type { CallOptions, ServerStatus, ServiceTransport } from '@ramiidv/arca-common';
+import type { CallOptions, ServerStatus, ServiceClientConfig } from '@ramiidv/arca-common';
 import { decodeResponse, obj, wrapped, xml } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import { WSCDC_NAMESPACE } from './constants.js';
@@ -26,11 +26,11 @@ import type {
 
 type Raw = Record<string, unknown>;
 
-/** Endpoint y opciones de transporte del cliente de bajo nivel. */
-export interface CdcClientConfig extends ServiceTransport {
-  /** URL del WSCDC. */
-  endpoint: string;
-}
+/**
+ * Configuración del cliente de bajo nivel: `{ endpoint, transport? }` (el
+ * namespace lo fija el cliente). `endpoint`: ver `ENDPOINTS.wscdc`.
+ */
+export type CdcClientConfig = ServiceClientConfig;
 
 function isRecord(value: unknown): value is Raw {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -90,8 +90,8 @@ function conEventos<T>(items: T[], eventos: CdcMensaje[]): ListaCdc<T> {
  * autenticación: el caller pasa el bloque `Auth`.
  */
 export class CdcClient extends SoapServiceClient {
-  constructor({ endpoint, ...transport }: CdcClientConfig) {
-    super({ endpoint, namespace: WSCDC_NAMESPACE, transport });
+  constructor(config: CdcClientConfig) {
+    super({ endpoint: config.endpoint, transport: config.transport, namespace: WSCDC_NAMESPACE });
   }
 
   /**
@@ -120,14 +120,14 @@ export class CdcClient extends SoapServiceClient {
   ): Promise<ListaCdc<T>> {
     const result = await this.call(method, { Auth: authXml(auth) }, opts);
     checkServiceErrors(result, `WSCDC ${method}`);
-    const r = decode<{ resultGet: T[]; events: MensajeRaw[] }>(
+    const r = decode<{ resultGet: T[]; eventos: MensajeRaw[] }>(
       result,
-      { resultGet: xml('ResultGet', wrapped(child, obj(item), 0)), events: S.EVENTS },
+      { resultGet: xml('ResultGet', wrapped(child, obj(item), 0)), eventos: S.EVENTS },
       method,
     );
     return conEventos(
       r.resultGet.map((i) => ({ ...i, desc: i.desc ?? '' })),
-      mensajes(r.events),
+      mensajes(r.eventos),
     );
   }
 
@@ -135,7 +135,8 @@ export class CdcClient extends SoapServiceClient {
    * `ComprobanteConstatar`: constata un comprobante (CAE, CAI o CAEA).
    *
    * - Errores de formato, autenticación o infraestructura (`Errors`) → `ArcaServiceError`.
-   * - Rechazo funcional → `resultado: 'R'` con el detalle en `observaciones`. Si en
+   * - Comprobante no constatado → `resultado: 'R'` con el detalle en `observaciones`
+   *   (es una consulta: no lanza `ArcaRechazoError`). Si en
    *   un rechazo `CmpResp` viene incompleto, se devuelve sin `cmpResp`.
    * @throws ArcaValidationError si el input o `auth.cuit` son inválidos (antes de llamar a ARCA).
    * @throws ArcaResponseError si la respuesta no tiene la forma esperada.
@@ -155,7 +156,7 @@ export class CdcClient extends SoapServiceClient {
 
     checkServiceErrors(result, `WSCDC ${method}`);
 
-    const r = decode<{ resultado: string; fchProceso: string; observaciones: MensajeRaw[]; events: MensajeRaw[] }>(
+    const r = decode<{ resultado: string; fchProceso: string; observaciones: MensajeRaw[]; eventos: MensajeRaw[] }>(
       result,
       S.CONSTATAR_RESP,
       method,
@@ -167,7 +168,7 @@ export class CdcClient extends SoapServiceClient {
       resultado: r.resultado,
       fchProceso: r.fchProceso,
       observaciones: mensajes(r.observaciones),
-      events: mensajes(r.events),
+      eventos: mensajes(r.eventos),
     };
     if (isRecord(result['CmpResp'])) {
       try {

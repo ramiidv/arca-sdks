@@ -11,6 +11,7 @@ export {
   ArcaAuthError,
   ArcaSoapError,
   ArcaServiceError,
+  ArcaRechazoError,
   ArcaResponseError,
   ArcaValidationError,
   ArcaTicketVigenteError,
@@ -39,13 +40,16 @@ export type {
   CallOptions,
   LegacyTlsMode,
   ServerStatus,
+  ServiceClientConfig,
+  ServiceEndpoints,
   ServiceErrorDetail,
+  ServiceTransport,
   TicketStorage,
   ValidationErrorDetail,
 } from './types.js';
 
 // Constants
-export { WSCDC_ENDPOINTS, WSCDC_NAMESPACE, WSCDC_SERVICE_ID, CBTE_MODOS } from './constants.js';
+export { ENDPOINTS, WSCDC_NAMESPACE, WSCDC_SERVICE_ID, CBTE_MODOS } from './constants.js';
 
 // Validation
 export { validateConstatarInput } from './validation.js';

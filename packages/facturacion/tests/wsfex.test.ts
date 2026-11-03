@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ArcaAuthError, ArcaResponseError, ArcaSoapError, ArcaValidationError } from '@ramiidv/arca-common';
+import {
+  ArcaAuthError,
+  ArcaRechazoError,
+  ArcaResponseError,
+  ArcaSoapError,
+  ArcaValidationError,
+} from '@ramiidv/arca-common';
 import { ArcaConflictoExpo, ArcaResultadoInciertoExpo, ArcaWSFEError } from '../src/errors.js';
 import { CbteTipo, TipoExpo } from '../src/constants.js';
 import type { FacturarExpoOpts } from '../src/types.js';
@@ -28,12 +34,15 @@ const autorizado = (o: {
   resultado?: string;
   obs?: string;
   events?: string;
+  sinCae?: boolean;
 }) =>
   wsfexResponse(
     'FEXAuthorize',
     `<FEXResultAuth><Id>${o.id}</Id><Cuit>20123456786</Cuit><Cbte_tipo>${o.tipo ?? 19}</Cbte_tipo><Punto_vta>${o.ptoVta ?? 3}</Punto_vta>` +
       `<Cbte_nro>${o.nro}</Cbte_nro>` +
-      ((o.resultado ?? 'A') === 'A' ? '<Cae>76123456789099</Cae><Fch_venc_Cae>20261109</Fch_venc_Cae>' : '') +
+      ((o.resultado ?? 'A') === 'A' && !o.sinCae
+        ? '<Cae>76123456789099</Cae><Fch_venc_Cae>20261109</Fch_venc_Cae>'
+        : '') +
       `<Fch_cbte>20261030</Fch_cbte><Resultado>${o.resultado ?? 'A'}</Resultado><Reproceso>${o.reproceso ?? 'N'}</Reproceso>` +
       (o.obs ? `<Motivos_Obs>${o.obs}</Motivos_Obs>` : '') +
       `</FEXResultAuth>${OK_ERR}${o.events ?? OK_EVT}`,
@@ -119,8 +128,8 @@ describe('facturarExpo: request', () => {
     });
     expect(cmp).not.toHaveProperty('Fecha_pago');
 
+    expect(res).not.toHaveProperty('aprobada');
     expect(res).toMatchObject({
-      aprobada: true,
       id: 42,
       reproceso: false,
       cae: '76123456789099',
@@ -234,7 +243,7 @@ describe('facturarExpo: respuesta y errores', () => {
     expect(err.message).toMatch(/^WSFEX Error/);
   });
 
-  it('rechazo (Resultado R) con observaciones y eventos', async () => {
+  it('rechazo (Resultado R) → ArcaRechazoError (FEXAuthorize) con Motivos_Obs en observaciones', async () => {
     const arca = await arcaDePrueba();
     mockArcaFetch({
       FEXAuthorize: autorizado({
@@ -245,11 +254,82 @@ describe('facturarExpo: respuesta y errores', () => {
         events: '<FEXEvents><EventCode>12</EventCode><EventMsg>Aviso</EventMsg></FEXEvents>',
       }),
     });
+    const err = await arca.facturarExpo({ ...BIENES, id: 1, cbteNro: 1 }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err).not.toBeInstanceOf(ArcaWSFEError);
+    expect(err.code).toBe('ARCA_RECHAZO');
+    expect(err.operacion).toBe('FEXAuthorize');
+    expect(err.errors).toEqual([]);
+    expect(err.observaciones).toEqual([{ code: 0, msg: 'Cotizacion fuera de rango' }]);
+    expect(err.message).toContain('19-3-1');
+    expect(err.message).toContain('Cotizacion fuera de rango');
+  });
+
+  it('rechazo sin Motivos_Obs → ArcaRechazoError sin observaciones', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({ FEXAuthorize: autorizado({ id: 1, nro: 1, resultado: 'R' }) });
+    const err = await arca.facturarExpo({ ...BIENES, id: 1, cbteNro: 1 }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err.observaciones).toEqual([]);
+  });
+
+  it('aprobado sin CAE → ArcaResultadoInciertoExpo con el intento (no un resultado sin CAE)', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({ FEXAuthorize: autorizado({ id: 1, nro: 1, sinCae: true }) });
+    const err = await arca.facturarExpo({ ...BIENES, id: 1, cbteNro: 1 }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaResultadoInciertoExpo);
+    expect(err.intento).toMatchObject({ id: 1, cbteNro: 1, fecha: '20261030' });
+    expect(err.cause).toBeInstanceOf(ArcaResponseError);
+  });
+
+  it('aprobado con observaciones: obs y eventos en el resultado', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FEXAuthorize: autorizado({
+        id: 1,
+        nro: 1,
+        obs: 'Aviso de prueba',
+        events: '<FEXEvents><EventCode>12</EventCode><EventMsg>Aviso</EventMsg></FEXEvents>',
+      }),
+    });
     const res = await arca.facturarExpo({ ...BIENES, id: 1, cbteNro: 1 });
-    expect(res.aprobada).toBe(false);
-    expect(res.cae).toBeUndefined();
-    expect(res.obs).toBe('Cotizacion fuera de rango');
+    expect(res.cae).toBe('76123456789099');
+    expect(res.obs).toBe('Aviso de prueba');
     expect(res.eventos).toEqual([{ code: 12, msg: 'Aviso' }]);
+  });
+
+  it('raw crearFacturaExportacion: Resultado R se devuelve tal cual (no lanza)', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({ FEXAuthorize: autorizado({ id: 1, nro: 1, resultado: 'R', obs: 'x' }) });
+    const res = await arca.crearFacturaExportacion({
+      id: 1,
+      cbteTipo: 19,
+      fechaCbte: '20261030',
+      puntoVta: 3,
+      cbteNro: 1,
+      tipoExpo: 2,
+      dstCmp: 203,
+      cliente: 'X',
+      cuitPaisCliente: 50000000059,
+      domicilioCliente: 'Y',
+      monedaId: 'DOL',
+      monedaCtz: 1000,
+      impTotal: 10,
+      idiomaCbte: 1,
+      fechaPago: '20261030',
+      items: [
+        {
+          proCodigo: 'S',
+          proDs: 'Servicio',
+          proQty: 1,
+          proUmed: 7,
+          proPrecioUni: 10,
+          proBonificacion: 0,
+          proTotalItem: 10,
+        },
+      ],
+    });
+    expect(res.fexResultAuth?.resultado).toBe('R');
   });
 
   it('timeout → ArcaResultadoInciertoExpo con Id y número; el reenvío con el mismo Id devuelve reproceso', async () => {
@@ -294,7 +374,7 @@ describe('facturarExpo: respuesta y errores', () => {
     expect(err.cause).toBeInstanceOf(ArcaWSFEError);
   });
 
-  it('sin FEXResultAuth y ErrCode 0 → incierto (no aprobada:false con número inventado)', async () => {
+  it('sin FEXResultAuth y ErrCode 0 → incierto (no un rechazo con número inventado)', async () => {
     const arca = await arcaDePrueba();
     mockArcaFetch({ FEXAuthorize: wsfexResponse('FEXAuthorize', OK_ERR + OK_EVT) });
     await expect(arca.facturarExpo({ ...BIENES, id: 1, cbteNro: 1 })).rejects.toBeInstanceOf(ArcaResultadoInciertoExpo);
@@ -340,7 +420,7 @@ describe('facturarExpo: respuesta y errores', () => {
 });
 
 describe('facturarExpo: Id repetido (único por CUIT)', () => {
-  it('Id calculado y WSFEX devuelve otro comprobante → ArcaConflictoExpo, no aprobada', async () => {
+  it('Id calculado y WSFEX devuelve otro comprobante → ArcaConflictoExpo, no se autorizó', async () => {
     const arca = await arcaDePrueba();
     // Otra emisión (ptoVta 4) usó el Id 42 mientras tanto.
     mockArcaFetch({
@@ -370,7 +450,7 @@ describe('facturarExpo: Id repetido (único por CUIT)', () => {
     const arca = await arcaDePrueba();
     mockArcaFetch({ FEXAuthorize: autorizado({ id: 42, nro: 10, reproceso: 'S' }) });
     const res = await arca.facturarExpo({ ...BIENES, id: 42, cbteNro: 10 });
-    expect(res).toMatchObject({ aprobada: true, reproceso: true, cbteNro: 10 });
+    expect(res).toMatchObject({ reproceso: true, cbteNro: 10, cae: '76123456789099' });
   });
 
   it('API raw: respuesta de otro comprobante → ArcaConflictoExpo', async () => {

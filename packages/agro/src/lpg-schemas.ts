@@ -315,9 +315,6 @@ export const CONSULTA_X_NRO_ORDEN: Schema = { ptoEmision: ptoEmision(), nroOrden
 /** LpgLiqUltNroOrdenReqType (sin `auth`) */
 export const ULT_NRO_ORDEN: Schema = { ptoEmision: ptoEmision() };
 
-/** LpgAnulacionReqType (sin `auth`) */
-export const ANULACION: Schema = { coe: id() };
-
 /** LpgLocalidadReqType: `codProvincia` es `xs:string` */
 export const LOCALIDADES: Schema = { codProvincia: str() };
 
@@ -714,14 +711,6 @@ export const R_LIQ_RETURN: Schema = {
 export const R_LIQ_CONS_RETURN: Schema = {
   liquidacion: opt(obj(R_LIQUIDACION_BASE)),
   autorizacion: opt(obj(R_LIQUIDACION_AUTORIZADA)),
-  pdf: opt(base64()),
-  ...R_EVENTOS,
-};
-
-/** LpgAnulacionReturnType */
-export const R_ANULACION_RETURN: Schema = {
-  coe: id(),
-  resultado: str(),
   pdf: opt(base64()),
   ...R_EVENTOS,
 };

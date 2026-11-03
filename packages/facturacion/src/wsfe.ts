@@ -1,19 +1,6 @@
-import {
-  ArcaResponseError,
-  SoapServiceClient,
-  extractServiceErrors,
-  parseServerStatus,
-  transportOptions,
-} from '@ramiidv/arca-common';
-import type {
-  ArcaEvent,
-  CallOptions,
-  LegacyTlsMode,
-  ServerStatus,
-  ServiceTransport,
-  SoapOperationKind,
-} from '@ramiidv/arca-common';
-import { ENDPOINTS, WSFE_ERRORES_AUTH, WSFE_ERRORES_INTERNOS, WSFE_NAMESPACE } from './constants.js';
+import { ArcaResponseError, SoapServiceClient, extractServiceErrors, parseServerStatus } from '@ramiidv/arca-common';
+import type { CallOptions, ServerStatus, ServiceClientConfig, SoapOperationKind } from '@ramiidv/arca-common';
+import { WSFE_ERRORES_AUTH, WSFE_ERRORES_INTERNOS, WSFE_NAMESPACE } from './constants.js';
 import { encodeRequest } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import { decodeArca, sinCampo } from './decode.js';
@@ -45,23 +32,6 @@ import type {
 
 type R = Record<string, unknown>;
 
-/** Opciones de transporte de los clientes de bajo nivel (`WsfeClient`, `WsfexClient`). */
-export interface WsClientOptions {
-  /** Timeout en ms (default: 30000). */
-  timeoutMs?: number;
-  /** Reintentos en consultas (default: 1). Las emisiones nunca se reintentan. */
-  retries?: number;
-  /** Delay base del backoff en ms (default: 1000). */
-  retryDelayMs?: number;
-  onEvent?: (event: ArcaEvent) => void;
-  /** `fetch` propio (proxy, mTLS, tests). */
-  fetch?: typeof fetch;
-  /** Transporte TLS legacy para hosts con DH de 1024 bits (default: `auto`). */
-  legacyTls?: LegacyTlsMode;
-  /** URL del servicio. Si no se indica, la de ARCA según `production`. */
-  endpoint?: string;
-}
-
 /** `Errors` de una respuesta de WSFEv1 como `ArcaWSFEError`, o `undefined`. */
 function erroresDe(result: R): ArcaWSFEError | undefined {
   const errors = extractServiceErrors(result);
@@ -90,19 +60,20 @@ export function authXml(auth: WsfeAuth): R {
   return { Token: auth.token, Sign: auth.sign, Cuit: auth.cuit };
 }
 
-/** Opciones de transporte de arca-common a partir de `WsClientOptions` (`timeoutMs` → `timeout`). */
-export function transportDe(opts: WsClientOptions): ServiceTransport {
-  return transportOptions({ ...opts, timeout: opts.timeoutMs });
-}
-
-/** Cliente de bajo nivel de WSFEv1 (Factura electrónica, mercado interno). */
+/**
+ * Cliente de bajo nivel de WSFEv1 (Factura electrónica, mercado interno).
+ *
+ * Devuelve las respuestas de ARCA tal cual (un `Resultado` "R" no lanza): el
+ * manejo de rechazos lo hace `ArcaFacturacion`.
+ *
+ * @example
+ * ```ts
+ * const wsfe = new WsfeClient({ endpoint: ENDPOINTS.wsfe.testing, transport: { timeout: 60_000 } });
+ * ```
+ */
 export class WsfeClient extends SoapServiceClient {
-  constructor(production: boolean, opts: WsClientOptions = {}) {
-    super({
-      endpoint: opts.endpoint ?? (production ? ENDPOINTS.wsfe.production : ENDPOINTS.wsfe.testing),
-      namespace: WSFE_NAMESPACE,
-      transport: transportDe(opts),
-    });
+  constructor(config: ServiceClientConfig) {
+    super({ ...config, namespace: WSFE_NAMESPACE });
   }
 
   /**

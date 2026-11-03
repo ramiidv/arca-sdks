@@ -1,6 +1,6 @@
 import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
-import { ENDPOINTS } from './constants.js';
+import { ENDPOINTS, FECRED_SERVICE_ID } from './constants.js';
 import { FecredClient } from './fecred-client.js';
 import type {
   AceptarFecredParams,
@@ -24,7 +24,6 @@ import type {
   InformarFacturaAgtDptoCltvParams,
   ModificarOpcionTransferenciaParams,
   MontoObligadoRecepcionResult,
-  ObligadoRecepcionResult,
   OperacionFecredResult,
   RechazarFecredParams,
   RechazarNotaDCParams,
@@ -62,10 +61,9 @@ export class ArcaFecred extends ArcaSdkBase<'wsfecred'> {
 
   constructor(config: ArcaFecredConfig) {
     // `ArcaSdkBase` valida la CUIT (dígito verificador) y la normaliza a 11 dígitos (`this.cuit`).
-    super(config, { wsfecred: ENDPOINTS.wsfecred.serviceId });
+    super(config, { wsfecred: FECRED_SERVICE_ID });
     this.client = new FecredClient({
       endpoint: this.endpoint(ENDPOINTS.wsfecred, config.endpoints?.wsfecred),
-      namespace: ENDPOINTS.wsfecred.namespace,
       transport: this.transport,
     });
   }
@@ -89,14 +87,6 @@ export class ArcaFecred extends ArcaSdkBase<'wsfecred'> {
     opts?: CallOptions,
   ): Promise<MontoObligadoRecepcionResult> {
     return this.client.consultarMontoObligadoRecepcion(this.auth(opts), params, this.callOptions(opts));
-  }
-
-  /**
-   * Si una CUIT está obligada a recibir FCE y desde qué fecha.
-   * @deprecated El manual (§2.4.13) la depreca porque la información es incompleta: usar `consultarMontoObligadoRecepcion`.
-   */
-  consultarObligadoRecepcion(cuitConsultada: number | string, opts?: CallOptions): Promise<ObligadoRecepcionResult> {
-    return this.client.consultarObligadoRecepcion(this.auth(opts), cuitConsultada, this.callOptions(opts));
   }
 
   // =========================================================================
@@ -137,13 +127,17 @@ export class ArcaFecred extends ArcaSdkBase<'wsfecred'> {
   }
 
   // =========================================================================
-  // Operaciones (no idempotentes: nunca se reintentan)
+  // Operaciones (no idempotentes: nunca se reintentan). Un `resultado` `R` se
+  // lanza como `ArcaRechazoError`: lo devuelto siempre es `A` u `O`.
   // =========================================================================
 
   /**
-   * Acepta una FCE. Un rechazo de ARCA (errores o `resultado = 'R'`) se lanza
-   * como `ArcaServiceError`. Si la respuesta se pierde (`ArcaSoapError` con
-   * `uncertain`), consultá el estado con `consultarCtaCte` antes de reintentar.
+   * Acepta una FCE. Un rechazo de ARCA (`resultado = 'R'`) se lanza como
+   * `ArcaRechazoError` (con `errors` y `observaciones`); otros errores de ARCA,
+   * como `ArcaServiceError`. Lo que devuelve siempre es una operación aprobada
+   * (`A` u `O`). Si la respuesta se pierde (`ArcaSoapError` con `uncertain`) o
+   * no se puede leer (`ArcaResponseError` con `uncertain`), consultá el estado
+   * con `consultarCtaCte` antes de reintentar.
    */
   aceptarFECred(params: AceptarFecredParams, opts?: CallOptions): Promise<OperacionFecredResult> {
     return this.client.aceptarFECred(this.auth(opts), params, this.callOptions(opts));

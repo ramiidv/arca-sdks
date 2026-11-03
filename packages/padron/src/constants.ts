@@ -1,14 +1,20 @@
-import { WSAA_ENDPOINTS } from '@ramiidv/arca-common';
+import type { ServiceEndpoints } from '@ramiidv/arca-common';
 
 // Re-export shared enums from common
 export { Provincia, DocTipo, CondicionIva } from '@ramiidv/arca-common';
 
 // ---------------------------------------------------------------------------
-// Endpoints
+// Endpoints, namespaces e IDs de WSAA
 // ---------------------------------------------------------------------------
 
 /**
- * Endpoints de los servicios de Padrón.
+ * Endpoints oficiales de cada servicio de Padrón por entorno. Las claves son
+ * las mismas de `endpoints` en la configuración de `ArcaPadron`; los de WSAA
+ * están en `WSAA_ENDPOINTS` de `@ramiidv/arca-common`.
+ *
+ * - `a5`: constancia de inscripción (ex Padrón A5; ws_sr_padron_a5 está deprecado por ARCA).
+ * - `a4`, `a10`, `a13`: padrones A4, A10 y A13.
+ * - `a100`: tablas de parámetros.
  *
  * El manual de la constancia de inscripción (v4.1) publica los hosts
  * `awshomo.arca.gob.ar` / `aws.arca.gob.ar`. El SDK usa `awshomo.afip.gov.ar` /
@@ -17,39 +23,48 @@ export { Provincia, DocTipo, CondicionIva } from '@ramiidv/arca-common';
  * usar otro host, pasá `endpoints` en la configuración.
  */
 export const ENDPOINTS = {
-  wsaa: WSAA_ENDPOINTS,
-  /** Constancia de inscripción (ex Padrón A5: ws_sr_padron_a5 está deprecado por ARCA). */
   a5: {
     testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA5',
     production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5',
-    namespace: 'http://a5.soap.ws.server.puc.sr/',
-    serviceId: 'ws_sr_constancia_inscripcion',
   },
   a13: {
     testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA13',
     production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA13',
-    namespace: 'http://a13.soap.ws.server.puc.sr/',
-    serviceId: 'ws_sr_padron_a13',
   },
   a4: {
     testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA4',
     production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA4',
-    namespace: 'http://a4.soap.ws.server.puc.sr/',
-    serviceId: 'ws_sr_padron_a4',
   },
   a10: {
     testing: 'https://awshomo.afip.gov.ar/sr-padron/webservices/personaServiceA10',
     production: 'https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA10',
-    namespace: 'http://a10.soap.ws.server.puc.sr/',
-    serviceId: 'ws_sr_padron_a10',
   },
   a100: {
     testing: 'https://awshomo.afip.gov.ar/sr-parametros/webservices/parameterServiceA100',
     production: 'https://aws.afip.gov.ar/sr-parametros/webservices/parameterServiceA100',
-    namespace: 'http://a100.soap.ws.server.pucParam.sr/',
-    serviceId: 'ws_sr_padron_a100',
   },
-} as const;
+} as const satisfies Record<string, ServiceEndpoints>;
+
+/** Namespace (targetNamespace del WSDL) de cada servicio, con las mismas claves que `ENDPOINTS`. */
+export const NAMESPACES = {
+  a5: 'http://a5.soap.ws.server.puc.sr/',
+  a13: 'http://a13.soap.ws.server.puc.sr/',
+  a4: 'http://a4.soap.ws.server.puc.sr/',
+  a10: 'http://a10.soap.ws.server.puc.sr/',
+  a100: 'http://a100.soap.ws.server.pucParam.sr/',
+} as const satisfies Record<keyof typeof ENDPOINTS, string>;
+
+/**
+ * ID de WSAA (servicio del Ticket de Acceso) de cada servicio, con las mismas
+ * claves que `ENDPOINTS`. La constancia usa `ws_sr_constancia_inscripcion`.
+ */
+export const SERVICE_IDS = {
+  a5: 'ws_sr_constancia_inscripcion',
+  a13: 'ws_sr_padron_a13',
+  a4: 'ws_sr_padron_a4',
+  a10: 'ws_sr_padron_a10',
+  a100: 'ws_sr_padron_a100',
+} as const satisfies Record<keyof typeof ENDPOINTS, string>;
 
 // ---------------------------------------------------------------------------
 // Enums (domain-specific)
@@ -65,10 +80,6 @@ export enum TipoDomicilio {
   LEGAL_REAL = 'LEGAL/REAL',
   /** Solo en A4. */
   LOCALES_Y_ESTABLECIMIENTOS = 'LOCALES Y ESTABLECIMIENTOS',
-  /** @deprecated Los manuales informan `LEGAL/REAL` (`TipoDomicilio.LEGAL_REAL`). Se quita en la próxima major. */
-  LEGAL = 'LEGAL',
-  /** @deprecated Los manuales informan `LEGAL/REAL` (`TipoDomicilio.LEGAL_REAL`). Se quita en la próxima major. */
-  REAL = 'REAL',
 }
 
 /** Tipos de persona */
@@ -113,16 +124,13 @@ export enum ImpuestoId {
   AUTONOMOS = 308,
 }
 
-/** Estado de la clave fiscal del contribuyente */
+/**
+ * Estado de la clave fiscal del contribuyente. Los manuales solo documentan
+ * `ACTIVO` e `INACTIVO` ("limitada" aparece en el texto de `errorConstancia`).
+ */
 export enum EstadoClave {
   ACTIVO = 'ACTIVO',
   INACTIVO = 'INACTIVO',
-  /**
-   * @deprecated Los manuales solo documentan `ACTIVO` e `INACTIVO`; "limitada"
-   * aparece en el texto de `errorConstancia`, no en `estadoClave`. Se quita en
-   * la próxima major.
-   */
-  LIMITADO = 'LIMITADO',
 }
 
 /**

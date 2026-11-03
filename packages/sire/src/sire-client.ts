@@ -1,5 +1,6 @@
 import {
   ArcaAuthError,
+  ArcaResponseError,
   ArcaSoapError,
   buildXml,
   extractMethodResult,
@@ -7,11 +8,12 @@ import {
   SoapServiceClient,
   soapCall,
 } from '@ramiidv/arca-common';
-import type { ArcaEvent, CallOptions, LegacyTlsMode, ServiceTransport, SoapOperationKind } from '@ramiidv/arca-common';
+import type { CallOptions, ServiceClientConfig } from '@ramiidv/arca-common';
 import { decodeResponse } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import { SIRE_NAMESPACE } from './constants.js';
 import { ArcaSireServiceError } from './errors.js';
+import type { SireOperacion } from './errors.js';
 import { CERTIFICADO, CERTIFICADO_ANULACION, CERTIFICADO_RESULT } from './schemas.js';
 import type {
   CertificadoAnulacionRequest,
@@ -22,25 +24,13 @@ import type {
   WsAuth,
 } from './types.js';
 
-/** Configuración del cliente SOAP de bajo nivel. */
-export interface SireClientConfig {
-  /** URL del servicio (ver `ENDPOINTS.sire`). */
-  endpoint: string;
-  /** Timeout en ms (default: 30000). */
-  timeout?: number;
-  /** Reintentos de `dummy` (default: 1). `emitir`/`anular` nunca se reintentan. */
-  retries?: number;
-  /** Delay base entre reintentos en ms (default: 1000). */
-  retryDelayMs?: number;
-  onEvent?: (event: ArcaEvent) => void;
-  fetch?: typeof fetch;
-  legacyTls?: LegacyTlsMode;
-  /**
-   * Opciones de transporte ya armadas (ej: las de `ArcaSire`). Si se pasa, se
-   * ignoran `timeout`, `retries`, `retryDelayMs`, `onEvent`, `fetch` y `legacyTls`.
-   */
-  transport?: ServiceTransport;
-}
+/**
+ * Configuración del cliente SOAP de bajo nivel: `endpoint` (ver `ENDPOINTS.sire`)
+ * y `transport` opcional (timeout, reintentos de `dummy`, eventos, fetch, TLS
+ * legacy; `emitir`/`anular` nunca se reintentan). El namespace lo fija el
+ * cliente (`SIRE_NAMESPACE`).
+ */
+export type SireClientConfig = ServiceClientConfig;
 
 /**
  * Faults con `faultcode` `soapenv:Server` que, según lo observado en
@@ -87,26 +77,22 @@ function pick(source: object, schema: Schema): Record<string, unknown> {
  * Cliente SOAP de bajo nivel del servicio SIRE certificado C2005.
  * No autentica ni valida: recibe el token/sign y los datos ya serializados.
  * Usar `ArcaSire` salvo que necesites controlar esos pasos.
+ *
+ * @example
+ * ```ts
+ * const client = new SireClient({ endpoint: ENDPOINTS.sire.testing, transport: { timeout: 30_000 } });
+ * ```
  */
 export class SireClient extends SoapServiceClient {
   constructor(config: SireClientConfig) {
-    super({
-      endpoint: config.endpoint,
-      namespace: SIRE_NAMESPACE,
-      transport: config.transport ?? {
-        timeout: config.timeout,
-        retries: config.retries,
-        retryDelayMs: config.retryDelayMs,
-        onEvent: config.onEvent,
-        fetch: config.fetch,
-        legacyTls: config.legacyTls,
-      },
-    });
+    super({ endpoint: config.endpoint, namespace: SIRE_NAMESPACE, transport: config.transport });
   }
 
   /**
    * Estado de los servidores de SIRE (no requiere autenticación), con el
-   * `HeaderInfo` de la respuesta (ambiente y versiones) si vino.
+   * `HeaderInfo` de la respuesta (ambiente y versiones) si vino. No es una
+   * emisión: un SOAP Fault se propaga como `ArcaSoapError` (nunca como
+   * `ArcaSireServiceError`) y una respuesta incompleta lanza `ArcaResponseError`.
    */
   async dummy(opts?: CallOptions): Promise<SireServerStatus> {
     // soapCall directo (no `this.call`) para leer el header de la respuesta.
@@ -126,7 +112,9 @@ export class SireClient extends SoapServiceClient {
 
   /**
    * Emite un certificado C2005 (`emitir`). Operación no idempotente: nunca se
-   * reintenta y un error de transporte tiene `uncertain: true`.
+   * reintenta y un error de transporte tiene `uncertain: true`. Un rechazo de
+   * ARCA se lanza como `ArcaSireServiceError` (`operacion: 'emitir'`); una
+   * respuesta inválida, como `ArcaResponseError` con `uncertain: true`.
    */
   async emitir(
     auth: WsAuth,
@@ -137,7 +125,6 @@ export class SireClient extends SoapServiceClient {
     const result = await this.call(
       'emitir',
       { token: auth.token, sign: auth.sign, cuitAgente, certificado: pick(certificado, CERTIFICADO) },
-      'emision',
       opts,
     );
     return this.parseCertificado(result, 'emitir');
@@ -146,6 +133,7 @@ export class SireClient extends SoapServiceClient {
   /**
    * Anula un certificado C2005 ya emitido (`anular`). Devuelve el número y el
    * código de seguridad del certificado que anula al informado. No se reintenta.
+   * Mismos errores que `emitir` (`operacion: 'anular'`).
    */
   async anular(
     auth: WsAuth,
@@ -161,36 +149,33 @@ export class SireClient extends SoapServiceClient {
         cuitAgente,
         certificadoAnulacion: pick(certificadoAnulacion, CERTIFICADO_ANULACION),
       },
-      'emision',
       opts,
     );
     return this.parseCertificado(result, 'anular');
   }
 
-  private parseCertificado(result: Record<string, unknown>, method: string): CertificadoResult {
+  private parseCertificado(result: Record<string, unknown>, method: SireOperacion): CertificadoResult {
     // En una emisión/anulación la operación pudo haberse realizado igual.
-    const error = (message: string) => new ArcaSoapError(`${method}: ${message}`, { uncertain: true });
-    const res = decodeResponse<CertificadoResult>(result, CERTIFICADO_RESULT, `${method}Response`, { error });
-    for (const field of ['certificadoNro', 'codigoSeguridad'] as const) {
-      if (res[field] === '') throw error(`Respuesta inválida: ${method}Response.${field} vacío`);
-    }
-    return res;
+    // `must(str())`: un campo ausente o vacío también lanza.
+    return decodeResponse<CertificadoResult>(result, CERTIFICADO_RESULT, `${method}Response`, {
+      error: (message) => new ArcaResponseError(`SIRE ${method}: ${message}`, true),
+    });
   }
 
   /**
-   * Llamada SOAP. Los SOAP Faults que son rechazos (ver `toRejection`) se
-   * convierten en `ArcaSireServiceError` (o `ArcaAuthError` si es de token/sign);
-   * el resto se propaga como `ArcaSoapError`.
+   * Llamada SOAP de una emisión (`emitir`/`anular`: nunca se reintenta). Los
+   * SOAP Faults que son rechazos (ver `toRejection`) se convierten en
+   * `ArcaSireServiceError` (o `ArcaAuthError` si es de token/sign); el resto se
+   * propaga como `ArcaSoapError`.
    */
   private async call(
-    method: string,
+    method: SireOperacion,
     params: Record<string, unknown>,
-    kind: SoapOperationKind,
     opts?: CallOptions,
   ): Promise<Record<string, unknown>> {
     try {
       // Texto sin convertir: `certificadoNro`/`codigoSeguridad` son `xs:string`.
-      return await this.soapCall(method, params, { kind, signal: opts?.signal, parseNumbers: false });
+      return await this.soapCall(method, params, { kind: 'emision', signal: opts?.signal, parseNumbers: false });
     } catch (err) {
       throw toRejection(err, method) ?? err;
     }
@@ -235,12 +220,15 @@ function faultMessage(err: ArcaSoapError): string {
  *
  * - Token/sign faltante o inválido → `ArcaAuthError` (no se emitió/anuló nada).
  * - Rechazo (cualquier `soapenv:Client`, aunque no traiga `faultstring`) →
- *   `ArcaSireServiceError` (determinístico: no se emitió/anuló nada).
+ *   `ArcaSireServiceError` con `operacion` = `method` (determinístico: no se
+ *   emitió/anuló nada).
  * - Otro `soapenv:Server` → `undefined`: se propaga el `ArcaSoapError`, que en
  *   `emitir`/`anular` tiene `uncertain: true` (un error interno pudo ocurrir
  *   después de registrar el certificado).
+ *
+ * Solo se usa en `emitir`/`anular`: los Faults de `dummy` quedan como `ArcaSoapError`.
  */
-function toRejection(err: unknown, method: string): ArcaSireServiceError | ArcaAuthError | undefined {
+function toRejection(err: unknown, method: SireOperacion): ArcaSireServiceError | ArcaAuthError | undefined {
   if (!(err instanceof ArcaSoapError)) return undefined;
   if (err.faultCode === undefined && err.faultString === undefined) return undefined; // no es un Fault
   const message = faultMessage(err);
@@ -249,8 +237,9 @@ function toRejection(err: unknown, method: string): ArcaSireServiceError | ArcaA
   }
   const isClient = faultCodeName(err.faultCode) === 'Client';
   if (!isClient && !REJECTION_FAULT_PATTERNS.some((re) => re.test(message))) return undefined;
-  return new ArcaSireServiceError(`SIRE ${method}: ${message}`, [{ code: 0, msg: message }], {
-    cause: err,
-    faultCode: err.faultCode?.trim(),
-  });
+  return new ArcaSireServiceError(
+    `SIRE ${method}: ${message}`,
+    { operacion: method, errors: [{ code: 0, msg: message }] },
+    { cause: err, faultCode: err.faultCode?.trim() },
+  );
 }
