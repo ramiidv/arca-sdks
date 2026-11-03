@@ -1,7 +1,7 @@
 import {
   ArcaResponseError,
+  ArcaServiceError,
   checkServiceErrors,
-  extractServiceErrors,
   parseServerStatus,
   SoapServiceClient,
   validateCuit,
@@ -68,13 +68,14 @@ const mensajes = (list: MensajeRaw[]): CdcMensaje[] =>
 const SIN_RESULTADOS = 503;
 
 /**
- * `true` si los `Errors` de la respuesta son solo el 503 "Sin Resultados" (la
- * tabla está vacía; ej. `OpcionalesTipoConsultar` en homologación). El 503
- * también es un error de infraestructura en el manual, así que se exige el
- * texto "Sin Resultados".
+ * `true` si el error de una tabla es solo el 503 "Sin Resultados" (la tabla
+ * está vacía; ej. `OpcionalesTipoConsultar` en homologación). El 503 también
+ * es un error de infraestructura en el manual, así que se exige el texto
+ * "Sin Resultados". Los `Err` con código 0 no son errores.
  */
-function esSinResultados(result: Raw): boolean {
-  const errors = extractServiceErrors(result).filter((e) => e.code !== 0 || e.rawCode !== undefined);
+function esSinResultados(err: unknown): boolean {
+  if (!(err instanceof ArcaServiceError)) return false;
+  const errors = err.errors.filter((e) => e.code !== 0 || e.rawCode !== undefined);
   return errors.length > 0 && errors.every((e) => e.code === SIN_RESULTADOS && /^sin resultados/i.test(e.msg.trim()));
 }
 
@@ -137,11 +138,13 @@ export class CdcClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<ListaCdc<T>> {
     const result = await this.call(method, { Auth: authXml(auth) }, opts);
-    if (esSinResultados(result)) {
+    try {
+      checkServiceErrors(result, `WSCDC ${method}`);
+    } catch (err) {
+      if (!esSinResultados(err)) throw err;
       const { eventos } = decode<{ eventos: MensajeRaw[] }>(result, { eventos: S.EVENTS }, method);
       return conEventos<T>([], mensajes(eventos));
     }
-    checkServiceErrors(result, `WSCDC ${method}`);
     const r = decode<{ resultGet: T[]; eventos: MensajeRaw[] }>(
       result,
       { resultGet: xml('ResultGet', wrapped(child, obj(item), 0)), eventos: S.EVENTS },

@@ -513,7 +513,7 @@ function reglasNoCategorizado(
   if (gravado > 0 && !arr(c.otrosTributos).some((t) => imp(t?.importe) > 0)) {
     errors.push({
       field: 'otrosTributos',
-      message: `al Sujeto No Categorizado con importe gravado hay que informar el tributo ${TRIBUTO_PERCEPCION_NO_CATEGORIZADO} en otrosTributos (${codigos.percepcion})`,
+      message: `al Sujeto No Categorizado con importe gravado hay que informar el tributo ${TRIBUTO_PERCEPCION_NO_CATEGORIZADO} (o al menos otro tributo con importe > 0) en otrosTributos (${codigos.percepcion})`,
     });
   }
 }
