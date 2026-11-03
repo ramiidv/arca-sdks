@@ -1,6 +1,6 @@
 import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
-import { WSCDC_ENDPOINTS, WSCDC_SERVICE_ID } from './constants.js';
+import { ENDPOINTS, WSCDC_SERVICE_ID } from './constants.js';
 import { CdcClient } from './cdc-client.js';
 import { buildCmpReq } from './validation.js';
 import type {
@@ -36,6 +36,7 @@ import type {
  * });
  * r.resultado; // 'A' | 'R'
  * r.observaciones; // [{ code, msg }]
+ * r.eventos; // Events de ARCA
  * ```
  */
 export class ArcaCdc extends ArcaSdkBase<'wscdc'> {
@@ -46,8 +47,8 @@ export class ArcaCdc extends ArcaSdkBase<'wscdc'> {
   constructor(config: ArcaCdcConfig) {
     super(config, { wscdc: WSCDC_SERVICE_ID });
     this.client = new CdcClient({
-      endpoint: this.endpoint(WSCDC_ENDPOINTS, config.endpoints?.wscdc),
-      ...this.transport,
+      endpoint: this.endpoint(ENDPOINTS.wscdc, config.endpoints?.wscdc),
+      transport: this.transport,
     });
   }
 
@@ -56,7 +57,8 @@ export class ArcaCdc extends ArcaSdkBase<'wscdc'> {
    * (`ComprobanteConstatar`). Es una consulta: se puede reintentar.
    *
    * @returns `resultado` `A` (constatado, con posibles observaciones) o `R`
-   *   (rechazo funcional; motivos en `observaciones`).
+   *   (no constatado; motivos en `observaciones`). Un `R` no es un error: es la
+   *   respuesta de la consulta (no lanza `ArcaRechazoError`, que es solo para emisiones).
    * @throws ArcaValidationError si el input es inválido (antes de autenticarse y de llamar a ARCA).
    * @throws ArcaServiceError si ARCA devuelve `Errors` (formato, autenticación 600-602, infraestructura 500-503).
    * @throws ArcaResponseError si la respuesta no tiene la forma esperada.

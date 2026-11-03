@@ -85,7 +85,7 @@ export const CONSTATAR_RESP: Schema = {
   resultado: xml('Resultado', must(str())),
   observaciones: xml('Observaciones', wrapped('Obs', obj(MENSAJE), 0)),
   fchProceso: xml('FchProceso', must(str())),
-  events: EVENTS,
+  eventos: EVENTS,
 };
 
 /**

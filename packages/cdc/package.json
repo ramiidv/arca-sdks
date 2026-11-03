@@ -61,7 +61,7 @@
     "provenance": true
   },
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22.12.0"
   },
   "dependencies": {
     "@ramiidv/arca-common": "^0.8.0"

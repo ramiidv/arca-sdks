@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@ramiidv/arca-cdc)](https://www.npmjs.com/package/@ramiidv/arca-cdc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Node >= 20.19](https://img.shields.io/badge/node-%3E%3D20.19-brightgreen)](https://nodejs.org)
+[![Node >= 22.12](https://img.shields.io/badge/node-%3E%3D22.12-brightgreen)](https://nodejs.org)
 
 SDK en TypeScript para el web service **WSCDC** (Constatación de Comprobantes) de **ARCA** (ex AFIP).
 
@@ -21,7 +21,7 @@ npm install @ramiidv/arca-cdc
 
 ## Requisitos
 
-- Node.js >= 20.19. Solo ESM; desde CommonJS se carga con `require()` (Node ≥ 20.19 permite cargar módulos ESM con `require()`).
+- Node.js >= 22.12. Solo ESM; desde CommonJS se carga con `require()` (Node ≥ 22.12 permite cargar módulos ESM con `require()`).
 - Certificado digital X.509 y clave privada de ARCA, con el servicio **`wscdc`** asociado
   - **Homologación**: [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx)
   - **Producción**: [Administración de Certificados Digitales](https://www.afip.gob.ar/ws/documentacion/certificados.asp)
@@ -137,7 +137,7 @@ interface ConstatarResult {
   fchProceso: string; // YYYYMMDDHHMMSS
   cmpResp?: ComprobanteConstatado; // los datos del comprobante tal como los devuelve ARCA
   observaciones: { code: number; msg: string }[];
-  events: { code: number; msg: string }[]; // Events de ARCA
+  eventos: { code: number; msg: string }[]; // Events de ARCA
 }
 ```
 
@@ -145,9 +145,12 @@ Cómo interpretar la respuesta (manual WSCDC, 2.2.3):
 
 - **`resultado: 'A'`**: el comprobante está registrado y autorizado. Puede traer observaciones no
   excluyentes (ej: `200`, CAEA aún no rendido pero en plazo).
-- **`resultado: 'R'`**: rechazo por validaciones funcionales (`100` código inexistente, `102` CUIT
-  emisor no coincide, `110` importe no coincide, etc.). El detalle está en `observaciones`. Si en un
-  rechazo ARCA devuelve `CmpResp` incompleto, el resultado viene sin `cmpResp`.
+- **`resultado: 'R'`**: el comprobante no se pudo constatar por validaciones funcionales (`100`
+  código inexistente, `102` CUIT emisor no coincide, `110` importe no coincide, etc.). El detalle
+  está en `observaciones`. Si ARCA devuelve `CmpResp` incompleto, el resultado viene sin `cmpResp`.
+  `constatar()` es una consulta, así que un `R` **se devuelve, no se lanza**: es la respuesta a "¿este
+  comprobante es válido?". (`ArcaRechazoError`, que los demás SDKs lanzan cuando ARCA rechaza una
+  emisión, no aplica acá.)
 - **`Errors` de ARCA** (validaciones de formato `1`-`10`, autenticación `600`-`602`,
   infraestructura `500`-`503`): el SDK **lanza `ArcaServiceError`**, porque el comprobante no se
   llegó a constatar. ARCA en esos casos también responde `resultado: R`, pero no significa que el
@@ -175,7 +178,7 @@ El input se valida una sola vez, antes de autenticarse con WSAA: un input invál
 
 ```typescript
 import fs from 'node:fs';
-import { ArcaCdc, CdcClient, WSCDC_ENDPOINTS, WSCDC_SERVICE_ID } from '@ramiidv/arca-cdc';
+import { ArcaCdc, CdcClient, ENDPOINTS, WSCDC_SERVICE_ID } from '@ramiidv/arca-cdc';
 import type { CdcAuth } from '@ramiidv/arca-cdc';
 
 const cdc = new ArcaCdc({
@@ -184,7 +187,8 @@ const cdc = new ArcaCdc({
   key: fs.readFileSync('./certs/clave.key', 'utf-8'),
 });
 
-const client = new CdcClient({ endpoint: WSCDC_ENDPOINTS.testing });
+// { endpoint, transport? }: transport son las opciones de red (timeout, retries, onEvent, fetch, legacyTls)
+const client = new CdcClient({ endpoint: ENDPOINTS.wscdc.testing, transport: { timeout: 30_000 } });
 await client.dummy();
 
 const ticket = await cdc.wsaa.getAccessTicket(WSCDC_SERVICE_ID);

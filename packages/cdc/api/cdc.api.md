@@ -8,6 +8,7 @@ import { AccessTicket } from '@ramiidv/arca-common';
 import { ArcaAuthError } from '@ramiidv/arca-common';
 import { ArcaError } from '@ramiidv/arca-common';
 import { ArcaEvent } from '@ramiidv/arca-common';
+import { ArcaRechazoError } from '@ramiidv/arca-common';
 import { ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { ArcaSdkConfig } from '@ramiidv/arca-common';
@@ -20,8 +21,10 @@ import { FileTicketStorage } from '@ramiidv/arca-common';
 import { LegacyTlsMode } from '@ramiidv/arca-common';
 import { MemoryTicketStorage } from '@ramiidv/arca-common';
 import { ServerStatus } from '@ramiidv/arca-common';
+import { ServiceClientConfig } from '@ramiidv/arca-common';
+import { ServiceEndpoints } from '@ramiidv/arca-common';
 import { ServiceErrorDetail } from '@ramiidv/arca-common';
-import type { ServiceTransport } from '@ramiidv/arca-common';
+import { ServiceTransport } from '@ramiidv/arca-common';
 import { SoapServiceClient } from '@ramiidv/arca-common';
 import { TicketStorage } from '@ramiidv/arca-common';
 import { ValidationErrorDetail } from '@ramiidv/arca-common';
@@ -55,6 +58,8 @@ export { ArcaError }
 
 export { ArcaEvent }
 
+export { ArcaRechazoError }
+
 export { ArcaResponseError }
 
 export { ArcaServiceError }
@@ -84,7 +89,7 @@ export interface CdcAuth {
 
 // @public
 export class CdcClient extends SoapServiceClient {
-    constructor(input: CdcClientConfig);
+    constructor(config: CdcClientConfig);
     constatar(auth: CdcAuth, input: ConstatarInput, opts?: CallOptions): Promise<ConstatarResult>;
     // @internal
     constatarCmpReq(auth: CdcAuth, cmpReq: Record<string, unknown>, opts?: CallOptions): Promise<ConstatarResult>;
@@ -96,9 +101,7 @@ export class CdcClient extends SoapServiceClient {
 }
 
 // @public
-export interface CdcClientConfig extends ServiceTransport {
-    endpoint: string;
-}
+export type CdcClientConfig = ServiceClientConfig;
 
 // @public
 export interface CdcMensaje {
@@ -152,7 +155,7 @@ export interface ConstatarInput {
 // @public (undocumented)
 export interface ConstatarResult {
     cmpResp?: ComprobanteConstatado;
-    events: CdcMensaje[];
+    eventos: CdcMensaje[];
     fchProceso: string;
     observaciones: CdcMensaje[];
     resultado: 'A' | 'R';
@@ -165,6 +168,14 @@ export interface DocTipoItem {
     // (undocumented)
     id: string;
 }
+
+// @public
+export const ENDPOINTS: {
+    readonly wscdc: {
+        readonly testing: 'https://wswhomo.afip.gov.ar/WSCDC/service.asmx';
+        readonly production: 'https://servicios1.afip.gov.ar/WSCDC/service.asmx';
+    };
+};
 
 export { FileTicketStorage }
 
@@ -203,7 +214,13 @@ export interface OpcionalTipoItem {
 
 export { ServerStatus }
 
+export { ServiceClientConfig }
+
+export { ServiceEndpoints }
+
 export { ServiceErrorDetail }
+
+export { ServiceTransport }
 
 export { TicketStorage }
 
@@ -221,12 +238,6 @@ export function validateConstatarInput(input: ConstatarInput): void;
 export { ValidationErrorDetail }
 
 export { WsaaClient }
-
-// @public
-export const WSCDC_ENDPOINTS: {
-    readonly testing: 'https://wswhomo.afip.gov.ar/WSCDC/service.asmx';
-    readonly production: 'https://servicios1.afip.gov.ar/WSCDC/service.asmx';
-};
 
 // @public
 export const WSCDC_NAMESPACE = "http://servicios1.afip.gob.ar/wscdc/";

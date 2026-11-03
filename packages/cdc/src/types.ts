@@ -5,7 +5,10 @@ export type {
   CallOptions,
   LegacyTlsMode,
   ServerStatus,
+  ServiceClientConfig,
+  ServiceEndpoints,
   ServiceErrorDetail,
+  ServiceTransport,
   TicketStorage,
   ValidationErrorDetail,
 } from '@ramiidv/arca-common';
@@ -126,7 +129,7 @@ export interface ConstatarResult {
   /** Observaciones (motivos del rechazo funcional, u observaciones no excluyentes). */
   observaciones: CdcMensaje[];
   /** Eventos informados por ARCA (`Events`). */
-  events: CdcMensaje[];
+  eventos: CdcMensaje[];
 }
 
 /**
