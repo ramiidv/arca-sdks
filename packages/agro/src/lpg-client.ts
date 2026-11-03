@@ -2,7 +2,6 @@ import { SoapServiceClient, parseServerStatus } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus, ServiceErrorDetail, SoapOperationKind } from '@ramiidv/arca-common';
 import { LPG_NAMESPACE } from './constants.js';
 import type { ServiceContext } from './context.js';
-import { ArcaAgroServiceError } from './errors.js';
 import {
   at,
   checkErrors,
@@ -24,7 +23,6 @@ import type {
   AjusteUnificadoResultado,
   AnulacionCertificacionResultado,
   AnulacionContraDocumentoParams,
-  AnulacionLiquidacionResultado,
   AsociarAContratoParams,
   AutorizarAnticipoParams,
   CancelarAnticipoParams,
@@ -68,7 +66,6 @@ const OPS = {
   liquidacionXCoeConsultar: op('liquidacionXCoeConsultar', 'liqConsXCoeReq'),
   liquidacionXNroOrdenConsultar: op('liquidacionXNroOrdenConsultar', 'liqConsXNroOrdenReq'),
   liquidacionUltimoNroOrdenConsultar: op('liquidacionUltimoNroOrdenConsultar', 'liqUltNroOrdenReq'),
-  liquidacionAnular: op('liquidacionAnular', 'anulacionReq'),
   lpgAnularContraDocumento: op('lpgAnularContraDocumento', 'LpgAnularContraDocumentoReq'),
   liquidacionAjustarUnificado: op('liquidacionAjustarUnificado', 'ajustarUnificadoReq'),
   liquidacionAjustarContrato: op('liquidacionAjustarContrato', 'ajustarContratoReq'),
@@ -90,7 +87,6 @@ const OPS = {
   lsgConsultarXNroOrden: op('lsgConsultarXNroOrden', 'lsgConsultarXNroOrdenReq'),
   lsgConsultarUltimoNroOrden: op('lsgConsultarUltimoNroOrden', 'lsgConsultarUltimoNroOrdenReq'),
   lsgConsultarXContrato: { ...op('lsgConsultarXContrato', 'lsgConsultarXContratoReq'), ret: 'liqPorContratoCons' },
-  lsgAnular: op('lsgAnular', 'lsgAnularReq'),
   lsgAnularContraDocumento: op('lsgAnularContraDocumento', 'LsgAnularContraDocumentoReq'),
   lsgAjustarXCoe: op('lsgAjustarXCoe', 'lsgAjustarXCoeReq'),
   lsgAjustarXContrato: op('lsgAjustarXContrato', 'lsgAjustarXContratoReq'),
@@ -269,22 +265,6 @@ export class LpgClient extends SoapServiceClient {
     return decodeResult<{ nroOrden: number }>(node, S.R_ULT_NRO_ORDEN, o.method, 'consulta').nroOrden;
   }
 
-  /** `liquidacionAnular` / `lsgAnular`: `resultado: 'R'` lanza. */
-  async #anular(o: Op, body: Record<string, unknown>, opts?: CallOptions): Promise<AnulacionLiquidacionResultado> {
-    const { node, advertencias } = await this.#call(o, body, 'emision', opts, (n) => at(n, 'resultado') === 'A');
-    const res = decodeResult<AnulacionLiquidacionResultado>(node, S.R_ANULACION_RETURN, o.method, 'emision');
-    if (res.resultado === 'R') {
-      throw new ArcaAgroServiceError(
-        `${SERVICE} ${o.method}: anulación rechazada (resultado R)`,
-        advertencias,
-        SERVICE,
-        o.method,
-        node,
-      );
-    }
-    return withAdvertencias(res, advertencias);
-  }
-
   /** `lpgAnularContraDocumento` / `lsgAnularContraDocumento` (`LpgAnularContraDocumentoReqType`). */
   async #anularContraDocumento(
     o: Op,
@@ -349,17 +329,6 @@ export class LpgClient extends SoapServiceClient {
    */
   async liquidacionUltimoNroOrdenConsultar(ptoEmision: number, opts?: CallOptions): Promise<number> {
     return this.#ultimoNroOrden(OPS.liquidacionUltimoNroOrdenConsultar, ptoEmision, opts);
-  }
-
-  /**
-   * Anula una liquidación por COE. Emisión.
-   * @deprecated Discontinuado desde el manual WSLPG v1.21 (sigue en el WSDL): usá
-   *   `lpgAnularContraDocumento`.
-   * @throws ArcaAgroServiceError si ARCA responde `resultado: 'R'` (rechazada).
-   */
-  async liquidacionAnular(coe: string | number, opts?: CallOptions): Promise<AnulacionLiquidacionResultado> {
-    const o = OPS.liquidacionAnular;
-    return this.#anular(o, encodeRequest({ coe }, S.ANULACION, o.method), opts);
   }
 
   /**
@@ -524,21 +493,6 @@ export class LpgClient extends SoapServiceClient {
     const o = OPS.lsgConsultarXContrato;
     const body = encodeRequest(params, S.LIQ_POR_CONTRATO, o.method);
     return this.#lista(o, body, S.R_LIQ_POR_CONTRATO_RETURN, 'coeRelacionados', opts);
-  }
-
-  /**
-   * Anula una liquidación secundaria por COE. Emisión.
-   * @deprecated Discontinuado desde el manual WSLPG v1.22 (sigue en el WSDL): usá
-   *   `lsgAnularContraDocumento`.
-   * @throws ArcaAgroServiceError si ARCA responde `resultado: 'R'` (rechazada).
-   */
-  async lsgAnular(
-    coe: string | number,
-    params: { pdf?: boolean } = {},
-    opts?: CallOptions,
-  ): Promise<AnulacionLiquidacionResultado> {
-    const o = OPS.lsgAnular;
-    return this.#anular(o, this.#coePdf(o, coe, params.pdf), opts);
   }
 
   /**

@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   ArcaAgroResponseError,
   ArcaAgroServiceError,
+  ArcaRechazoError,
   ArcaServiceError,
   ArcaSoapError,
   ArcaValidationError,
-  LPG_ENDPOINTS,
+  ENDPOINTS,
   validateAjusteContrato,
   validateAutorizarAnticipo,
   validateCgAutorizar,
@@ -104,7 +105,7 @@ describe('WSLPG: liquidacionAutorizar', () => {
     const { agro, calls } = setup(() => lpgResp('liquidacionResp', 'liqReturn', AUTORIZACION + EVENTO));
     await agro.lpg.liquidacionAutorizar(liquidacion());
     const c = calls[0];
-    expect(c.url).toBe(LPG_ENDPOINTS.testing);
+    expect(c.url).toBe(ENDPOINTS.lpg.testing);
     expect(c.element).toBe('ser:liquidacionReq');
     expect(c.ns).toBe('http://serviciosjava.afip.gob.ar/wslpg/');
     expect(c.ns).toBe(LPG_NS);
@@ -474,24 +475,13 @@ interface EmisionCase {
   order: string[];
   run: (a: ArcaAgro) => Promise<unknown>;
   check: (r: any) => void;
-  /** La respuesta puede no traer el resultado (`resultado`/`estadoCertificado` opcionales en el XSD). */
+  /** La respuesta puede no traer el resultado (`estadoCertificado` opcional en el XSD). */
   resultadoOpcional?: true;
   /** Errores junto con el resultado no vuelven incierta la operación. */
   sinDeteccion?: true;
 }
 
 const EMISIONES: EmisionCase[] = [
-  {
-    name: 'liquidacionAnular',
-    req: 'anulacionReq',
-    resp: 'anulacionResp',
-    ret: 'anulacionReturn',
-    ok: '<coe>330100012345</coe><resultado>A</resultado>',
-    order: ['auth', 'coe'],
-    run: (a) => a.lpg.liquidacionAnular('330100012345'),
-    check: (r) => expect(r).toEqual({ coe: '330100012345', resultado: 'A', eventos: [] }),
-    resultadoOpcional: true,
-  },
   {
     name: 'liquidacionAjustarUnificado',
     req: 'ajustarUnificadoReq',
@@ -714,17 +704,6 @@ const EMISIONES: EmisionCase[] = [
     check: (r) => expect(r.liquidaciones[0].autorizacion.coe).toBe('331000000537'),
   },
   {
-    name: 'lsgAnular',
-    req: 'lsgAnularReq',
-    resp: 'lsgAnularResp',
-    ret: 'anulacionReturn',
-    ok: '<coe>331000000155</coe><resultado>A</resultado>',
-    order: ['auth', 'coe'],
-    run: (a) => a.lpg.lsgAnular('331000000155'),
-    check: (r) => expect(r).toEqual({ coe: '331000000155', resultado: 'A', eventos: [] }),
-    resultadoOpcional: true,
-  },
-  {
     name: 'lsgAnularContraDocumento',
     req: 'LsgAnularContraDocumentoReq',
     resp: 'LsgAnularContraDocumentoResp',
@@ -754,6 +733,9 @@ describe.each(EMISIONES)('WSLPG $name (emisión)', (c) => {
     const many = setup(() => lpgResp(resp, ret, ERROR_N));
     const e: any = await run(many.agro).catch((err: any) => err);
     expect(e).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e).toBeInstanceOf(ArcaServiceError);
+    // Sin `resultado: 'R'` en WSLPG: los rechazos vienen en `errores` (no son ArcaRechazoError).
+    expect(e).not.toBeInstanceOf(ArcaRechazoError);
     expect(e.errors).toHaveLength(2);
   });
 
@@ -990,43 +972,16 @@ describe('WSLPG: paramétricas', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Anulación: resultado R / ausente; estadoCertificado ausente
+// Anulación de certificaciones: estadoCertificado ausente
 // ---------------------------------------------------------------------------
 
-describe('WSLPG: resultado de las anulaciones', () => {
-  it('liquidacionAnular con resultado R → ArcaAgroServiceError (no uncertain)', async () => {
-    const { agro } = setup(() =>
-      lpgResp('anulacionResp', 'anulacionReturn', '<coe>330100012345</coe><resultado>R</resultado>'),
-    );
-    const e: any = await agro.lpg.liquidacionAnular('330100012345').catch((x: any) => x);
-    expect(e).toBeInstanceOf(ArcaAgroServiceError);
-    expect(e.uncertain).toBe(false);
-    expect(e.method).toBe('liquidacionAnular');
-    expect(e.response.resultado).toBe('R');
-  });
-
-  it('liquidacionAnular con R y errores → lanza con los errores', async () => {
-    const { agro } = setup(() =>
-      lpgResp('anulacionResp', 'anulacionReturn', `<coe>330100012345</coe><resultado>R</resultado>${ERROR_1}`),
-    );
-    const e: any = await agro.lpg.liquidacionAnular('330100012345').catch((x: any) => x);
-    expect(e).toBeInstanceOf(ArcaAgroServiceError);
-    expect(e.errors).toEqual([{ code: 1105, msg: 'El número de orden ya fue utilizado.' }]);
-    expect(e.uncertain).toBe(false);
-  });
-
-  it('liquidacionAnular con A y errores → uncertain', async () => {
-    const { agro } = setup(() =>
-      lpgResp('anulacionResp', 'anulacionReturn', `<coe>330100012345</coe><resultado>A</resultado>${ERROR_1}`),
-    );
-    const e: any = await agro.lpg.liquidacionAnular('330100012345').catch((x: any) => x);
-    expect(e).toBeInstanceOf(ArcaAgroServiceError);
-    expect(e.uncertain).toBe(true);
-  });
-
-  it('liquidacionAnular sin resultado → devuelve (resultado opcional en el XSD)', async () => {
-    const { agro } = setup(() => lpgResp('anulacionResp', 'anulacionReturn', '<coe>330100012345</coe>'));
-    expect(await agro.lpg.liquidacionAnular('330100012345')).toEqual({ coe: '330100012345', eventos: [] });
+describe('WSLPG: anulación de certificaciones', () => {
+  it('liquidacionAnular y lsgAnular (discontinuados por el manual) no existen: se usa *AnularContraDocumento', () => {
+    const { agro } = setup(() => '');
+    expect('liquidacionAnular' in agro.lpg).toBe(false);
+    expect('lsgAnular' in agro.lpg).toBe(false);
+    expect(typeof agro.lpg.lpgAnularContraDocumento).toBe('function');
+    expect(typeof agro.lpg.lsgAnularContraDocumento).toBe('function');
   });
 
   it('cgSolicitarAnulacion sin estadoCertificado → devuelve, no es un error incierto', async () => {
@@ -1590,15 +1545,6 @@ describe('WSLPG: consultas lsg*', () => {
     expect(r).toEqual(['331000000537']);
     expect(calls[0].element).toBe('ser:lsgConsultarXContratoReq');
     expect(calls[0].soapAction).toBe(`"${LPG_NS}lsgConsultarXContrato"`);
-  });
-
-  it('lsgAnular (discontinuado) con resultado R → ArcaAgroServiceError', async () => {
-    const { agro } = setup(() =>
-      lpgResp('lsgAnularResp', 'anulacionReturn', `<coe>331000000155</coe><resultado>R</resultado>${ERROR_1}`),
-    );
-    const e: any = await agro.lpg.lsgAnular('331000000155').catch((x: any) => x);
-    expect(e).toBeInstanceOf(ArcaAgroServiceError);
-    expect(e.method).toBe('lsgAnular');
   });
 });
 

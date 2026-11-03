@@ -2,7 +2,7 @@ import { ArcaSdkBase, statusOf } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
 import { CpeClient } from './cpe-client.js';
 import { LpgClient } from './lpg-client.js';
-import { CPE_ENDPOINTS, LPG_ENDPOINTS, WSAA_SERVICES } from './constants.js';
+import { ENDPOINTS, WSAA_SERVICES } from './constants.js';
 import type { ServiceContext } from './context.js';
 import type { AgroServiceStatus, ArcaAgroConfig } from './types.js';
 
@@ -41,8 +41,8 @@ export class ArcaAgro extends ArcaSdkBase<AgroService> {
       getTicket: (opts) => this.ticket(service, opts),
       callOptions: (opts) => this.callOptions(opts),
     });
-    this.cpe = new CpeClient(context('cpe', this.endpoint(CPE_ENDPOINTS, config.endpoints?.cpe)));
-    this.lpg = new LpgClient(context('lpg', this.endpoint(LPG_ENDPOINTS, config.endpoints?.lpg)));
+    this.cpe = new CpeClient(context('cpe', this.endpoint(ENDPOINTS.cpe, config.endpoints?.cpe)));
+    this.lpg = new LpgClient(context('lpg', this.endpoint(ENDPOINTS.lpg, config.endpoints?.lpg)));
   }
 
   /**

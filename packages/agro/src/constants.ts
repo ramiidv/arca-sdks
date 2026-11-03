@@ -1,3 +1,5 @@
+import type { ServiceEndpoints } from '@ramiidv/arca-common';
+
 // ---------------------------------------------------------------------------
 // WSAA service identifiers
 // ---------------------------------------------------------------------------
@@ -8,16 +10,30 @@ export const WSAA_SERVICES = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// WSCPE - Carta de Porte Electrónica
+// Endpoints
 // ---------------------------------------------------------------------------
 
 /**
- * Endpoints de WSCPE (`soap:address` de los WSDL oficiales y manual WSCPE §2.2).
+ * Endpoints oficiales de cada servicio por entorno:
+ * - `cpe`: WSCPE (`soap:address` de los WSDL oficiales y manual WSCPE §2.2).
+ * - `lpg`: WSLPG (`soap:address` de los WSDL oficiales).
+ *
+ * Para usar otros (ej: un proxy), pasá `endpoints: { cpe, lpg }` en la config.
  */
-export const CPE_ENDPOINTS = {
-  testing: 'https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap',
-  production: 'https://cpea-ws.afip.gob.ar/wscpe/services/soap',
-} as const;
+export const ENDPOINTS = {
+  cpe: {
+    testing: 'https://cpea-ws-qaext.afip.gob.ar/wscpe/services/soap',
+    production: 'https://cpea-ws.afip.gob.ar/wscpe/services/soap',
+  },
+  lpg: {
+    testing: 'https://fwshomo.afip.gov.ar/wslpg/LpgService',
+    production: 'https://serviciosjava.afip.gob.ar/wslpg/LpgService',
+  },
+} as const satisfies Record<string, ServiceEndpoints>;
+
+// ---------------------------------------------------------------------------
+// WSCPE - Carta de Porte Electrónica
+// ---------------------------------------------------------------------------
 
 /** Namespace (targetNamespace) de WSCPE. */
 export const CPE_NAMESPACE = 'https://serviciosjava.afip.gob.ar/wscpe/';
@@ -61,12 +77,6 @@ export const ESTADOS_CPE = {
 // ---------------------------------------------------------------------------
 // WSLPG - Liquidación Primaria de Granos
 // ---------------------------------------------------------------------------
-
-/** Endpoints de WSLPG (`soap:address` de los WSDL oficiales). */
-export const LPG_ENDPOINTS = {
-  testing: 'https://fwshomo.afip.gov.ar/wslpg/LpgService',
-  production: 'https://serviciosjava.afip.gob.ar/wslpg/LpgService',
-} as const;
 
 /** Namespace (targetNamespace) de WSLPG. Ojo: es `http`, no `https`. */
 export const LPG_NAMESPACE = 'http://serviciosjava.afip.gob.ar/wslpg/';

@@ -1,6 +1,6 @@
 import { testCert } from '@ramiidv/arca-common/testing';
 import { describe, it, expect, vi } from 'vitest';
-import { ArcaAgro, ArcaSoapError, ArcaValidationError, WSAA_SERVICES } from '../src/index.js';
+import { ArcaAgro, ArcaSoapError, ArcaValidationError, ENDPOINTS, WSAA_SERVICES } from '../src/index.js';
 import type { ArcaEvent, TicketStorage } from '../src/index.js';
 import { CPE_NS, LPG_NS, cpeResp, http503, lpgResp, setup, ticketStorage } from './helpers.js';
 
@@ -94,5 +94,40 @@ describe('ArcaAgro', () => {
     const otro = new ArcaAgro({ cuit: '20123456786', ...testCert(), wsaa: agro.wsaa });
     expect(otro.wsaa).toBe(agro.wsaa);
     expect(otro.cuit).toBe('20123456786');
+  });
+});
+
+describe('ENDPOINTS', () => {
+  it('tiene un ServiceEndpoints por servicio (cpe, lpg), las mismas claves que config.endpoints', () => {
+    expect(Object.keys(ENDPOINTS).sort()).toEqual(['cpe', 'lpg']);
+    expect(Object.keys(ENDPOINTS).sort()).toEqual(Object.keys(WSAA_SERVICES).sort());
+    for (const e of Object.values(ENDPOINTS)) {
+      expect(Object.keys(e).sort()).toEqual(['production', 'testing']);
+      expect(e.testing).toMatch(/^https:\/\//);
+      expect(e.production).toMatch(/^https:\/\//);
+    }
+    expect(ENDPOINTS.cpe.production).toBe('https://cpea-ws.afip.gob.ar/wscpe/services/soap');
+    expect(ENDPOINTS.lpg.production).toBe('https://serviciosjava.afip.gob.ar/wslpg/LpgService');
+  });
+
+  it('testing por defecto y production con production: true', async () => {
+    const dummy = (call: { url: string }) => (call.url.includes('wscpe') ? CPE_DUMMY : LPG_DUMMY);
+    const testing = setup(dummy);
+    await testing.agro.status();
+    expect(testing.calls.map((c) => c.url).sort()).toEqual([ENDPOINTS.cpe.testing, ENDPOINTS.lpg.testing].sort());
+
+    const prod = setup(dummy, { production: true });
+    await prod.agro.status();
+    expect(prod.calls.map((c) => c.url).sort()).toEqual([ENDPOINTS.cpe.production, ENDPOINTS.lpg.production].sort());
+  });
+
+  it('config.endpoints reemplaza el de cada servicio', async () => {
+    const cpe = 'https://proxy.example/wscpe';
+    const lpg = 'https://proxy.example/wslpg';
+    const { agro, calls } = setup((call) => (call.url.includes('wscpe') ? CPE_DUMMY : LPG_DUMMY), {
+      endpoints: { cpe, lpg },
+    });
+    await agro.status();
+    expect(calls.map((c) => c.url).sort()).toEqual([cpe, lpg].sort());
   });
 });

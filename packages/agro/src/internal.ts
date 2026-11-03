@@ -4,7 +4,7 @@
  *
  * @internal No se exporta desde `index.ts`.
  */
-import { ArcaResponseError } from '@ramiidv/arca-common';
+import { ArcaResponseError, formatServiceErrors } from '@ramiidv/arca-common';
 import type { AccessTicket, CallOptions, ServiceErrorDetail, SoapOperationKind } from '@ramiidv/arca-common';
 import type { Field, Schema } from '@ramiidv/arca-common/schema';
 import { ArcaAgroResponseError, ArcaAgroServiceError } from './errors.js';
@@ -108,7 +108,7 @@ export function checkErrors(
   if (errors.some((e) => esFatal(e, service))) {
     const uncertain = kind === 'emision' && conResultado !== undefined && conResultado(node);
     throw new ArcaAgroServiceError(
-      `${service} ${method}: ${errors.map((e) => `[${e.rawCode ?? e.code}] ${e.msg}`).join(', ')}` +
+      `${service} ${method}: ${formatServiceErrors(errors)}` +
         (uncertain ? ' (la respuesta trae el resultado: verificá el estado antes de reintentar)' : ''),
       errors,
       service,

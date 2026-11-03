@@ -164,7 +164,6 @@ export type {
   LiquidacionResultado,
   LiquidacionConsultadaLpg,
   LiquidacionConsultaResultado,
-  AnulacionLiquidacionResultado,
   AjusteCreditoDebitoResultadoLpg,
   AjusteUnificadoLpg,
   AjusteUnificadoResultado,
@@ -219,11 +218,10 @@ export {
 // ---------------------------------------------------------------------------
 export {
   WSAA_SERVICES,
-  CPE_ENDPOINTS,
+  ENDPOINTS,
   CPE_NAMESPACE,
   TIPO_CPE,
   ESTADOS_CPE,
-  LPG_ENDPOINTS,
   LPG_NAMESPACE,
 } from './constants.js';
 
@@ -237,10 +235,12 @@ export {
   ArcaAuthError,
   ArcaSoapError,
   ArcaServiceError,
+  ArcaRechazoError,
+  ArcaResponseError,
   ArcaValidationError,
   ArcaTicketVigenteError,
   WsaaClient,
   MemoryTicketStorage,
   FileTicketStorage,
 } from '@ramiidv/arca-common';
-export type { ServiceErrorDetail, ValidationErrorDetail } from '@ramiidv/arca-common';
+export type { ServiceEndpoints, ServiceErrorDetail, ValidationErrorDetail } from '@ramiidv/arca-common';
