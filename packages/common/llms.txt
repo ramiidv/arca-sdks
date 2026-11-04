@@ -224,7 +224,7 @@ class ArcaResponseError extends ArcaError { uncertain: boolean }   // respuesta 
 
 ## Seguridad
 
-- Certificado y clave fuera del repositorio (en `.gitignore`, o desde variables de entorno / un gestor de secretos).
+- Certificado y clave: el SDK los recibe como strings (`cert`, `key`); se cargan desde donde la aplicación guarde sus secretos.
 - Endpoints propios: siempre `https://` (http solo en loopback para servidores de prueba locales); sin credenciales en la URL.
 - Antes de loguear un error, redactar `ArcaValidationError.details[].value`, `ArcaSoapError.faultDetail` y `ArcaSoapError.responseBody`: pueden traer CUITs y datos personales.
 - Tickets: `token`/`sign` son secretos; `FileTicketStorage` los guarda en texto plano (archivos 0600, directorio 0700 propio). Con otro storage (DB, Redis), protegerlos igual.

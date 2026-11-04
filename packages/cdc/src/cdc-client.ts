@@ -69,7 +69,7 @@ const SIN_RESULTADOS = 503;
 
 /**
  * `true` si el error de una tabla es solo el 503 "Sin Resultados" (la tabla
- * está vacía; ej. `OpcionalesTipoConsultar` en homologación). El 503 también
+ * está vacía; ej. `OpcionalesTipoConsultar` sin opcionales). El 503 también
  * es un error de infraestructura en el manual, así que se exige el texto
  * "Sin Resultados". Los `Err` con código 0 no son errores.
  */

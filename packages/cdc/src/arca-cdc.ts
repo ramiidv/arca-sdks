@@ -99,7 +99,7 @@ export class ArcaCdc extends ArcaSdkBase<'wscdc'> {
 
   /**
    * Identificadores válidos para `Opcionales` (`OpcionalesTipoConsultar`). Si
-   * ARCA no tiene ninguno (503 "Sin Resultados", como en homologación), devuelve `[]`.
+   * ARCA no tiene ninguno (503 "Sin Resultados"), devuelve `[]`.
    */
   async getTiposOpcionales(opts?: CallOptions): Promise<ListaCdc<OpcionalTipoItem>> {
     return this.client.getTiposOpcionales(await this.auth(opts), this.callOptions(opts));

@@ -40,8 +40,6 @@ Glosario:
 
 ## Inicio rápido
 
-La carpeta `certs/` del ejemplo (certificado y clave privada) tiene que estar en el `.gitignore` del proyecto: la clave nunca se versiona.
-
 ```ts
 import { readFileSync } from 'node:fs';
 import { ArcaFacturacion, ArcaRechazoError, CbteTipo, FileTicketStorage, IvaTipo } from '@ramiidv/arca-facturacion';

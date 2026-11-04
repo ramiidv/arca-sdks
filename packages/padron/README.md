@@ -55,8 +55,6 @@ npm install @ramiidv/arca-padron
 
 ## Inicio rápido
 
-La carpeta `certs/` del ejemplo (certificado y clave privada) tiene que estar en el `.gitignore` del proyecto: la clave nunca se versiona.
-
 ```typescript
 import { readFileSync } from 'node:fs';
 import { ArcaPadron, CollectionName, FileTicketStorage, condicionIvaDesdePadron } from '@ramiidv/arca-padron';

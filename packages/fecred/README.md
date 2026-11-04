@@ -34,8 +34,6 @@ npm install @ramiidv/arca-fecred
 
 ## Inicio rápido
 
-La carpeta `certs/` del ejemplo (certificado y clave privada) tiene que estar en el `.gitignore` del proyecto: la clave nunca se versiona.
-
 ```typescript
 import { readFileSync } from "node:fs";
 import { ArcaFecred, FileTicketStorage } from "@ramiidv/arca-fecred";
@@ -220,7 +218,7 @@ const client = new FecredClient({
 console.log(tipos, await client.dummy());
 ```
 
-Detalles del protocolo (verificados contra homologación): namespace `http://ar.gob.afip.wsfecred/FECredService/`, wrapper `<operacionRequest>`, header `SOAPAction` = namespace + operación (obligatorio), `dummy` con Body vacío.
+Detalles del protocolo: namespace `http://ar.gob.afip.wsfecred/FECredService/`, wrapper `<operacionRequest>`, header `SOAPAction` = namespace + operación (obligatorio), `dummy` con Body vacío.
 
 ## Manejo de errores
 

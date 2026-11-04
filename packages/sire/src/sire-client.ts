@@ -33,8 +33,8 @@ import type {
 export type SireClientConfig = ServiceClientConfig;
 
 /**
- * Faults con `faultcode` `soapenv:Server` que, según lo observado en
- * homologación, son rechazos previos a procesar el request: XML que no cumple
+ * Faults con `faultcode` `soapenv:Server` que son rechazos previos a procesar
+ * el request: XML que no cumple
  * el schema (`XML invalido, no cumple el schema: ...`) y request mal formado.
  *
  * Anclados al inicio del mensaje: un Fault de sistema que mencione estos textos
@@ -44,8 +44,8 @@ export type SireClientConfig = ServiceClientConfig;
 const REJECTION_FAULT_PATTERNS = [/^XML invalido\b/i, /^Request mal formado\b/i];
 
 /**
- * Faults de token/sign faltante o inválido. El manual no publica la lista; en
- * homologación se observaron `MISSING_AUTHENTICATION_TOKEN`, `CANT_PARSE_TOKEN`,
+ * Faults de token/sign faltante o inválido. El manual no publica la lista; los
+ * que responde SIRE son `MISSING_AUTHENTICATION_TOKEN`, `CANT_PARSE_TOKEN`,
  * `CANT_VERIFY_SIGN` (cubiertos por el patrón `XXX_TOKEN`/`XXX_SIGN`),
  * `BAD_SERVICE` (ticket de otro servicio) y `CANT_VERIFY_DATA` (token y sign que
  * no se corresponden). Todos con `soapenv:Server` y `faultstring` igual al

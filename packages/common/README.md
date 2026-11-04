@@ -565,8 +565,8 @@ Métodos y propiedades: `getAccessTicket(service, { signal }?)`, `clearTicket(se
 
 ## Seguridad
 
-- **Certificado y clave**: fuera del repositorio (agregá la carpeta a `.gitignore`) o desde variables
-  de entorno o un gestor de secretos. La clave firma los pedidos de acceso con tu CUIT.
+- **Certificado y clave**: el SDK los recibe como strings (`cert`, `key`), así que se cargan desde
+  donde la aplicación guarde sus secretos. La clave firma los pedidos de acceso con tu CUIT.
 - **Endpoints propios** (`endpoint`, `endpoints.*`): siempre `https://`. `http://` se acepta solo en
   `localhost`, `127.0.0.0/8` y `::1`, para servidores de prueba locales. Sin usuario ni contraseña en
   la URL.
