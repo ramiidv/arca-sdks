@@ -51,6 +51,9 @@ servicio.
 - `@types/node` sigue la Node mínima de `engines.node` (hoy 22): `npm run lint`
   falla si las majors no coinciden (`scripts/check-types-node.mjs`) y Dependabot
   no propone sus majors. Al subir la Node mínima, subir los dos juntos.
+- `deps-frescas.yml` corre una vez por mes (y a pedido) sin lockfile, con lo
+  último de cada rango que declaran los paquetes, que es lo que reciben los
+  usuarios al instalar. Si falla, abre o comenta un issue.
 
 ## Cómo publicar
 
