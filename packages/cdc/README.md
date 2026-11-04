@@ -39,8 +39,6 @@ Glosario:
 
 ## Inicio rápido
 
-La carpeta `certs/` del ejemplo (certificado y clave privada) tiene que estar en el `.gitignore` del proyecto: la clave nunca se versiona.
-
 ```typescript
 import fs from 'node:fs';
 import { ArcaCdc } from '@ramiidv/arca-cdc';
@@ -116,7 +114,7 @@ Todos aceptan un último parámetro opcional `opts?: { signal?: AbortSignal }`.
 Las tablas devuelven un `ListaCdc<T>`: un array común (`desc` es `''` si ARCA no la informa) con los
 `Events` de ARCA, si vinieron, en `lista.eventos` (propiedad no enumerable: no aparece al iterar,
 serializar ni copiar el array). Si ARCA responde el error `503` "Sin Resultados" (como
-`OpcionalesTipoConsultar` en homologación), la tabla es `[]`; cualquier otro error lanza
+`OpcionalesTipoConsultar` sin opcionales), la tabla es `[]`; cualquier otro error lanza
 `ArcaServiceError`.
 
 ARCA manda `<Events><Evt><Code>0</Code></Evt></Events>` cuando no hay eventos: el SDK descarta los

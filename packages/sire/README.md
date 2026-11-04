@@ -30,8 +30,6 @@ npm install @ramiidv/arca-sire
 
 ## Inicio rápido
 
-La carpeta `certs/` del ejemplo (certificado y clave privada) tiene que estar en el `.gitignore` del proyecto: la clave nunca se versiona.
-
 ```typescript
 import { readFileSync } from 'node:fs';
 import { ArcaSire, Condicion, TipoComprobante } from '@ramiidv/arca-sire';
@@ -184,7 +182,7 @@ console.log(await client.dummy());
 | `ArcaSoapError` con `uncertain: true`                | Timeout, error de red después de enviar, HTTP 5xx sin Fault, respuesta ilegible, o un Fault `soapenv:Server` de sistema (ej: "Error de conexión a la base de datos").                                                                                                  | **No se sabe**    |
 | `ArcaSoapError` con `uncertain: false`               | El request no llegó a enviarse (DNS, conexión rechazada, abort antes de enviar).                                                                                                                                                                                       | No                |
 
-Criterio para los SOAP Faults: el manual (sección 4) define `soapenv:Client` como error de negocio y `soapenv:Server` como error de sistema. En homologación, además, el servidor responde `soapenv:Server` para rechazos previos a procesar (XML que no cumple el schema, operación inexistente, faults de autenticación); esos también se informan como rechazo. Cualquier otro `soapenv:Server` en `emitir`/`anular` se deja como `ArcaSoapError` incierto. `status()` (`dummy`) no es una emisión: sus Faults quedan siempre como `ArcaSoapError`. El manual no publica la lista de Faults de autenticación: el SDK trata como tal un `faultstring` del estilo `XXX_TOKEN`/`XXX_SIGN` (en homologación: `MISSING_AUTHENTICATION_TOKEN`, `CANT_PARSE_TOKEN`, `CANT_VERIFY_SIGN`), más `BAD_SERVICE` (token/sign emitido para otro servicio) y `CANT_VERIFY_DATA` (token y sign que no se corresponden).
+Criterio para los SOAP Faults: el manual (sección 4) define `soapenv:Client` como error de negocio y `soapenv:Server` como error de sistema. El servidor también responde `soapenv:Server` para rechazos previos a procesar el request (`XML invalido, no cumple el schema: ...` y `Request mal formado`): esos se informan como rechazo, y los faults de autenticación como `ArcaAuthError`. Cualquier otro `soapenv:Server` en `emitir`/`anular` se deja como `ArcaSoapError` incierto. `status()` (`dummy`) no es una emisión: sus Faults quedan siempre como `ArcaSoapError`. El manual no publica la lista de Faults de autenticación: el SDK trata como tal un `faultstring` del estilo `XXX_TOKEN`/`XXX_SIGN` (ej: `MISSING_AUTHENTICATION_TOKEN`, `CANT_PARSE_TOKEN`, `CANT_VERIFY_SIGN`), más `BAD_SERVICE` (token/sign emitido para otro servicio) y `CANT_VERIFY_DATA` (token y sign que no se corresponden).
 
 ```typescript
 import {

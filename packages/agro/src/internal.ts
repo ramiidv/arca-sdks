@@ -32,7 +32,7 @@ export const CODIGOS_ADMITIDOS: Readonly<Record<AgroServiceName, readonly number
  * vuelve vacía (ver `soloSinRegistros`).
  *
  * - WSCPE 800: "No existen solicitudes para los parámetros indicados" (lo
- *   responde homologación en las consultas de CPE y en las paramétricas sin
+ *   responde ARCA en las consultas de CPE y en las paramétricas sin
  *   resultados, ej: `consultarPlantas` de un CUIT sin plantas).
  * - WSLPG 600: "No existen datos en las bases de la Administración según los
  *   parámetros de búsqueda informados" (manual WSLPG §1.7, para todos los métodos).

@@ -247,7 +247,7 @@ export function checkCalidadCg(input: Record<string, unknown>, errors: Validatio
  * - 1631 / 1634: informar `codGradoEnt` y/o `factorEnt`; `valGradoEnt` solo
  *   con `codGradoEnt`.
  * - 1644 / 1646: con `certificados` no se informan `pesoNetoSinCertificado` ni
- *   la procedencia sin certificado. Sin `certificados`, homologación rechaza
+ *   la procedencia sin certificado. Sin `certificados`, ARCA rechaza
  *   con 1646 un `pesoNetoSinCertificado` sin procedencia: se exige al menos
  *   uno de `codLocalidadProcedenciaSinCertificado` y
  *   `codProvProcedenciaSinCertificado` (si falta uno de los dos, la
