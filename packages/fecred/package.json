@@ -1,6 +1,6 @@
 {
   "name": "@ramiidv/arca-fecred",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "TypeScript SDK para el web service WSFECRED de ARCA (ex AFIP) - Factura de Crédito Electrónica MiPyME",
   "author": "ramiidv",
   "license": "MIT",
@@ -59,6 +59,6 @@
     "node": ">=22.12.0"
   },
   "dependencies": {
-    "@ramiidv/arca-common": "^0.10.0"
+    "@ramiidv/arca-common": "^0.10.1"
   }
 }
