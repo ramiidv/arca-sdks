@@ -1,6 +1,6 @@
 {
   "name": "@ramiidv/arca-mtxca",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "TypeScript SDK para el web service WSMTXCA de ARCA (ex AFIP) - Facturación electrónica con detalle de artículos",
   "author": "ramiidv",
   "license": "MIT",
@@ -63,6 +63,6 @@
     "node": ">=22.12.0"
   },
   "dependencies": {
-    "@ramiidv/arca-common": "^0.10.0"
+    "@ramiidv/arca-common": "^0.10.1"
   }
 }
