@@ -26,6 +26,7 @@ export {
   obj,
   opt,
   porcentaje,
+  siNo,
   str,
   wrapped,
   xml,

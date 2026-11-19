@@ -19,6 +19,7 @@ import {
   obj,
   opt,
   porcentaje,
+  siNo,
   str,
   wrapped,
   xml,
@@ -39,7 +40,8 @@ const pesoNeto = () => int(0, 99999999, true); // LpgPesoNetoType
 const codLocalidad = () => int(0, 999999, true); // LpgCodLocProcedenciaType
 const codProvincia = () => int(0, 99); // LpgCodProvProcedenciaType
 const campania = () => int(203, 9999); // LpgCampaniaType
-const siNo = () => str({ values: ['S', 'N'] }); // LpgSiNoType
+/** `LpgSiNoType` como texto `S`/`N` (los `pdf` usan `siNo()` de common: boolean ↔ S/N). */
+const letraSN = () => str({ values: ['S', 'N'] });
 const alicuota = () => dec(4, 0, 100); // LpgAlicuotaType
 // biome-ignore lint/correctness/noPrecisionLoss: tope literal del XSD (maxInclusive)
 const importe17_2 = () => dec(2, 0, 99999999999999999.99); // LpgImporte_17_2_Type
@@ -122,7 +124,7 @@ export const LIQUIDACION_BASE: Schema = {
   nroActComprador: actividad(),
   nroIngBrutoComprador: ib(),
   codTipoOperacion: codTipoOperacion(),
-  esLiquidacionPropia: opt(siNo()),
+  esLiquidacionPropia: opt(letraSN()),
   esCanje: opt(str({ values: ['P', 'T', 'N'] })),
   codPuerto: codPuerto(),
   desPuertoLocalidad: opt(puertoLocalidad()),
@@ -132,8 +134,8 @@ export const LIQUIDACION_BASE: Schema = {
   codProvProcedenciaSinCertificado: opt(codProvincia()),
   cuitVendedor: cuit(),
   nroIngBrutoVendedor: ib(),
-  actuaCorredor: opt(siNo()),
-  liquidaCorredor: siNo(),
+  actuaCorredor: opt(letraSN()),
+  liquidaCorredor: letraSN(),
   cuitCorredor: opt(cuit()),
   comisionCorredor: opt(porcentaje99()),
   nroIngBrutoCorredor: opt(ib()),
@@ -279,8 +281,8 @@ export const AUTORIZAR_ANTICIPO: Schema = {
       pesoNetoSinCertificado: pesoNeto(),
       cuitVendedor: cuit(),
       nroIngBrutoVendedor: ib(),
-      actuaCorredor: opt(siNo()),
-      liquidaCorredor: siNo(),
+      actuaCorredor: opt(letraSN()),
+      liquidaCorredor: letraSN(),
       cuitCorredor: opt(cuit()),
       comisionCorredor: opt(porcentaje99()),
       nroIngBrutoCorredor: opt(ib()),
@@ -362,8 +364,8 @@ export const LSG_AUTORIZAR: Schema = {
     cuitVendedor: cuit(),
     nroActVendedor: actividad(),
     nroIngBrutoVendedor: ib(),
-    actuaCorredor: opt(siNo()),
-    liquidaCorredor: siNo(),
+    actuaCorredor: opt(letraSN()),
+    liquidaCorredor: letraSN(),
     cuitCorredor: opt(cuit()),
     nroIngBrutoCorredor: opt(ib()),
     fechaPrecioOperacion: date(),

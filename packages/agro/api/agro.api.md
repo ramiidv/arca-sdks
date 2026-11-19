@@ -32,6 +32,9 @@ import { WsaaClient } from '@ramiidv/arca-common';
 export { AccessTicket }
 
 // @public
+export type AgroServiceName = 'WSCPE' | 'WSLPG';
+
+// @public
 export type AgroServiceStatus = ServiceStatus;
 
 // @public
@@ -325,14 +328,16 @@ export interface ArcaAgroConfig extends ArcaSdkConfig {
 
 // @public
 export class ArcaAgroResponseError extends ArcaResponseError {
-    constructor(message: string, uncertain?: boolean);
+    constructor(message: string, uncertain?: boolean, options?: {
+        cause?: unknown;
+    });
     // (undocumented)
     static readonly code: string;
 }
 
 // @public
 export class ArcaAgroServiceError extends ArcaServiceError {
-    constructor(message: string, errors: ServiceErrorDetail[], service: 'WSCPE' | 'WSLPG', method: string, response: Record<string, unknown>, uncertain?: boolean);
+    constructor(message: string, errors: ServiceErrorDetail[], service: AgroServiceName, method: string, response: Record<string, unknown>, uncertain?: boolean);
     // (undocumented)
     static readonly code: string;
     // (undocumented)
@@ -340,7 +345,7 @@ export class ArcaAgroServiceError extends ArcaServiceError {
     // (undocumented)
     readonly response: Record<string, unknown>;
     // (undocumented)
-    readonly service: 'WSCPE' | 'WSLPG';
+    readonly service: AgroServiceName;
     // (undocumented)
     readonly uncertain: boolean;
 }

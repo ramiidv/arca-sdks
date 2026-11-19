@@ -873,7 +873,9 @@ export const R_DETALLE_FERROVIARIA: Schema = {
       cuitPagadorFlete: cuit(),
       cuitConductor: cuit(),
       cuitConductorTramo2: cuit(),
-      tarifa: int(),
+      // El XSD la declara `xsd:long`, pero se informa con 2 decimales (`Tarifa`
+      // en los requests): se decodifica como decimal para aceptar ambas formas.
+      tarifa: dec(2),
       cuitIntermediarioFlete: cuit(),
       mercaderiaFumigada: bool(),
     }),

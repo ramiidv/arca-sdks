@@ -1,6 +1,16 @@
 import { testCert } from '@ramiidv/arca-common/testing';
 import { describe, it, expect, vi } from 'vitest';
-import { ArcaAgro, ArcaSoapError, ArcaValidationError, ENDPOINTS, WSAA_SERVICES } from '../src/index.js';
+import { must, int } from '@ramiidv/arca-common/schema';
+import {
+  ArcaAgro,
+  ArcaAgroResponseError,
+  ArcaResponseError,
+  ArcaSoapError,
+  ArcaValidationError,
+  ENDPOINTS,
+  WSAA_SERVICES,
+} from '../src/index.js';
+import { decodeResult } from '../src/internal.js';
 import type { ArcaEvent, TicketStorage } from '../src/index.js';
 import { CPE_NS, LPG_NS, cpeResp, http503, lpgResp, setup, ticketStorage } from './helpers.js';
 
@@ -129,5 +139,29 @@ describe('ENDPOINTS', () => {
     });
     await agro.status();
     expect(calls.map((c) => c.url).sort()).toEqual([cpe, lpg].sort());
+  });
+});
+
+describe('ArcaAgroResponseError', () => {
+  it('acepta cause (compatible: sin options no tiene cause)', () => {
+    const causa = new Error('original');
+    const e = new ArcaAgroResponseError('x', true, { cause: causa });
+    expect(e.cause).toBe(causa);
+    expect(e.uncertain).toBe(true);
+    expect(new ArcaAgroResponseError('y').cause).toBeUndefined();
+  });
+
+  it('una emisión sin un must() conserva el error original como cause', () => {
+    const e: any = (() => {
+      try {
+        return decodeResult({}, { nroCTG: must(int()) }, 'op.respuesta', 'emision');
+      } catch (err) {
+        return err;
+      }
+    })();
+    expect(e).toBeInstanceOf(ArcaAgroResponseError);
+    expect(e.uncertain).toBe(true);
+    expect(e.cause).toBeInstanceOf(ArcaResponseError);
+    expect(e.cause.message).toBe(e.message);
   });
 });

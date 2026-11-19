@@ -2,6 +2,7 @@ import { SoapServiceClient, parseServerStatus } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus, ServiceErrorDetail, SoapOperationKind } from '@ramiidv/arca-common';
 import { LPG_NAMESPACE } from './constants.js';
 import type { ServiceContext } from './context.js';
+import { ArcaAgroResponseError } from './errors.js';
 import {
   at,
   checkErrors,
@@ -46,7 +47,7 @@ import type {
   LsgAutorizarResultado,
   LsgConsultaResultado,
 } from './lpg-types.js';
-import { checkBloqueCertificado, checkCalidadCg, checkLiquidacion, requireAjuste } from './validation.js';
+import { encodeSolicitud } from './validation.js';
 
 const SERVICE = 'WSLPG';
 
@@ -121,9 +122,10 @@ const OPS = {
 const COE_AUTORIZACION = 'autorizacion.coe';
 /** Ruta del COE en las respuestas de ajuste unificado y sus consultas. */
 const COE_AJUSTE = 'ajusteUnificado.coe';
-
-/** `pdf` de los requests (`LpgSiNoType`). */
-const siNo = (pdf: boolean | undefined) => (pdf === undefined ? undefined : pdf ? 'S' : 'N');
+/** Ruta del COE en la respuesta de `liquidacionAjustarContrato`. */
+const COE_AJUSTE_CONTRATO = 'ajusteContrato.coe';
+/** Ruta del COE en las respuestas de los ajustes de liquidación secundaria (`lsgAjustar*`). */
+const COE_LSG_AJUSTE = 'coe';
 
 /**
  * Cliente de WSLPG (Liquidación Primaria y Secundaria de Granos). Se accede como `agro.lpg`.
@@ -158,7 +160,9 @@ export class LpgClient extends SoapServiceClient {
 
   /**
    * Llama a una operación de WSLPG y devuelve el nodo `*Return` (common lo
-   * desenvuelve), sin verificar errores.
+   * desenvuelve), sin verificar errores. En las operaciones con `ret`, si falta
+   * ese hijo lanza `ArcaAgroResponseError` (`uncertain` en emisiones); vacío
+   * (`<ret/>`) devuelve `{}`.
    */
   async #request(
     o: Op,
@@ -179,10 +183,12 @@ export class LpgClient extends SoapServiceClient {
       soapActionFromMethod: true,
       parseNumbers: false,
     });
-    const inner = o.ret === undefined ? result : result[o.ret];
-    return inner !== null && typeof inner === 'object' && !Array.isArray(inner)
-      ? (inner as Record<string, unknown>)
-      : {};
+    if (o.ret === undefined) return result;
+    const inner = result[o.ret] === '' ? {} : result[o.ret];
+    if (inner === undefined || inner === null || typeof inner !== 'object' || Array.isArray(inner)) {
+      throw new ArcaAgroResponseError(`${SERVICE} ${o.method}: la respuesta no tiene <${o.ret}>`, kind === 'emision');
+    }
+    return inner as Record<string, unknown>;
   }
 
   /**
@@ -252,7 +258,7 @@ export class LpgClient extends SoapServiceClient {
 
   /** `{ coe, pdf }` (`LpgLiqConsXCoeReqType`). */
   #coePdf(o: Op, coe: string | number, pdf: boolean | undefined): Record<string, unknown> {
-    return encodeRequest({ coe, pdf: siNo(pdf) }, S.CONSULTA_X_COE, o.method);
+    return encodeRequest({ coe, pdf }, S.CONSULTA_X_COE, o.method);
   }
 
   #nroOrden(o: Op, ptoEmision: number, nroOrden: number): Record<string, unknown> {
@@ -297,7 +303,7 @@ export class LpgClient extends SoapServiceClient {
    */
   async liquidacionAutorizar(params: LiquidacionAutorizarParams, opts?: CallOptions): Promise<LiquidacionResultado> {
     const o = OPS.liquidacionAutorizar;
-    const body = encodeRequest(params, S.LIQUIDACION_AUTORIZAR, o.method, checkLiquidacion);
+    const body = encodeSolicitud('liquidacionAutorizar', params);
     return this.#conCoe(o, body, S.R_LIQ_RETURN, COE_AUTORIZACION, 'emision', opts);
   }
 
@@ -358,7 +364,7 @@ export class LpgClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<AjusteUnificadoResultado> {
     const o = OPS.liquidacionAjustarUnificado;
-    const body = encodeRequest(params, S.AJUSTE_UNIFICADO, o.method, requireAjuste);
+    const body = encodeSolicitud('liquidacionAjustarUnificado', params);
     return this.#conCoe(o, body, S.R_AJUSTE_UNIFICADO_RETURN, COE_AJUSTE, 'emision', opts);
   }
 
@@ -370,8 +376,8 @@ export class LpgClient extends SoapServiceClient {
    */
   async liquidacionAjustarContrato(params: AjusteContratoParams, opts?: CallOptions): Promise<AjusteContratoResultado> {
     const o = OPS.liquidacionAjustarContrato;
-    const body = encodeRequest(params, S.AJUSTE_CONTRATO, o.method, requireAjuste);
-    return this.#conCoe(o, body, S.R_AJUSTE_CONTRATO_RETURN, 'ajusteContrato.coe', 'emision', opts);
+    const body = encodeSolicitud('liquidacionAjustarContrato', params);
+    return this.#conCoe(o, body, S.R_AJUSTE_CONTRATO_RETURN, COE_AJUSTE_CONTRATO, 'emision', opts);
   }
 
   /** Asocia una liquidación original (COE) a un contrato. Emisión; devuelve la liquidación. */
@@ -391,7 +397,7 @@ export class LpgClient extends SoapServiceClient {
    */
   async lpgAutorizarAnticipo(params: AutorizarAnticipoParams, opts?: CallOptions): Promise<LiquidacionResultado> {
     const o = OPS.lpgAutorizarAnticipo;
-    const body = encodeRequest(params, S.AUTORIZAR_ANTICIPO, o.method);
+    const body = encodeSolicitud('lpgAutorizarAnticipo', params);
     return this.#conCoe(o, body, S.R_LIQ_RETURN, COE_AUTORIZACION, 'emision', opts);
   }
 
@@ -404,7 +410,7 @@ export class LpgClient extends SoapServiceClient {
     const o = OPS.lpgCancelarAnticipo;
     const { pdf, ...rest } = params;
     // `pdf` es obligatorio en el XSD: sin `pdf: true` se envía `N`.
-    const body = encodeRequest({ ...rest, pdf: siNo(pdf ?? false) }, S.CANCELAR_ANTICIPO, o.method);
+    const body = encodeRequest({ ...rest, pdf: pdf ?? false }, S.CANCELAR_ANTICIPO, o.method);
     return this.#conCoe(o, body, S.R_LIQ_CONS_RETURN, COE_AUTORIZACION, 'emision', opts);
   }
 
@@ -459,7 +465,7 @@ export class LpgClient extends SoapServiceClient {
    */
   async lsgAutorizar(params: LsgAutorizarParams, opts?: CallOptions): Promise<LsgAutorizarResultado> {
     const o = OPS.lsgAutorizar;
-    const body = encodeRequest(params, S.LSG_AUTORIZAR, o.method);
+    const body = encodeSolicitud('lsgAutorizar', params);
     return this.#conCoe(o, body, S.R_LSG_AUTORIZAR_RETURN, COE_AUTORIZACION, 'emision', opts);
   }
 
@@ -514,15 +520,15 @@ export class LpgClient extends SoapServiceClient {
    */
   async lsgAjustarXCoe(params: LsgAjustarXCoeParams, opts?: CallOptions): Promise<LsgAjusteResultado> {
     const o = OPS.lsgAjustarXCoe;
-    const body = encodeRequest(params, S.LSG_AJUSTAR_X_COE, o.method, requireAjuste);
-    return this.#conCoe(o, body, S.R_LSG_AJUSTE_RETURN, 'coe', 'emision', opts);
+    const body = encodeSolicitud('lsgAjustarXCoe', params);
+    return this.#conCoe(o, body, S.R_LSG_AJUSTE_RETURN, COE_LSG_AJUSTE, 'emision', opts);
   }
 
   /** Ajusta las liquidaciones secundarias de un contrato. Emisión (ver `lsgAjustarXCoe`). */
   async lsgAjustarXContrato(params: LsgAjustarXContratoParams, opts?: CallOptions): Promise<LsgAjusteResultado> {
     const o = OPS.lsgAjustarXContrato;
-    const body = encodeRequest(params, S.LSG_AJUSTAR_X_CONTRATO, o.method, requireAjuste);
-    return this.#conCoe(o, body, S.R_LSG_AJUSTE_RETURN, 'coe', 'emision', opts);
+    const body = encodeSolicitud('lsgAjustarXContrato', params);
+    return this.#conCoe(o, body, S.R_LSG_AJUSTE_RETURN, COE_LSG_AJUSTE, 'emision', opts);
   }
 
   /** Asocia una liquidación secundaria (COE) a un contrato. Emisión; devuelve la liquidación. */
@@ -545,7 +551,7 @@ export class LpgClient extends SoapServiceClient {
    */
   async cgAutorizar(params: CgAutorizarParams, opts?: CallOptions): Promise<CertificacionResultado> {
     const o = OPS.cgAutorizar;
-    const body = encodeRequest(params, S.CG_AUTORIZAR, o.method, checkBloqueCertificado);
+    const body = encodeSolicitud('cgAutorizar', params);
     return this.#conCoe(o, body, S.R_CG_AUTORIZAR_RETURN, COE_AUTORIZACION, 'emision', opts);
   }
 
@@ -558,7 +564,7 @@ export class LpgClient extends SoapServiceClient {
     opts?: CallOptions,
   ): Promise<CertificacionConsultaResultado> {
     const o = OPS.cgInformarCalidad;
-    const body = encodeRequest(params, S.CG_INFORMAR_CALIDAD, o.method, checkCalidadCg);
+    const body = encodeSolicitud('cgInformarCalidad', params);
     return this.#conCoe(o, body, S.R_CG_CONSULTAR_RETURN, COE_AUTORIZACION, 'emision', opts, true);
   }
 
@@ -606,7 +612,10 @@ export class LpgClient extends SoapServiceClient {
     return this.#ultimoNroOrden(OPS.cgConsultarUltimoNroOrden, ptoEmision, opts);
   }
 
-  /** Solicita la anulación de una certificación. Emisión. */
+  /**
+   * Solicita la anulación de una certificación. Emisión.
+   * @throws ArcaAgroResponseError (`uncertain`) si falta `oReturn` o viene sin ningún dato.
+   */
   async cgSolicitarAnulacion(
     coe: string | number,
     params: { pdf?: boolean } = {},
@@ -615,7 +624,10 @@ export class LpgClient extends SoapServiceClient {
     return this.#cgAnulacion(OPS.cgSolicitarAnulacion, coe, params, opts);
   }
 
-  /** Confirma la anulación de una certificación. Emisión. */
+  /**
+   * Confirma la anulación de una certificación. Emisión.
+   * @throws ArcaAgroResponseError (`uncertain`) si falta `oReturn` o viene sin ningún dato.
+   */
   async cgConfirmarAnulacion(
     coe: string | number,
     params: { pdf?: boolean } = {},
@@ -624,13 +636,25 @@ export class LpgClient extends SoapServiceClient {
     return this.#cgAnulacion(OPS.cgConfirmarAnulacion, coe, params, opts);
   }
 
+  /**
+   * `cgSolicitarAnulacion` / `cgConfirmarAnulacion`. `estadoCertificado` es
+   * opcional en el XSD, pero la respuesta tiene que traer algún dato: si falta
+   * `oReturn` o viene vacío, no se puede saber si ARCA procesó la anulación.
+   */
   async #cgAnulacion(
     o: Op,
     coe: string | number,
     params: { pdf?: boolean },
     opts?: CallOptions,
   ): Promise<AnulacionCertificacionResultado> {
-    return this.#operacion(o, this.#coePdf(o, coe, params.pdf), S.R_CG_ANULACION_RETURN, 'emision', opts);
+    const { node, advertencias } = await this.#call(o, this.#coePdf(o, coe, params.pdf), 'emision', opts);
+    // Sin `oReturn` common devuelve el elemento de respuesta; vacío, queda `oReturn: ''`.
+    const datos = Object.keys(node).filter((k) => !k.startsWith('@_') && k !== 'oReturn');
+    if (datos.length === 0) {
+      throw new ArcaAgroResponseError(`${SERVICE} ${o.method}: la respuesta no tiene <oReturn> con datos`, true);
+    }
+    const res = decodeResult<AnulacionCertificacionResultado>(node, S.R_CG_ANULACION_RETURN, o.method, 'emision');
+    return withAdvertencias(res, advertencias);
   }
 
   // ============================================================
