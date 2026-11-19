@@ -91,4 +91,8 @@ export const REGIMENES_CON_CONDICION: readonly number[] = [831];
  * (`numeroCertificadoOriginal`, `fechaRetencionCertificadoOriginal`,
  * `importeCertificadoOriginal`) (manual, 3.2.1).
  */
-export const TIPOS_CON_CERTIFICADO_ORIGINAL: readonly number[] = [3, 19, 20];
+export const TIPOS_CON_CERTIFICADO_ORIGINAL: readonly number[] = [
+  TipoComprobante.NOTA_CREDITO,
+  TipoComprobante.LIQUIDACION_SERVICIOS_PUBLICOS_A_NEGATIVA,
+  TipoComprobante.LIQUIDACION_SERVICIOS_PUBLICOS_B_NEGATIVA,
+];
