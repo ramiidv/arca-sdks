@@ -1109,8 +1109,10 @@ describe('configuración del cliente', () => {
     expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'request:start' }));
   });
 
-  it('sin endpoint lanza TypeError', () => {
-    expect(() => new MtxcaClient({} as MtxcaClientConfig)).toThrow(TypeError);
+  it('sin endpoint lanza ArcaValidationError (como los demás clientes)', () => {
+    expect(() => new MtxcaClient({} as MtxcaClientConfig)).toThrow(ArcaValidationError);
+    expect(() => new MtxcaClient(undefined as unknown as MtxcaClientConfig)).toThrow(ArcaValidationError);
+    expect(() => new MtxcaClient({ endpoint: 'http://ejemplo.com' })).toThrow(ArcaValidationError);
   });
 
   it('ENDPOINTS tiene la forma { wsmtxca: { testing, production } }', () => {

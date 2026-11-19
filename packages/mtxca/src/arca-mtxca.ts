@@ -92,9 +92,12 @@ export class ArcaMtxca extends ArcaSdkBase<'wsmtxca'> {
   /**
    * Autoriza un ajuste de IVA (`autorizarAjusteIVA`, ND/NC 2, 3, 7, 8, 52, 53).
    * Tiene reglas propias (ej. importeSubtotal 0, sin gravado/no gravado/exento),
-   * así que solo se valida contra el XSD. Misma numeración y manejo de errores
-   * que `autorizar()`.
+   * así que no se aplican las reglas de importes de `autorizar()`: solo se
+   * valida contra el XSD y el dígito verificador de las CUIT/CUIL (tipo de
+   * documento 80/86, también en compradores). Misma numeración y manejo de
+   * errores que `autorizar()`.
    *
+   * @throws ArcaValidationError si no cumple el XSD o una CUIT/CUIL es inválida (antes de llamar a ARCA).
    * @throws ArcaRechazoError si ARCA rechaza el ajuste.
    */
   async autorizarAjusteIVA(request: AutorizarRequest, opts?: CallOptions): Promise<MtxcaAutorizarResult> {
@@ -230,7 +233,8 @@ export class ArcaMtxca extends ArcaSdkBase<'wsmtxca'> {
 
   /**
    * Informa un ajuste de IVA emitido con CAEA (`informarAjusteIVACAEA`). Valida
-   * el XSD y `fechaHoraGen`, obligatoria en todo comprobante CAEA (754).
+   * el XSD, el dígito verificador de las CUIT/CUIL y `fechaHoraGen`,
+   * obligatoria en todo comprobante CAEA (754).
    *
    * @throws ArcaRechazoError si ARCA rechaza el ajuste.
    */

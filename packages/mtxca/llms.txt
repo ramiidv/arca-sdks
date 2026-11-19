@@ -107,7 +107,7 @@ Validación sin request: `validateComprobanteCAE(c, ctx?)` (reglas de autorizar)
 ## Métodos
 
 - autorizar(req, opts?) -> MtxcaAutorizarResult { resultado: 'A'|'O', comprobante, observaciones, evento? }
-- autorizarAjusteIVA(req, opts?) -> MtxcaAutorizarResult (solo validación XSD)
+- autorizarAjusteIVA(req, opts?) -> MtxcaAutorizarResult. Valida el XSD y el dígito verificador de las CUIT/CUIL (tipo de documento 80/86, también en compradores); no aplica las reglas de importes de autorizar (el ajuste tiene reglas propias).
 - ultimoComprobante(ptoVta, cbteTipo, opts?) -> number
 - siguienteComprobante(ptoVta, cbteTipo, opts?) -> number
 - consultarComprobante(cbteTipo, ptoVta, cbteNro, opts?) -> { comprobante, observaciones, evento? }
@@ -116,7 +116,7 @@ Validación sin request: `validateComprobanteCAE(c, ctx?)` (reglas de autorizar)
 - consultarCAEA(caea, opts?) -> MtxcaCAEA
 - consultarCAEAEntreFechas(desde, hasta, opts?) -> MtxcaCAEA[]
 - informarComprobanteCAEA({ ...comprobante, numeroComprobante, caea, fechaHoraGen }, opts?) -> MtxcaInformarCAEAResult { resultado: 'A'|'O', fechaProceso, comprobante: { caea, codigoTipoComprobante, numeroPuntoVenta, numeroComprobante }, observaciones, evento? }. fechaHoraGen es obligatoria (754): Date (hora de Argentina) o 'YYYY-MM-DDTHH:MM:SS'.
-- informarAjusteIVACAEA(comp, opts?) -> MtxcaInformarCAEAResult. Valida el XSD y fechaHoraGen (754).
+- informarAjusteIVACAEA(comp, opts?) -> MtxcaInformarCAEAResult. Valida el XSD, el dígito verificador de las CUIT/CUIL y fechaHoraGen (754).
 - informarCAEANoUtilizado(caea, opts?) / informarCAEANoUtilizadoPtoVta(caea, ptoVta, opts?) -> { resultado: 'A'|'O', fechaProceso, caea, numeroPuntoVenta? (solo PtoVta), evento? }
 - consultarPtosVtaCAEANoInformados(caea, opts?) -> PuntoVenta[]
 - status() -> { appserver, dbserver, authserver } (dummy, sin auth)

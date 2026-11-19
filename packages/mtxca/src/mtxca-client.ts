@@ -178,10 +178,10 @@ interface ComprobanteRaw
 export class MtxcaClient extends SoapServiceClient {
   readonly #onEvento?: MtxcaClientConfig['onEvento'];
 
+  /** @throws ArcaValidationError si falta `endpoint` o no es una URL https. */
   constructor(config: MtxcaClientConfig) {
-    if (!config?.endpoint) throw new TypeError('MtxcaClient: endpoint es obligatorio');
-    super({ endpoint: config.endpoint, transport: config.transport, namespace: MTXCA_NAMESPACE });
-    this.#onEvento = config.onEvento;
+    super({ endpoint: config?.endpoint, transport: config?.transport, namespace: MTXCA_NAMESPACE });
+    this.#onEvento = config?.onEvento;
   }
 
   private async call(
