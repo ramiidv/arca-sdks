@@ -1,25 +1,8 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { parseEnv } from 'node:util';
 import { defineConfig } from 'vitest/config';
+import { arcaTestEnv } from './tests/homologacion/env.js';
 
 const commonSrc = fileURLToPath(new URL('./packages/common/src/', import.meta.url));
-
-/**
- * Variables `ARCA_TEST_*` del `.env` local (no se versiona, ver .gitignore) para
- * los tests de integración. Las del entorno tienen prioridad sobre las del archivo.
- */
-function arcaTestEnv(): Record<string, string> {
-  const file = fileURLToPath(new URL('./.env', import.meta.url));
-  if (!existsSync(file)) return {};
-  const vars = parseEnv(readFileSync(file, 'utf8'));
-  return Object.fromEntries(
-    Object.entries(vars).filter(
-      (entry): entry is [string, string] =>
-        entry[0].startsWith('ARCA_TEST_') && entry[1] !== undefined && process.env[entry[0]] === undefined,
-    ),
-  );
-}
 
 export default defineConfig({
   // Los tests de cada paquete usan el código fuente de common, no su `dist/`:
@@ -36,16 +19,20 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
-          include: ['packages/*/tests/**/*.test.ts'],
+          include: ['packages/*/tests/**/*.test.ts', 'tests/homologacion/unit/**/*.test.ts'],
           exclude: ['**/node_modules/**', 'packages/*/tests/integration/**'],
         },
       },
       {
         // Contra ARCA homologación: `npm run test:integration` (se saltean sin ARCA_TEST_*).
+        // El guard bloquea toda conexión a un host que no sea de homologación.
         extends: true,
         test: {
           name: 'integration',
-          include: ['packages/*/tests/integration/**/*.test.ts'],
+          include: ['packages/*/tests/integration/**/*.test.ts', 'tests/homologacion/*.test.ts'],
+          setupFiles: ['tests/homologacion/guard.ts'],
+          // En serie: los archivos comparten certificados y WSAA rechaza logins simultáneos.
+          fileParallelism: false,
           env: arcaTestEnv(),
         },
       },
