@@ -1,6 +1,9 @@
 import { ArcaResponseError, ArcaServiceError, ArcaSoapError } from '@ramiidv/arca-common';
 import type { ServiceErrorDetail } from '@ramiidv/arca-common';
 
+/** Servicio de ARCA que informó el error. */
+export type AgroServiceName = 'WSCPE' | 'WSLPG';
+
 /**
  * Error de negocio de WSCPE/WSLPG (`errores.error[]`, y en WSLPG también
  * `erroresFormato.error[]`). Extiende `ArcaServiceError`.
@@ -26,7 +29,7 @@ export class ArcaAgroServiceError extends ArcaServiceError {
   constructor(
     message: string,
     errors: ServiceErrorDetail[],
-    public readonly service: 'WSCPE' | 'WSLPG',
+    public readonly service: AgroServiceName,
     public readonly method: string,
     public readonly response: Record<string, unknown>,
     public readonly uncertain = false,
@@ -42,8 +45,12 @@ export class ArcaAgroServiceError extends ArcaServiceError {
  */
 export class ArcaAgroResponseError extends ArcaResponseError {
   static override readonly code: string = 'ARCA_AGRO_RESPONSE_ERROR';
-  constructor(message: string, uncertain = false) {
-    super(message, uncertain);
+  /**
+   * @param uncertain `true` en emisiones: ARCA pudo haber procesado la operación.
+   * @param options `cause`: el error original, si este lo envuelve.
+   */
+  constructor(message: string, uncertain = false, options?: { cause?: unknown }) {
+    super(message, uncertain, options);
     this.name = 'ArcaAgroResponseError';
   }
 }

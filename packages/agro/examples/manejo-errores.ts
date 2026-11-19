@@ -35,8 +35,16 @@ const agro = new ArcaAgro({
 });
 
 const soloDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
-const segundos = (v: Date | string | undefined) =>
-  v === undefined ? Number.NaN : Math.floor(new Date(v).getTime() / 1000);
+/**
+ * Segundos desde la época de una fecha/hora. Una fecha/hora sin zona horaria
+ * (ej: `2026-11-01T08:30:00`) es hora de Argentina: sin agregarle `-03:00`,
+ * `new Date()` la tomaría en la zona del servidor y la comparación fallaría.
+ */
+const segundos = (v: Date | string | undefined) => {
+  if (v === undefined) return Number.NaN;
+  const conZona = typeof v === 'string' && !/(Z|[+-]\d{2}:?\d{2})$/.test(v) ? `${v}-03:00` : v;
+  return Math.floor(new Date(conZona).getTime() / 1000);
+};
 
 /**
  * ¿La CPE consultada es la que intentamos autorizar? Otro proceso pudo haber

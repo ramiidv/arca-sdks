@@ -252,9 +252,10 @@ function formatearAlfanumerico(c: CampoDiseno, value: unknown, o: OpcionesResuel
     fail(c, value, 'contiene caracteres de control (saltos de línea, tabulaciones, etc.).');
   const max = maxCodePoint(o.encoding);
   let s = value.normalize('NFC');
-  const noRepresentable = (t: string) => [...t].find((ch) => ch.codePointAt(0)! > max);
-  if (noRepresentable(s) !== undefined && o.noRepresentables === 'transliterar') s = transliterar(s);
-  const bad = noRepresentable(s);
+  const excede = (ch: string) => ch.codePointAt(0)! > max;
+  // Solo los caracteres no representables pierden el diacrítico: en latin1, 'Ñandú ő' → 'Ñandú o'.
+  if (o.noRepresentables === 'transliterar') s = [...s].map((ch) => (excede(ch) ? transliterar(ch) : ch)).join('');
+  const bad = [...s].find(excede);
   if (bad !== undefined) {
     fail(c, value, `el caracter "${bad}" no es representable en ${o.encoding === 'ascii' ? 'ASCII' : 'ISO-8859-1'}.`);
   }

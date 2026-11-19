@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaServiceError, ArcaSoapError, ArcaValidationError, CdcClient, ENDPOINTS } from '../src/index.js';
 import type { ConstatarInput } from '../src/index.js';
-import * as validation from '../src/validation.js';
 import { asmxResponse, childOrder, CUIT, makeCdc, mockFetch, NS, requestBody } from './helpers.js';
 
 const input: ConstatarInput = {
@@ -669,15 +668,19 @@ describe('Validación del input y de Auth', () => {
     expect(op.Auth.Cuit).toBe(CUIT);
   });
 
-  it('ArcaCdc valida una sola vez y antes de autenticarse', async () => {
+  it('ArcaCdc valida antes de autenticarse', async () => {
     const fetch = mockFetch(
       asmxResponse('ComprobanteConstatar', '<Resultado>A</Resultado><FchProceso>20261101120000</FchProceso>'),
     );
     const cdc = makeCdc(fetch);
-    const validar = vi.spyOn(validation, 'buildCmpReq');
-    await cdc.constatar(input);
-    expect(validar).toHaveBeenCalledTimes(1);
-    validar.mockRestore();
+    const ticket = vi.spyOn(cdc.wsaa, 'getAccessTicket');
+    await expect(cdc.constatar({ ...input, cuitEmisor: 30712345672 })).rejects.toBeInstanceOf(ArcaValidationError);
+    expect(ticket).not.toHaveBeenCalled();
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  it('CdcClient no expone un constatar sin validar (solo constatar con el input)', () => {
+    expect('constatarCmpReq' in CdcClient.prototype).toBe(false);
   });
 });
 

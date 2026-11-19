@@ -8,7 +8,7 @@
  *
  * @internal No se exporta desde `index.ts`.
  */
-import { ArcaResponseError, formatDate, validateCBU } from '@ramiidv/arca-common';
+import { formatDate, validateCBU } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
 import {
   choice,
@@ -189,9 +189,7 @@ function conObservaciones(node: unknown, schema: Schema): unknown {
  * emisiones (la operación pudo haberse registrado aunque no se pueda leer).
  */
 export function decode<T>(node: unknown, schema: Schema, path: string, kind: SoapOperationKind): T {
-  return decodeResponse<T>(conObservaciones(node, schema), schema, path, {
-    error: (message) => new ArcaResponseError(`${SERVICE}: ${message}`, kind === 'emision'),
-  });
+  return decodeResponse<T>(conObservaciones(node, schema), schema, path, { kind });
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +205,7 @@ const enumOf = (values: Record<string, string>) => str({ values: Object.values(v
 const enumResp = () => str();
 
 /** Código `xsd:short` (el SDK no acepta negativos). */
-export const short = () => int(0, 32767);
+const short = () => int(0, 32767);
 /** `ImporteSimpleType` (con signo). */
 export const importe = () => dec(2, -IMPORTE_MAX, IMPORTE_MAX);
 /** `ImporteSimpleType` no negativo (regla del SDK para los importes de los requests, salvo ajustes). */
@@ -215,11 +213,11 @@ export const importePositivo = () => importeNoNegativo(IMPORTE_MAX);
 /** `PorcentajeSimpleType`: mayor a 0 y menor a 100, 2 decimales (manual §3.1). */
 export const porcentaje = () => dec(2, 0, 99.99, true);
 /** Cotización (`xsd:decimal`): positiva, con hasta 6 decimales. */
-export const cotizacion = () => dec(6, 0, undefined, true);
+const cotizacion = () => dec(6, 0, undefined, true);
 /** `Texto250SimpleType`. */
-export const texto250 = () => str({ minLen: 3, maxLen: 250 });
+const texto250 = () => str({ minLen: 3, maxLen: 250 });
 /** `CBUSimpleType` (22 dígitos; el dígito verificador se valida en `checkRequest`). */
-export const cbu = () => str({ pattern: /^\d{22}$/ });
+const cbu = () => str({ pattern: /^\d{22}$/ });
 /** `CuitSimpleType`, devuelto como string de 11 dígitos. */
 const cuitStr = () => cuit({ decodeAs: 'string' });
 const nonEmpty = () => str({ minLen: 1 });
@@ -233,7 +231,7 @@ const CODIGO_DESCRIPCION: Schema = { codigo: must(short()), descripcion: must(no
 const codigosDescripciones = () => wrapped('codigoDescripcion', obj(CODIGO_DESCRIPCION));
 
 /** `IdComprobanteType`. */
-export const ID_COMPROBANTE: Schema = {
+const ID_COMPROBANTE: Schema = {
   cuitEmisor: as('CUITEmisor', must(cuitStr())),
   codTipoCmp: must(short()),
   ptoVta: must(int(1, 99999)),
@@ -241,7 +239,7 @@ export const ID_COMPROBANTE: Schema = {
 };
 
 /** `IdCtaCteType` (`xsd:choice`: usar con `choice()`). */
-export const ID_CTA_CTE: Schema = { codCtaCte: opt(id()), idFactura: opt(obj(ID_COMPROBANTE)) };
+const ID_CTA_CTE: Schema = { codCtaCte: opt(id()), idFactura: opt(obj(ID_COMPROBANTE)) };
 
 /** `FiltroFechaType`. */
 const FILTRO_FECHA: Schema = { tipo: enumOf(TipoFechaFiltro), desde: date(), hasta: date() };
@@ -498,8 +496,6 @@ export const RESP = {
   /** `OperacionFECredReturnType`. */
   operacion: { resultado: must(enumOf(Resultado)), idCtaCte: must(choice(ID_CTA_CTE)), ...INFO },
   rechazarNotaDC: { idComprobante: must(obj(ID_COMPROBANTE)), resultado: must(enumOf(Resultado)), ...INFO },
-  /** Solo `evento` y observaciones de `OperacionFECredReturnType`/`RechazarNotaDCReturnType`. */
-  info: INFO,
   consultarCuentasEnAgtDptoCltv: {
     cuentas: as('arrayCuentasEnAgente', wrapped('cuentaEnAgente', obj(CUENTA_EN_AGENTE))),
     ...INFO_OBSERVACION,

@@ -509,6 +509,33 @@ describe('facturarExpo: cliente e items especiales', () => {
     expect(cmp.Imp_total).toBe(74.5);
   });
 
+  it('unidades 0, 97 y 99 sin cantidad ni precio (desde JavaScript): Pro_qty y Pro_precio_uni en 0', async () => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({ FEXAuthorize: autorizado({ id: 42, nro: 10 }) });
+    await arca.facturarExpo({
+      ...BIENES,
+      id: 42,
+      cbteNro: 10,
+      items: [
+        { codigo: 'A1', descripcion: 'Vino', cantidad: 10, unidad: 7, precioUnitario: 10 },
+        { codigo: 'S', descripcion: 'Seña', unidad: 97, total: -20 } as never,
+        { codigo: 'C', descripcion: 'Cargo', unidad: 0, total: 3 } as never,
+      ],
+    });
+    const items = mock.last('FEXAuthorize').params.Cmp.Items.Item;
+    expect(items[1]).toMatchObject({ Pro_umed: 97, Pro_qty: 0, Pro_precio_uni: 0, Pro_total_item: -20 });
+    expect(items[2]).toMatchObject({ Pro_umed: 0, Pro_qty: 0, Pro_precio_uni: 0, Pro_total_item: 3 });
+  });
+
+  it('un dato inválido según el WSDL falla antes de consultar el último Id y número', async () => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({});
+    const err = await arca.facturarExpo({ ...BIENES, idioma: 1.5 }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    expect(err.message).toMatch(/Idioma_cbte|idiomaCbte/);
+    expect(mock.fn).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['99 con total >= 0', { unidad: 99, cantidad: 0, precioUnitario: 0, total: 5 }],
     ['97 sin total', { unidad: 97, cantidad: 0, precioUnitario: 0 }],
@@ -645,6 +672,102 @@ describe('WSFEX: consultas', () => {
     expect(orden(mock.last('FEXGetPARAM_Ctz').params)).toEqual(['Auth', 'Mon_id', 'FchCotiz']);
     expect(await arca.checkPermisoExpo('26001EC01000001A', 203)).toBe('OK');
     expect(orden(mock.last('FEXCheck_Permiso').params)).toEqual(['Auth', 'ID_Permiso', 'Dst_merc']);
+  });
+});
+
+describe('WSFEX: parámetros', () => {
+  const tabla = (method: string, item: string, inner: string) =>
+    wsfexResponse(method, `<FEXResultGet><${item}>${inner}</${item}></FEXResultGet>${OK_ERR}`);
+
+  it.each([
+    [
+      'getTiposCbteExpo',
+      'FEXGetPARAM_Cbte_Tipo',
+      tabla('FEXGetPARAM_Cbte_Tipo', 'ClsFEXResponse_Cbte_Tipo', '<Cbte_Id>19</Cbte_Id><Cbte_Ds>Factura E</Cbte_Ds>'),
+      [{ cbteId: 19, cbteDs: 'Factura E' }],
+    ],
+    [
+      'getMonedasExpo',
+      'FEXGetPARAM_MON',
+      tabla('FEXGetPARAM_MON', 'ClsFEXResponse_Mon', '<Mon_Id>DOL</Mon_Id><Mon_Ds>Dólar</Mon_Ds>'),
+      [{ monId: 'DOL', monDs: 'Dólar' }],
+    ],
+    [
+      'getIdiomasExpo',
+      'FEXGetPARAM_Idiomas',
+      tabla('FEXGetPARAM_Idiomas', 'ClsFEXResponse_Idi', '<Idi_Id>1</Idi_Id><Idi_Ds>Español</Idi_Ds>'),
+      [{ idiId: 1, idiDs: 'Español' }],
+    ],
+    [
+      'getIncotermsExpo',
+      'FEXGetPARAM_Incoterms',
+      tabla('FEXGetPARAM_Incoterms', 'ClsFEXResponse_Inc', '<Inc_Id>FOB</Inc_Id><Inc_Ds>FOB</Inc_Ds>'),
+      [{ incId: 'FOB', incDs: 'FOB' }],
+    ],
+    [
+      'getUMedExpo',
+      'FEXGetPARAM_UMed',
+      tabla('FEXGetPARAM_UMed', 'ClsFEXResponse_UMed', '<Umed_Id>7</Umed_Id><Umed_Ds>unidades</Umed_Ds>'),
+      [{ umedId: 7, umedDs: 'unidades' }],
+    ],
+    [
+      'getTiposExpo',
+      'FEXGetPARAM_Tipo_Expo',
+      tabla('FEXGetPARAM_Tipo_Expo', 'ClsFEXResponse_Tex', '<Tex_Id>1</Tex_Id><Tex_Ds>Bienes</Tex_Ds>'),
+      [{ texId: 1, texDs: 'Bienes' }],
+    ],
+    [
+      'getCuitsPaisExpo',
+      'FEXGetPARAM_DST_CUIT',
+      tabla(
+        'FEXGetPARAM_DST_CUIT',
+        'ClsFEXResponse_DST_cuit',
+        '<DST_CUIT>50000000059</DST_CUIT><DST_Ds>BRASIL</DST_Ds>',
+      ),
+      [{ dstCuit: '50000000059', dstDs: 'BRASIL' }],
+    ],
+  ] as const)('%s → %s', async (metodo, operacion, respuesta, esperado) => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({ [operacion]: respuesta });
+    expect(await arca[metodo]()).toEqual(esperado);
+    expect(orden(mock.last(operacion).params)).toEqual(['Auth']);
+    expect(mock.last(operacion).params.Auth).toEqual({ Token: 'TOKEN', Sign: 'SIGN', Cuit: '20123456786' });
+  });
+
+  it('getMonedasConCotizacionExpo: fecha → Fecha_CTZ (sin fecha no se envía)', async () => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({
+      FEXGetPARAM_MON_CON_COTIZACION: tabla(
+        'FEXGetPARAM_MON_CON_COTIZACION',
+        'ClsFEXResponse_Mon_CON_Cotizacion',
+        '<Mon_Id>DOL</Mon_Id><Mon_Ds>Dólar</Mon_Ds><Mon_ctz>1015.5</Mon_ctz><Fecha_ctz>20261029</Fecha_ctz>',
+      ),
+    });
+    expect(await arca.getMonedasConCotizacionExpo({ fecha: '2026-10-29' })).toEqual([
+      { monId: 'DOL', monDs: 'Dólar', monCtz: 1015.5, fechaCtz: '20261029' },
+    ]);
+    const { params } = mock.last('FEXGetPARAM_MON_CON_COTIZACION');
+    expect(orden(params)).toEqual(['Auth', 'Fecha_CTZ']);
+    expect(String(params.Fecha_CTZ)).toBe('20261029');
+    await arca.getMonedasConCotizacionExpo();
+    expect(orden(mock.last('FEXGetPARAM_MON_CON_COTIZACION').params)).toEqual(['Auth']);
+  });
+
+  it('ultimoIdExpo: FEXGetLast_ID; sin Id → ArcaResponseError', async () => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({ FEXGetLast_ID: [lastId(41), wsfexResponse('FEXGetLast_ID', OK_ERR)] });
+    expect(await arca.ultimoIdExpo()).toBe(41);
+    expect(orden(mock.last('FEXGetLast_ID').params)).toEqual(['Auth']);
+    await expect(arca.ultimoIdExpo()).rejects.toBeInstanceOf(ArcaResponseError);
+  });
+
+  it('FEXErr con código no numérico: ArcaWSFEError con rawCode', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({ FEXGetLast_ID: fexErr('FEXGetLast_ID', 'E-1' as never, 'Error raro') });
+    const err = await arca.ultimoIdExpo().catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaWSFEError);
+    expect(err.errors).toEqual([{ code: 0, msg: 'Error raro', rawCode: 'E-1' }]);
+    expect(err.message).toBe('WSFEX Error: [E-1] Error raro');
   });
 });
 

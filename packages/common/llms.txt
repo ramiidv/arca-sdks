@@ -63,29 +63,29 @@ const wsaa = new WsaaClient({
   production?: boolean,             // default false (homologación)
   endpoint?: string,                // URL propia de WSAA: https (http solo en localhost/127.0.0.0/8/::1), sin usuario ni contraseña
   tokenTTLMinutes?: number,         // vigencia del TRA, 1..1440 (default 10). NO es la vida del TA (12 h según el manual)
-  timeout?: number,                 // default 30000
-  retries?: number,                 // default 1; solo errores de red sin enviar (nunca timeouts ni 5xx)
-  retryDelayMs?: number,            // default 1000
+  timeout?: number,                 // default 30000; entero 1..2147483647
+  retries?: number,                 // default 1; entero 0..2147483647; solo errores de red sin enviar (nunca timeouts ni 5xx)
+  retryDelayMs?: number,            // default 1000; entero 0..2147483647
   onEvent?: (event: ArcaEvent) => void,
   ticketStorage?: TicketStorage,    // recomendado
-  clockOffsetMs?: number,           // relojARCA - relojLocal, default 0
+  clockOffsetMs?: number,           // relojARCA - relojLocal, default 0; finito, hasta ±86400000 (24 h)
   autoClockSkew?: boolean,          // default true
-  loginErrorCooldownMs?: number,    // espera tras error transitorio, default 60000 (0 la desactiva)
-  permanentErrorCooldownMs?: number,// espera tras error no reintentable, default Infinity (0 la desactiva)
-  alreadyAuthenticatedCooldownMs?: number, // espera tras coe.alreadyAuthenticated, default 120000 prod / 600000 homo
+  loginErrorCooldownMs?: number,    // espera tras error transitorio, default 60000 (0 la desactiva); finito ≥ 0
+  permanentErrorCooldownMs?: number,// espera tras error no reintentable, default Infinity (0 la desactiva); ≥ 0
+  alreadyAuthenticatedCooldownMs?: number, // espera tras coe.alreadyAuthenticated, default 120000 prod / 600000 homo; finito ≥ 0
   fetch?: typeof fetch,
   legacyTls?: "auto" | "never" | "always",
   maxResponseBytes?: number,        // tamaño máximo del body de una respuesta, default 52428800 (50 MB)
 });
 ```
 
-El constructor lanza `ArcaValidationError` si el certificado o la clave son inválidos, si no se corresponden, si la clave encriptada no tiene (o tiene mal) `keyPassphrase`, si `tokenTTLMinutes` está fuera de 1..1440 o si `endpoint` no es una URL https. Cert y clave se parsean una sola vez.
+El constructor lanza `ArcaValidationError` si el certificado o la clave son inválidos, si no se corresponden, si la clave encriptada no tiene (o tiene mal) `keyPassphrase`, si `tokenTTLMinutes` está fuera de 1..1440, si `timeout`/`retries`/`retryDelayMs`/`maxResponseBytes`/`clockOffsetMs`/`*CooldownMs` están fuera de rango (`NaN`, negativos, no enteros donde se pide entero, `Infinity` salvo en `permanentErrorCooldownMs`) o si `endpoint` no es una URL https. Cert y clave se parsean una sola vez.
 
 Propiedades y métodos:
-- `getAccessTicket(service, { signal }?)`: memoria → storage → login (deduplicado por servicio). `service` se valida: 3 a 32 caracteres `[A-Za-z0-9_-]` empezando con una letra (si no, `ArcaValidationError`). El `signal` solo cancela la espera, nunca un login en curso.
+- `getAccessTicket(service, { signal }?)`: memoria → storage → login (deduplicado por servicio). `service` se valida: 3 a 32 caracteres `[A-Za-z0-9_-]` empezando con una letra (si no, `ArcaValidationError`). El `signal` solo cancela la espera, nunca un login en curso; con un `signal` ya abortado (y sin ticket en memoria) lanza `ArcaSoapError` `aborted: true, uncertain: false` sin iniciar un login.
 - `clearTicket(service)` / `clearAllTickets()`: borran tickets (memoria y storage) y limpian esperas. Ojo: WSAA rechaza un TA nuevo mientras el anterior esté vigente y dentro del lapso de retención; borrar uno vigente deja sin acceso durante ese lapso (según el manual de WSAA, 2 min en producción y 10 en homologación).
 - `resetLoginCooldown(service?)`: limpia esperas sin tocar tickets (usar después de corregir la causa de un error no reintentable).
-- `ticketKey(service)`: `"{prod|homo|hash}:{huella del cert}:{service}"`.
+- `ticketKey(service)`: `"{prod|homo|hash}:{huella del cert}:{service}"`. La huella se calcula sobre el certificado (DER del primer bloque PEM): `Bag Attributes` o la cadena completa no la cambian.
 - `endpoint`, `production` (readonly), `clockOffsetMs`, `now()`.
 
 Comportamiento:
@@ -104,13 +104,13 @@ Comportamiento:
 
 `certificateInfo(pem)` → `{ subject, issuer, notBefore, notAfter, cuit? }` (`cuit` del `serialNumber` del sujeto, `"CUIT 20123456786"`). Lanza `ArcaValidationError` si el PEM es inválido.
 
-`MemoryTicketStorage` / `FileTicketStorage(directory)`: un archivo JSON por key, en texto plano (nombre sanitizado a `[a-zA-Z0-9._-]`, modo 0600, escritura atómica con fsync + rename, directorio 0700). En POSIX el directorio no puede ser un symlink ni de otro usuario (`get`/`set` lanzan → `auth:storage-error`); si tiene permisos para grupo/otros se ajusta a 0700 (el directorio actual, el home y la raíz no se tocan: se rechazan si grupo/otros pueden escribir). Los archivos se abren con `O_NOFOLLOW`/`O_NONBLOCK`: un symlink, FIFO, archivo de otro usuario o de más de 1 MB se ignora (`get` → null + `options.onError`). Un JSON corrupto se borra, `get` devuelve null y se informa por `options.onError` (`auth:storage-error`) sin citar el contenido.
+`MemoryTicketStorage` / `FileTicketStorage(directory)`: un archivo JSON por key, en texto plano (nombre sanitizado a `[a-zA-Z0-9._-]`, modo 0600, escritura atómica con fsync + rename, directorio 0700). En POSIX el directorio no puede ser un symlink ni de otro usuario (`get`/`set` lanzan → `auth:storage-error`); si tiene permisos para grupo/otros se ajusta a 0700 (el directorio actual, el home y la raíz no se tocan: se rechazan si grupo/otros pueden escribir). Los archivos se abren con `O_NOFOLLOW`/`O_NONBLOCK`: un symlink, FIFO, archivo de otro usuario o de más de 1 MB se ignora (`get` → null + `options.onError`). Un JSON corrupto se borra, `get` devuelve null y se informa por `options.onError` (`auth:storage-error`) sin citar el contenido. Si el directorio se borra, el próximo `set` lo vuelve a crear. `normalizeAccessTicket(raw)` → `AccessTicket | null` (null si `token`/`sign` no son strings no vacíos o `expirationTime` es ilegible).
 
 ## Base de los SDKs (service.ts)
 
-- `ArcaSdkBase<TService>` (abstracta): `constructor(config: ArcaSdkConfig, services: Record<TService, string>)`. Valida la CUIT (`cuit` normalizada), crea el `WsaaClient` (o usa `config.wsaa`; si su `production` no coincide con `config.production` y usa un endpoint oficial, lanza `ArcaValidationError`), arma `transport`, reparte eventos a `config.onEvent` y `on()/off()`. Protegidos: `endpoint(defaults, override?)`, `callOptions(opts?)` (combina `config.signal` con el de la llamada), `ticket(service, opts?)`. Público: `clearAuthCache()`, `wsaa`, `cuit`, `production`.
+- `ArcaSdkBase<TService>` (abstracta): `constructor(config: ArcaSdkConfig, services: Record<TService, string>)`. Valida la CUIT (`cuit` normalizada), crea el `WsaaClient` (o usa `config.wsaa`; si su `production` no coincide con `config.production` y usa un endpoint oficial, lanza `ArcaValidationError`), arma `transport`, reparte eventos a `config.onEvent` y `on()/off()` (cada handler por separado: uno que lanza se ignora y no corta a los demás). Valida `timeout`/`retries`/`retryDelayMs`/`maxResponseBytes` también con `config.wsaa`. Protegidos: `endpoint(defaults, override?)`, `callOptions(opts?)` (combina `config.signal` con el de la llamada), `ticket(service, opts?)`. Público: `clearAuthCache()`, `wsaa`, `cuit`, `production`.
 - `ArcaSdkConfig` = `ArcaBaseConfig` + `wsaa?`, `signal?`, `endpoints?.wsaa`. El constructor valida cada `endpoints.*` (https; http solo en loopback) → `ArcaValidationError` con `field: "endpoints.<nombre>"`.
-- `ServiceClientConfig` = `{ endpoint, transport? }`: configuración de los clientes de bajo nivel de todos los SDKs (`new WsfeClient({ endpoint, transport })`, etc.). `ServiceEndpoints` = `{ testing, production }`: cada SDK exporta `ENDPOINTS: { <servicio>: ServiceEndpoints }`.
+- `ServiceClientConfig` = `{ endpoint, transport? }`: configuración de los clientes de bajo nivel de todos los SDKs (`new WsfeClient({ endpoint, transport })`, etc.). `ServiceEndpoints` = `{ testing, production }`: cada SDK exporta `ENDPOINTS: { <servicio>: ServiceEndpoints }`. `EnvEndpoints`: alias deprecado de `ServiceEndpoints`.
 - `SoapServiceClient` (abstracta): `constructor({ endpoint, namespace, transport? }: SoapServiceClientConfig)` (valida `endpoint`); protegido `soapCall(method, params, opts?: ServiceCallOptions)` → `arcaSoapCall`.
 - `ServiceTransport`, `transportOptions(config, onEvent?)`, `createWsaaClient(config, onEvent?)`.
 - `parseServerStatus(result, method?)` → `ServerStatus` (valores tal cual; cualquier capitalización). Lanza `ArcaResponseError` si falta un campo.
@@ -143,7 +143,8 @@ function getNestedValue(obj, ...keys): unknown;
 - `arcaSoapCall` no envía parámetros `null`/`undefined`.
 - SOAP Fault (HTTP 500 o 200, SOAP 1.1 o 1.2) → `ArcaSoapError` con `faultCode`, `faultString`, `faultDetail` (`<detail>`/`<Detail>`).
 - HTTP no-2xx sin Fault → mensaje con extracto del body y `responseBody` (≤ 500 caracteres, espacios colapsados).
-- Reintentos: solo `kind: "consulta"` (default), ante red, timeout, 5xx sin Fault y 2xx sin Envelope; backoff `retryDelayMs * 2^(intento-1)`; emite `request:retry`. Un abort durante la espera lanza `ArcaSoapError` `aborted: true, uncertain: false`.
+- Reintentos: solo `kind: "consulta"` (default), ante red, timeout, 5xx sin Fault y 2xx sin Envelope (no: Faults, 3xx, 4xx, respuestas que superan `maxResponseBytes`); backoff `retryDelayMs * 2^(intento-1)`, cada espera con tope 2147483647 ms; emite `request:retry`.
+- Validación: `timeout` entero 1..2147483647, `retries` y `retryDelayMs` enteros 0..2147483647, `maxResponseBytes` > 0; si no, `ArcaValidationError` (con `field`) sin enviar. Un abort durante la espera lanza `ArcaSoapError` `aborted: true, uncertain: false`.
 - `kind: "emision"`: nunca se reintenta. `uncertain: true` si el servidor pudo procesar (timeout, conexión cortada, 5xx, respuesta ilegible, Fault Server); `uncertain: false` si seguro que no (DNS, conexión rechazada, 4xx, abort antes de enviar, Fault `Client`/`Sender`).
 - TLS legacy: con `legacyTls: "auto"`, ante `ERR_SSL_DH_KEY_TOO_SMALL` y solo para `servicios1.afip.gov.ar` (WSFEv1, WSFEX, WSCDC de producción) reintenta una vez por node:https con `DEFAULT@SECLEVEL=1` y recuerda el host; con otro host el error se lanza. `"always"` lo usa con cualquier host, `"never"` nunca. Cada request por ese transporte emite `request:legacy-tls`.
 - Endpoint: `soapCall`/`arcaSoapCall` validan la URL antes de enviar (https; http solo en `localhost`, `127.0.0.0/8`, `::1`; sin usuario ni contraseña) → `ArcaValidationError`.
@@ -186,11 +187,11 @@ interface QRInput { fecha: string | Date; cuit: number | string; ptoVta: number;
 
 El mismo schema valida y codifica un request (`encodeRequest(input, schema, context, extraCheck?)`: orden XSD, obligatorios, rangos, CUIT, decimales, fechas; lanza `ArcaValidationError` con todos los errores) y decodifica una respuesta pedida con `parseNumbers: false` (`decodeResponse(node, schema, path, options?)`).
 
-Constructores: `str({ minLen, maxLen, values, pattern, patternMessage })` (rechaza controles que XML 1.0 no admite y surrogates UTF-16 sueltos), `nonEmptyStr({ min?, max? })` (no vacío ni solo espacios: "no puede estar vacío"), `int(min?, max?, minExclusive?)`, `id()`, `dec(digits, min?, max?, minExclusive?)` (mitad al par), `importe(max?)` (= `dec(2, 0, max)`), `porcentaje()` (= `dec(2, 0, 100)`), `double`, `bool`, `siNo`, `cuit({ decodeAs })`, `date`, `date8`, `datetime` (Date o ISO-8601 con segundos), `base64`, `custom(encode, decode?)`, `obj`, `choice`, `opt`, `must`, `list(f, minItems = 1, maxItems?)`, `wrapped(item, f, minItems = 1, maxItems?)`, `xml`. También exporta `formatDateTimeAR`, `roundHalfUp`, `roundHalfEven`.
+Constructores: `str({ minLen, maxLen, values, pattern, patternMessage })` (rechaza controles que XML 1.0 no admite y surrogates UTF-16 sueltos), `nonEmptyStr({ min?, max? })` (no vacío ni solo espacios: "no puede estar vacío"), `int(min?, max?, minExclusive?)`, `id()`, `dec(digits, min?, max?, minExclusive?)` (mitad al par), `importe(max?)` (= `dec(2, 0, max)`), `porcentaje()` (= `dec(2, 0, 100)`), `double`, `bool`, `siNo`, `cuit({ decodeAs })`, `date`, `date8`, `datetime` (Date o ISO-8601 con segundos, con una fecha que exista), `base64`, `custom(encode, decode?)`, `obj`, `choice`, `opt`, `must`, `list(f, minItems = 1, maxItems?)`, `wrapped(item, f, minItems = 1, maxItems?)`, `xml`. También exporta `formatDateTimeAR`, `roundHalfUp`, `roundHalfEven`.
 
 `decodeResponse` options: `error?: (message) => Error` (prioridad), `kind?: "consulta" | "emision"` (con `"emision"` el error por defecto es `ArcaResponseError` con `uncertain: true`), `emptyLists?: "array" | "omit"`.
 
-`@ramiidv/arca-common/testing`: `mockFetch`, `mockFetchByMethod`, `mockFetchWith`, `hangingReply`, `networkError`, `xmlResponse`, `soapEnvelope`, `soapResponse`, `soapFault`, `soapFaultResponse`, `loginResponse`, `fakeTicketStorage`, `testCert` (cert autofirmado y su clave, válidos para `WsaaClient`), `requestParams`, `childOrder`, `loadXsdTypes`, `checkSchemaAgainstXsd(schema, type, types, { direction, ignore })`. `loadXsdTypes` resuelve la herencia (`complexContent/extension`) también en tipos anónimos; `soapFault` escapa `faultCode` y `faultString`.
+`@ramiidv/arca-common/testing`: `mockFetch`, `mockFetchByMethod`, `mockFetchWith`, `hangingReply` (rechaza al abortarse el signal del request, o enseguida si ya llega abortado), `networkError`, `xmlResponse`, `soapEnvelope`, `soapResponse`, `soapFault`, `soapFaultResponse`, `loginResponse`, `fakeTicketStorage`, `testCert` (cert autofirmado y su clave, válidos para `WsaaClient`), `requestParams`, `childOrder`, `loadXsdTypes`, `checkSchemaAgainstXsd(schema, type, types, { direction, ignore })`. `loadXsdTypes` resuelve la herencia (`complexContent/extension`) también en tipos anónimos; `soapFault` escapa `faultCode` y `faultString`.
 
 ## Errores
 

@@ -4,7 +4,7 @@ import { ArcaRechazoError, ArcaSoapError, ArcaValidationError, ArcaServiceError 
 import { ArcaMtxca } from '../src/arca-mtxca.js';
 import { ENDPOINTS } from '../src/constants.js';
 import type { ArcaMtxcaConfig } from '../src/types.js';
-import { facturaA, hangingFetch, mockFetch, soapResponse } from './helpers.js';
+import { NS, facturaA, hangingFetch, mockFetch, soapResponse } from './helpers.js';
 
 function mtxca(fetchImpl: typeof fetch, extra: Partial<ArcaMtxcaConfig> = {}): ArcaMtxca {
   const m = new ArcaMtxca({
@@ -316,5 +316,226 @@ describe('ArcaMtxca: validación en un solo error', () => {
       .autorizar({ ...facturaA(), importeTotal: 500, codigoMoneda: 'PESOS' })
       .catch((e) => e);
     expect((err as ArcaValidationError).details.map((d) => d.field)).toEqual(['codigoMoneda']);
+  });
+});
+
+describe('ArcaMtxca: autorizarAjusteIVA', () => {
+  const ajusteAprobado = soapResponse(
+    'autorizarAjusteIVAResponse',
+    `<resultado>A</resultado><comprobanteResponse><cuit>20123456786</cuit><codigoTipoComprobante>2</codigoTipoComprobante>` +
+      `<numeroPuntoVenta>4000</numeroPuntoVenta><numeroComprobante>7</numeroComprobante><fechaEmision>2026-11-01</fechaEmision>` +
+      `<CAE>76443051234567</CAE><fechaVencimientoCAE>2026-11-11</fechaVencimientoCAE></comprobanteResponse>`,
+  );
+  // Importes incoherentes para autorizar(): el ajuste de IVA no aplica esas reglas.
+  const ajuste = () => ({ ...facturaA({ codigoTipoComprobante: 2, numeroComprobante: 7 }), importeTotal: 500 });
+
+  it('llama a autorizarAjusteIVA (no a autorizarComprobante) sin validar importes', async () => {
+    const m = mockFetch(ajusteAprobado);
+    // `validarImportes: true` no debe pisar el `false` forzado.
+    const opts = { validarImportes: true } as Parameters<ArcaMtxca['autorizarAjusteIVA']>[1];
+    const res = await mtxca(m.fetch).autorizarAjusteIVA(ajuste(), opts);
+    expect(res).toMatchObject({ resultado: 'A', comprobante: { cae: '76443051234567', numeroComprobante: 7 } });
+    expect(m.calls).toHaveLength(1);
+    expect(m.calls[0].headers.soapaction).toBe(`"${NS}autorizarAjusteIVA"`);
+    expect(m.calls[0].body).toContain('ser:autorizarAjusteIVARequest');
+    expect(m.calls[0].body).not.toContain('autorizarComprobanteRequest');
+  });
+
+  it('sin número usa último + 1', async () => {
+    const m = mockFetch(ultimo(6), ajusteAprobado);
+    const { numeroComprobante: _n, ...sinNro } = ajuste();
+    await mtxca(m.fetch).autorizarAjusteIVA(sinNro);
+    expect(m.calls.map((c) => c.headers.soapaction)).toEqual([
+      `"${NS}consultarUltimoComprobanteAutorizado"`,
+      `"${NS}autorizarAjusteIVA"`,
+    ]);
+    expect(m.calls[1].body).toContain('<numeroComprobante>7</numeroComprobante>');
+  });
+
+  it('valida el dígito verificador de la CUIT del receptor antes de enviar', async () => {
+    const m = mockFetch(ajusteAprobado);
+    const err = await mtxca(m.fetch)
+      .autorizarAjusteIVA({ ...ajuste(), numeroDocumento: '30000000008' })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    expect((err as ArcaValidationError).details.map((d) => d.field)).toEqual(['numeroDocumento']);
+    expect(m.fn).not.toHaveBeenCalled();
+  });
+});
+
+describe('ArcaMtxca: cada método llama a su operación de WSMTXCA', () => {
+  const CAEA = '36434058476543';
+  const caeaResponse =
+    `<CAEAResponse><fechaProceso>2026-10-27</fechaProceso><CAEA>${CAEA}</CAEA><periodo>202611</periodo><orden>1</orden>` +
+    '<fechaDesde>2026-11-01</fechaDesde><fechaHasta>2026-11-15</fechaHasta><fechaTopeInforme>2026-11-23</fechaTopeInforme></CAEAResponse>';
+  const codigos = (container: string) =>
+    `<${container}><codigoDescripcion><codigo>1</codigo><descripcion>Uno</descripcion></codigoDescripcion></${container}>`;
+  const pv =
+    '<arrayPuntosVenta><puntoVenta><numeroPuntoVenta>4000</numeroPuntoVenta><bloqueado>N</bloqueado></puntoVenta></arrayPuntosVenta>';
+  const comprobante =
+    `<comprobante><codigoTipoComprobante>1</codigoTipoComprobante><numeroPuntoVenta>4000</numeroPuntoVenta>` +
+    `<numeroComprobante>25</numeroComprobante><importeSubtotal>100.00</importeSubtotal><importeTotal>121.00</importeTotal>` +
+    `<codigoMoneda>PES</codigoMoneda><codigoConcepto>1</codigoConcepto><arrayItems><item><codigo>P1</codigo>` +
+    `<descripcion>Producto</descripcion><codigoUnidadMedida>7</codigoUnidadMedida><codigoCondicionIVA>5</codigoCondicionIVA>` +
+    `<importeItem>121.00</importeItem></item></arrayItems></comprobante>`;
+  const uno = [{ codigo: 1, descripcion: 'Uno' }];
+  const puntoVenta = [{ numeroPuntoVenta: 4000, bloqueado: 'N', fechaBaja: undefined }];
+
+  type Caso = {
+    metodo: string;
+    invocar: (a: ArcaMtxca) => Promise<unknown>;
+    operacion: string;
+    respuesta: string;
+    esperado: (res: unknown) => void;
+    /** El request lleva `authRequest` (todas salvo `dummy`). */
+    auth?: false;
+  };
+  const casos: Caso[] = [
+    {
+      metodo: 'siguienteComprobante',
+      invocar: (a) => a.siguienteComprobante(4000, 1),
+      operacion: 'consultarUltimoComprobanteAutorizado',
+      respuesta: '<numeroComprobante>41</numeroComprobante>',
+      esperado: (r) => expect(r).toBe(42),
+    },
+    {
+      metodo: 'consultarComprobante',
+      invocar: (a) => a.consultarComprobante(1, 4000, 25),
+      operacion: 'consultarComprobante',
+      respuesta: comprobante,
+      esperado: (r) => expect(r).toMatchObject({ comprobante: { numeroComprobante: 25, items: [{ codigo: 'P1' }] } }),
+    },
+    {
+      metodo: 'consultarCAEA',
+      invocar: (a) => a.consultarCAEA(CAEA),
+      operacion: 'consultarCAEA',
+      respuesta: caeaResponse,
+      esperado: (r) => expect(r).toMatchObject({ caea: CAEA, periodo: 202611, orden: 1 }),
+    },
+    {
+      metodo: 'consultarCAEAEntreFechas',
+      invocar: (a) => a.consultarCAEAEntreFechas('2026-11-01', '2026-11-30'),
+      operacion: 'consultarCAEAEntreFechas',
+      respuesta: `<arrayCAEAResponse>${caeaResponse}</arrayCAEAResponse>`,
+      esperado: (r) => expect(r).toMatchObject([{ caea: CAEA }]),
+    },
+    {
+      metodo: 'informarCAEANoUtilizadoPtoVta',
+      invocar: (a) => a.informarCAEANoUtilizadoPtoVta(CAEA, 4000),
+      operacion: 'informarCAEANoUtilizadoPtoVta',
+      respuesta: `<resultado>A</resultado><fechaProceso>2026-11-16</fechaProceso><CAEA>${CAEA}</CAEA><numeroPuntoVenta>4000</numeroPuntoVenta>`,
+      esperado: (r) =>
+        expect(r).toEqual({ resultado: 'A', fechaProceso: '2026-11-16', caea: CAEA, numeroPuntoVenta: 4000 }),
+    },
+    {
+      metodo: 'consultarPtosVtaCAEANoInformados',
+      invocar: (a) => a.consultarPtosVtaCAEANoInformados(CAEA),
+      operacion: 'consultarPtosVtaCAEANoInformados',
+      respuesta: pv,
+      esperado: (r) => expect(r).toEqual(puntoVenta),
+    },
+    {
+      metodo: 'status',
+      invocar: (a) => a.status(),
+      operacion: 'dummy',
+      respuesta: '<appserver>OK</appserver><dbserver>OK</dbserver><authserver>OK</authserver>',
+      esperado: (r) => expect(r).toEqual({ appserver: 'OK', dbserver: 'OK', authserver: 'OK' }),
+      auth: false,
+    },
+    {
+      metodo: 'getTiposComprobante',
+      invocar: (a) => a.getTiposComprobante(),
+      operacion: 'consultarTiposComprobante',
+      respuesta: codigos('arrayTiposComprobante'),
+      esperado: (r) => expect(r).toEqual(uno),
+    },
+    {
+      metodo: 'getTiposDocumento',
+      invocar: (a) => a.getTiposDocumento(),
+      operacion: 'consultarTiposDocumento',
+      respuesta: codigos('arrayTiposDocumento'),
+      esperado: (r) => expect(r).toEqual(uno),
+    },
+    {
+      metodo: 'getAlicuotasIVA',
+      invocar: (a) => a.getAlicuotasIVA(),
+      operacion: 'consultarAlicuotasIVA',
+      respuesta: codigos('arrayAlicuotasIVA'),
+      esperado: (r) => expect(r).toEqual(uno),
+    },
+    {
+      metodo: 'getCondicionesIVA',
+      invocar: (a) => a.getCondicionesIVA(),
+      operacion: 'consultarCondicionesIVA',
+      respuesta: codigos('arrayCondicionesIVA'),
+      esperado: (r) => expect(r).toEqual(uno),
+    },
+    {
+      metodo: 'getCondicionesIVAReceptor',
+      invocar: (a) => a.getCondicionesIVAReceptor(6),
+      operacion: 'consultarCondicionesIVAReceptor',
+      respuesta: codigos('arrayCondicionesIVAReceptor'),
+      esperado: (r) => expect(r).toEqual(uno),
+    },
+    {
+      metodo: 'getMonedas',
+      invocar: (a) => a.getMonedas(),
+      operacion: 'consultarMonedas',
+      respuesta:
+        '<arrayMonedas><codigoDescripcion><codigo>DOL</codigo><descripcion>Dólar</descripcion></codigoDescripcion></arrayMonedas>',
+      esperado: (r) => expect(r).toEqual([{ codigo: 'DOL', descripcion: 'Dólar' }]),
+    },
+    {
+      metodo: 'getUnidadesMedida',
+      invocar: (a) => a.getUnidadesMedida(),
+      operacion: 'consultarUnidadesMedida',
+      respuesta: codigos('arrayUnidadesMedida'),
+      esperado: (r) => expect(r).toEqual(uno),
+    },
+    {
+      metodo: 'getTiposTributo',
+      invocar: (a) => a.getTiposTributo(),
+      operacion: 'consultarTiposTributo',
+      respuesta: codigos('arrayTiposTributo'),
+      esperado: (r) => expect(r).toEqual(uno),
+    },
+    {
+      metodo: 'getTiposDatosAdicionales',
+      invocar: (a) => a.getTiposDatosAdicionales(),
+      operacion: 'consultarTiposDatosAdicionales',
+      respuesta: codigos('arrayTiposDatosAdicionales'),
+      esperado: (r) => expect(r).toEqual(uno),
+    },
+    {
+      metodo: 'getActividadesVigentes',
+      invocar: (a) => a.getActividadesVigentes(),
+      operacion: 'consultarActividadesVigentes',
+      respuesta:
+        '<arrayActividades><actividad><codigo>620100</codigo><orden>1</orden><descripcion>Servicios informáticos</descripcion></actividad></arrayActividades>',
+      esperado: (r) => expect(r).toEqual([{ codigo: 620100, orden: 1, descripcion: 'Servicios informáticos' }]),
+    },
+    {
+      metodo: 'getPuntosVenta',
+      invocar: (a) => a.getPuntosVenta(),
+      operacion: 'consultarPuntosVenta',
+      respuesta: pv,
+      esperado: (r) => expect(r).toEqual(puntoVenta),
+    },
+    {
+      metodo: 'getPuntosVentaCAE',
+      invocar: (a) => a.getPuntosVentaCAE(),
+      operacion: 'consultarPuntosVentaCAE',
+      respuesta: pv,
+      esperado: (r) => expect(r).toEqual(puntoVenta),
+    },
+  ];
+
+  it.each(casos)('$metodo → $operacion', async ({ invocar, operacion, respuesta, esperado, auth }) => {
+    const m = mockFetch(soapResponse(`${operacion}Response`, respuesta));
+    esperado(await invocar(mtxca(m.fetch)));
+    expect(m.calls).toHaveLength(1);
+    expect(m.calls[0].headers.soapaction).toBe(`"${NS}${operacion}"`);
+    if (auth === false) expect(m.calls[0].body).not.toContain('<authRequest>');
+    else expect(m.calls[0].body).toContain('<cuitRepresentada>20123456786</cuitRepresentada>');
   });
 });

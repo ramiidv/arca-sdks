@@ -189,6 +189,21 @@ describe('CAEA: informar comprobantes (FECAEARegInformativo)', () => {
     expect(mock.fn).not.toHaveBeenCalled();
   });
 
+  it.each(['', '3612345678901', '361234567890123', '3612345678901X'])(
+    'CAEA "%s" sin 14 dígitos → error de validación antes de consultar el último número',
+    async (caea) => {
+      const arca = await arcaDePrueba();
+      const mock = mockArcaFetch({});
+      const { cbteNro: _, ...sinNro } = opts;
+      const err = await arca
+        .registrarFacturaCAEA(caea, { ...sinNro, fechaHoraGeneracion: '20261103143210' })
+        .catch((e) => e);
+      expect(err).toBeInstanceOf(ArcaValidationError);
+      expect(err.field).toBe('caea');
+      expect(mock.fn).not.toHaveBeenCalled();
+    },
+  );
+
   it('registrarCAEA raw exige CbteFchHsGen con formato yyyymmddhhmmss', async () => {
     const arca = await arcaDePrueba();
     const mock = mockArcaFetch({});
@@ -294,6 +309,36 @@ describe('CAEA sin movimiento', () => {
     const err = await arca.sinMovimientoCAEA(CAEA, 5).catch((e) => e);
     expect(err).toBeInstanceOf(ArcaRechazoError);
     expect(err.operacion).toBe('FECAEASinMovimientoInformar');
+  });
+
+  it('FECAEASinMovimientoInformar: Resultado R con Events → observaciones y mensaje', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FECAEASinMovimientoInformar: wsfeResponse(
+        'FECAEASinMovimientoInformar',
+        `<CAEA>${CAEA}</CAEA><PtoVta>5</PtoVta><Resultado>R</Resultado>` +
+          '<Events><Evt><Code>1500</Code><Msg>El punto de venta tiene comprobantes informados</Msg></Evt></Events>',
+      ),
+    });
+    const err = await arca.sinMovimientoCAEA(CAEA, 5).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect(err.observaciones).toEqual([{ code: 1500, msg: 'El punto de venta tiene comprobantes informados' }]);
+    expect(err.message).toContain('[1500] El punto de venta tiene comprobantes informados');
+  });
+
+  it('FECAEASinMovimientoInformar con respuesta ilegible → ArcaResponseError uncertain con la causa', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FECAEASinMovimientoInformar: wsfeResponse(
+        'FECAEASinMovimientoInformar',
+        `<CAEA>${CAEA}</CAEA><PtoVta>cinco</PtoVta><Resultado>A</Resultado>`,
+      ),
+    });
+    const err = await arca.sinMovimientoCAEA(CAEA, 5).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaResponseError);
+    expect(err.uncertain).toBe(true);
+    expect(err.cause).toBeInstanceOf(ArcaResponseError);
+    expect(err.cause.message).toMatch(/ptoVta no es numérico/);
   });
 
   it('FECAEASinMovimientoInformar: rechazo de negocio → ArcaWSFEError', async () => {

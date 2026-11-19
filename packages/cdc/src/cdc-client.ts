@@ -167,15 +167,7 @@ export class CdcClient extends SoapServiceClient {
    * @throws ArcaResponseError si la respuesta no tiene la forma esperada.
    */
   async constatar(auth: CdcAuth, input: ConstatarInput, opts?: CallOptions): Promise<ConstatarResult> {
-    return this.constatarCmpReq(auth, buildCmpReq(input), opts);
-  }
-
-  /**
-   * `ComprobanteConstatar` con el `CmpReq` ya validado y normalizado por
-   * `buildCmpReq` (lo usa `ArcaCdc`, que valida antes de autenticarse).
-   * @internal
-   */
-  async constatarCmpReq(auth: CdcAuth, cmpReq: Record<string, unknown>, opts?: CallOptions): Promise<ConstatarResult> {
+    const cmpReq = buildCmpReq(input);
     const method = 'ComprobanteConstatar';
     const result = await this.call(method, { Auth: authXml(auth), CmpReq: cmpReq }, opts);
 

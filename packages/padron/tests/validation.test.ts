@@ -134,6 +134,25 @@ describe('request: wrapper, namespace, SOAPAction, auth y orden del XSD', () => 
     expect(cap.fn).not.toHaveBeenCalled();
   });
 
+  it('valida la CUIT/documento antes de pedir el ticket (no llama a WSAA)', async () => {
+    const client = padronSinTickets(CUIT_REPRESENTADA);
+    const ticket = vi.spyOn(client.wsaa, 'getAccessTicket');
+    const cap = mockFetch(respuesta(NAMESPACES.a4, 'getPersona', '<personaReturn/>'));
+    const invalida = '20-11111111-3';
+    const llamadas = [
+      () => client.getConstanciaInscripcion(invalida),
+      () => client.getPersona(invalida),
+      () => client.getPersonaBasic(invalida),
+      () => client.getPersonaA13(invalida),
+      () => client.getPersonaA13V2(invalida),
+      () => client.getIdPersonaListByDocumento('ABC123'),
+      () => client.getConstanciasInscripcion([]),
+    ];
+    for (const llamar of llamadas) await expect(llamar()).rejects.toBeInstanceOf(ArcaValidationError);
+    expect(ticket).not.toHaveBeenCalled();
+    expect(cap.fn).not.toHaveBeenCalled();
+  });
+
   it('valida la CUIT representada de la config', () => {
     expect(() => padronSinTickets('20123456789')).toThrow(ArcaValidationError);
   });

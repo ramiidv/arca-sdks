@@ -236,6 +236,15 @@ describe('emitirCertificado', () => {
     expect(m.calls).toHaveLength(1);
   });
 
+  it('ArcaSireServiceError sin cause ni faultCode no define cause', () => {
+    const err = new ArcaSireServiceError('SIRE anular: rechazado', { operacion: 'anular' });
+    expect(err).toBeInstanceOf(ArcaRechazoError);
+    expect('cause' in err).toBe(false);
+    expect(err.faultCode).toBeUndefined();
+    expect(err.operacion).toBe('anular');
+    expect(err.errors).toEqual([]);
+  });
+
   it('Fault soapenv:Server de schema (real de homologación) → ArcaSireServiceError con entidades decodificadas', async () => {
     const msg =
       // `fault()` escapa el texto: en el XML queda `&amp;apos;`, como lo manda ARCA.

@@ -11,13 +11,14 @@ const wsaa = new WsaaClient({
   cert: fs.readFileSync('./certs/certificado.crt', 'utf-8'),
   key: fs.readFileSync('./certs/clave.key', 'utf-8'),
   production: false,
-  // Persistir el ticket: sin esto, al reiniciar el proceso WSAA rechaza el login
-  // ("ya posee un TA válido") hasta que el ticket anterior venza.
+  // Persistir el ticket: sin esto, al reiniciar el proceso WSAA puede rechazar el
+  // login ("ya posee un TA válido") durante su lapso de retención (2 minutos en
+  // producción y 10 en homologación, según el manual de WSAA).
   ticketStorage: new FileTicketStorage('./.arca-tickets'),
   // Opcional:
-  // timeout: 30_000,
+  // timeout: 30_000, // entero de 1 a 2147483647 ms
   // retries: 2, // solo errores de red sin enviar (un timeout no se reintenta)
-  // tokenTTLMinutes: 720, // vigencia del TRA (1 a 1440), no del TA (WSAA lo emite por 12 h)
+  // tokenTTLMinutes: 10, // vigencia del TRA (1 a 1440, default 10), no del TA (WSAA lo emite por 12 h): no hace falta subirlo
   // keyPassphrase: process.env.ARCA_KEY_PASSPHRASE, // si la clave está encriptada
   // retryDelayMs: 1_000,
   // onEvent: (e) => console.log(e.type, e),

@@ -372,6 +372,14 @@ describe('caracteres y encoding', () => {
     ).toThrow(ArcaSerializationError);
   });
 
+  it('latin1 + transliterar: solo pierden el diacrítico los caracteres no representables', () => {
+    const opts = { noRepresentables: 'transliterar' } as const;
+    expect(campo(serializarRegistro({ ...base, cct: 'Ñandú ő' }, opts), 'cct')).toBe('Ñandú o   ');
+    const nfd = 'Ñandú ő'.normalize('NFD');
+    expect(campo(serializarRegistro({ ...base, cct: nfd }, opts), 'cct')).toBe('Ñandú o   ');
+    expect(() => serializarRegistro({ ...base, cct: 'Ñ€' }, opts)).toThrow(/"€" no es representable/);
+  });
+
   it('caracteres de control prohibidos (romperían el ancho fijo)', () => {
     expect(() => serializarRegistro({ ...base, cct: 'A\r\nB' })).toThrow(/control/);
     expect(() => serializarRegistro({ ...base, puesto: '\t' })).toThrow(/control/);

@@ -1,4 +1,4 @@
-import { testCert } from '@ramiidv/arca-common/testing';
+import { soapFaultResponse, testCert } from '@ramiidv/arca-common/testing';
 import { describe, it, expect, vi } from 'vitest';
 import { ArcaValidationError, WSAA_ENDPOINTS, type WsaaClient } from '@ramiidv/arca-common';
 import * as sdk from '../src/index.js';
@@ -158,5 +158,116 @@ describe('ArcaFecred', () => {
     const wsaa = fakeWsaa();
     await new ArcaFecred({ ...base, cuit: 20123456786, wsaa }).clearAuthCache();
     expect(wsaa.clearTicket).toHaveBeenCalledWith('wsfecred');
+  });
+});
+
+describe('ArcaFecred: wrappers de las operaciones', () => {
+  const ID = { cuitEmisor: '30712345671', codTipoCmp: 201, ptoVta: 3, nroCmp: 125 };
+  const MOTIVOS = [{ codMotivo: 1, descMotivo: 'Motivo', justificacion: 'Justificación' }];
+
+  /** [método de ArcaFecred, argumentos, operación SOAP, fragmento del XML que prueba que llegaron los params]. */
+  const casos: [keyof ArcaFecred, unknown[], string, string | undefined][] = [
+    [
+      'consultarMontoObligadoRecepcion',
+      [{ cuitConsultada: 30712345671, fechaEmision: '2026-11-01' }],
+      'consultarMontoObligadoRecepcion',
+      '<cuitConsultada>30712345671</cuitConsultada>',
+    ],
+    [
+      'consultarCtasCtes',
+      [{ rol: 'Emisor' }],
+      'consultarCtasCtes',
+      '<rolCUITRepresentada>Emisor</rolCUITRepresentada>',
+    ],
+    ['consultarCtaCte', [{ codCtaCte: 77 }], 'consultarCtaCte', '<codCtaCte>77</codCtaCte>'],
+    [
+      'consultarComprobantes',
+      [{ rol: 'Receptor' }],
+      'consultarComprobantes',
+      '<rolCUITRepresentada>Receptor</rolCUITRepresentada>',
+    ],
+    ['consultarHistorialEstadosComprobante', [ID], 'consultarHistorialEstadosComprobante', '<nroCmp>125</nroCmp>'],
+    [
+      'consultarHistorialEstadosCtaCte',
+      [{ codCtaCte: 5 }],
+      'consultarHistorialEstadosCtaCte',
+      '<codCtaCte>5</codCtaCte>',
+    ],
+    ['obtenerRemitos', [ID], 'obtenerRemitos', '<CUITEmisor>30712345671</CUITEmisor>'],
+    [
+      'aceptarFECred',
+      [{ idCtaCte: { codCtaCte: 1 }, saldoAceptado: 10, codMoneda: 'PES', cotizacionMonedaUlt: 1 }],
+      'aceptarFECred',
+      '<saldoAceptado>10.00</saldoAceptado>',
+    ],
+    [
+      'rechazarFECred',
+      [{ idCtaCte: { codCtaCte: 1 }, motivos: MOTIVOS }],
+      'rechazarFECred',
+      '<codMotivo>1</codMotivo>',
+    ],
+    [
+      'informarCancelacionTotalFECred',
+      [
+        {
+          idCtaCte: { codCtaCte: 77 },
+          formasCancelacion: [{ codigo: 1, descripcion: 'Transferencia' }],
+          importeCancelacion: 1500.5,
+        },
+      ],
+      'informarCancelacionTotalFECred',
+      '<importeCancelacion>1500.50</importeCancelacion>',
+    ],
+    ['rechazarNotaDC', [{ idComprobante: ID, motivos: MOTIVOS }], 'rechazarNotaDC', '<nroCmp>125</nroCmp>'],
+    [
+      'modificarOpcionTransferencia',
+      [{ idCtaCte: { codCtaCte: 1 }, opcionTransferencia: 'ADC' }],
+      'modificarOpcionTransferencia',
+      '<opcionTransferencia>ADC</opcionTransferencia>',
+    ],
+    [
+      'informarFacturaAgtDptoCltv',
+      [{ idCtaCte: { codCtaCte: 1 }, ctaAgente: { cuitAgente: '30500012346', idCuenta: 'CTA-001' } }],
+      'informarFacturaAgtDptoCltv',
+      '<idCuenta>CTA-001</idCuenta>',
+    ],
+    ['consultarCuentasEnAgtDptoCltv', [], 'consultarCuentasEnAgtDptoCltv', undefined],
+    [
+      'consultarFacturasAgtDptoCltv',
+      [{ idCtaCte: { codCtaCte: 5 } }],
+      'consultarFacturasAgtDptoCltv',
+      '<codCtaCte>5</codCtaCte>',
+    ],
+    ['consultarTiposRetenciones', [], 'consultarTiposRetenciones', undefined],
+    ['consultarTiposFormasCancelacion', [], 'consultarTiposFormasCancelacion', undefined],
+    ['consultarTiposMotivosRechazo', [], 'consultarTiposMotivosRechazo', undefined],
+    ['consultarTiposAjustesOperacion', [], 'consultarTiposAjustesOperacion', undefined],
+  ];
+
+  it.each(casos)('%s: operación SOAP, authRequest y parámetros', async (metodo, args, operacion, fragmento) => {
+    const wsaa = fakeWsaa();
+    // La respuesta no importa: se verifica el request enviado.
+    const fetch = mockFetch(soapFaultResponse('soap:Client', 'respuesta de prueba'));
+    const fecred = new ArcaFecred({ ...base, cuit: '20-12345678-6', wsaa, fetch, retries: 0 });
+    const llamar = fecred[metodo] as (...a: unknown[]) => Promise<unknown>;
+    await llamar.call(fecred, ...args).catch(() => undefined);
+
+    expect(wsaa.getAccessTicket).toHaveBeenCalledWith('wsfecred', {});
+    expect(fetch.calls).toHaveLength(1);
+    const { soapAction, body, xml } = sentRequest(fetch);
+    expect(soapAction).toBe(`"${FECRED_NAMESPACE}${operacion}"`);
+    expect(body[`ser:${operacion}Request`].authRequest).toEqual({
+      token: 'T',
+      sign: 'S',
+      cuitRepresentada: '20123456786',
+    });
+    if (fragmento) expect(xml).toContain(fragmento);
+  });
+
+  it('cubre todos los métodos públicos de operaciones', () => {
+    const metodos = Object.getOwnPropertyNames(ArcaFecred.prototype).filter(
+      (m) => m !== 'constructor' && m !== 'status' && m !== 'auth',
+    );
+    expect(casos.map((c) => c[0]).sort()).toEqual(metodos.sort());
   });
 });

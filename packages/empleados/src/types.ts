@@ -107,8 +107,9 @@ export interface OpcionesSerializacion {
   encoding?: EncodingArchivo;
   /**
    * Qué hacer con un caracter no representable en `encoding`:
-   * `'error'` (default) lanza `ArcaSerializationError`; `'transliterar'` quita
-   * diacríticos (NFD, ej. `ñ`→`n` en ASCII) y, si aún no es representable, lanza.
+   * `'error'` (default) lanza `ArcaSerializationError`; `'transliterar'` le quita
+   * el diacrítico (NFD) solo a los caracteres no representables (ej. `ñ`→`n` en
+   * ASCII; en latin1 `'Ñandú ő'`→`'Ñandú o'`) y, si aún no es representable, lanza.
    */
   noRepresentables?: 'error' | 'transliterar';
   /**

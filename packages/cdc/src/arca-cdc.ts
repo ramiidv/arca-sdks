@@ -2,7 +2,7 @@ import { ArcaSdkBase } from '@ramiidv/arca-common';
 import type { CallOptions, ServerStatus } from '@ramiidv/arca-common';
 import { ENDPOINTS, WSCDC_SERVICE_ID } from './constants.js';
 import { CdcClient } from './cdc-client.js';
-import { buildCmpReq } from './validation.js';
+import { validateConstatarInput } from './validation.js';
 import type {
   ArcaCdcConfig,
   CdcAuth,
@@ -64,8 +64,8 @@ export class ArcaCdc extends ArcaSdkBase<'wscdc'> {
    * @throws ArcaResponseError si la respuesta no tiene la forma esperada.
    */
   async constatar(input: ConstatarInput, opts?: CallOptions): Promise<ConstatarResult> {
-    const cmpReq = buildCmpReq(input);
-    return this.client.constatarCmpReq(await this.auth(opts), cmpReq, this.callOptions(opts));
+    validateConstatarInput(input); // antes de pedir el ticket
+    return this.client.constatar(await this.auth(opts), input, this.callOptions(opts));
   }
 
   /**

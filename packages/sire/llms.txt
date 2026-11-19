@@ -2,6 +2,14 @@
 
 > TypeScript SDK para el web service SIRE de ARCA (ex AFIP): emite y anula certificados de retención electrónicos de IVA (formulario C2005, RG 4523/2019). Autenticación WSAA automática (servicio "sire-ws"). Node >= 22.12. Solo ESM; también funciona desde CommonJS porque Node >= 22.12 permite cargar módulos ESM con `require()`.
 
+## Instalación
+
+npm install @ramiidv/arca-sire
+
+## Requisitos
+
+Node >= 22.12. Solo ESM; desde CommonJS se carga con `require()` (Node >= 22.12 permite cargar módulos ESM con `require()`). Depende de `@ramiidv/arca-common` (WSAA, transporte SOAP, validadores). Certificado de ARCA asociado al web service SIRE (servicio WSAA `sire-ws`) para la CUIT del agente de retención.
+
 ## Operaciones (WSDL oficial: solo existen estas tres)
 
 - `emitirCertificado(params, opts?)` → operación `emitir`. Devuelve `{ certificadoNro: string, codigoSeguridad: string }`.

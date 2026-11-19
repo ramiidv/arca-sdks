@@ -83,12 +83,12 @@ import type {
 } from './cpe-types.js';
 import type { CuitInput } from './types.js';
 import {
-  checkCargaDG,
+  SOLICITUDES,
   checkConceptoContingencia,
   checkRangoConsultaDestino,
   requireCartaPorteOCtg,
-  requireOrigen,
 } from './validation.js';
+import type { Solicitud } from './validation.js';
 
 const SERVICE = 'WSCPE';
 
@@ -157,7 +157,11 @@ const ELEMENTOS: Readonly<Record<string, { request?: string; response?: string }
   },
 };
 
-/** La respuesta trae la CPE (`cabecera.nroCTG` o `cabecera.estado`). */
+/**
+ * La respuesta trae la CPE (`cabecera.nroCTG` o `cabecera.estado`). Solo indica
+ * que la operación se procesó en una autorización: en las operaciones sobre una
+ * CPE que ya existe (editar, anular, desvío…) la cabecera es la de esa CPE.
+ */
 const conCabecera = (node: Record<string, unknown>): boolean =>
   Boolean(at(node, 'cabecera.nroCTG') || at(node, 'cabecera.estado'));
 
@@ -223,19 +227,28 @@ export class CpeClient extends SoapServiceClient {
     return respuesta as Record<string, unknown>;
   }
 
-  /** `#request` y verificación de `errores`: devuelve el nodo y los errores admitidos. */
+  /**
+   * `#request` y verificación de `errores`: devuelve el nodo y los errores admitidos.
+   *
+   * @param conResultado En emisiones: la respuesta trae el resultado (ver `checkErrors`).
+   */
   async #call(
     method: string,
     body: Record<string, unknown> | null,
     kind: SoapOperationKind,
     opts?: CallOptions,
+    conResultado?: (node: Record<string, unknown>) => boolean,
   ): Promise<{ node: Record<string, unknown>; advertencias: ServiceErrorDetail[] }> {
     const node = await this.#request(method, body, kind, opts);
-    const advertencias = checkErrors(node, SERVICE, method, kind, conCabecera);
+    const advertencias = checkErrors(node, SERVICE, method, kind, conResultado);
     return { node, advertencias };
   }
 
-  /** Operación sobre una CPE que responde `CartaPorteRespuesta`. */
+  /**
+   * Operación sobre una CPE que ya existe; responde `CartaPorteRespuesta`. Un
+   * rechazo no es `uncertain` aunque la respuesta traiga la cabecera (es la de
+   * la CPE sobre la que se operó).
+   */
   async #operar(
     method: string,
     schema: Schema,
@@ -251,7 +264,8 @@ export class CpeClient extends SoapServiceClient {
 
   /**
    * Operación que responde el detalle de una CPE (autorizar/consultar): exige
-   * `cabecera.nroCTG`.
+   * `cabecera.nroCTG`. En una autorización, un rechazo que trae la cabecera es
+   * `uncertain` (ver `conCabecera`).
    */
   async #detalle<T extends { cabecera?: { nroCTG?: string } }>(
     method: string,
@@ -263,7 +277,7 @@ export class CpeClient extends SoapServiceClient {
     extraCheck?: ExtraCheck,
   ): Promise<T> {
     const solicitud = encodeRequest(params, request, method, extraCheck);
-    const { node, advertencias } = await this.#call(method, { solicitud }, kind, opts);
+    const { node, advertencias } = await this.#call(method, { solicitud }, kind, opts, conCabecera);
     const detalle = decodeResult<T>(node, response, `${method}.respuesta`, kind);
     requireValue(detalle.cabecera?.nroCTG, 'cabecera.nroCTG', SERVICE, method, kind);
     return withAdvertencias(detalle, advertencias);
@@ -277,14 +291,14 @@ export class CpeClient extends SoapServiceClient {
   async #editar<P extends { nroCTG: string | number }>(
     circuito: 'automotor' | 'ferroviaria',
     method: string,
-    schema: Schema,
+    solicitud: Solicitud,
     params: P,
     completar: (params: P, vigente: CPEAutomotorDetalle | CPEFerroviariaDetalle) => P,
     opts?: EditarCPEOptions,
   ): Promise<CPEResultado> {
     let p = params;
     if (opts?.preservarIntervinientes) {
-      encodeRequest(params, schema, method);
+      encodeRequest(params, solicitud.schema, method, solicitud.check);
       const consulta = { nroCTG: params.nroCTG };
       const vigente =
         circuito === 'automotor'
@@ -292,7 +306,7 @@ export class CpeClient extends SoapServiceClient {
           : await this.consultarCPEFerroviaria(consulta, opts);
       p = completar(params, vigente);
     }
-    return this.#operar(method, schema, p, opts);
+    return this.#operar(method, solicitud.schema, p, opts, solicitud.check);
   }
 
   /** `editarCPEConfirmada*`: los intervinientes se completan dentro de `intervinientes`. */
@@ -305,7 +319,7 @@ export class CpeClient extends SoapServiceClient {
     return this.#editar(
       circuito,
       method,
-      S.EDITAR_CONFIRMADA,
+      SOLICITUDES.editarCPEConfirmada,
       params,
       (p, vigente) => ({ ...p, intervinientes: completarDesde(p.intervinientes, vigente, PRESERVAR.confirmada) }),
       opts,
@@ -345,11 +359,11 @@ export class CpeClient extends SoapServiceClient {
     return this.#detalle(
       'autorizarCPEAutomotor',
       'emision',
-      S.AUTORIZAR_AUTOMOTOR,
+      SOLICITUDES.autorizarCPEAutomotor.schema,
       params,
       S.R_DETALLE_AUTOMOTOR,
       opts,
-      requireOrigen,
+      SOLICITUDES.autorizarCPEAutomotor.check,
     );
   }
 
@@ -376,7 +390,7 @@ export class CpeClient extends SoapServiceClient {
     return this.#editar(
       'automotor',
       'editarCPEAutomotor',
-      S.EDITAR_AUTOMOTOR,
+      SOLICITUDES.editarCPEAutomotor,
       params,
       (p, vigente) => completarDesde(p, vigente, PRESERVAR.automotor),
       opts,
@@ -404,7 +418,13 @@ export class CpeClient extends SoapServiceClient {
     params: ConfirmacionDefinitivaCPEAutomotorParams,
     opts?: CallOptions,
   ): Promise<CPEResultado> {
-    return this.#operar('confirmacionDefinitivaCPEAutomotor', S.CONFIRMACION_AUTOMOTOR, params, opts);
+    return this.#operar(
+      'confirmacionDefinitivaCPEAutomotor',
+      SOLICITUDES.confirmacionDefinitivaCPEAutomotor.schema,
+      params,
+      opts,
+      SOLICITUDES.confirmacionDefinitivaCPEAutomotor.check,
+    );
   }
 
   /** Informa la descarga en destino. Emisión. */
@@ -471,10 +491,11 @@ export class CpeClient extends SoapServiceClient {
     return this.#detalle(
       'autorizarCPEFerroviaria',
       'emision',
-      S.AUTORIZAR_FERROVIARIA,
+      SOLICITUDES.autorizarCPEFerroviaria.schema,
       params,
       S.R_DETALLE_FERROVIARIA,
       opts,
+      SOLICITUDES.autorizarCPEFerroviaria.check,
     );
   }
 
@@ -501,7 +522,7 @@ export class CpeClient extends SoapServiceClient {
     return this.#editar(
       'ferroviaria',
       'editarCPEFerroviaria',
-      S.EDITAR_FERROVIARIA,
+      SOLICITUDES.editarCPEFerroviaria,
       params,
       (p, vigente) => completarDesde(p, vigente, PRESERVAR.ferroviaria),
       opts,
@@ -524,7 +545,13 @@ export class CpeClient extends SoapServiceClient {
     params: ConfirmacionDefinitivaCPEFerroviariaParams,
     opts?: CallOptions,
   ): Promise<CPEResultado> {
-    return this.#operar('confirmacionDefinitivaCPEFerroviaria', S.CONFIRMACION_FERROVIARIA, params, opts);
+    return this.#operar(
+      'confirmacionDefinitivaCPEFerroviaria',
+      SOLICITUDES.confirmacionDefinitivaCPEFerroviaria.schema,
+      params,
+      opts,
+      SOLICITUDES.confirmacionDefinitivaCPEFerroviaria.check,
+    );
   }
 
   /** Cambia destino y/o destinatario de una CPE ferroviaria. Emisión. */
@@ -577,11 +604,11 @@ export class CpeClient extends SoapServiceClient {
     return this.#detalle(
       'autorizarCPEAutomotorDG',
       'emision',
-      S.AUTORIZAR_AUTOMOTOR_DG,
+      SOLICITUDES.autorizarCPEAutomotorDG.schema,
       params,
       S.R_DETALLE_AUTOMOTOR_DG,
       opts,
-      checkCargaDG,
+      SOLICITUDES.autorizarCPEAutomotorDG.check,
     );
   }
 
@@ -653,11 +680,11 @@ export class CpeClient extends SoapServiceClient {
     return this.#detalle(
       'autorizarCPEFerroviariaDG',
       'emision',
-      S.AUTORIZAR_FERROVIARIA_DG,
+      SOLICITUDES.autorizarCPEFerroviariaDG.schema,
       params,
       S.R_DETALLE_FERROVIARIA_DG,
       opts,
-      checkCargaDG,
+      SOLICITUDES.autorizarCPEFerroviariaDG.check,
     );
   }
 
@@ -753,11 +780,11 @@ export class CpeClient extends SoapServiceClient {
     return this.#detalle(
       'autorizarCPEEmisionDestinoDG',
       'emision',
-      S.AUTORIZAR_EMISION_DESTINO_DG,
+      SOLICITUDES.autorizarCPEEmisionDestinoDG.schema,
       params,
       S.R_DETALLE_EMISION_DESTINO_DG,
       opts,
-      checkCargaDG,
+      SOLICITUDES.autorizarCPEEmisionDestinoDG.check,
     );
   }
 

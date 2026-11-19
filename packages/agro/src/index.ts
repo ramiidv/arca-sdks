@@ -229,7 +229,7 @@ export {
 // Errores
 // ---------------------------------------------------------------------------
 export { ArcaAgroServiceError, ArcaAgroResponseError, cpeFaultException } from './errors.js';
-export type { CpeFaultException } from './errors.js';
+export type { AgroServiceName, CpeFaultException } from './errors.js';
 export {
   ArcaError,
   ArcaAuthError,

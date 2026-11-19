@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ArcaRechazoError, ArcaResponseError } from '@ramiidv/arca-common';
 import { ArcaResultadoIncierto } from '../src/errors.js';
 import { CbteTipo, CondicionIva, DocTipo, IvaTipo } from '../src/constants.js';
-import type { IntentoComprobante } from '../src/types.js';
+import { coincideConIntento, facturaResultDesdeConsulta } from '../src/index.js';
+import type { FECompConsultarResult, IntentoComprobante } from '../src/types.js';
 import {
   arcaDePrueba,
   caeAprobado,
@@ -174,5 +175,73 @@ describe('recuperarComprobante', () => {
     expect(
       mock.calls.filter((c) => c.method === 'FECAESolicitar').map((c) => /<CbteDesde>(\d+)/.exec(c.body)![1]),
     ).toEqual(['151', '151']);
+  });
+});
+
+describe('coincideConIntento y facturaResultDesdeConsulta (funciones puras)', () => {
+  const consulta = (extra: Partial<FECompConsultarResult['resultGet']> = {}): FECompConsultarResult => ({
+    resultGet: {
+      concepto: 1,
+      docTipo: DocTipo.CUIT,
+      docNro: 20111111112,
+      cbteDesde: 151,
+      cbteHasta: 151,
+      cbteFch: '20261030',
+      impTotal: 1210,
+      impTotConc: 0,
+      impNeto: 1000,
+      impOpEx: 0,
+      impTrib: 0,
+      impIva: 210,
+      monId: 'PES',
+      monCotiz: 1,
+      resultado: 'A',
+      codAutorizacion: '76123456789012',
+      fchVto: '20261109',
+      ptoVta: 1,
+      cbteTipo: CbteTipo.FACTURA_A,
+      iva: [{ id: IvaTipo.IVA_21, baseImp: 1000, importe: 210 }],
+      ...extra,
+    },
+  });
+
+  it('coincideConIntento: mismos datos y aprobado (tolerancia de 0,01 en el total)', () => {
+    expect(coincideConIntento(consulta(), intento)).toBe(true);
+    expect(coincideConIntento(consulta({ impTotal: 1210.01 }), intento)).toBe(true);
+    expect(coincideConIntento(consulta({ resultado: undefined }), intento)).toBe(true);
+  });
+
+  it.each([
+    ['otro total', { impTotal: 1210.02 }],
+    ['otro documento', { docNro: 20222222223 }],
+    ['otro tipo de documento', { docTipo: DocTipo.DNI }],
+    ['otra fecha', { cbteFch: '20261031' }],
+    ['rechazado', { resultado: 'R' as const }],
+  ])('coincideConIntento: %s → false', (_, extra) => {
+    expect(coincideConIntento(consulta(extra), intento)).toBe(false);
+  });
+
+  it('coincideConIntento sin ResultGet → false', () => {
+    expect(coincideConIntento({} as FECompConsultarResult, intento)).toBe(false);
+  });
+
+  it('facturaResultDesdeConsulta: arma el FacturaResult con CAE, importes y moneda', () => {
+    const res = facturaResultDesdeConsulta(consulta());
+    expect(res).toMatchObject({
+      cae: '76123456789012',
+      caeVencimiento: '20261109',
+      cbteTipo: CbteTipo.FACTURA_A,
+      ptoVta: 1,
+      cbteNro: 151,
+      importes: { total: 1210, neto: 1000, iva: 210, exento: 0, noGravado: 0, tributos: 0 },
+    });
+  });
+
+  it('facturaResultDesdeConsulta: rechazado → ArcaRechazoError; otro resultado o sin CAE → ArcaResponseError', () => {
+    expect(() => facturaResultDesdeConsulta(consulta({ resultado: 'R' }))).toThrow(ArcaRechazoError);
+    expect(() => facturaResultDesdeConsulta(consulta({ resultado: 'P' as never }))).toThrow(ArcaResponseError);
+    expect(() => facturaResultDesdeConsulta(consulta({ codAutorizacion: undefined }))).toThrow(
+      /no tiene CodAutorizacion/,
+    );
   });
 });

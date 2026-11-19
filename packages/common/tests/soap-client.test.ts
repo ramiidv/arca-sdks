@@ -3,15 +3,12 @@ import { vi } from 'vitest';
 import { arcaSoapCall, buildXml, soapCall } from '../src/soap-client.js';
 import { ArcaSoapError, ArcaValidationError } from '../src/errors.js';
 import { mockFetch, soapEnvelope, soapFault, xmlResponse } from './helpers.js';
+import { networkError } from '../src/testing.js';
 
 const URL = 'https://example.test/ws';
 const OK = soapEnvelope(
   '<ns2:dummyResponse xmlns:ns2="http://x/"><return><appserver>OK</appserver></return></ns2:dummyResponse>',
 );
-
-function networkError(code: string): TypeError {
-  return new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) });
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();

@@ -220,7 +220,7 @@ export function condicionIvaDesdePadron(persona: PersonaA5 | PersonaA4): Condici
       condicionIva: null,
       motivo:
         `No se puede determinar: ARCA no informó datos de ${errores.map((e) => e.split(':')[0]).join(' ni de ')} ` +
-        `(${errores.join(' | ')}).${avisoClave}${notaConstancia}`,
+        `(${errores.join(' | ')}).${avisoClave}`,
     };
   }
 

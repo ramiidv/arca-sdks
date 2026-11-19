@@ -431,6 +431,14 @@ describe.each(OPERACIONES)('WSCPE $method (emisión)', ({ method, run, order }) 
     expect(eN.errors.map((e: { code: number }) => e.code)).toEqual([1501, 2104]);
   });
 
+  it('errores junto con la cabecera → rechazo cierto (la cabecera es la de la CPE existente)', async () => {
+    const { agro } = setup(() => cpeResp(`${capital(method)}Resp`, CABECERA() + ERROR_1));
+    const e: any = await run(agro).catch((err: any) => err);
+    expect(e).toBeInstanceOf(ArcaAgroServiceError);
+    expect(e.uncertain).toBe(false);
+    expect(e.response.cabecera.nroCTG).toBe('010100012345');
+  });
+
   it('no reintenta ante un 503 y el error es uncertain', async () => {
     const { agro, fetchMock } = setup(http503);
     const e: any = await run(agro).catch((err: any) => err);
@@ -518,6 +526,21 @@ describe('WSCPE: consultas', () => {
     expect(calls[0].body).toContain('<nroCTG>020200012345</nroCTG>');
     expect(r.cabecera.nroCTG).toBe('020200012345');
     expect(r.transporte).toBeUndefined();
+  });
+
+  it.each([
+    ['decimal', '1500.50', 1500.5],
+    ['entera', '1500', 1500],
+  ])('consultarCPEFerroviaria: transporte.tarifa %s (xsd:long en el XSD)', async (_, xml, esperada) => {
+    const { agro } = setup(() =>
+      cpeResp(
+        'ConsultarCPEFerroviariaResp',
+        CABECERA('020200012345') +
+          `<transporte><cuitTransportista>${CUIT3}</cuitTransportista><tarifa>${xml}</tarifa></transporte>`,
+      ),
+    );
+    const r = await agro.cpe.consultarCPEFerroviaria({ nroCTG: '020200012345' });
+    expect(r.transporte?.tarifa).toBe(esperada);
   });
 
   it('consultar sin cartaPorte ni nroCTG → ArcaValidationError sin llamar', async () => {
@@ -1295,5 +1318,37 @@ describe('WSCPE: SOAP Fault Exception', () => {
       serverName: 'cpea-1',
     });
     expect(cpeFaultException(new Error('x'))).toBeUndefined();
+  });
+
+  it('cpeFaultException: detail ausente, no objeto o sin Exception → undefined', () => {
+    for (const faultDetail of [undefined, null, 'texto', 42, {}, { Otro: { uuid: 'x' } }]) {
+      expect(cpeFaultException(new ArcaSoapError('Fault', { faultDetail }))).toBeUndefined();
+    }
+  });
+
+  it('cpeFaultException: clave con prefijo (ns2:Exception)', () => {
+    const e = new ArcaSoapError('Fault', { faultDetail: { 'ns2:Exception': { uuid: 'u-1', businessErrorId: 7 } } });
+    expect(cpeFaultException(e)).toEqual({ uuid: 'u-1', businessErrorId: '7' });
+  });
+
+  it('cpeFaultException: Exception repetido (array), vacío o escalar → undefined', () => {
+    for (const node of [[{ uuid: 'a' }, { uuid: 'b' }], null, '', 'texto']) {
+      expect(cpeFaultException(new ArcaSoapError('Fault', { faultDetail: { Exception: node } }))).toBeUndefined();
+    }
+  });
+
+  it('cpeFaultException: ignora campos que no son valores simples y los desconocidos', () => {
+    const e = new ArcaSoapError('Fault', {
+      faultDetail: {
+        Exception: {
+          uuid: { '#text': 'u-1', '@_attr': 'x' },
+          timestamp: null,
+          exceptionDetails: 'detalle',
+          serverName: ['a', 'b'],
+          extra: 'no',
+        },
+      },
+    });
+    expect(cpeFaultException(e)).toEqual({ exceptionDetails: 'detalle' });
   });
 });

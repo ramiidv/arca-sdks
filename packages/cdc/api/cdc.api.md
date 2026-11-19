@@ -91,8 +91,6 @@ export interface CdcAuth {
 export class CdcClient extends SoapServiceClient {
     constructor(config: CdcClientConfig);
     constatar(auth: CdcAuth, input: ConstatarInput, opts?: CallOptions): Promise<ConstatarResult>;
-    // @internal
-    constatarCmpReq(auth: CdcAuth, cmpReq: Record<string, unknown>, opts?: CallOptions): Promise<ConstatarResult>;
     dummy(opts?: CallOptions): Promise<ServerStatus>;
     getDocTipos(auth: CdcAuth, opts?: CallOptions): Promise<ListaCdc<DocTipoItem>>;
     getModalidades(auth: CdcAuth, opts?: CallOptions): Promise<ListaCdc<ModalidadItem>>;

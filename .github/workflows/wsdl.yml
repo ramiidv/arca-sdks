@@ -3,7 +3,8 @@ name: WSDL de ARCA
 # Verifica todas las noches que los WSDL publicados por ARCA sigan iguales a los
 # snapshots de packages/*/wsdl/ (contra los que corren los tests de contrato).
 # Si ARCA cambia un servicio, el job falla: correr `npm run wsdl:update`,
-# revisar el diff y ajustar los schemas.
+# revisar el diff y ajustar los schemas. En la corrida programada, si falla abre
+# (o comenta) un issue.
 
 on:
   schedule:
@@ -25,3 +26,26 @@ jobs:
         with:
           node-version: 24
       - run: npm run wsdl:check
+
+  avisar:
+    needs: check
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Abrir o comentar el issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          titulo="WSDL de ARCA: un WSDL publicado cambió respecto del snapshot"
+          numero=$(gh issue list --state open --search "\"$titulo\" in:title" --json number --jq '.[0].number')
+          cuerpo="La verificación nocturna de los WSDL falló: $RUN_URL. Correr \`npm run wsdl:update\`, revisar el diff y ajustar los schemas (o, si fue un error de red, volver a correr el workflow)."
+          if [ -n "$numero" ]; then
+            gh issue comment "$numero" --body "$cuerpo"
+          else
+            gh issue create --title "$titulo" --body "$cuerpo"
+          fi

@@ -339,7 +339,7 @@ Todos los requests y respuestas están tipados; los nombres de los campos son lo
 - **WSCPE, respuestas:** `CPEResultado`, `CabeceraCPE`, `MetadataCPE`, `DestinoCPERespuesta`, `CPEAutomotorDetalle`, `CPEFerroviariaDetalle`, `CPEResumen`, `OperativoFerroviarioCPE`, `PlantaCPE`, `CoordenadaCPE`, `LocalidadProductorCPE`, `VariedadSemillaCPE`, `RenspaCPE`, `DomicilioCPE`, `TipoEmbalajeCPE`; DG: `CPEAutomotorDGDetalle`, `CPEFerroviariaDGDetalle`, `CPEEmisionDestinoDGDetalle`, `CPEDuctosDetalle`, `IntervinientesCPEDGRespuesta`, `CPEDGPendiente`, `DerivadoGranarioCPE`, `PlantaDGCPE`.
 - **WSLPG, requests:** `SiNo`, `GradoLpg`, `LiquidacionAutorizarParams` (`LiquidacionLpg`, `DeduccionLpg`, `RetencionLpg`, `PercepcionLpg`, `CertificadoDepositoLpg`), `AjusteUnificadoParams` (`AjusteCreditoDebitoLpg`, `FusionLpg`), `AjusteContratoParams` (`AjustePorImporteLpg`), `AsociarAContratoParams`, `LiquidacionPorContratoParams`, `AutorizarAnticipoParams` (`LiquidacionAnticipoLpg`), `CancelarAnticipoParams`, `AnulacionContraDocumentoParams`, `CgAutorizarParams` (`MermasCg`), `CgInformarCalidadParams` (`CalidadCg`), `CgBuscarCtgParams`, `CgBuscarCertConSaldoDisponibleParams`, `LsgAutorizarParams` (`LiquidacionSecundariaLsg`, `DeduccionLsg`, `PercepcionLsg`, `FacturaPapelLsg`), `LsgAjustarXCoeParams` y `LsgAjustarXContratoParams` (`AjusteLsg`).
 - **WSLPG, respuestas:** `LiquidacionResultado` (`LiquidacionAutorizadaLpg`, `DeduccionLiquidadaLpg`, `RetencionLiquidadaLpg`), `LiquidacionConsultaResultado` (`LiquidacionConsultadaLpg`), `AjusteUnificadoResultado`, `AjusteContratoResultado`, `AjusteConsultaResultado` (`AjusteUnificadoLpg`, `AjusteCreditoDebitoResultadoLpg`, `ImporteAjustadoLpg`), `CertificacionResultado` (`CertificacionAutorizadaLpg`), `CertificacionConsultaResultado` (`MermasCgRespuesta`), `AnulacionCertificacionResultado`, `CtgCertificableLpg`, `CertificadoConSaldoLpg`, `GradoEntregadoLpg`, `LsgAutorizarResultado` (`LiquidacionSecundariaAutorizadaLsg`), `LsgConsultaResultado` (`LiquidacionesLsg`, `LiquidacionSecundariaConsultadaLsg`), `LsgAjusteResultado` (`AjusteCreditoDebitoResultadoLsg`, `TotalesUnificadosLsg`).
-- **Errores:** `ArcaError` (base), `ArcaValidationError` (`ValidationErrorDetail`), `ArcaServiceError` / `ArcaAgroServiceError` (`ServiceErrorDetail`), `ArcaRechazoError`, `ArcaResponseError` / `ArcaAgroResponseError`, `ArcaSoapError`, `ArcaAuthError`, `ArcaTicketVigenteError`, `CpeFaultException` (ver [Manejo de errores](#manejo-de-errores)).
+- **Errores:** `ArcaError` (base), `ArcaValidationError` (`ValidationErrorDetail`), `ArcaServiceError` / `ArcaAgroServiceError` (`ServiceErrorDetail`; `service` es un `AgroServiceName`), `ArcaRechazoError`, `ArcaResponseError` / `ArcaAgroResponseError`, `ArcaSoapError`, `ArcaAuthError`, `ArcaTicketVigenteError`, `CpeFaultException` (ver [Manejo de errores](#manejo-de-errores)).
 
 ### Formatos
 
@@ -357,7 +357,7 @@ Todos los requests y respuestas están tipados; los nombres de los campos son lo
 | `ArcaValidationError`                                  | Datos inválidos, antes de llamar a ARCA: campo obligatorio faltante, campo desconocido, CUIT con dígito verificador incorrecto, `NaN`/`Infinity`, rangos y largos del XSD, fechas. `details[]` trae cada campo con su ruta (ej: `transporte.dominio[0]`). |
 | `ArcaAgroServiceError` (extiende `ArcaServiceError`)   | ARCA rechazó la operación: `errores.error[]` (y en WSLPG también `erroresFormato.error[]`). Trae `errors[]`, `service`, `method`, `response` (el nodo completo) y `uncertain`.                                                                            |
 | `ArcaSoapError`                                        | Red, timeout, HTTP o SOAP Fault. `uncertain` indica si ARCA pudo haber procesado el request; `faultDetail` trae el `<detail>` del Fault.                                                                                                                  |
-| `ArcaAgroResponseError` (extiende `ArcaResponseError`) | La respuesta no trae un dato imprescindible (`nroCTG` al autorizar, `coe` al liquidar, `nroOrden` al consultar el último) o, en una consulta, no tiene la forma del XSD. `uncertain` es `true` en emisiones.                                              |
+| `ArcaAgroResponseError` (extiende `ArcaResponseError`) | La respuesta no trae un dato imprescindible (`nroCTG` al autorizar, `coe` al liquidar, `nroOrden` al consultar el último) o, en una consulta, no tiene la forma del XSD. `uncertain` es `true` en emisiones; `cause` trae el error original si lo hay.    |
 | `ArcaAuthError` / `ArcaTicketVigenteError`             | Errores de WSAA.                                                                                                                                                                                                                                          |
 
 Un `<error>` sin código (o con código no numérico) cuenta como error; solo se ignora el código explícito `0`.
@@ -394,8 +394,8 @@ Las emisiones (en WSCPE, todas las operaciones salvo las consultas; en WSLPG, au
 Una emisión puede terminar con `uncertain: true`, es decir, ARCA **pudo haberla procesado**:
 
 - `ArcaSoapError`: timeout, conexión cortada, HTTP 5xx o SOAP Fault `Server`. Los Faults `Client` no son inciertos (ARCA rechazó el request sin procesarlo).
-- `ArcaAgroResponseError`: la respuesta no trae el identificador (`nroCTG`, `coe`).
-- `ArcaAgroServiceError`: la respuesta trae errores **y también** el resultado (`cabecera.nroCTG` o `cabecera.estado` en WSCPE; `autorizacion.coe`, `ajusteUnificado.coe`, `ajusteContrato.coe`, o `coe` en los ajustes `lsg*` en WSLPG). `cgSolicitarAnulacion` y `cgConfirmarAnulacion` no detectan este caso: ante cualquier error, verificá con `cgConsultarXCoe`. En `asociarLiquidacionAContrato`, `lsgAsociarAContrato` y `cgInformarCalidad` un error no es incierto: operan sobre un comprobante existente y el COE de la respuesta es el que se informó.
+- `ArcaAgroResponseError`: la respuesta no trae el identificador (`nroCTG`, `coe`) o, en `cgSolicitarAnulacion` y `cgConfirmarAnulacion`, viene sin `oReturn` o sin ningún dato.
+- `ArcaAgroServiceError`: la respuesta trae errores **y también** el resultado (`cabecera.nroCTG` o `cabecera.estado` en las autorizaciones de WSCPE; `autorizacion.coe`, `ajusteUnificado.coe`, `ajusteContrato.coe`, o `coe` en los ajustes `lsg*` en WSLPG). `cgSolicitarAnulacion` y `cgConfirmarAnulacion` no detectan este caso: ante cualquier error, verificá con `cgConsultarXCoe`. En `asociarLiquidacionAContrato`, `lsgAsociarAContrato` y `cgInformarCalidad` un error no es incierto: operan sobre un comprobante existente y el COE de la respuesta es el que se informó. Lo mismo en las operaciones de WSCPE sobre una CPE existente (ediciones, anulación, desvíos, confirmaciones…): la cabecera de la respuesta es la de esa CPE.
 
 En una emisión aceptada, un campo secundario de la respuesta que no tiene la forma del XSD se omite: no vuelve incierta una operación que ARCA aceptó.
 
@@ -417,7 +417,12 @@ import type { AutorizarCPEAutomotorParams, CPEAutomotorDetalle } from '@ramiidv/
 declare const agro: ArcaAgro;
 
 const digitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
-const segundos = (v?: Date | string) => (v === undefined ? Number.NaN : Math.floor(new Date(v).getTime() / 1000));
+/** Una fecha/hora sin zona horaria es hora de Argentina (-03:00), no la del servidor. */
+const segundos = (v?: Date | string) => {
+  if (v === undefined) return Number.NaN;
+  const conZona = typeof v === 'string' && !/(Z|[+-]\d{2}:?\d{2})$/.test(v) ? `${v}-03:00` : v;
+  return Math.floor(new Date(conZona).getTime() / 1000);
+};
 
 /** ¿La CPE consultada es la que intentamos autorizar? */
 function esLaMisma(cpe: CPEAutomotorDetalle, p: AutorizarCPEAutomotorParams): boolean {

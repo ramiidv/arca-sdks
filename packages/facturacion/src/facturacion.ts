@@ -168,7 +168,7 @@ export function calcularTotales(
 
   // Precio final de cada grupo antes del descuento.
   const finals = list.map((b) => {
-    const ivaSobreNeto = Math.round((b.netoCents * b.rateBp) / 10_000);
+    const ivaSobreNeto = dividirMitadPar(BigInt(b.netoCents) * BigInt(b.rateBp), 10_000);
     return b.netoCents + ivaSobreNeto + b.totalCents;
   });
   // Base de cada grupo antes del descuento (para elegir el grupo que absorbe el resto).
@@ -236,10 +236,27 @@ export function calcularTotales(
   return { importes, iva: ivaArray };
 }
 
-/** Despeja la base de un precio final: total / (1 + alícuota), redondeada al centavo. */
+/** Despeja la base de un precio final: total / (1 + alícuota), redondeada al centavo (mitad al par). */
 function baseDesdeTotal(totalCents: number, rateBp: number): number {
   if (rateBp === 0) return totalCents;
-  return Math.round((totalCents * 10_000) / (10_000 + rateBp));
+  return dividirMitadPar(BigInt(totalCents) * 10_000n, 10_000 + rateBp);
+}
+
+/**
+ * `n / denominador` (enteros, denominador > 0) redondeado al entero,
+ * mitad al par (Round Half Even, el criterio del manual de WSFEv1): 5 / 10 → 0,
+ * 15 / 10 → 2. Opera con enteros (BigInt), sin errores de punto flotante.
+ * Simétrico para negativos.
+ */
+function dividirMitadPar(n: bigint, denominador: number): number {
+  const d = BigInt(denominador);
+  const negativo = n < 0n;
+  const abs = negativo ? -n : n;
+  let q = abs / d;
+  const resto2 = (abs % d) * 2n;
+  if (resto2 > d || (resto2 === d && q % 2n === 1n)) q += 1n;
+  const r = Number(negativo ? -q : q);
+  return r === 0 ? 0 : r;
 }
 
 /**

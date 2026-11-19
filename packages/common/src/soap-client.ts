@@ -271,9 +271,16 @@ function faultFromBody(body: Record<string, unknown> | undefined): SoapFault | u
  * el request sin procesarlo.
  */
 function isClientFault(faultCode: string | undefined): boolean {
-  if (!faultCode) return false;
-  const local = faultCode.slice(faultCode.lastIndexOf(':') + 1);
-  return /^(Client|Sender)(\.|$)/.test(local);
+  return /^(Client|Sender)(\.|$)/.test(localFaultCode(faultCode));
+}
+
+/**
+ * Nombre local de un `faultcode` (`ns1:cms.cert.expired` → `cms.cert.expired`;
+ * `''` si no hay código).
+ * @internal
+ */
+export function localFaultCode(faultCode: string | undefined): string {
+  return faultCode ? faultCode.slice(faultCode.lastIndexOf(':') + 1) : '';
 }
 
 /**
@@ -318,7 +325,12 @@ function isRetryable(error: ArcaSoapError): boolean {
   return status === undefined || status < 300 || status >= 500;
 }
 
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+/**
+ * Espera `ms` milisegundos. Con `signal`, rechaza con su `reason` si se aborta
+ * (o si ya estaba abortado).
+ * @internal
+ */
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(signal.reason);
@@ -352,6 +364,60 @@ const legacyTlsHosts = new Set<string>();
 
 /** Tamaño máximo por defecto del body de una respuesta: 50 MB (alcanza para los PDF en base64 de WSLPG/WSCPE). */
 const DEFAULT_MAX_RESPONSE_BYTES = 50 * 1024 * 1024;
+/** Timeout por defecto de cada intento, en ms. */
+const DEFAULT_TIMEOUT_MS = 30_000;
+/** Reintentos por defecto en consultas. */
+const DEFAULT_RETRIES = 1;
+/** Espera base por defecto entre reintentos, en ms (se duplica en cada intento). */
+const DEFAULT_RETRY_DELAY_MS = 1_000;
+
+/**
+ * Máximo que admite `setTimeout` (2^31-1 ms, unos 24,8 días): con un valor
+ * mayor (o `Infinity`) Node dispara el timer a 1 ms.
+ * @internal
+ */
+export const MAX_TIMER_MS = 2 ** 31 - 1;
+
+function invalidOption(field: string, value: unknown, rule: string): ArcaValidationError {
+  return new ArcaValidationError(
+    `${field} inválido: ${String(value)}. Tiene que ser ${rule}.`,
+    [{ field, message: `debe ser ${rule}`, value }],
+    field,
+  );
+}
+
+/** `true` si `value` es un entero entre `min` y `MAX_TIMER_MS`. */
+function isIntInRange(value: unknown, min: number): boolean {
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= MAX_TIMER_MS;
+}
+
+/**
+ * Valida las opciones de transporte presentes (las `undefined` usan su default):
+ * - `timeout`: entero entre 1 y 2147483647 (ms).
+ * - `retries` y `retryDelayMs`: enteros entre 0 y 2147483647.
+ * - `maxResponseBytes`: número positivo.
+ *
+ * @throws ArcaValidationError si alguna es inválida.
+ * @internal
+ */
+export function validateTransportOptions(
+  opts: Pick<SoapCallOptions, 'timeout' | 'retries' | 'retryDelayMs' | 'maxResponseBytes'> | undefined,
+): void {
+  if (!opts) return;
+  const { timeout, retries, retryDelayMs, maxResponseBytes } = opts;
+  if (timeout !== undefined && !isIntInRange(timeout, 1)) {
+    throw invalidOption('timeout', timeout, `un entero entre 1 y ${MAX_TIMER_MS} (milisegundos)`);
+  }
+  if (retries !== undefined && !isIntInRange(retries, 0)) {
+    throw invalidOption('retries', retries, `un entero entre 0 y ${MAX_TIMER_MS}`);
+  }
+  if (retryDelayMs !== undefined && !isIntInRange(retryDelayMs, 0)) {
+    throw invalidOption('retryDelayMs', retryDelayMs, `un entero entre 0 y ${MAX_TIMER_MS} (milisegundos)`);
+  }
+  if (maxResponseBytes !== undefined && (typeof maxResponseBytes !== 'number' || !(maxResponseBytes > 0))) {
+    throw invalidOption('maxResponseBytes', maxResponseBytes, 'un número positivo');
+  }
+}
 
 /** Respuesta HTTP normalizada (de `fetch` o del transporte legacy). */
 interface TransportResponse {
@@ -474,10 +540,10 @@ export async function soapCallWith(
   opts: SoapCallOptions | undefined,
   retryable: (error: ArcaSoapError) => boolean,
 ): Promise<Record<string, unknown>> {
-  const timeout = opts?.timeout ?? 30_000;
+  const timeout = opts?.timeout ?? DEFAULT_TIMEOUT_MS;
   const kind = opts?.kind ?? 'consulta';
-  const maxRetries = kind === 'emision' ? 0 : (opts?.retries ?? 1);
-  const baseDelay = opts?.retryDelayMs ?? 1_000;
+  const maxRetries = kind === 'emision' ? 0 : (opts?.retries ?? DEFAULT_RETRIES);
+  const baseDelay = opts?.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   const onEvent = opts?.onEvent;
   const methodName = opts?.methodName ?? 'unknown';
   const externalSignal = opts?.signal;
@@ -486,13 +552,7 @@ export async function soapCallWith(
   const maxResponseBytes = opts?.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES;
   const responseParser = opts?.parseNumbers === false ? soapResponseTextParser : soapResponseParser;
   const url = validateEndpoint(endpoint, 'endpoint');
-  if (typeof maxResponseBytes !== 'number' || !(maxResponseBytes > 0)) {
-    throw new ArcaValidationError(
-      `maxResponseBytes inválido: ${String(maxResponseBytes)}. Tiene que ser un número positivo.`,
-      [{ field: 'maxResponseBytes', message: 'debe ser un número positivo', value: maxResponseBytes }],
-      'maxResponseBytes',
-    );
-  }
+  validateTransportOptions(opts);
   const host = url.host;
 
   const envelope =
@@ -510,7 +570,8 @@ export async function soapCallWith(
 
   for (let attempt = 0; ; attempt++) {
     if (lastError) {
-      const delay = baseDelay * 2 ** (attempt - 1);
+      // Con muchos reintentos el backoff crece sin límite: se acota al máximo de `setTimeout`.
+      const delay = Math.min(baseDelay * 2 ** (attempt - 1), MAX_TIMER_MS);
       safeEmit(onEvent, {
         type: 'request:retry',
         endpoint,
@@ -656,10 +717,12 @@ export async function soapCallWith(
       // SOAP no admite DTDs: con `<!DOCTYPE` no se parsea (ni se expanden sus entidades).
       const hasDoctype = DOCTYPE_RE.test(responseText);
       let parsed: Record<string, unknown> | undefined;
+      let parseError: unknown;
       try {
         parsed = hasDoctype ? undefined : (responseParser.parse(responseText) as Record<string, unknown>);
-      } catch {
+      } catch (err) {
         parsed = undefined;
+        parseError = err;
       }
 
       // Un Fault se lanza igual con HTTP 500 o 200.
@@ -700,6 +763,7 @@ export async function soapCallWith(
         return new ArcaSoapError(
           `Respuesta inválida de ${methodName}: HTTP ${response.status} sin SOAP Envelope${doctype} (${excerpt ? `respuesta: ${excerpt}` : 'body vacío'})`,
           {
+            ...(parseError !== undefined ? { cause: parseError } : {}),
             statusCode: response.status,
             responseDate,
             uncertain: true,

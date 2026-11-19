@@ -200,17 +200,10 @@ export { ArcaValidationError }
 
 // @public
 export class ArcaWSFEError extends ArcaServiceError {
-    constructor(errors: {
-        code: number;
-        msg: string;
-    }[], servicio?: 'WSFE' | 'WSFEX');
+    constructor(errors: ServiceErrorDetail[], servicio?: 'WSFE' | 'WSFEX');
     // (undocumented)
     static readonly code: string;
-    // (undocumented)
-    readonly errors: {
-        code: number;
-        msg: string;
-    }[];
+    readonly errors: ServiceErrorDetail[];
     tieneCodigo(code: number): boolean;
 }
 

@@ -126,7 +126,7 @@ Reglas validadas localmente (el mensaje cita el código del manual WSFEv1 v4.8 o
 
 - `crearFactura(request: InvoiceRequest): Promise<FECAESolicitarResult>`: `{ ptoVta, cbteTipo, invoices: InvoiceDetail[] }`. Devuelve la respuesta tal cual: un comprobante con resultado 'R' no lanza. En lotes, `feCabResp.resultado` puede ser 'P' (parcial) y cada `feDetResp[i]` trae su resultado.
 - `crearFacturaAuto(ptoVta, cbteTipo, invoice)`, `ultimoComprobante(ptoVta, cbteTipo)`, `siguienteComprobante(...)`, `consultarComprobante(cbteTipo, ptoVta, cbteNro)`.
-- Valida: `ImpTotal` = `ImpTotConc + ImpNeto + ImpOpEx + ImpTrib + ImpIVA` (10048), `ImpIVA` = suma de `iva[].importe` (10023), `ImpTrib` = suma de `tributos[].importe` (10029), con el margen del manual (0,01 por elemento o 0,01 %); `condicionIvaReceptorId` obligatorio también con DocTipo 99 (10246). Importes redondeados a 2 decimales y `monCotiz` a 6, mitad al par (Round Half Even, criterio del manual; también en la API simplificada).
+- Valida: `ImpTotal` = `ImpTotConc + ImpNeto + ImpOpEx + ImpTrib + ImpIVA` (10048), `ImpIVA` = suma de `iva[].importe` (10023), `ImpTrib` = suma de `tributos[].importe` (10029), con el margen del manual (0,01 por elemento o 0,01 %); `condicionIvaReceptorId` obligatorio también con DocTipo 99 (10246). Importes redondeados a 2 decimales y `monCotiz` a 6, mitad al par (Round Half Even, criterio del manual; también en la API simplificada, incluidos el IVA sobre el neto y la base despejada de un `total`: neto 0,50 al 21 % → IVA 0,10).
 - Los campos de respuesta que ARCA puede omitir son opcionales en los tipos (ej: `feCabResp.fchProceso`, `resultGet.codAutorizacion`, `resultGet.monId`).
 
 ### Exportación WSFEX
@@ -179,7 +179,7 @@ await arca.facturarExpo({
 
 - `ArcaValidationError` (`field`, `details`): datos inválidos, no se envió nada.
 - `ArcaRechazoError` (`code` `ARCA_RECHAZO`, extiende `ArcaServiceError`; `operacion`, `errors`, `observaciones`: `{ code, msg }[]`): ARCA rechazó el comprobante (`Resultado` "R"), no se emitió. Lo lanzan `facturar`, `notaCredito`, `notaDebito`, `registrarFacturaCAEA`, `sinMovimientoCAEA`, `facturarExpo` y `recuperarComprobante`. En WSFEv1 los motivos vienen en `observaciones` (`errors` vacío); en WSFEX, `Motivos_Obs` como `{ code: 0, msg }`.
-- `ArcaWSFEError` (extiende `ArcaServiceError`; `errors: { code, msg }[]`, `tieneCodigo(code)`): ARCA rechazó el request (`Errors`/`FEXErr`), no se emitió.
+- `ArcaWSFEError` (extiende `ArcaServiceError`; `errors: { code, msg, rawCode? }[]` (`rawCode`: código original si no era numérico, con `code` 0), `tieneCodigo(code)`): ARCA rechazó el request (`Errors`/`FEXErr`), no se emitió.
 - `ArcaResultadoIncierto` (`intento`, `intentos`, `operacion`): emisión WSFEv1 sin respuesta confiable (timeout, red, HTTP 5xx, errores 500/501/502, respuesta ilegible). Resolver con `recuperarComprobante(e.intento)`.
 - `ArcaResultadoInciertoExpo` (`intento: { id, cbteNro, fecha }`, `request`): igual en `FEXAuthorize` (y 500/501/502/505). Reenviar la misma solicitud con el mismo `Id`: `facturarExpo({ ...opts, ...e.intento })` o `crearFacturaExportacion(e.request)`; si ya estaba autorizada vuelve con `reproceso: true`.
 - `ArcaConflictoExpo` (`id`, `request`, `respuesta`): el `Id` ya lo usaba otra solicitud y WSFEX devolvió otro comprobante (o `Reproceso = "S"` con un `Id` calculado). El del request no se autorizó: reintentar sin `id`.

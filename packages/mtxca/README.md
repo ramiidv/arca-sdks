@@ -127,14 +127,14 @@ Todos los métodos aceptan un último parámetro `opts?: CallOptions` con `signa
 
 ### Comprobantes con CAE
 
-| Método                                                   | Operación WSMTXCA                                                  |
-| -------------------------------------------------------- | ------------------------------------------------------------------ |
-| `autorizar(req, opts?)`                                  | `autorizarComprobante` (número automático si se omite)             |
-| `autorizarAjusteIVA(req, opts?)`                         | `autorizarAjusteIVA` (solo valida el XSD: tiene reglas propias)    |
-| `ultimoComprobante(ptoVta, cbteTipo, opts?)`             | `consultarUltimoComprobanteAutorizado`                             |
-| `siguienteComprobante(ptoVta, cbteTipo, opts?)`          | último + 1                                                         |
-| `consultarComprobante(cbteTipo, ptoVta, cbteNro, opts?)` | `consultarComprobante` → `{ comprobante, observaciones, evento? }` |
-| `urlQR(comprobante, resultado?, options?)`               | URL del código QR (RG 4892), sin request                           |
+| Método                                                   | Operación WSMTXCA                                                                                 |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `autorizar(req, opts?)`                                  | `autorizarComprobante` (número automático si se omite)                                            |
+| `autorizarAjusteIVA(req, opts?)`                         | `autorizarAjusteIVA` (valida el XSD y el dígito verificador de CUIT/CUIL; sin reglas de importes) |
+| `ultimoComprobante(ptoVta, cbteTipo, opts?)`             | `consultarUltimoComprobanteAutorizado`                                                            |
+| `siguienteComprobante(ptoVta, cbteTipo, opts?)`          | último + 1                                                                                        |
+| `consultarComprobante(cbteTipo, ptoVta, cbteNro, opts?)` | `consultarComprobante` → `{ comprobante, observaciones, evento? }`                                |
+| `urlQR(comprobante, resultado?, options?)`               | URL del código QR (RG 4892), sin request                                                          |
 
 ### Código QR (RG 4892)
 
@@ -149,16 +149,16 @@ Lanza `ArcaValidationError` si falta un dato (ej. la cotización de una moneda e
 
 ### CAEA
 
-| Método                                               | Operación WSMTXCA                                             |
-| ---------------------------------------------------- | ------------------------------------------------------------- |
-| `solicitarCAEA(periodo, orden, opts?)`               | `solicitarCAEA` (`periodo` AAAAMM, `orden` 1 o 2)             |
-| `consultarCAEA(caea, opts?)`                         | `consultarCAEA`                                               |
-| `consultarCAEAEntreFechas(desde, hasta, opts?)`      | `consultarCAEAEntreFechas`                                    |
-| `informarComprobanteCAEA(comp, opts?)`               | `informarComprobanteCAEA` (`comp.caea` = CAEA usado)          |
-| `informarAjusteIVACAEA(comp, opts?)`                 | `informarAjusteIVACAEA` (valida el XSD y `fechaHoraGen`, 754) |
-| `informarCAEANoUtilizado(caea, opts?)`               | `informarCAEANoUtilizado`                                     |
-| `informarCAEANoUtilizadoPtoVta(caea, ptoVta, opts?)` | `informarCAEANoUtilizadoPtoVta`                               |
-| `consultarPtosVtaCAEANoInformados(caea, opts?)`      | `consultarPtosVtaCAEANoInformados`                            |
+| Método                                               | Operación WSMTXCA                                                                                 |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `solicitarCAEA(periodo, orden, opts?)`               | `solicitarCAEA` (`periodo` AAAAMM, `orden` 1 o 2)                                                 |
+| `consultarCAEA(caea, opts?)`                         | `consultarCAEA`                                                                                   |
+| `consultarCAEAEntreFechas(desde, hasta, opts?)`      | `consultarCAEAEntreFechas`                                                                        |
+| `informarComprobanteCAEA(comp, opts?)`               | `informarComprobanteCAEA` (`comp.caea` = CAEA usado)                                              |
+| `informarAjusteIVACAEA(comp, opts?)`                 | `informarAjusteIVACAEA` (valida el XSD, el dígito verificador de CUIT/CUIL y `fechaHoraGen`, 754) |
+| `informarCAEANoUtilizado(caea, opts?)`               | `informarCAEANoUtilizado`                                                                         |
+| `informarCAEANoUtilizadoPtoVta(caea, ptoVta, opts?)` | `informarCAEANoUtilizadoPtoVta`                                                                   |
+| `consultarPtosVtaCAEANoInformados(caea, opts?)`      | `consultarPtosVtaCAEANoInformados`                                                                |
 
 ### Parámetros y estado
 

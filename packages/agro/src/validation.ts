@@ -10,6 +10,7 @@ import { ArcaValidationError, diasEntre } from '@ramiidv/arca-common';
 import type { ValidationErrorDetail } from '@ramiidv/arca-common';
 import { TIPO_CPE } from './constants.js';
 import { encodeRequest } from './schema.js';
+import type { Schema } from './schema.js';
 import {
   AUTORIZAR_AUTOMOTOR,
   AUTORIZAR_AUTOMOTOR_DG,
@@ -108,6 +109,9 @@ export function checkConceptoContingencia(input: Record<string, unknown>, errors
   }
 }
 
+/** `tipoEmbalaje` a granel: no lleva `cantidadUnidades` ni `kgLitroM3` (manual WSCPE §3.2). */
+const TIPO_EMBALAJE_GRANEL = 1;
+
 /**
  * @internal Datos que el manual (§3.2) pide "solo si" en la autorización de una
  * CPE DG: `cuitTitularPlanta` con `esUsuarioIndustria`, `cantidadUnidades` y
@@ -124,12 +128,12 @@ export function checkCargaDG(input: Record<string, unknown>, errors: ValidationE
   }
   const carga = input['datosCarga'] as Record<string, unknown> | undefined;
   if (!carga) return;
-  if (carga['tipoEmbalaje'] === 1) {
+  if (carga['tipoEmbalaje'] === TIPO_EMBALAJE_GRANEL) {
     for (const campo of ['cantidadUnidades', 'kgLitroM3']) {
       if (carga[campo] != null) {
         errors.push({
           field: `datosCarga.${campo}`,
-          message: `datosCarga.${campo}: no corresponde con tipoEmbalaje 1 (a granel)`,
+          message: `datosCarga.${campo}: no corresponde con tipoEmbalaje ${TIPO_EMBALAJE_GRANEL} (a granel)`,
           value: carga[campo],
         });
       }
@@ -292,24 +296,77 @@ export function checkLiquidacion(input: Record<string, unknown>, errors: Validat
   }
 }
 
+/** Validación de negocio que se suma al schema (ver `encodeRequest`). */
+type ExtraCheck = (input: Record<string, unknown>, errors: ValidationErrorDetail[]) => void;
+
+/** @internal Schema y validación de negocio de la solicitud de una operación. */
+export interface Solicitud {
+  readonly schema: Schema;
+  readonly check?: ExtraCheck;
+}
+
+const TABLA_SOLICITUDES = {
+  // WSCPE
+  autorizarCPEAutomotor: { schema: AUTORIZAR_AUTOMOTOR, check: requireOrigen },
+  autorizarCPEFerroviaria: { schema: AUTORIZAR_FERROVIARIA },
+  editarCPEAutomotor: { schema: EDITAR_AUTOMOTOR },
+  editarCPEFerroviaria: { schema: EDITAR_FERROVIARIA },
+  /** `editarCPEConfirmadaAutomotor` y `editarCPEConfirmadaFerroviaria` (mismo tipo). */
+  editarCPEConfirmada: { schema: EDITAR_CONFIRMADA },
+  confirmacionDefinitivaCPEAutomotor: { schema: CONFIRMACION_AUTOMOTOR },
+  confirmacionDefinitivaCPEFerroviaria: { schema: CONFIRMACION_FERROVIARIA },
+  autorizarCPEAutomotorDG: { schema: AUTORIZAR_AUTOMOTOR_DG, check: checkCargaDG },
+  autorizarCPEFerroviariaDG: { schema: AUTORIZAR_FERROVIARIA_DG, check: checkCargaDG },
+  autorizarCPEEmisionDestinoDG: { schema: AUTORIZAR_EMISION_DESTINO_DG, check: checkCargaDG },
+  // WSLPG
+  liquidacionAutorizar: { schema: LIQUIDACION_AUTORIZAR, check: checkLiquidacion },
+  liquidacionAjustarUnificado: { schema: AJUSTE_UNIFICADO, check: requireAjuste },
+  liquidacionAjustarContrato: { schema: AJUSTE_CONTRATO, check: requireAjuste },
+  lpgAutorizarAnticipo: { schema: AUTORIZAR_ANTICIPO },
+  cgAutorizar: { schema: CG_AUTORIZAR, check: checkBloqueCertificado },
+  cgInformarCalidad: { schema: CG_INFORMAR_CALIDAD, check: checkCalidadCg },
+  lsgAutorizar: { schema: LSG_AUTORIZAR },
+  lsgAjustarXCoe: { schema: LSG_AJUSTAR_X_COE, check: requireAjuste },
+  lsgAjustarXContrato: { schema: LSG_AJUSTAR_X_CONTRATO, check: requireAjuste },
+} satisfies Record<string, Solicitud>;
+
+/** @internal Operación con validador público (`validate*`). */
+export type OperacionValidada = keyof typeof TABLA_SOLICITUDES;
+
+/**
+ * @internal Solicitudes de las operaciones con validador público: las usan los
+ * clientes antes de enviar y las funciones `validate*`, así validan lo mismo.
+ */
+export const SOLICITUDES: Readonly<Record<OperacionValidada, Solicitud>> = TABLA_SOLICITUDES;
+
+/**
+ * @internal Valida y codifica la solicitud de `op` (ver `SOLICITUDES`).
+ * @param method Nombre de la operación en los mensajes de error (por defecto, `op`).
+ * @throws ArcaValidationError
+ */
+export function encodeSolicitud(op: OperacionValidada, params: unknown, method: string = op): Record<string, unknown> {
+  const { schema, check } = SOLICITUDES[op];
+  return encodeRequest(params, schema, method, check);
+}
+
 /** Valida una solicitud de `autorizarCPEAutomotor`. @throws ArcaValidationError */
 export function validateAutorizarCPEAutomotor(params: AutorizarCPEAutomotorParams): void {
-  encodeRequest(params, AUTORIZAR_AUTOMOTOR, 'autorizarCPEAutomotor', requireOrigen);
+  encodeSolicitud('autorizarCPEAutomotor', params);
 }
 
 /** Valida una solicitud de `autorizarCPEFerroviaria`. @throws ArcaValidationError */
 export function validateAutorizarCPEFerroviaria(params: AutorizarCPEFerroviariaParams): void {
-  encodeRequest(params, AUTORIZAR_FERROVIARIA, 'autorizarCPEFerroviaria');
+  encodeSolicitud('autorizarCPEFerroviaria', params);
 }
 
 /** Valida una solicitud de `editarCPEAutomotor`. @throws ArcaValidationError */
 export function validateEditarCPEAutomotor(params: EditarCPEAutomotorParams): void {
-  encodeRequest(params, EDITAR_AUTOMOTOR, 'editarCPEAutomotor');
+  encodeSolicitud('editarCPEAutomotor', params);
 }
 
 /** Valida una solicitud de `editarCPEFerroviaria`. @throws ArcaValidationError */
 export function validateEditarCPEFerroviaria(params: EditarCPEFerroviariaParams): void {
-  encodeRequest(params, EDITAR_FERROVIARIA, 'editarCPEFerroviaria');
+  encodeSolicitud('editarCPEFerroviaria', params);
 }
 
 /**
@@ -317,75 +374,75 @@ export function validateEditarCPEFerroviaria(params: EditarCPEFerroviariaParams)
  * `editarCPEConfirmadaFerroviaria` (mismo tipo). @throws ArcaValidationError
  */
 export function validateEditarCPEConfirmada(params: EditarCPEConfirmadaParams): void {
-  encodeRequest(params, EDITAR_CONFIRMADA, 'editarCPEConfirmada');
+  encodeSolicitud('editarCPEConfirmada', params);
 }
 
 /** Valida una solicitud de `confirmacionDefinitivaCPEAutomotor`. @throws ArcaValidationError */
 export function validateConfirmacionDefinitivaCPEAutomotor(params: ConfirmacionDefinitivaCPEAutomotorParams): void {
-  encodeRequest(params, CONFIRMACION_AUTOMOTOR, 'confirmacionDefinitivaCPEAutomotor');
+  encodeSolicitud('confirmacionDefinitivaCPEAutomotor', params);
 }
 
 /** Valida una solicitud de `confirmacionDefinitivaCPEFerroviaria`. @throws ArcaValidationError */
 export function validateConfirmacionDefinitivaCPEFerroviaria(params: ConfirmacionDefinitivaCPEFerroviariaParams): void {
-  encodeRequest(params, CONFIRMACION_FERROVIARIA, 'confirmacionDefinitivaCPEFerroviaria');
+  encodeSolicitud('confirmacionDefinitivaCPEFerroviaria', params);
 }
 
 /** Valida una solicitud de `autorizarCPEAutomotorDG`. @throws ArcaValidationError */
 export function validateAutorizarCPEAutomotorDG(params: AutorizarCPEAutomotorDGParams): void {
-  encodeRequest(params, AUTORIZAR_AUTOMOTOR_DG, 'autorizarCPEAutomotorDG', checkCargaDG);
+  encodeSolicitud('autorizarCPEAutomotorDG', params);
 }
 
 /** Valida una solicitud de `autorizarCPEFerroviariaDG`. @throws ArcaValidationError */
 export function validateAutorizarCPEFerroviariaDG(params: AutorizarCPEFerroviariaDGParams): void {
-  encodeRequest(params, AUTORIZAR_FERROVIARIA_DG, 'autorizarCPEFerroviariaDG', checkCargaDG);
+  encodeSolicitud('autorizarCPEFerroviariaDG', params);
 }
 
 /** Valida una solicitud de `autorizarCPEEmisionDestinoDG`. @throws ArcaValidationError */
 export function validateAutorizarCPEEmisionDestinoDG(params: AutorizarCPEEmisionDestinoDGParams): void {
-  encodeRequest(params, AUTORIZAR_EMISION_DESTINO_DG, 'autorizarCPEEmisionDestinoDG', checkCargaDG);
+  encodeSolicitud('autorizarCPEEmisionDestinoDG', params);
 }
 
 /** Valida una solicitud de `liquidacionAutorizar`. @throws ArcaValidationError */
 export function validateLiquidacion(params: LiquidacionAutorizarParams): void {
-  encodeRequest(params, LIQUIDACION_AUTORIZAR, 'liquidacionAutorizar', checkLiquidacion);
+  encodeSolicitud('liquidacionAutorizar', params);
 }
 
 /** Valida una solicitud de `liquidacionAjustarUnificado`. @throws ArcaValidationError */
 export function validateAjusteUnificado(params: AjusteUnificadoParams): void {
-  encodeRequest(params, AJUSTE_UNIFICADO, 'liquidacionAjustarUnificado', requireAjuste);
+  encodeSolicitud('liquidacionAjustarUnificado', params);
 }
 
 /** Valida una solicitud de `cgAutorizar`. @throws ArcaValidationError */
 export function validateCgAutorizar(params: CgAutorizarParams): void {
-  encodeRequest(params, CG_AUTORIZAR, 'cgAutorizar', checkBloqueCertificado);
+  encodeSolicitud('cgAutorizar', params);
 }
 
 /** Valida una solicitud de `liquidacionAjustarContrato`. @throws ArcaValidationError */
 export function validateAjusteContrato(params: AjusteContratoParams): void {
-  encodeRequest(params, AJUSTE_CONTRATO, 'liquidacionAjustarContrato', requireAjuste);
+  encodeSolicitud('liquidacionAjustarContrato', params);
 }
 
 /** Valida una solicitud de `lpgAutorizarAnticipo`. @throws ArcaValidationError */
 export function validateAutorizarAnticipo(params: AutorizarAnticipoParams): void {
-  encodeRequest(params, AUTORIZAR_ANTICIPO, 'lpgAutorizarAnticipo');
+  encodeSolicitud('lpgAutorizarAnticipo', params);
 }
 
 /** Valida una solicitud de `cgInformarCalidad`. @throws ArcaValidationError */
 export function validateCgInformarCalidad(params: CgInformarCalidadParams): void {
-  encodeRequest(params, CG_INFORMAR_CALIDAD, 'cgInformarCalidad', checkCalidadCg);
+  encodeSolicitud('cgInformarCalidad', params);
 }
 
 /** Valida una solicitud de `lsgAutorizar`. @throws ArcaValidationError */
 export function validateLsgAutorizar(params: LsgAutorizarParams): void {
-  encodeRequest(params, LSG_AUTORIZAR, 'lsgAutorizar');
+  encodeSolicitud('lsgAutorizar', params);
 }
 
 /** Valida una solicitud de `lsgAjustarXCoe`. @throws ArcaValidationError */
 export function validateLsgAjustarXCoe(params: LsgAjustarXCoeParams): void {
-  encodeRequest(params, LSG_AJUSTAR_X_COE, 'lsgAjustarXCoe', requireAjuste);
+  encodeSolicitud('lsgAjustarXCoe', params);
 }
 
 /** Valida una solicitud de `lsgAjustarXContrato`. @throws ArcaValidationError */
 export function validateLsgAjustarXContrato(params: LsgAjustarXContratoParams): void {
-  encodeRequest(params, LSG_AJUSTAR_X_CONTRATO, 'lsgAjustarXContrato', requireAjuste);
+  encodeSolicitud('lsgAjustarXContrato', params);
 }

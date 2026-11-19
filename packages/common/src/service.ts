@@ -1,9 +1,10 @@
 import { EventEmitter } from 'node:events';
 import { WSAA_ENDPOINTS } from './constants.js';
+import type { ServiceEndpoints } from './constants.js';
 import { validateEndpoint } from './endpoint.js';
 import { ArcaResponseError, ArcaValidationError } from './errors.js';
 import { anySignal } from './signals.js';
-import { arcaSoapCall, safeEmit } from './soap-client.js';
+import { arcaSoapCall, safeEmit, validateTransportOptions } from './soap-client.js';
 import type { ArcaSoapCallOptions } from './soap-client.js';
 import type {
   AccessTicket,
@@ -27,11 +28,11 @@ export type ServiceTransport = Pick<
   'timeout' | 'retries' | 'retryDelayMs' | 'onEvent' | 'fetch' | 'legacyTls' | 'maxResponseBytes'
 >;
 
-/** URLs de un servicio por entorno. */
-export interface EnvEndpoints {
-  production: string;
-  testing: string;
-}
+/**
+ * URLs de un servicio por entorno.
+ * @deprecated Usá `ServiceEndpoints` (misma forma: `{ testing, production }`).
+ */
+export type EnvEndpoints = ServiceEndpoints;
 
 /**
  * Configuración común de las clases principales de los SDKs (`ArcaSdkBase`).
@@ -137,11 +138,14 @@ export abstract class ArcaSdkBase<TService extends string = string> {
 
   /**
    * @throws ArcaValidationError si la CUIT es inválida, si el certificado o la
-   *   clave son inválidos, si `config.wsaa` es de otro entorno que `production`
-   *   o si algún `endpoints.*` no es una URL https.
+   *   clave son inválidos, si `config.wsaa` es de otro entorno que `production`,
+   *   si algún `endpoints.*` no es una URL https o si alguna opción numérica
+   *   (`timeout`, `retries`, `retryDelayMs`, `maxResponseBytes`,
+   *   `clockOffsetMs`, `*CooldownMs`) está fuera de rango.
    */
   constructor(config: ArcaSdkConfig, services: Readonly<Record<TService, string>>) {
     this.cuit = validateCuit(config.cuit);
+    validateTransportOptions(config);
     for (const [name, url] of Object.entries(config.endpoints ?? {})) {
       if (url !== undefined) validateEndpoint(url, `endpoints.${name}`);
     }
@@ -152,14 +156,17 @@ export abstract class ArcaSdkBase<TService extends string = string> {
 
     const emit = (event: ArcaEvent) => {
       safeEmit(config.onEvent, event);
-      safeEmit((e) => this.#emitter.emit(e.type, e), event);
+      // Cada handler por separado: uno que lanza no impide que se llame a los siguientes.
+      for (const handler of this.#emitter.listeners(event.type)) {
+        safeEmit(handler as (event: ArcaEvent) => void, event);
+      }
     };
     this.wsaa = config.wsaa ?? createWsaaClient(config, emit);
     this.transport = transportOptions(config, emit);
   }
 
   /** Endpoint del servicio según el entorno, salvo que se indique uno propio. */
-  protected endpoint(defaults: EnvEndpoints, override?: string): string {
+  protected endpoint(defaults: ServiceEndpoints, override?: string): string {
     return override ?? (this.production ? defaults.production : defaults.testing);
   }
 
@@ -179,8 +186,9 @@ export abstract class ArcaSdkBase<TService extends string = string> {
   }
 
   /**
-   * Suscribirse a eventos del SDK (`auth:*`, `request:*`). Los errores de los
-   * handlers se ignoran.
+   * Suscribirse a eventos del SDK (`auth:*`, `request:*`). Los handlers se
+   * llaman en el orden en que se suscribieron; si uno lanza, el error se
+   * ignora y se sigue con los demás (un handler roto no afecta la operación).
    */
   on(event: ArcaEvent['type'], handler: (event: ArcaEvent) => void): this {
     this.#emitter.on(event, handler);

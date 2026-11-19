@@ -6,12 +6,14 @@ import {
   NOTA_DEBITO_MAP,
   CBTES_ASOCIABLES,
   TributoTipo,
+  isFCE,
   isFacturaFCE,
   isNotaCredito,
   isNotaCreditoODebito,
   isNotaDebito,
   isTipoA,
   isTipoB,
+  isRemito,
   isUmedSinCantidad,
 } from '../src/constants.js';
 
@@ -111,5 +113,17 @@ describe('NOTA_CREDITO_MAP / NOTA_DEBITO_MAP (validación 10040)', () => {
     for (const t of [1, 6, 11, 20, 21, 201]) expect(isNotaCreditoODebito(t)).toBe(false);
     for (const t of [6, 7, 8, 9, 10, 35, 40, 61, 64, 206, 207, 208]) expect(isTipoB(t)).toBe(true);
     for (const t of [1, 11, 49, 51, 211]) expect(isTipoB(t)).toBe(false);
+  });
+});
+
+describe('isFCE e isRemito', () => {
+  it('isFCE: solo los tipos FCE que existen (201-203, 206-208, 211-213)', () => {
+    const fce = [201, 202, 203, 206, 207, 208, 211, 212, 213];
+    for (let t = 195; t <= 220; t++) expect(isFCE(t)).toBe(fce.includes(t));
+  });
+
+  it('isRemito: solo los remitos asociables, no cualquier número fuera de CbteTipo', () => {
+    for (const r of [88, 91, 988, 990, 991, 993, 994, 995, 996, 997]) expect(isRemito(r)).toBe(true);
+    for (const t of [1, 6, 11, 201, 204, 999, 0, 12345]) expect(isRemito(t)).toBe(false);
   });
 });

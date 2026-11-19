@@ -106,11 +106,46 @@ describe('getPersonaList_v2: una CUIT no hace fallar el lote', () => {
       ),
     );
     const list = await client.getConstanciasInscripcion(['20224107030', '20111111112', '27111111117']);
-    expect(list.map((p) => p.idPersona)).toEqual(['20224107030', '27111111117']);
+    expect(list.map((p) => p.idPersona)).toEqual(['20224107030', '20111111112', '27111111117']);
     expect(list[0].errorConstancia?.error[0]).toMatch(
       /Respuesta inválida de ARCA: falta getPersonaList_v2\.personaListReturn\.persona\[0\]\.datosRegimenGeneral\.impuesto\[0\]\.idImpuesto/,
     );
-    expect(list[1].errorConstancia).toBeUndefined();
+    expect(list[1].errorConstancia?.error).toEqual(['ARCA no devolvió datos para esta CUIT.']);
+    expect(list[2].errorConstancia).toBeUndefined();
+  });
+
+  it('una entrada por cada CUIT pedida: repetidas se consultan una vez; omitidas por ARCA vuelven con error', async () => {
+    const client = await padron();
+    const cap = mockFetch(
+      respuesta(A5, 'getPersonaList_v2', `<personaListReturn>${persona('20224107030')}</personaListReturn>`),
+    );
+    const cuits = ['20224107030', '20111111112', '20-22410703-0', 'abc'];
+    const list = await client.getConstanciasInscripcion(cuits);
+
+    expect(requestBody(cap.bodies[0], 'getPersonaList_v2')['idPersona']).toEqual(['20224107030', '20111111112']);
+    expect(list).toHaveLength(cuits.length);
+    expect(list.map((p) => p.idPersona)).toEqual(['20224107030', '20111111112', '20224107030', 'abc']);
+    expect(list[0].tipoPersona).toBe('FISICA');
+    expect(list[2]).toEqual(list[0]);
+    expect(list[1]).toEqual({
+      idPersona: '20111111112',
+      impuestos: [],
+      errorConstancia: { error: ['ARCA no devolvió datos para esta CUIT.'], idPersona: '20111111112' },
+    });
+    expect(list[3].errorConstancia?.error[0]).toMatch(/No se consultó a ARCA\.$/);
+  });
+
+  it('lo que ARCA devuelve sin haberse pedido va al final', async () => {
+    const client = await padron();
+    mockFetch(
+      respuesta(
+        A5,
+        'getPersonaList_v2',
+        `<personaListReturn>${persona('27111111117')}${persona('20224107030')}</personaListReturn>`,
+      ),
+    );
+    const list = await client.getConstanciasInscripcion(['20224107030']);
+    expect(list.map((p) => p.idPersona)).toEqual(['20224107030', '27111111117']);
   });
 });
 

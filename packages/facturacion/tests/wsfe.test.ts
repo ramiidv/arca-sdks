@@ -21,6 +21,7 @@ import {
   wsfeResponse,
   wsfexResponse,
 } from './helpers.js';
+import { mockFetchByMethod } from '@ramiidv/arca-common/testing';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -553,6 +554,136 @@ describe('parámetros', () => {
     expect(b).toBe(a);
     expect(c).toBe(a);
     expect(mock.count('FEParamGetTiposIva')).toBe(2);
+  });
+});
+
+describe('cache de parámetros y signal', () => {
+  const TABLA = () =>
+    wsfeResponse('FEParamGetTiposIva', '<ResultGet><IvaTipo><Id>5</Id><Desc>21%</Desc></IvaTipo></ResultGet>');
+
+  /** fetch que responde la tabla a los `ms` milisegundos, o rechaza si se aborta el request. */
+  function fetchLento(ms = 30) {
+    return mockFetchByMethod({
+      FEParamGetTiposIva: (req) =>
+        new Promise<Response>((resolve, reject) => {
+          const t = setTimeout(() => resolve(TABLA()), ms);
+          req.signal?.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(t);
+              reject(req.signal?.reason);
+            },
+            { once: true },
+          );
+        }),
+    });
+  }
+
+  it('si un llamador aborta, los concurrentes reciben el resultado del request compartido', async () => {
+    const fetch = fetchLento();
+    const arca = await arcaDePrueba({ fetch, retries: 0 });
+    const controller = new AbortController();
+    const primero = arca.getTiposIva({ signal: controller.signal });
+    const segundo = arca.getTiposIva();
+    controller.abort();
+    const err = await primero.catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaSoapError);
+    expect(err.aborted).toBe(true);
+    expect(await segundo).toEqual([{ id: 5, desc: '21%' }]);
+    expect(fetch.calls).toHaveLength(1);
+    // Quedó cacheado: no hay otro request.
+    await arca.getTiposIva();
+    expect(fetch.calls).toHaveLength(1);
+  });
+
+  it('con el signal ya abortado no inicia el request', async () => {
+    const fetch = fetchLento();
+    const arca = await arcaDePrueba({ fetch });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(arca.getTiposIva({ signal: controller.signal })).rejects.toMatchObject({ aborted: true });
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  it('el signal de la config sí cancela el request compartido', async () => {
+    const fetch = fetchLento();
+    const controller = new AbortController();
+    const arca = await arcaDePrueba({ fetch, retries: 0, signal: controller.signal });
+    const a = arca.getTiposIva();
+    const b = arca.getTiposIva();
+    controller.abort();
+    await expect(a).rejects.toBeInstanceOf(ArcaSoapError);
+    await expect(b).rejects.toBeInstanceOf(ArcaSoapError);
+  });
+
+  it('sin cache (paramCacheTTLMs: 0) el signal del llamador cancela su propio request', async () => {
+    const fetch = fetchLento(150);
+    const arca = await arcaDePrueba({ fetch, retries: 0, paramCacheTTLMs: 0 });
+    const controller = new AbortController();
+    const p = arca.getTiposIva({ signal: controller.signal });
+    const otro = arca.getTiposIva();
+    await vi.waitFor(() => expect(fetch.calls).toHaveLength(2), { interval: 5 });
+    controller.abort();
+    await expect(p).rejects.toMatchObject({ aborted: true });
+    expect(await otro).toEqual([{ id: 5, desc: '21%' }]);
+    expect(fetch.calls).toHaveLength(2);
+  });
+});
+
+describe('errores de WSFEv1', () => {
+  it('600 después de otro código → ArcaAuthError con faultCode 600', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FEParamGetTiposIva: wsfeErrores('FEParamGetTiposIva', [
+        { code: 10016, msg: 'Otro' },
+        { code: 600, msg: 'ValidacionDeToken' },
+      ]),
+    });
+    await expect(arca.getTiposIva()).rejects.toMatchObject({ code: 'ARCA_AUTH_ERROR', faultCode: '600' });
+  });
+
+  it('un código no numérico se conserva en rawCode', async () => {
+    const arca = await arcaDePrueba();
+    mockArcaFetch({
+      FEParamGetTiposIva: wsfeResponse(
+        'FEParamGetTiposIva',
+        '<Errors><Err><Code>X99</Code><Msg>Error raro</Msg></Err></Errors>',
+      ),
+    });
+    const err = await arca.getTiposIva().catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaWSFEError);
+    expect(err.errors).toEqual([{ code: 0, msg: 'Error raro', rawCode: 'X99' }]);
+    expect(err.message).toBe('WSFE Error: [X99] Error raro');
+  });
+});
+
+describe('crearFacturaAuto', () => {
+  it('usa el último autorizado + 1 como CbteDesde y CbteHasta', async () => {
+    const arca = await arcaDePrueba();
+    const mock = mockArcaFetch({
+      FECompUltimoAutorizado: ultimoAutorizado(1, CbteTipo.FACTURA_B, 149),
+      FECAESolicitar: caeAprobado({ ptoVta: 1, cbteTipo: CbteTipo.FACTURA_B, cbteNro: 150 }),
+    });
+    const res = await arca.crearFacturaAuto(1, CbteTipo.FACTURA_B, {
+      concepto: 1,
+      docTipo: DocTipo.CONSUMIDOR_FINAL,
+      docNro: 0,
+      cbteFch: '20261030',
+      impTotal: 121,
+      impTotConc: 0,
+      impNeto: 100,
+      impOpEx: 0,
+      impTrib: 0,
+      impIva: 21,
+      monId: 'PES',
+      monCotiz: 1,
+      condicionIvaReceptorId: CondicionIva.CONSUMIDOR_FINAL,
+      iva: [{ id: IvaTipo.IVA_21, baseImp: 100, importe: 21 }],
+    });
+    const det = mock.last('FECAESolicitar').params.FeCAEReq.FeDetReq.FECAEDetRequest;
+    expect(det.CbteDesde).toBe(150);
+    expect(det.CbteHasta).toBe(150);
+    expect(res.feDetResp[0].cae).toBe('76123456789012');
   });
 });
 

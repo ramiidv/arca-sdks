@@ -28,7 +28,7 @@ import type {
   LiquidacionAutorizarParams,
   LsgAutorizarParams,
 } from '../src/index.js';
-import { CUIT, CUIT2, CUIT3, LPG_NS, hang, http503, keys, lpgResp, setup } from './helpers.js';
+import { CUIT, CUIT2, CUIT3, LPG_NS, envelope, hang, http503, keys, lpgResp, setup } from './helpers.js';
 import { soapFaultResponse } from '@ramiidv/arca-common/testing';
 
 function liquidacion(): LiquidacionAutorizarParams {
@@ -997,6 +997,19 @@ describe('WSLPG: anulación de certificaciones', () => {
       eventos: [{ codigo: '1', descripcion: 'Liquidación registrada' }],
     });
   });
+
+  it.each([
+    ['cgSolicitarAnulacion', 'oReturn vacío', lpgResp('cgSolicitarAnulacionResp', 'oReturn', '')],
+    ['cgSolicitarAnulacion', 'sin oReturn', envelope('cgSolicitarAnulacionResp', LPG_NS, '')],
+    ['cgConfirmarAnulacion', 'oReturn vacío', lpgResp('cgConfirmarAnulacionResp', 'oReturn', '')],
+    ['cgConfirmarAnulacion', 'sin oReturn', envelope('cgConfirmarAnulacionResp', LPG_NS, '')],
+  ] as const)('%s con %s → ArcaAgroResponseError uncertain', async (method, _, xml) => {
+    const { agro } = setup(() => xml);
+    const e: any = await agro.lpg[method]('330200000099').catch((err: any) => err);
+    expect(e).toBeInstanceOf(ArcaAgroResponseError);
+    expect(e.uncertain).toBe(true);
+    expect(e.message).toContain('<oReturn>');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1149,6 +1162,42 @@ describe('WSLPG: consultas de certificación y ajuste', () => {
     expect(keys(calls[0].req)).toEqual(['auth', 'nroContrato', 'cuitComprador', 'cuitVendedor', 'codGrano']);
     const vacia = setup(() => lpgResp('liquidacionPorContratoConsultarResp', 'liqPorContratoCons', EVENTO));
     expect(await vacia.agro.lpg.liquidacionPorContratoConsultar(params)).toEqual([]);
+  });
+
+  it.each([
+    [
+      'liquidacionPorContratoConsultar',
+      'liquidacionPorContratoConsultarResp',
+      (a: ArcaAgro) =>
+        a.lpg.liquidacionPorContratoConsultar({
+          nroContrato: 1,
+          cuitComprador: CUIT,
+          cuitVendedor: CUIT2,
+          codGrano: 23,
+        }),
+    ],
+    [
+      'lsgConsultarXContrato',
+      'lsgConsultarXContratoResp',
+      (a: ArcaAgro) =>
+        a.lpg.lsgConsultarXContrato({ nroContrato: 1, cuitComprador: CUIT, cuitVendedor: CUIT2, codGrano: 23 }),
+    ],
+  ])('%s sin <liqPorContratoCons> → ArcaAgroResponseError (no [] en silencio)', async (_, resp, run) => {
+    const { agro } = setup(() => envelope(resp, LPG_NS, '<otro>1</otro>'));
+    const e: any = await run(agro).catch((err: any) => err);
+    expect(e).toBeInstanceOf(ArcaAgroResponseError);
+    expect(e.uncertain).toBe(false);
+    expect(e.message).toContain('<liqPorContratoCons>');
+    // Vacío (`<liqPorContratoCons/>`) es una lista sin resultados.
+    const vacia = setup(() => envelope(resp, LPG_NS, '<liqPorContratoCons/>'));
+    expect(await run(vacia.agro)).toEqual([]);
+  });
+
+  it('asociarLiquidacionAContrato sin <liquidacion> → ArcaAgroResponseError uncertain', async () => {
+    const { agro } = setup(() => envelope('asociarLiqAContratoResp', LPG_NS, ''));
+    const e: any = await agro.lpg.asociarLiquidacionAContrato(asociar()).catch((err: any) => err);
+    expect(e).toBeInstanceOf(ArcaAgroResponseError);
+    expect(e.uncertain).toBe(true);
   });
 
   it('cgBuscarCtg', async () => {

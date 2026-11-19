@@ -19,9 +19,6 @@ import type { PadronMetadata } from './types.js';
 export { dec, id, int, list, must, obj, str } from '@ramiidv/arca-common/schema';
 export type { Schema } from '@ramiidv/arca-common/schema';
 
-/** Registro de una respuesta SOAP parseada. */
-export type SoapRecord = Record<string, unknown>;
-
 const responseError = (message: string) =>
   new ArcaPadronError(message.replace(/^Respuesta inválida:/, 'Respuesta inválida de ARCA:'));
 

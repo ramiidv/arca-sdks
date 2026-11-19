@@ -71,7 +71,7 @@ Emisiones (nunca se reintentan):
 - Ediciones (`editarCPEAutomotor`, `editarCPEFerroviaria`, `editarCPEConfirmada*`): ARCA anula los CUIT opcionales no informados. `opts: EditarCPEOptions { preservarIntervinientes?: boolean, signal? }`: con `true` valida, consulta la CPE (si la consulta falla no edita) y completa los CUIT `undefined` con el valor vigente; `null` los quita.
 - Reglas del manual validadas localmente: hasta 3 dominios (2144), codigoTurno alfanumérico con `-_/` y espacios intermedios (2244), cosecha 4 dígitos (2073), RENSPA `nn.nnn.n.nnnnn/nn` (2153), motivos de anulación/rechazo 1-3, contingencia según tipoCPE (A-F; G solo en ferroviaria 75 y ferroviaria DG 285; ductos DG 287: A, C, D, E, F), cierre y desactivación A-C, consultarCPEPorDestino rango <= 3 días (2152).
 - Devuelven `CPEResultado { cabecera?, pdf?, metadata?, advertencias? }`: `editarCPEAutomotor`, `editarCPEConfirmadaAutomotor`, `confirmarArriboCPE`, `confirmacionDefinitivaCPEAutomotor`, `descargadoDestinoCPE`, `rechazoCPE`, `anularCPE`, `nuevoDestinoDestinatarioCPEAutomotor`, `regresoOrigenCPEAutomotor`, `desvioCPEAutomotor`, `informarContingencia`, `cerrarContingenciaCPE`, `editarCPEFerroviaria`, `editarCPEConfirmadaFerroviaria`, `confirmacionDefinitivaCPEFerroviaria`, `nuevoDestinoDestinatarioCPEFerroviaria`, `regresoOrigenCPEFerroviaria`, `desvioCPEFerroviaria`
-- Comunes a automotor y ferroviaria (según `cartaPorte.tipoCPE`, manual §2.8): `confirmarArriboCPE`, `descargadoDestinoCPE`, `rechazoCPE`, `anularCPE`, `informarContingencia`, `cerrarContingenciaCPE`
+- Comunes a automotor y ferroviaria (según `cartaPorte.tipoCPE`, manual WSCPE §2.9): `confirmarArriboCPE`, `descargadoDestinoCPE`, `rechazoCPE`, `anularCPE`, `informarContingencia`, `cerrarContingenciaCPE`
 
 Consultas (se reintentan; listas vacías → `[]`, también si el único error es el 800 "No existen solicitudes para los parámetros indicados"; fuera de las listas el 800 lanza):
 - `consultarCPEAutomotor({ cuitSolicitante?, cartaPorte? | nroCTG? })` → `CPEAutomotorDetalle`
@@ -146,15 +146,15 @@ Todos los requests se validan localmente contra el XSD antes de enviarse (`ArcaV
 ## Errores
 
 - `ArcaValidationError`: datos inválidos (no se envía el request).
-- `ArcaAgroServiceError extends ArcaServiceError`: errores de negocio de ARCA; `errors[]`, `service`, `method`, `response`, `uncertain`. Un `<error>` sin código cuenta como error; solo se ignora el código explícito `0`.
+- `ArcaAgroServiceError extends ArcaServiceError`: errores de negocio de ARCA; `errors[]`, `service` (`AgroServiceName`: `'WSCPE' | 'WSLPG'`), `method`, `response`, `uncertain`. Un `<error>` sin código cuenta como error; solo se ignora el código explícito `0`.
 - `ArcaSoapError`: transporte/HTTP/SOAP Fault; `uncertain` en emisiones (no en Faults `Client`); `faultDetail` con el `<detail>`. `cpeFaultException(error)` devuelve el `Exception` de WSCPE (`uuid`, `timestamp`, `businessErrorId`, `exceptionDetails`, `serverName`).
-- `ArcaAgroResponseError extends ArcaResponseError`: falta un dato imprescindible (nroCTG, coe, nroOrden) o una consulta no tiene la forma del XSD; `uncertain` en emisiones.
+- `ArcaAgroResponseError extends ArcaResponseError`: falta un dato imprescindible (nroCTG, coe, nroOrden) o una consulta no tiene la forma del XSD; `uncertain` en emisiones; `cause` con el error original si lo envuelve.
 - `ArcaAuthError`, `ArcaTicketVigenteError`: WSAA.
 - `ArcaRechazoError` (common, `resultado: 'R'` en otros SDKs): este SDK no lo lanza. WSCPE y WSLPG no tienen `resultado: 'R'`; un rechazo viene en `errores` y lanza `ArcaAgroServiceError`. Lo que devuelve una emisión es siempre una operación aceptada. `catch (e) { if (e instanceof ArcaServiceError) ... }` cubre ambos.
 
 Errores admitidos: WSCPE 550 y WSLPG 1021 ("Error al generar el archivo pdf", operación Aceptada) no lanzan; el resultado viene sin `pdf` y con `advertencias: ServiceErrorDetail[]`. Si vienen junto con otro error, se lanza con todos.
 
-`uncertain: true` en emisiones: `ArcaSoapError` (timeout, 5xx, Fault Server), `ArcaAgroResponseError` (sin identificador) o `ArcaAgroServiceError` cuando la respuesta trae errores y también el resultado (`cabecera.nroCTG`/`cabecera.estado` en WSCPE; `autorizacion.coe`, `ajusteUnificado.coe`, `ajusteContrato.coe`, o `coe` en los ajustes `lsg*` en WSLPG; no lo detectan `cgSolicitarAnulacion`/`cgConfirmarAnulacion` ni las operaciones sobre un comprobante existente, `asociarLiquidacionAContrato`, `lsgAsociarAContrato` y `cgInformarCalidad`, cuya respuesta trae el COE informado). En una emisión aceptada, un campo secundario con forma inválida se omite en lugar de lanzar.
+`uncertain: true` en emisiones: `ArcaSoapError` (timeout, 5xx, Fault Server), `ArcaAgroResponseError` (sin identificador, o sin `oReturn` / respuesta vacía en `cgSolicitarAnulacion`/`cgConfirmarAnulacion`) o `ArcaAgroServiceError` cuando la respuesta trae errores y también el resultado (`cabecera.nroCTG`/`cabecera.estado` en las autorizaciones de WSCPE: en las operaciones sobre una CPE existente un error no es incierto; `autorizacion.coe`, `ajusteUnificado.coe`, `ajusteContrato.coe`, o `coe` en los ajustes `lsg*` en WSLPG; no lo detectan `cgSolicitarAnulacion`/`cgConfirmarAnulacion` ni las operaciones sobre un comprobante existente, `asociarLiquidacionAContrato`, `lsgAsociarAContrato` y `cgInformarCalidad`, cuya respuesta trae el COE informado). En una emisión aceptada, un campo secundario con forma inválida se omite en lugar de lanzar.
 
 ## Recuperar una emisión incierta
 

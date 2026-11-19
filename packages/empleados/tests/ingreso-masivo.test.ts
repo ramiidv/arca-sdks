@@ -245,7 +245,10 @@ describe('ArcaEmpleados', () => {
     expect(sr.cantidad).toBe(1);
     // no estricto: no aplica reglas de negocio
     new ArcaEmpleados({ strict: false, fechaReferencia: '2026-11-01' }).alta({ ...alta(), fechaInicio: '2027-06-01' });
-    expect(() => new ArcaEmpleados({ fechaReferencia: '2026-13-01' })).toThrow(TypeError);
+    expect(() => new ArcaEmpleados({ fechaReferencia: '2026-13-01' })).toThrow(ArcaValidationError);
+    const err = capturar(() => new ArcaEmpleados({ fechaReferencia: 'x' }));
+    expect(err).toBeInstanceOf(ArcaValidationError);
+    expect((err as ArcaValidationError).details).toMatchObject([{ field: 'fechaReferencia', value: 'x' }]);
   });
 
   it('rechaza un movimiento distinto al del método', () => {

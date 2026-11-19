@@ -65,8 +65,6 @@ const responses: [nombre: string, schema: Schema, tipoXsd: string][] = [
   ['obtenerRemitos', RESP.obtenerRemitos, 'ObtenerRemitosReturnType'],
   ['operacion', RESP.operacion, 'OperacionFECredReturnType'],
   ['rechazarNotaDC', RESP.rechazarNotaDC, 'RechazarNotaDCReturnType'],
-  ['info (OperacionFECred)', RESP.info, 'OperacionFECredReturnType'],
-  ['info (RechazarNotaDC)', RESP.info, 'RechazarNotaDCReturnType'],
   ['consultarCuentasEnAgtDptoCltv', RESP.consultarCuentasEnAgtDptoCltv, 'ConsultarCuentasEnAgtDptoCltvReturnType'],
   ['consultarFacturasAgtDptoCltv', RESP.consultarFacturasAgtDptoCltv, 'ConsultarFacturasAgtDptoCltvReturnType'],
   ['consultarTiposRetenciones', RESP.consultarTiposRetenciones, 'ConsultarTiposRetencionesReturnType'],

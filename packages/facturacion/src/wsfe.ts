@@ -35,7 +35,7 @@ type R = Record<string, unknown>;
 /** `Errors` de una respuesta de WSFEv1 como `ArcaWSFEError`, o `undefined`. */
 function erroresDe(result: R): ArcaWSFEError | undefined {
   const errors = extractServiceErrors(result);
-  return errors.length > 0 ? new ArcaWSFEError(errors.map((e) => ({ code: e.code, msg: e.msg }))) : undefined;
+  return errors.length > 0 ? new ArcaWSFEError(errors) : undefined;
 }
 
 /**
@@ -45,7 +45,7 @@ function erroresDe(result: R): ArcaWSFEError | undefined {
 function checkErrors(result: R): void {
   const error = erroresDe(result);
   if (!error) return;
-  if (WSFE_ERRORES_AUTH.some((c) => error.tieneCodigo(c))) throw authErrorDe(error);
+  if (WSFE_ERRORES_AUTH.some((c) => error.tieneCodigo(c))) throw authErrorDe(error, WSFE_ERRORES_AUTH);
   throw error;
 }
 
@@ -445,13 +445,19 @@ export class WsfeClient extends SoapServiceClient {
     }
     checkErrors(raw);
     let result: CaeaSinMovResult | undefined;
+    let cause: unknown;
     try {
       result = decodeArca<CaeaSinMovResult>(raw, S.CAEA_SIN_MOV_RESP, method, 'emision');
-    } catch {
-      // Forma inválida: se trata como respuesta sin Resultado.
+    } catch (err) {
+      // Forma inválida: se trata como respuesta sin Resultado (el error de decodificación queda en `cause`).
+      cause = err;
     }
     if (result?.resultado !== 'A' && result?.resultado !== 'R') {
-      throw new ArcaResponseError(`Respuesta de ${method} sin Resultado`, true);
+      throw new ArcaResponseError(
+        `Respuesta de ${method} sin Resultado`,
+        true,
+        cause !== undefined ? { cause } : undefined,
+      );
     }
     return result;
   }
@@ -489,7 +495,8 @@ export class WsfeClient extends SoapServiceClient {
 // ============================================================
 
 const presente = (v: unknown) => v !== undefined && v !== null && v !== '';
-const lista = <T>(v: T[] | undefined) => (v && v.length > 0 ? v : undefined);
+/** La lista si tiene elementos; si no, `undefined` (no se envía). También la usa WSFEX. */
+export const lista = <T>(v: T[] | undefined): T[] | undefined => (v && v.length > 0 ? v : undefined);
 
 /**
  * Campos de un `InvoiceDetail` que se envían en el `FEDetRequest`. Los

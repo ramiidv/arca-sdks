@@ -8,9 +8,8 @@ import { ArcaResponseError, formatServiceErrors } from '@ramiidv/arca-common';
 import type { AccessTicket, CallOptions, ServiceErrorDetail, SoapOperationKind } from '@ramiidv/arca-common';
 import type { Field, Schema } from '@ramiidv/arca-common/schema';
 import { ArcaAgroResponseError, ArcaAgroServiceError } from './errors.js';
+import type { AgroServiceName } from './errors.js';
 import { decodeResponse } from './schema.js';
-
-export type AgroServiceName = 'WSCPE' | 'WSLPG';
 
 /**
  * Códigos de error que ARCA informa en `errores` sin rechazar la operación
@@ -146,7 +145,7 @@ export function decodeResult<T>(node: unknown, schema: Schema, path: string, kin
   try {
     return decodeTolerant(node, schema, path) as T;
   } catch (e) {
-    if (e instanceof ArcaResponseError) throw new ArcaAgroResponseError(e.message, true);
+    if (e instanceof ArcaResponseError) throw new ArcaAgroResponseError(e.message, true, { cause: e });
     throw e;
   }
 }

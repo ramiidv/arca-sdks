@@ -16,6 +16,21 @@ describe('calcularTotales', () => {
     expect(iva[0]).toEqual({ id: IvaTipo.IVA_21, baseImp: 100, importe: 21 });
   });
 
+  it.each([
+    // [neto, alícuota, IVA]: los empates exactos (x,xx5) se redondean al centavo par.
+    [0.5, IvaTipo.IVA_21, 0.1], // 0,105 → 0,10
+    [1.5, IvaTipo.IVA_21, 0.32], // 0,315 → 0,32
+    [0.1, IvaTipo.IVA_5, 0], // 0,005 → 0,00
+    [0.6, IvaTipo.IVA_2_5, 0.02], // 0,015 → 0,02
+    [0.2, IvaTipo.IVA_2_5, 0], // 0,005 → 0,00
+    [0.51, IvaTipo.IVA_21, 0.11], // 0,1071 → 0,11 (sin empate)
+  ])('IVA sobre el neto %d (IvaTipo %i): mitad al par → %d', (neto, alicuota, esperado) => {
+    const { importes, iva } = calcularTotales([{ neto, iva: alicuota }]);
+    expect(importes.iva).toBe(esperado);
+    expect(iva[0].importe).toBe(esperado);
+    expect(importes.total).toBe(Math.round((neto + esperado) * 100) / 100);
+  });
+
   it('agrupa múltiples items por alícuota', () => {
     const { importes, iva } = calcularTotales([
       { neto: 1000, iva: IvaTipo.IVA_21 },

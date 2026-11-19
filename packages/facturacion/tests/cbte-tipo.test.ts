@@ -38,4 +38,15 @@ describe('resolverCbteTipo', () => {
   it('emisor que no puede emitir A/B/C', () => {
     expect(() => resolverCbteTipo(CondicionIva.CONSUMIDOR_FINAL, RI)).toThrow(ArcaValidationError);
   });
+
+  it('clase de comprobante desconocida (incluidas las propiedades heredadas de Object)', () => {
+    expect(() => resolverCbteTipo(RI, RI, 'recibo' as never)).toThrow(/clase de comprobante desconocida: recibo/);
+    expect(() => resolverCbteTipo(RI, RI, 'toString' as never)).toThrow(ArcaValidationError);
+  });
+
+  it('receptor desconocido', () => {
+    expect(() => resolverCbteTipo(RI, 999 as CondicionIva)).toThrow(
+      /condición frente al IVA del receptor desconocida: 999/,
+    );
+  });
 });

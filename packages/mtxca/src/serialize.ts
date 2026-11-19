@@ -10,8 +10,8 @@ type R = Record<string, unknown>;
 /** Reglas de negocio que se reportan junto con las del XSD (ver `validation.ts`). */
 export type ReglasComprobante = (c: MtxcaComprobanteBase, errors: ValidationErrorDetail[]) => void;
 
-/** Tipos de documento que son CUIT/CUIL (dígito verificador). */
-const DOC_CUIT = new Set([80, 86]);
+/** Tipos de documento con dígito verificador: CUIT (80) y CUIL (86). */
+const DOC_CON_DV = new Set([80, 86]);
 
 function isObject(v: unknown): v is R {
   return v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date);
@@ -48,7 +48,7 @@ function normalizar(c: R): R {
 /** Con tipo de documento 80/86 el número es un CUIT: se valida el dígito verificador. */
 function validarCuits(c: R, errors: ValidationErrorDetail[]): void {
   const check = (tipo: unknown, nro: unknown, field: string) => {
-    if (!DOC_CUIT.has(tipo as number) || typeof nro !== 'string' || !/^\d{1,18}$/.test(nro)) return;
+    if (!DOC_CON_DV.has(tipo as number) || typeof nro !== 'string' || !/^\d{1,18}$/.test(nro)) return;
     try {
       validateCuit(nro);
     } catch (e) {

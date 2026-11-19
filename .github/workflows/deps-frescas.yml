@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [22, 24]
+        node-version: [22.12.0, 22, 24]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -61,7 +61,7 @@ jobs:
         run: |
           titulo="Dependencias frescas: falla con las últimas versiones de los rangos"
           numero=$(gh issue list --state open --search "\"$titulo\" in:title" --json number --jq '.[0].number')
-          cuerpo="La corrida mensual sin lockfile falló: $RUN_URL. Alguna dependencia publicó una versión (dentro de los rangos que declaran los paquetes) que rompe el build o los tests. Los usuarios que instalen hoy la van a recibir."
+          cuerpo="La corrida mensual sin lockfile falló: $RUN_URL. Alguna dependencia publicó una versión dentro de los rangos declarados que rompe el build o los tests. Si es una dependencia de runtime (fast-xml-parser, node-forge), los usuarios que instalen hoy la van a recibir; si es una herramienta de desarrollo (typescript, vitest, biome…), afecta solo a este repo."
           if [ -n "$numero" ]; then
             gh issue comment "$numero" --body "$cuerpo"
           else

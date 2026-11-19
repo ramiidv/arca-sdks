@@ -121,6 +121,9 @@ const cpeCases: Case[] = [
     [
       ['autorizarCPEAutomotor', C.R_DETALLE_AUTOMOTOR],
       ['consultarCPEAutomotor', C.R_DETALLE_AUTOMOTOR],
+      // Excepción de tipo (el contrato no compara escalares): `transporte.tarifa`
+      // es `xsd:long` en el XSD pero se decodifica con `dec(2)`, porque la tarifa
+      // se informa con decimales (`Tarifa`) y ARCA puede devolverla así.
       ['autorizarCPEFerroviaria', C.R_DETALLE_FERROVIARIA],
       ['consultarCPEFerroviaria', C.R_DETALLE_FERROVIARIA],
       ['consultaCPEFerroviariaPorNroOperativo', C.R_OPERATIVO_FERROVIARIO],

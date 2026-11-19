@@ -34,8 +34,6 @@
     "build": "node ../../scripts/clean-dist.mjs && tsc -p tsconfig.build.json",
     "clean": "node ../../scripts/clean-dist.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
     "lint:pkg": "publint --strict && attw --pack . --profile esm-only"
   },
   "keywords": [

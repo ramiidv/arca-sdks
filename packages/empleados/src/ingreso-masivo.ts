@@ -68,6 +68,10 @@ export class ArcaEmpleados {
   private readonly fechaReferencia: FechaInput | undefined;
   private entradas: Entrada[] = [];
 
+  /**
+   * @throws ArcaValidationError si `fechaReferencia` no es una fecha válida (como `validateRegistro`).
+   * @throws TypeError si `config`, `strict` o las opciones de serialización no tienen el tipo esperado.
+   */
   constructor(config: ArcaEmpleadosConfig = {}) {
     if (typeof config !== 'object' || config === null) {
       throw new TypeError('ArcaEmpleados: config debe ser un objeto.');
@@ -81,7 +85,13 @@ export class ArcaEmpleados {
       try {
         formatFechaSR(config.fechaReferencia);
       } catch (e) {
-        throw new TypeError(`ArcaEmpleados: config.fechaReferencia inválida (${(e as Error).message})`, { cause: e });
+        const message = (e as Error).message;
+        throw new ArcaValidationError(
+          `ArcaEmpleados: config.fechaReferencia inválida (${message})`,
+          [{ field: 'fechaReferencia', message, value: config.fechaReferencia }],
+          'fechaReferencia',
+          { cause: e },
+        );
       }
     }
     this.fechaReferencia =
