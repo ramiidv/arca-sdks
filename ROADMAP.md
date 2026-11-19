@@ -54,6 +54,10 @@ servicio.
 - `deps-frescas.yml` corre una vez por mes (y a pedido) sin lockfile, con lo
   último de cada rango que declaran los paquetes, que es lo que reciben los
   usuarios al instalar. Si falla, abre o comenta un issue.
+- Tests de integración: `npm run test:homologacion` (RI y monotributista, y
+  los cruces entre los dos) escribe un reporte sin datos del contribuyente;
+  cada corrida, propia o reportada en un issue "Reporte de homologación", se
+  suma a [HOMOLOGACION.md](HOMOLOGACION.md).
 
 ## Cómo publicar
 

@@ -1,0 +1,29 @@
+name: Reporte de homologación
+description: Resultado de `npm run test:homologacion` contra ARCA homologación
+title: "Reporte de homologación: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gracias por correr los tests contra ARCA homologación. Cómo correrlos: [HOMOLOGACION.md](https://github.com/ramiidv/arca-sdks/blob/main/HOMOLOGACION.md).
+
+        El reporte no incluye CUIT, certificados, claves, tokens ni CAE. **No pegues** tu `.env`, tu certificado, tu clave ni la salida completa de vitest: los mensajes de error pueden traer tu CUIT.
+  - type: textarea
+    id: reporte
+    attributes:
+      label: Reporte
+      description: Contenido de `homologacion-reporte.md`, tal cual.
+    validations:
+      required: true
+  - type: textarea
+    id: notas
+    attributes:
+      label: Notas
+      description: Opcional. Si algún test falló, qué viste (sin datos del contribuyente).
+  - type: checkboxes
+    id: privacidad
+    attributes:
+      label: Privacidad
+      options:
+        - label: Revisé que el reporte y las notas no tengan mi CUIT, mi certificado, mi clave ni tokens.
+          required: true

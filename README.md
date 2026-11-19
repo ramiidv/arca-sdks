@@ -61,6 +61,7 @@ npm run build              # compila todos los paquetes (common primero)
 npm test                   # tests unitarios (usan el fuente de common, sin compilar)
 npm run test:coverage      # tests unitarios con cobertura (coverage/)
 npm run test:integration   # contra ARCA homologación (sin ARCA_TEST_* se saltean)
+npm run test:homologacion  # lo mismo, y escribe homologacion-reporte.md (HOMOLOGACION.md)
 npm run lint               # biome (lint:fix para corregir)
 npm run typecheck          # tsc de cada paquete (requiere build: usa el dist de common)
 npm run typecheck:examples # examples/ de cada paquete
@@ -73,19 +74,34 @@ npm run test:smoke         # require() desde CommonJS
 
 Los tests de integración corren localmente, con el certificado de homologación
 de cada desarrollador. `npm run test:integration` toma las variables `ARCA_TEST_*`
-del entorno o de un `.env` en la raíz (`.env`, `certs/` y los archivos `*.key`/`*.crt`/`*.pem`
-están en `.gitignore`: no se versionan):
+del entorno o de un `.env` en la raíz (`.env`, `.env.*`, `certs/` y los archivos
+`*.key`/`*.crt`/`*.pem` están en `.gitignore`: no se versionan):
 
 ```sh
 ARCA_TEST_CERT=./certs/homo.crt     # certificado (PEM o ruta al archivo)
 ARCA_TEST_KEY=./certs/homo.key      # clave privada (PEM o ruta al archivo)
-ARCA_TEST_CUIT=20123456786          # CUIT del certificado
+ARCA_TEST_CUIT=20123456786          # CUIT del certificado (con o sin guiones)
+ARCA_TEST_PERFIL=ri                 # ri (emite A y B) o monotributo (emite C); default ri
 ARCA_TEST_SERVICES=wsfe,wscdc       # servicios autorizados (sin esto solo corren los dummy)
-ARCA_TEST_PTO_VTA=1                 # punto de venta de WSFE (opcional, default 1)
+ARCA_TEST_PTO_VTA=1                 # punto de venta de WSFE y WSFEX (opcional, default 1)
 ARCA_TEST_TICKETS_DIR=.arca-test-tickets # tickets de WSAA (opcional, default <tmp>/arca-test-tickets)
 ```
 
 Sin `ARCA_TEST_CERT`, `ARCA_TEST_KEY` y `ARCA_TEST_CUIT`, los tests se saltean.
+Las mismas variables con el prefijo `ARCA_TEST_CONTRAPARTE_` definen un segundo
+usuario, de otro perfil, para los cruces de `tests/homologacion/cruces.test.ts`
+(el RI le factura al monotributista y viceversa, cada uno constata con CDC el
+comprobante del otro, y el `Id` de WSFEX se autoriza en las dos CUIT).
+
+Todos los tests de integración corren con un guard de red
+(`tests/homologacion/guard.ts`) que bloquea cualquier conexión a un host que no
+sea de homologación, producción incluida, y corren de a un archivo por vez.
+
+`npm run test:homologacion` además escribe `homologacion-reporte.md` (no se
+versiona) con la fecha, el commit, las versiones, el perfil, los servicios y el
+resultado de cada test, sin CUIT, certificado ni tokens; exige `ARCA_TEST_PERFIL`
+(y `ARCA_TEST_CONTRAPARTE_PERFIL` si hay contraparte).
+Cómo sumarlo al registro de corridas está en [HOMOLOGACION.md](HOMOLOGACION.md).
 
 ## Plan de trabajo
 
