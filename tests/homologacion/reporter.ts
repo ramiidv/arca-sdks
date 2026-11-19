@@ -78,7 +78,7 @@ export interface EntradaReporte {
   node: string;
 }
 
-const listaServicios = (u: Usuario) => [...u.servicios].filter(Boolean).sort().join(', ') || 'ninguno (solo los dummy)';
+const listaServicios = (u: Usuario) => [...u.servicios].sort().join(', ') || 'ninguno (solo los dummy)';
 
 /**
  * El texto del reporte, o el motivo por el que no se genera: faltan las

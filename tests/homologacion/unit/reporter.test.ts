@@ -1,8 +1,9 @@
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { TestState } from 'vitest/node';
 import { datosPrivados, type EntradaReporte, generarReporte, type ModuloReporte } from '../reporter.js';
 
-const RAIZ = new URL('../../../', import.meta.url).pathname;
+const RAIZ = fileURLToPath(new URL('../../../', import.meta.url));
 
 const modulo = (ruta: string, tests: [string, TestState][], estado = 'passed'): ModuloReporte => ({
   moduleId: `${RAIZ}${ruta}`,

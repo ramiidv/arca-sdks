@@ -32,7 +32,7 @@ export function arcaTestVars(env: NodeJS.ProcessEnv = process.env): Record<strin
   return { ...arcaTestEnv(env), ...Object.fromEntries(delEntorno) };
 }
 
-export const PERFILES = ['ri', 'monotributo'] as const;
+const PERFILES = ['ri', 'monotributo'] as const;
 /** Condición del contribuyente del certificado: responsable inscripto o monotributista. */
 export type Perfil = (typeof PERFILES)[number];
 
@@ -90,7 +90,12 @@ export function usuario(vars: Vars, prefijo = 'ARCA_TEST_'): Usuario | undefined
     cuit: normalizarCuit(cuit, `${prefijo}CUIT`),
     perfil: perfil as Perfil,
     perfilExplicito: v('PERFIL') !== undefined,
-    servicios: new Set((v('SERVICES') ?? '').split(',').map((s) => s.trim())),
+    servicios: new Set(
+      (v('SERVICES') ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
     ticketsDir: v('TICKETS_DIR'),
     ptoVta,
   };

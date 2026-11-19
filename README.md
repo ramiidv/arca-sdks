@@ -63,7 +63,7 @@ npm run test:coverage      # tests unitarios con cobertura (coverage/)
 npm run test:integration   # contra ARCA homologación (sin ARCA_TEST_* se saltean)
 npm run test:homologacion  # lo mismo, y escribe homologacion-reporte.md (HOMOLOGACION.md)
 npm run lint               # biome (lint:fix para corregir)
-npm run typecheck          # tsc de cada paquete (requiere build: usa el dist de common)
+npm run typecheck          # tsc de cada paquete y de tests/ (requiere build: usa el dist de common)
 npm run typecheck:examples # examples/ de cada paquete
 npm run check:snippets     # bloques ```ts de los README (requiere build)
 npm run lint:pkg           # publint + attw sobre cada paquete
@@ -84,6 +84,7 @@ ARCA_TEST_CUIT=20123456786          # CUIT del certificado (con o sin guiones)
 ARCA_TEST_PERFIL=ri                 # ri (emite A y B) o monotributo (emite C); default ri
 ARCA_TEST_SERVICES=wsfe,wscdc       # servicios autorizados (sin esto solo corren los dummy)
 ARCA_TEST_PTO_VTA=1                 # punto de venta de WSFE y WSFEX (opcional, default 1)
+ARCA_TEST_CUIT_RECEPTOR=20111111112 # receptor RI de la factura a un CUIT (opcional, este default)
 ARCA_TEST_TICKETS_DIR=.arca-test-tickets # tickets de WSAA (opcional, default <tmp>/arca-test-tickets)
 ```
 

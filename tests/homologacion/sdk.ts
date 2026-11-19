@@ -8,13 +8,13 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FileTicketStorage } from '@ramiidv/arca-common';
-import { type Credenciales, credenciales } from './env.js';
+import { type Credenciales, credenciales, type Usuario } from './env.js';
 
 export const principal = credenciales(process.env);
 export const contraparte = credenciales(process.env, 'ARCA_TEST_CONTRAPARTE_');
 
 /** `true` si todos los usuarios dados están definidos y autorizados en el servicio. */
-export function autorizado(servicio: string, ...usuarios: (Credenciales | undefined)[]): boolean {
+export function autorizado(servicio: string, ...usuarios: (Usuario | undefined)[]): boolean {
   return usuarios.every((u) => u?.servicios.has(servicio));
 }
 

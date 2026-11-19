@@ -32,6 +32,8 @@ const tipoACuit = resolverCbteTipo(emisor, CondicionIva.RESPONSABLE_INSCRIPTO);
 const letra = (tipo: number) => CbteTipo[tipo]!.replace(/^FACTURA_/, '');
 /** La clase C no discrimina IVA: sus ítems van sin alícuota. */
 const conIva = (iva: IvaTipo) => (ri ? { iva } : {});
+/** El ítem de la factura a un CUIT y de su nota de crédito: neto más IVA en la A, total en la C. */
+const itemACuit = ri ? { neto: 1000, iva: IvaTipo.IVA_21 } : { total: 1000 };
 
 describe.skipIf(!principal)(
   `integración WSFEv1 (homologación, perfil ${principal?.perfil})`,
@@ -96,7 +98,7 @@ describe.skipIf(!principal)(
         ptoVta,
         cbteTipo: tipoACuit,
         ...aCuit,
-        items: [ri ? { neto: 1000, iva: IvaTipo.IVA_21 } : { total: 1000 }],
+        items: [itemACuit],
       });
       expect(facturaACuit.cae).toMatch(/^\d{14}$/);
     });
@@ -105,7 +107,7 @@ describe.skipIf(!principal)(
       const nc = await arca.notaCredito({
         ptoVta,
         ...aCuit,
-        items: [ri ? { neto: 1000, iva: IvaTipo.IVA_21 } : { total: 1000 }],
+        items: [itemACuit],
         comprobanteOriginal: { tipo: tipoACuit, ptoVta, nro: facturaACuit.cbteNro },
       });
       expect(nc.cae).toMatch(/^\d{14}$/);

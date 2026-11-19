@@ -24,6 +24,11 @@ describe('credenciales', () => {
     });
   });
 
+  it('sin SERVICES no hay servicios autorizados (ni uno vacío)', () => {
+    expect([...credenciales(base)!.servicios]).toEqual([]);
+    expect([...credenciales({ ...base, ARCA_TEST_SERVICES: ' , wsfe,' })!.servicios]).toEqual(['wsfe']);
+  });
+
   it('lee perfil, servicios, punto de venta y tickets', () => {
     const c = credenciales({
       ...base,
