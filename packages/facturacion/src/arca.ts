@@ -1,11 +1,20 @@
-import { ArcaRechazoError, ArcaResponseError, ArcaSdkBase, formatDate, statusOf } from '@ramiidv/arca-common';
+import {
+  ArcaRechazoError,
+  ArcaResponseError,
+  ArcaSdkBase,
+  ArcaSoapError,
+  formatDate,
+  formatServiceErrors,
+  statusOf,
+} from '@ramiidv/arca-common';
 import type { CallOptions, ServiceStatus } from '@ramiidv/arca-common';
 import { WsfeClient } from './wsfe.js';
-import { WsfexClient } from './wsfex.js';
+import { WsfexClient, buildFexCmp, eventosWsfex } from './wsfex.js';
 import {
   armarComprobante,
   buildInvoiceDetail,
   coincidenDatos,
+  eventosWsfe,
   facturaResultDesdeConsulta,
   intentoDesdeComprobante,
   optString,
@@ -14,7 +23,6 @@ import {
   redondear2,
   totalesDe,
 } from './facturacion.js';
-import { eventosWsfex } from './wsfex.js';
 import { ArcaConflictoExpo, ArcaResultadoIncierto, ArcaResultadoInciertoExpo } from './errors.js';
 import type { OperacionEmision } from './errors.js';
 import { fail, validateFacturarOpts, validateFacturarExpoOpts, validateInvoiceRequest } from './validation.js';
@@ -70,6 +78,9 @@ import {
   isTipoE,
   isUmedSinCantidad,
 } from './constants.js';
+
+/** Idioma del comprobante de exportación si no viene `idioma`: 1 = Español (`getIdiomasExpo`). */
+const IDIOMA_DEFAULT = 1;
 
 /** TTL por defecto del cache de parámetros (24 horas). */
 const DEFAULT_PARAM_CACHE_TTL_MS = 24 * 60 * 60_000;
@@ -383,9 +394,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
 
   /** Último número de comprobante de exportación autorizado. */
   async ultimoComprobanteExpo(ptoVta: number, cbteTipo: number, call?: CallOptions): Promise<number> {
-    const callOpts = this.opts(call);
-    const auth = await this.getAuth('wsfex', callOpts);
-    return this.wsfex.getLastCmp(auth, ptoVta, cbteTipo, callOpts);
+    return this.expo((a, o) => this.wsfex.getLastCmp(a, ptoVta, cbteTipo, o), call);
   }
 
   /** Siguiente número de comprobante de exportación. */
@@ -396,9 +405,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
 
   /** Último ID de request WSFEX. */
   async ultimoIdExpo(call?: CallOptions): Promise<number> {
-    const callOpts = this.opts(call);
-    const auth = await this.getAuth('wsfex', callOpts);
-    return this.wsfex.getLastId(auth, callOpts);
+    return this.expo((a, o) => this.wsfex.getLastId(a, o), call);
   }
 
   /** Consulta un comprobante de exportación. */
@@ -408,11 +415,10 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     cbteNro: number,
     call?: CallOptions,
   ): Promise<WsfexGetCmpResult> {
-    const callOpts = this.opts(call);
-    const auth = await this.getAuth('wsfex', callOpts);
-    return this.wsfex.getCmp(auth, cbteTipo, ptoVta, cbteNro, callOpts);
+    return this.expo((a, o) => this.wsfex.getCmp(a, cbteTipo, ptoVta, cbteNro, o), call);
   }
 
+  /** Obtiene el ticket de WSFEX y llama a `fn` con el `Auth` y el signal combinado. */
   private async expo<T>(fn: (auth: WsfeAuth, opts: CallOptions) => Promise<T>, call?: CallOptions): Promise<T> {
     const callOpts = this.opts(call);
     const auth = await this.getAuth('wsfex', callOpts);
@@ -511,28 +517,22 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    */
   async facturarExpo(opts: FacturarExpoOpts, call?: CallOptions): Promise<FacturaExpoResult> {
     validateFacturarExpoOpts(opts);
-    const callOpts = this.opts(call);
-    const auth = await this.getAuth('wsfex', callOpts);
-    const [id, cbteNro] = await Promise.all([
-      opts.id ?? this.wsfex.getLastId(auth, callOpts).then((n) => n + 1),
-      opts.cbteNro ?? this.wsfex.getLastCmp(auth, opts.ptoVta, opts.cbteTipo, callOpts).then((n) => n + 1),
-    ]);
-
     const fecha = formatDate(opts.fecha ?? this.wsaa.now());
 
     let totalCents = 0;
     const items = opts.items.map((item) => {
-      // Unidades 0, 97 y 99 (señas, bonificaciones): sin cantidad ni precio, con el total explícito (1775, 1810).
-      const totalItem = isUmedSinCantidad(item.unidad)
+      // Unidades 0, 97 y 99 (señas, bonificaciones): cantidad y precio en 0, con el total explícito (1775, 1810).
+      const sinCantidad = isUmedSinCantidad(item.unidad);
+      const totalItem = sinCantidad
         ? redondear2(item.total ?? 0)
         : redondear2(item.cantidad * item.precioUnitario - (item.bonificacion ?? 0));
       totalCents += Math.round(totalItem * 100);
       return {
         proCodigo: item.codigo,
         proDs: item.descripcion,
-        proQty: item.cantidad,
+        proQty: sinCantidad ? 0 : item.cantidad,
         proUmed: item.unidad,
-        proPrecioUni: item.precioUnitario,
+        proPrecioUni: sinCantidad ? 0 : item.precioUnitario,
         proBonificacion: item.bonificacion ?? 0,
         proTotalItem: totalItem,
       };
@@ -545,12 +545,10 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     const esFacturaBienes = esFactura && opts.tipoExpo === TipoExpo.BIENES;
     const esServicios = opts.tipoExpo === TipoExpo.SERVICIOS || opts.tipoExpo === TipoExpo.OTROS;
 
-    const invoice: WsfexInvoice = {
-      id: id,
+    const base: Omit<WsfexInvoice, 'id' | 'cbteNro'> = {
       cbteTipo: opts.cbteTipo,
       fechaCbte: fecha,
       puntoVta: opts.ptoVta,
-      cbteNro: cbteNro,
       tipoExpo: opts.tipoExpo,
       permisoExistente: esFacturaBienes ? (opts.permisoExistente ?? 'N') : '',
       dstCmp: opts.pais,
@@ -560,27 +558,39 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
       idImpositivo: opts.cliente.idImpositivo,
       monedaId: opts.moneda,
       monedaCtz: opts.cotizacion,
-      idiomaCbte: opts.idioma ?? 1,
+      idiomaCbte: opts.idioma ?? IDIOMA_DEFAULT,
       impTotal: totalCents / 100,
       items: items,
     };
 
     // Fecha_pago: solo Factura E (1673); obligatoria para servicios y otros (1672).
     if (esFactura) {
-      if (opts.fechaPago !== undefined) invoice.fechaPago = formatDate(opts.fechaPago);
-      else if (esServicios) invoice.fechaPago = fecha;
+      if (opts.fechaPago !== undefined) base.fechaPago = formatDate(opts.fechaPago);
+      else if (esServicios) base.fechaPago = fecha;
     }
 
-    if (opts.formaPago) invoice.formaPago = opts.formaPago;
-    if (opts.incoterms) invoice.incoterms = opts.incoterms;
-    if (opts.incotermsDes) invoice.incotermsDs = opts.incotermsDes;
-    if (opts.obsComerciales) invoice.obsComerciales = opts.obsComerciales;
-    if (opts.obs) invoice.obs = opts.obs;
-    if (opts.permisos?.length) invoice.permisos = opts.permisos;
-    if (opts.cbtesAsoc?.length) invoice.cmpsAsoc = opts.cbtesAsoc;
-    if (opts.canMisMonExt) invoice.canMisMonExt = opts.canMisMonExt;
-    if (opts.opcionales?.length) invoice.opcionales = opts.opcionales;
-    if (opts.actividades?.length) invoice.actividades = opts.actividades.map((a) => ({ id: a }));
+    if (opts.formaPago) base.formaPago = opts.formaPago;
+    if (opts.incoterms) base.incoterms = opts.incoterms;
+    if (opts.incotermsDes) base.incotermsDs = opts.incotermsDes;
+    if (opts.obsComerciales) base.obsComerciales = opts.obsComerciales;
+    if (opts.obs) base.obs = opts.obs;
+    if (opts.permisos?.length) base.permisos = opts.permisos;
+    if (opts.cbtesAsoc?.length) base.cmpsAsoc = opts.cbtesAsoc;
+    if (opts.canMisMonExt) base.canMisMonExt = opts.canMisMonExt;
+    if (opts.opcionales?.length) base.opcionales = opts.opcionales;
+    if (opts.actividades?.length) base.actividades = opts.actividades.map((a) => ({ id: a }));
+
+    // Valida el Cmp contra el WSDL antes de consultar el último Id y número: un
+    // dato inválido no gasta consultas (Id y número todavía no se conocen).
+    buildFexCmp({ ...base, id: opts.id ?? 1, cbteNro: opts.cbteNro ?? 1 });
+
+    const callOpts = this.opts(call);
+    const auth = await this.getAuth('wsfex', callOpts);
+    const [id, cbteNro] = await Promise.all([
+      opts.id ?? this.wsfex.getLastId(auth, callOpts).then((n) => n + 1),
+      opts.cbteNro ?? this.wsfex.getLastCmp(auth, opts.ptoVta, opts.cbteTipo, callOpts).then((n) => n + 1),
+    ]);
+    const invoice: WsfexInvoice = { id, ...base, cbteNro };
 
     // Emisión: no se reintenta. Un resultado incierto llega como ArcaResultadoInciertoExpo.
     const result = await this.wsfex.authorize(auth, invoice, callOpts);
@@ -698,7 +708,7 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    * ```
    */
   async registrarFacturaCAEA(caea: string, opts: FacturarCAEAOpts, call?: CallOptions): Promise<FacturaResult> {
-    if (!caea) fail('caea', 'caea es requerido');
+    if (!/^\d{14}$/.test(String(caea ?? ''))) fail('caea', 'caea debe tener 14 dígitos', caea);
     if (opts.fechaHoraGeneracion === undefined)
       fail(
         'fechaHoraGeneracion',
@@ -733,9 +743,12 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     const auth = await this.getAuth('wsfe', callOpts);
     const result = await this.wsfe.sinMovimientoCAEA(auth, caea, ptoVta, callOpts);
     if (result.resultado === 'R') {
+      // La respuesta no trae observaciones: los avisos de ARCA (`Events`) van en `observaciones`.
+      const observaciones = eventosWsfe(result);
       throw new ArcaRechazoError(
-        `FECAEASinMovimientoInformar: ARCA rechazó el informe sin movimiento del CAEA ${caea} (punto de venta ${ptoVta})`,
-        { operacion: 'FECAEASinMovimientoInformar' },
+        `FECAEASinMovimientoInformar: ARCA rechazó el informe sin movimiento del CAEA ${caea} (punto de venta ${ptoVta})` +
+          (observaciones.length > 0 ? `: ${formatServiceErrors(observaciones)}` : ''),
+        { operacion: 'FECAEASinMovimientoInformar', observaciones },
       );
     }
     return result as CaeaSinMovResult & { resultado: 'A' };
@@ -761,7 +774,6 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
    * iguales comparten un solo request. Si falla, se descarta (no se cachean errores).
    */
   private cachedParam<T>(key: string, fn: () => Promise<T>): Promise<T> {
-    if (this.paramCacheTTLMs <= 0) return fn();
     const cached = this.paramCache.get(key);
     if (cached && cached.expires > Date.now()) return cached.data as Promise<T>;
     const data = fn();
@@ -773,13 +785,39 @@ export class ArcaFacturacion extends ArcaSdkBase<ArcaService> {
     return data;
   }
 
+  /**
+   * Parámetro de WSFEv1 cacheado. El request compartido usa solo el `signal`
+   * de la config: si un llamador aborta con su `signal`, deja de esperar
+   * (`ArcaSoapError` con `aborted`) sin cancelar a los demás.
+   */
   private wsfeParam<T>(
     key: string,
     fn: (auth: WsfeAuth, opts: CallOptions) => Promise<T>,
     call?: CallOptions,
   ): Promise<T> {
-    const callOpts = this.opts(call);
-    return this.cachedParam(key, async () => fn(await this.getAuth('wsfe', callOpts), callOpts));
+    const consultar = (opts: CallOptions) => async () => fn(await this.getAuth('wsfe', opts), opts);
+    if (this.paramCacheTTLMs <= 0) return consultar(this.opts(call))();
+    const signal = call?.signal;
+    const abortado = () =>
+      new ArcaSoapError(`Consulta de parámetros (${key}) abortada`, { cause: signal?.reason, aborted: true });
+    if (signal?.aborted) return Promise.reject(abortado());
+    const data = this.cachedParam(key, consultar(this.opts()));
+    if (!signal) return data;
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () => reject(abortado());
+      signal.addEventListener('abort', onAbort, { once: true });
+      const fin = () => signal.removeEventListener('abort', onAbort);
+      data.then(
+        (v) => {
+          fin();
+          resolve(v);
+        },
+        (e: unknown) => {
+          fin();
+          reject(e);
+        },
+      );
+    });
   }
 
   /**

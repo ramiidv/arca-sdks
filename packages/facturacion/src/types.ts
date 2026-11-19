@@ -623,11 +623,18 @@ export interface ExpoLineItem {
   codigo: string;
   /** Descripción */
   descripcion: string;
-  /** Cantidad (> 0; 0 con las unidades 0, 97 y 99) */
+  /**
+   * Cantidad (> 0). Con las unidades 0, 97 y 99 (señas, anticipos y
+   * bonificaciones) va 0: esos items no llevan cantidad ni precio, solo `total`,
+   * y el SDK envía `Pro_qty` en 0.
+   */
   cantidad: number;
   /** Unidad de medida (código de `getUMedExpo`) */
   unidad: number;
-  /** Precio unitario (>= 0; 0 con las unidades 0, 97 y 99) */
+  /**
+   * Precio unitario (>= 0). Con las unidades 0, 97 y 99 va 0 (el SDK envía
+   * `Pro_precio_uni` en 0 y el importe sale de `total`).
+   */
   precioUnitario: number;
   /** Bonificación / descuento. Default: 0 (con las unidades 0, 97 y 99 tiene que ser 0) */
   bonificacion?: number;

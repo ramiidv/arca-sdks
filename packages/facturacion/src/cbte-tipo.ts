@@ -54,7 +54,7 @@ export function resolverCbteTipo(
   receptor: CondicionIva,
   clase: ClaseComprobante = 'factura',
 ): CbteTipo {
-  if (!(clase in POR_CLASE.A)) fail('clase', `clase de comprobante desconocida: ${clase}`, clase);
+  if (!Object.hasOwn(POR_CLASE.A, clase)) fail('clase', `clase de comprobante desconocida: ${clase}`, clase);
 
   if (EMISORES_CLASE_C.has(emisor)) return POR_CLASE.C[clase];
 

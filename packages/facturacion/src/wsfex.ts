@@ -1,12 +1,18 @@
 import { ArcaResponseError, SoapServiceClient, ensureArray, parseServerStatus } from '@ramiidv/arca-common';
-import type { CallOptions, ServerStatus, ServiceClientConfig, SoapOperationKind } from '@ramiidv/arca-common';
+import type {
+  CallOptions,
+  ServerStatus,
+  ServiceClientConfig,
+  ServiceErrorDetail,
+  SoapOperationKind,
+} from '@ramiidv/arca-common';
 import { WSFEX_ERRORES_AUTH, WSFEX_ERRORES_INTERNOS, WSFEX_NAMESPACE } from './constants.js';
 import { encodeRequest } from '@ramiidv/arca-common/schema';
 import type { Schema } from '@ramiidv/arca-common/schema';
 import { decodeArca, sinCampo } from './decode.js';
 import { ArcaConflictoExpo, ArcaResultadoInciertoExpo, ArcaSoapError, ArcaWSFEError, authErrorDe } from './errors.js';
 import * as S from './schemas.js';
-import { authXml } from './wsfe.js';
+import { authXml, lista } from './wsfe.js';
 import type {
   WsfeAuth,
   WsfexInvoice,
@@ -23,16 +29,17 @@ import type {
 
 type R = Record<string, unknown>;
 
-interface WsfexErr {
-  errCode: number;
-  errMsg: string;
-}
-
-/** Error de WSFEX en `FEXErr` (código distinto de 0), o `undefined`. */
-function fexErr(result: R): WsfexErr | undefined {
+/**
+ * Error de WSFEX en `FEXErr` (código distinto de 0), o `undefined`. Un código
+ * no numérico queda en `rawCode` (con `code` 0), como en los errores de WSFEv1.
+ */
+function fexErr(result: R): ServiceErrorDetail | undefined {
   const err = result.FEXErr as R | undefined;
-  if (!err || err.ErrCode === undefined || Number(err.ErrCode) === 0) return undefined;
-  return { errCode: Number(err.ErrCode), errMsg: String(err.ErrMsg ?? '') };
+  const raw = err?.ErrCode === undefined || err.ErrCode === null ? '' : String(err.ErrCode).trim();
+  if (!err || raw === '') return undefined;
+  const msg = String(err.ErrMsg ?? '');
+  if (!/^-?\d+$/.test(raw)) return { code: 0, msg, rawCode: raw };
+  return Number(raw) === 0 ? undefined : { code: Number(raw), msg };
 }
 
 /**
@@ -42,8 +49,8 @@ function fexErr(result: R): WsfexErr | undefined {
 function checkFexErr(result: R): void {
   const err = fexErr(result);
   if (!err) return;
-  const error = new ArcaWSFEError([{ code: err.errCode, msg: err.errMsg }], 'WSFEX');
-  if (WSFEX_ERRORES_AUTH.includes(err.errCode)) throw authErrorDe(error);
+  const error = new ArcaWSFEError([err], 'WSFEX');
+  if (WSFEX_ERRORES_AUTH.includes(err.code)) throw authErrorDe(error, WSFEX_ERRORES_AUTH);
   throw error;
 }
 
@@ -53,8 +60,6 @@ export function eventosWsfex(result: { fexEvents?: WsfexEvents } | undefined): M
     .filter((e) => e.eventCode !== 0)
     .map((e) => ({ code: e.eventCode, msg: e.eventMsg ?? '' }));
 }
-
-const lista = <T>(v: T[] | undefined) => (v && v.length > 0 ? v : undefined);
 
 /**
  * Arma el `Cmp` (ClsFEXRequest) con los nombres del XML y en el orden de la
@@ -177,10 +182,8 @@ export class WsfexClient extends SoapServiceClient {
     }
 
     const err = fexErr(result);
-    if (err && WSFEX_ERRORES_INTERNOS.includes(err.errCode)) {
-      throw new ArcaResultadoInciertoExpo(invoice, {
-        cause: new ArcaWSFEError([{ code: err.errCode, msg: err.errMsg }], 'WSFEX'),
-      });
+    if (err && WSFEX_ERRORES_INTERNOS.includes(err.code)) {
+      throw new ArcaResultadoInciertoExpo(invoice, { cause: new ArcaWSFEError([err], 'WSFEX') });
     }
     checkFexErr(result);
 

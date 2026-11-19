@@ -109,14 +109,14 @@ export { QR_URL } from '@ramiidv/arca-common';
 // ============================================================
 
 export enum CbteTipo {
-  // Tipo A - Responsable Inscripto a Responsable Inscripto
+  // Tipo A - Responsable Inscripto a Responsable Inscripto o Monotributista (RG 5003)
   FACTURA_A = 1,
   NOTA_DEBITO_A = 2,
   NOTA_CREDITO_A = 3,
   RECIBO_A = 4,
   NOTA_VENTA_CONTADO_A = 5,
 
-  // Tipo B - Responsable Inscripto a Consumidor Final / Monotributista / Exento
+  // Tipo B - Responsable Inscripto a Consumidor Final, Exento, No Categorizado y demás receptores que no son RI ni monotributistas
   FACTURA_B = 6,
   NOTA_DEBITO_B = 7,
   NOTA_CREDITO_B = 8,
@@ -295,6 +295,7 @@ const CLASE_M: readonly number[] = [
 const FCE_A: readonly number[] = [CbteTipo.FCE_FACTURA_A, CbteTipo.FCE_NOTA_DEBITO_A, CbteTipo.FCE_NOTA_CREDITO_A];
 const FCE_B: readonly number[] = [CbteTipo.FCE_FACTURA_B, CbteTipo.FCE_NOTA_DEBITO_B, CbteTipo.FCE_NOTA_CREDITO_B];
 const FCE_C: readonly number[] = [CbteTipo.FCE_FACTURA_C, CbteTipo.FCE_NOTA_DEBITO_C, CbteTipo.FCE_NOTA_CREDITO_C];
+const TIPOS_FCE = new Set<number>([...FCE_A, ...FCE_B, ...FCE_C]);
 
 /** CbteTipo que NO discriminan IVA (Monotributista - tipo C) */
 const TIPOS_C = new Set<number>([...CLASE_C, ...FCE_C]);
@@ -344,10 +345,11 @@ export function isTipoB(cbteTipo: number): boolean {
 const REMITOS_ASOCIABLES: readonly number[] = [88, 991];
 const REMITOS_ASOCIABLES_FCE: readonly number[] = [91, 990, 991, 993, 994, 995];
 const REMITOS_ASOCIABLES_NOTA_FCE: readonly number[] = [88, 91, 988, 990, 991, 993, 994, 995, 996, 997];
+const REMITOS = new Set<number>([...REMITOS_ASOCIABLES, ...REMITOS_ASOCIABLES_FCE, ...REMITOS_ASOCIABLES_NOTA_FCE]);
 
-/** `true` si el tipo no es un comprobante de WSFEv1 (un remito u otro comprobante asociable). */
+/** `true` si el tipo es uno de los remitos que la validación 10040 admite asociar (no es un comprobante de WSFEv1). */
 export function isRemito(tipo: number): boolean {
-  return CbteTipo[tipo] === undefined;
+  return REMITOS.has(tipo);
 }
 
 const asociables = (tipos: readonly number[], asociables: readonly number[]) =>
@@ -424,9 +426,9 @@ export const NOTA_DEBITO_MAP: Record<number, number> = {
   [CbteTipo.FACTURA_E]: CbteTipo.NOTA_DEBITO_E,
 };
 
-/** Facturas de Crédito Electrónica MiPyME (FCE), cualquier clase. */
+/** Comprobantes de Crédito Electrónica MiPyME (FCE): 201-203, 206-208 y 211-213. */
 export function isFCE(cbteTipo: number): boolean {
-  return cbteTipo >= 201 && cbteTipo <= 213;
+  return TIPOS_FCE.has(cbteTipo);
 }
 
 /** Facturas FCE (201, 206, 211): llevan `FchVtoPago` siempre (validación 10163). */

@@ -325,7 +325,8 @@ validación 10175).
 | API raw: `CondicionIVAReceptorId` obligatorio, también con `DocTipo` 99                                                                                                                                                 | 10246                             |
 
 En la API raw los importes se redondean a 2 decimales y `MonCotiz` a 6 (Double 13+2 y 4+6 del manual),
-mitad al par (Round Half Even, el criterio de redondeo del manual), igual que los importes que calcula la API simplificada.
+mitad al par (Round Half Even, el criterio de redondeo del manual), igual que los importes que calcula la API simplificada
+(el IVA sobre el neto y la base despejada de un `total`: 0,50 al 21 % da IVA 0,10).
 
 #### Elegir el tipo de comprobante
 
@@ -535,7 +536,7 @@ boliviano, `032` peso colombiano, `010` peso mexicano, `021` libra, `019` yen, `
 | --------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ArcaValidationError`       | `ARCA_VALIDATION_ERROR`        | Datos inválidos (no se envió nada). `field`, `details`; el mensaje cita la validación del manual                                                                          |
 | `ArcaRechazoError`          | `ARCA_RECHAZO`                 | ARCA procesó la emisión y rechazó el comprobante (`Resultado` "R"): no se emitió. `operacion`, `errors`, `observaciones` (`{ code, msg }[]`). Extiende `ArcaServiceError` |
-| `ArcaWSFEError`             | `ARCA_WSFE_ERROR`              | ARCA rechazó el request (`Errors`/`FEXErr`): no se emitió. `errors: { code, msg }[]`, `tieneCodigo(code)`. Extiende `ArcaServiceError`                                    |
+| `ArcaWSFEError`             | `ARCA_WSFE_ERROR`              | ARCA rechazó el request (`Errors`/`FEXErr`): no se emitió. `errors: { code, msg, rawCode? }[]`, `tieneCodigo(code)`. Extiende `ArcaServiceError`                          |
 | `ArcaResultadoIncierto`     | `ARCA_RESULTADO_INCIERTO`      | Emisión WSFEv1 sin respuesta confiable (timeout, red, HTTP 5xx, error interno 500/501/502, respuesta ilegible). `intento`, `intentos`, `operacion`                        |
 | `ArcaResultadoInciertoExpo` | `ARCA_RESULTADO_INCIERTO_EXPO` | Lo mismo en `FEXAuthorize` (y errores 500/501/502/505). `intento` (`id`, `cbteNro`, `fecha`) y `request` para reenviar con el mismo `Id`                                  |
 | `ArcaConflictoExpo`         | `ARCA_CONFLICTO_EXPO`          | El `Id` de WSFEX ya lo usaba otra solicitud: WSFEX devolvió otro comprobante. El del request **no** se autorizó. `id`, `request`, `respuesta`                             |
