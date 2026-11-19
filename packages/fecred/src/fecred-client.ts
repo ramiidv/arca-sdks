@@ -86,9 +86,8 @@ function isAuthFault(e: ArcaSoapError): boolean {
  * `ArcaSoapError` original en `cause`.
  */
 function authFault(e: unknown): ArcaAuthError | undefined {
-  if (!(e instanceof ArcaSoapError) || e.faultString === undefined) return undefined;
-  if (!isAuthFault(e)) return undefined;
-  return new ArcaAuthError(`${SERVICE}: ${e.faultString}`, { cause: e });
+  if (!(e instanceof ArcaSoapError) || !isAuthFault(e)) return undefined;
+  return new ArcaAuthError(`${SERVICE}: ${e.faultString ?? e.faultCode}`, { cause: e });
 }
 
 // ---------------------------------------------------------------------------

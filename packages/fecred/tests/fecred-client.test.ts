@@ -847,6 +847,17 @@ describe('emisiones', () => {
     await expect(client(fetch).consultarCtasCtes(AUTH, { rol: 'Emisor' })).rejects.toThrow(ArcaAuthError);
   });
 
+  it('un ArcaSoapError con faultcode wscommon_* sin faultstring también es ArcaAuthError', async () => {
+    const c = client(mockFetch());
+    vi.spyOn(c as unknown as { soapCall: () => Promise<unknown> }, 'soapCall').mockRejectedValue(
+      new ArcaSoapError('SOAP Fault', { faultCode: 'ns1:wscommon_003' }),
+    );
+    const err = await c.consultarCtasCtes(AUTH, { rol: 'Emisor' }).catch((e) => e);
+    expect(err).toBeInstanceOf(ArcaAuthError);
+    expect(err.message).toBe('WSFECRED: ns1:wscommon_003');
+    expect(err.cause).toBeInstanceOf(ArcaSoapError);
+  });
+
   it('un faultcode wscommon_* (con prefijo de namespace) también es ArcaAuthError', async () => {
     const fetch = mockFetch(soapFaultResponse('ns1:wscommon_003', 'Token vencido'));
     const err = await client(fetch)
