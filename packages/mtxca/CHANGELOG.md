@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.4
+
+### Patch Changes
+
+- 7384968: - `new MtxcaClient()` sin `endpoint` (o con uno que no es `https://`) lanza `ArcaValidationError`, como los clientes de los demás paquetes, en lugar de `TypeError`.
+  - Docs: `autorizarAjusteIVA` e `informarAjusteIVACAEA` validan, además del XSD, el dígito verificador de las CUIT/CUIL (tipo de documento 80/86, también en compradores). No aplican las reglas de importes de `autorizar`.
+- Updated dependencies [4197d0a]
+  - @ramiidv/arca-common@0.10.2
+
 ## 0.8.3
 
 ### Patch Changes

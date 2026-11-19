@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.5
+
+### Patch Changes
+
+- 3e27ad2: `CdcClient` deja de exponer `constatarCmpReq`, un método interno que enviaba el `CmpReq` sin validar. Usá `constatar(auth, input)`, que valida el input antes de llamar a ARCA.
+- Updated dependencies [4197d0a]
+  - @ramiidv/arca-common@0.10.2
+
 ## 0.8.4
 
 ### Patch Changes
