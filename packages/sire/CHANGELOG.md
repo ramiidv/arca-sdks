@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.4
+
+### Patch Changes
+
+- d29cbfc: `llms.txt`: se agregan las secciones de instalación y requisitos (Node >= 22.12, solo ESM, certificado asociado a `sire-ws`).
+- Updated dependencies [4197d0a]
+  - @ramiidv/arca-common@0.10.2
+
 ## 0.7.3
 
 ### Patch Changes
