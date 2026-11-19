@@ -3,6 +3,7 @@ import { arcaSoapCall, buildXml, extractMethodResult, parseXml, soapCall } from 
 import { ArcaSoapError } from '../src/errors.js';
 import type { ArcaEvent } from '../src/types.js';
 import { mockFetch, soapEnvelope, soapFault, xmlResponse } from './helpers.js';
+import { networkError } from '../src/testing.js';
 
 const URL = 'https://example.test/ws';
 const OK = soapEnvelope('<dummyResponse xmlns="http://x/"><return><appserver>OK</appserver></return></dummyResponse>');
@@ -12,10 +13,6 @@ const SOAP12_FAULT = (code: string) =>
   `<env:Fault><env:Code><env:Value>${code}</env:Value></env:Code>` +
   '<env:Reason><env:Text xml:lang="es">Request inválido</env:Text></env:Reason>' +
   '<env:Detail><error><codigo>12</codigo></error></env:Detail></env:Fault></env:Body></env:Envelope>';
-
-function networkError(code: string): TypeError {
-  return new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) });
-}
 
 afterEach(() => {
   vi.unstubAllGlobals();

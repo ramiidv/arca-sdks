@@ -7,12 +7,13 @@ import type { AccessTicket, TicketStorage, TicketStorageGetOptions } from './typ
 
 /**
  * Normaliza un ticket leído de un storage: acepta `expirationTime` como string
- * ISO, epoch en ms o `Date`, y devuelve `null` si el valor no es un ticket válido.
+ * ISO, epoch en ms o `Date`, y devuelve `null` si el valor no es un ticket
+ * válido (`token` o `sign` vacíos o que no son strings, o `expirationTime` ilegible).
  */
 export function normalizeAccessTicket(raw: unknown): AccessTicket | null {
   if (!raw || typeof raw !== 'object') return null;
   const t = raw as Record<string, unknown>;
-  if (typeof t['token'] !== 'string' || typeof t['sign'] !== 'string') return null;
+  if (typeof t['token'] !== 'string' || !t['token'] || typeof t['sign'] !== 'string' || !t['sign']) return null;
 
   const expirationTime = toIso(t['expirationTime']);
   if (!expirationTime) return null;
@@ -94,6 +95,8 @@ const READ_FLAGS = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) | (fsCon
  *   y se informa por `options.onError`).
  * - Un archivo con JSON corrupto se borra y se trata como inexistente (se
  *   informa por `options.onError`, que `WsaaClient` emite como `auth:storage-error`).
+ * - Si el directorio se borra mientras el proceso corre, el próximo `set` lo
+ *   vuelve a crear.
  * - Seguro para varios procesos que comparten el directorio (cada key es un archivo).
  *
  * @example
@@ -137,6 +140,23 @@ export class FileTicketStorage implements TicketStorage {
   }
 
   async set(key: string, ticket: AccessTicket): Promise<void> {
+    try {
+      await this.write(key, ticket);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      // El directorio se borró después de verificarlo: se vuelve a crear (y
+      // verificar) una vez.
+      this.directoryReady = false;
+      await this.write(key, ticket);
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    await rm(this.pathFor(key), { force: true });
+  }
+
+  /** Escribe el ticket de forma atómica (temporal + `fsync` + rename), creando el directorio si hace falta. */
+  private async write(key: string, ticket: AccessTicket): Promise<void> {
     await this.checkDirectory(true);
     const target = this.pathFor(key);
     const tmp = `${target}.${randomUUID()}.tmp`;
@@ -153,10 +173,6 @@ export class FileTicketStorage implements TicketStorage {
       await rm(tmp, { force: true });
       throw err;
     }
-  }
-
-  async delete(key: string): Promise<void> {
-    await rm(this.pathFor(key), { force: true });
   }
 
   /**

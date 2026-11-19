@@ -44,7 +44,7 @@ Lo mismo para todos los SDKs (la documentación oficial está en
    ```
 
    `serialNumber` es el texto `CUIT`, un espacio y la CUIT sin guiones. Guardá la clave: el
-   certificado no sirve sin ella. Los ejemplos de este repo leen `./certs/clave.key` y
+   certificado no sirve sin ella. Los ejemplos de esta documentación leen `./certs/clave.key` y
    `./certs/certificado.crt`.
 2. **Certificado**: con el CSR, generalo en
    - **Homologación**: [WSASS](https://wsass-homo.afip.gob.ar/wsass/portal/main.aspx), que se
@@ -80,7 +80,7 @@ Lo mismo para todos los SDKs (la documentación oficial está en
 | **QR**                | `generarUrlQR` — URL del QR de los comprobantes electrónicos                                                                                                             |
 | **Errores**           | `ArcaError`, `ArcaAuthError`, `ArcaTicketVigenteError`, `ArcaSoapError`, `ArcaServiceError`, `ArcaRechazoError`, `ArcaValidationError`, `ArcaResponseError`              |
 | **Schemas del XSD**   | `@ramiidv/arca-common/schema` — DSL para validar/codificar requests y decodificar respuestas                                                                             |
-| **Testing**           | `@ramiidv/arca-common/testing` — `fetch` simulado, envelopes, `testCert`, contratos contra el XSD                                                                        |
+| **Testing**           | `@ramiidv/arca-common/testing` — `fetch` simulado, envelopes, `testCert`, contratos contra el XSD (ver [Testing](#testing-ramiidvarca-commontesting))                     |
 | **Constantes**        | `WSAA_ENDPOINTS`, `DocTipo`, `Provincia`, `CondicionIva` (tipo `ServiceEndpoints`: la forma de cada servicio en el `ENDPOINTS` de los SDKs)                              |
 
 ## Autenticación WSAA
@@ -124,7 +124,8 @@ storage se descarta y se hace login.
 
 El `endpoint` propio tiene que ser `https://` (`http://` solo en `localhost`, `127.0.0.0/8` o `::1`,
 para servidores de prueba locales) y sin usuario ni contraseña; si no, el constructor lanza
-`ArcaValidationError`.
+`ArcaValidationError`. Lo mismo con las opciones numéricas fuera de rango (ver
+[Configuración de `WsaaClient`](#configuración-de-wsaaclient)).
 
 ### Datos del certificado
 
@@ -162,6 +163,7 @@ loguearte durante ese lapso. Para evitarlo, configurá un `ticketStorage`:
 `FileTicketStorage(directorio)` guarda un archivo JSON por ticket, **en texto plano**, con escritura
 atómica (archivo temporal + `fsync` + rename), permisos 0600 en los archivos y 0700 en el directorio.
 Un archivo corrupto se descarta (y se informa como `auth:storage-error`, sin citar su contenido).
+Si el directorio se borra mientras el proceso corre, el próximo `set` lo vuelve a crear.
 Sirve para varios procesos que comparten el directorio. `MemoryTicketStorage` no sobrevive a un
 reinicio (útil en tests).
 
@@ -177,10 +179,12 @@ En Linux y macOS, `FileTicketStorage` verifica el directorio antes de usarlo:
 En Windows no se verifican dueño ni permisos.
 
 La key que recibe el storage identifica entorno, certificado y servicio
-(`"prod:3f9a0c1b2d4e5f60:wsfe"`), así que el mismo storage sirve para varios CUITs y entornos.
+(`"prod:3f9a0c1b2d4e5f60:wsfe"`), así que el mismo storage sirve para varios CUITs y entornos. La
+huella se calcula sobre el certificado en sí, no sobre el texto del PEM: el mismo certificado con
+`Bag Attributes` o seguido de la cadena de certificación usa la misma key.
 `AccessTicket` es JSON puro (fechas ISO-8601). En un storage propio, `normalizeAccessTicket(raw)`
 valida lo leído (acepta `expirationTime` como ISO, epoch en ms o `Date`) y devuelve `null` si no es
-un ticket; `get` recibe un segundo parámetro opcional `{ onError }` para informar problemas que el
+un ticket (por ejemplo, con `token` o `sign` vacíos); `get` recibe un segundo parámetro opcional `{ onError }` para informar problemas que el
 storage resolvió sin lanzar:
 
 ```typescript
@@ -301,6 +305,7 @@ class ArcaMiServicio extends ArcaSdkBase<'mi'> {
 | `validateCuit`                            | Valida y normaliza la CUIT representada (ver Validadores)                                                                                                                                                                                                                                                                                                    |
 | `anySignal(...signals)`                   | Combina varios `AbortSignal` (ignora los `undefined`) en uno que se aborta con cualquiera                                                                                                                                                                                                                                                                    |
 | `safeEmit(onEvent, event)`                | Emite un `ArcaEvent` ignorando los errores del callback                                                                                                                                                                                                                                                                                                      |
+| `on(event, handler)` / `off(...)`         | Suscribe (o desuscribe) un handler a un evento de la instancia. Los handlers se llaman en orden de suscripción; si uno lanza, el error se ignora y se sigue con los demás                                                                                                                                                                                     |
 | `collectErrors(fn, errors)`               | Corre una validación y acumula los `details` de un `ArcaValidationError` en `errors` en vez de lanzar (re-lanza cualquier otro error)                                                                                                                                                                                                                        |
 | `collectErrorsWithPrefix(fn, errors, p)`  | Igual, prefijando `p.` al `field` de cada detalle                                                                                                                                                                                                                                                                                                            |
 
@@ -355,13 +360,19 @@ formatServiceErrors(extractServiceErrors(data)); // '[600] ..., [601] ...' (el f
 - `maxResponseBytes` (default 50 MB, alcanza para los PDF en base64 de los servicios agro) limita el
   body de cada respuesta: se lee por streaming y, si lo supera, se corta y se lanza `ArcaSoapError`
   (sin reintento; en emisiones, `uncertain: true`).
+- `timeout` tiene que ser un entero de 1 a 2147483647 ms, y `retries` y `retryDelayMs`, enteros de 0
+  a 2147483647 (el máximo de un timer de Node: con un valor mayor, o `Infinity`, el timer se
+  dispararía enseguida); `maxResponseBytes`, un número positivo. Si no, `soapCall` lanza
+  `ArcaValidationError` sin enviar nada (y los constructores de `WsaaClient` y de los SDKs, al
+  crearse).
 
 ### Reintentos e incertidumbre
 
 Las **consultas** (`kind: 'consulta'`, default) reintentan (`retries`, default 1, backoff
-`retryDelayMs * 2^(intento-1)`) los errores transitorios: red, timeout, HTTP 5xx sin Fault y
-respuesta 2xx sin Envelope SOAP (ej: una página HTML de un proxy).
-No reintentan SOAP Faults, 4xx ni errores de negocio.
+`retryDelayMs * 2^(intento-1)`, con un tope de 2147483647 ms por espera) los errores transitorios:
+red, timeout, HTTP 5xx sin Fault y respuesta 2xx sin Envelope SOAP (ej: una página HTML de un proxy).
+No reintentan SOAP Faults, redirecciones (3xx), 4xx, respuestas que superan `maxResponseBytes`
+(volverían a superarlo) ni errores de negocio.
 
 Las **emisiones** (`kind: 'emision'`) nunca se reintentan. El error indica `uncertain: true`
 cuando el servidor pudo haber procesado el request (timeout, conexión cortada, 5xx, respuesta
@@ -466,8 +477,9 @@ try {
 
 Todos los errores tienen un `code` estable (`"ARCA_AUTH_ERROR"`, `"ARCA_TICKET_VIGENTE"`,
 `"ARCA_SOAP_ERROR"`...) y `instanceof` funciona aunque haya más de una copia del paquete cargada.
-Las subclases propias tienen que declarar `static readonly code`. Los callbacks de `onEvent` nunca
-rompen una llamada: si lanzan, el error se ignora.
+Las subclases propias tienen que declarar `static readonly code`. Los callbacks de `onEvent` y los
+handlers de `on()` nunca rompen una llamada: si lanzan, el error se ignora (y los demás handlers se
+llaman igual).
 
 ## Schemas del XSD (`@ramiidv/arca-common/schema`)
 
@@ -489,7 +501,8 @@ const resp = decodeResponse(result, { numero: must(int()) }, 'autorizarResponse'
 - `nonEmptyStr({ min?, max? })`: string que no puede estar vacío ni tener solo espacios.
 - `str()` rechaza los caracteres que XML 1.0 no admite (controles salvo tab, LF y CR; U+FFFE y
   U+FFFF) y los surrogates UTF-16 sueltos.
-- `datetime()` acepta `Date` (se envía en hora de Argentina) o un string ISO-8601 con segundos.
+- `datetime()` acepta `Date` (se envía en hora de Argentina) o un string ISO-8601 con segundos y una
+  fecha que exista (`2026-02-30T00:00:00` se rechaza).
 - `list(f, minItems?, maxItems?)` / `wrapped(item, f, minItems?, maxItems?)`: en requests se verifica la
   cantidad de elementos.
 - `dec(digits, ...)` redondea a `digits` decimales mitad al par (Round Half Even, el método que
@@ -499,9 +512,43 @@ const resp = decodeResponse(result, { numero: must(int()) }, 'autorizarResponse'
   `uncertain: true`. `error` (fábrica propia) tiene prioridad.
 - También exporta `formatDateTimeAR`, `roundHalfUp` y `roundHalfEven`.
 
-`@ramiidv/arca-common/testing` incluye `loadXsdTypes` y `checkSchemaAgainstXsd` para tests de
-contrato contra el WSDL oficial, además de `mockFetch`, `soapResponse`, `soapFault`, `testCert`
-(certificado autofirmado válido) y `fakeTicketStorage`.
+## Testing (`@ramiidv/arca-common/testing`)
+
+Utilidades para testear sin red el código que usa los SDKs (no dependen de ningún framework de
+tests):
+
+- **`fetch` simulado** (graban cada request en `.calls`: `url`, `headers`, `soapAction`, `body`,
+  `method`, `signal`): `mockFetch(...respuestas)` responde en orden y lanza ante un request de
+  más; `mockFetchByMethod({ metodo: respuesta | [respuestas] })` responde según el método SOAP
+  (la última respuesta de cada método se repite; un método sin respuestas lanza);
+  `mockFetchWith(req => respuesta)` responde según el request. Una respuesta puede ser un XML
+  (HTTP 200), un `Response`, un `Error` (se lanza) o una función.
+- **Respuestas**: `xmlResponse(body, status?, headers?)`, `soapEnvelope(body, header?)`,
+  `soapResponse(elemento, contenido, namespace)`, `soapFault(code, string)`,
+  `soapFaultResponse(code, string)` (HTTP 500), `loginResponse(token, vencimiento)` (respuesta de
+  WSAA), `networkError(code)` (error de red como el de `fetch`, ej: `ECONNREFUSED`) y
+  `hangingReply()` (no responde hasta que se aborta el `signal` del request; para probar timeouts).
+- **Autenticación**: `fakeTicketStorage()` (siempre devuelve un ticket vigente: no se llama a
+  WSAA) y `testCert()` (certificado autofirmado y su clave, válidos para `WsaaClient`).
+- **Inspección del XML enviado**: `requestParams(body, { parseNumbers? })` (contenido del método,
+  sin prefijos; lanza si el request no tiene Body) y `childOrder(xml, tag)` (hijos de un elemento
+  en orden de documento, para verificar una `xsd:sequence`; lanza si no lo encuentra).
+- **Contratos contra el XSD**: `loadXsdTypes` y `checkSchemaAgainstXsd`, para verificar un schema
+  contra el WSDL oficial.
+
+```typescript
+import { arcaSoapCall } from '@ramiidv/arca-common';
+import { mockFetchByMethod, requestParams, soapResponse } from '@ramiidv/arca-common/testing';
+
+const NS = 'http://ar.gob.afip.ws/miServicio/';
+const fetch = mockFetchByMethod({
+  dummy: soapResponse('dummyResponse', '<return><appserver>OK</appserver></return>', NS),
+});
+await arcaSoapCall('https://localhost/miServicio', NS, 'dummy', {}, { fetch });
+fetch.calls[0].method; // "dummy"
+requestParams(fetch.calls[0].body); // {} (parámetros enviados)
+// Con un SDK: new ArcaFacturacion({ ...testCert(), cuit, fetch, ticketStorage: fakeTicketStorage() })
+```
 
 ## Configuración de `WsaaClient`
 
@@ -513,12 +560,12 @@ contrato contra el WSDL oficial, además de `mockFetch`, `soapResponse`, `soapFa
 | `production`                     | `boolean`                       | `false`             | Usar WSAA de producción                                                               |
 | `endpoint`                       | `string`                        | —                   | URL propia de WSAA (proxy, mock): `https://` (`http://` solo en loopback)             |
 | `tokenTTLMinutes`                | `number`                        | `10`                | Vigencia del TRA (1 a 1440). No es la vida del TA                                     |
-| `timeout`                        | `number`                        | `30000`             | Timeout HTTP en ms                                                                    |
-| `retries`                        | `number`                        | `1`                 | Reintentos del login, solo ante errores de red sin enviar                             |
-| `retryDelayMs`                   | `number`                        | `1000`              | Delay base del backoff exponencial                                                    |
+| `timeout`                        | `number`                        | `30000`             | Timeout HTTP en ms (entero de 1 a 2147483647)                                         |
+| `retries`                        | `number`                        | `1`                 | Reintentos del login, solo ante errores de red sin enviar (entero ≥ 0)                |
+| `retryDelayMs`                   | `number`                        | `1000`              | Delay base del backoff exponencial, en ms (entero ≥ 0)                                |
 | `onEvent`                        | `function`                      | —                   | Callback de eventos                                                                   |
 | `ticketStorage`                  | `TicketStorage`                 | —                   | Persistencia de tickets entre reinicios (recomendado)                                 |
-| `clockOffsetMs`                  | `number`                        | `0`                 | Offset `relojARCA - relojLocal` en ms                                                 |
+| `clockOffsetMs`                  | `number`                        | `0`                 | Offset `relojARCA - relojLocal` en ms (hasta ±24 horas)                               |
 | `autoClockSkew`                  | `boolean`                       | `true`              | Ajustar el offset si WSAA rechaza el TRA por reloj                                    |
 | `loginErrorCooldownMs`           | `number`                        | `60000`             | Espera tras un error transitorio (`0` = sin espera)                                   |
 | `permanentErrorCooldownMs`       | `number`                        | `Infinity`          | Espera tras un error no reintentable (`Infinity` = hasta limpiarla; `0` = sin espera) |
@@ -526,6 +573,10 @@ contrato contra el WSDL oficial, además de `mockFetch`, `soapResponse`, `soapFa
 | `fetch`                          | `typeof fetch`                  | `globalThis.fetch`  | `fetch` propio (proxy, mTLS, tests)                                                   |
 | `legacyTls`                      | `'auto' \| 'never' \| 'always'` | `'auto'`            | Transporte TLS legacy para hosts con DH de 1024 bits                                  |
 | `maxResponseBytes`               | `number`                        | `52428800`          | Tamaño máximo del body de una respuesta (50 MB)                                       |
+
+Los valores fuera de rango (`NaN`, negativos, `Infinity` salvo en `permanentErrorCooldownMs`, un
+`timeout`/`retries`/`retryDelayMs` no entero o mayor a 2147483647) hacen que el constructor lance
+`ArcaValidationError`.
 
 `ArcaBaseConfig`, la config común de los SDKs, tiene los mismos campos que esta tabla (incluidos
 `loginErrorCooldownMs`, `permanentErrorCooldownMs` y `alreadyAuthenticatedCooldownMs`) salvo

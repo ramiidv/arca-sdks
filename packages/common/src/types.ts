@@ -96,11 +96,17 @@ export interface ArcaBaseConfig {
   cuit: number | string;
   /** Usar entorno de producción (default: false = testing/homologación) */
   production?: boolean;
-  /** Timeout para requests HTTP en milisegundos (default: 30000) */
+  /** Timeout para requests HTTP en milisegundos, entero de 1 a 2147483647 (default: 30000) */
   timeout?: number;
-  /** Cantidad de reintentos en consultas ante errores transitorios (default: 1). Las emisiones nunca se reintentan. */
+  /**
+   * Cantidad de reintentos en consultas ante errores transitorios, entero ≥ 0
+   * (default: 1). Las emisiones nunca se reintentan.
+   */
   retries?: number;
-  /** Delay inicial entre reintentos en milisegundos, se duplica con cada intento (default: 1000) */
+  /**
+   * Delay inicial entre reintentos en milisegundos, entero de 0 a 2147483647;
+   * se duplica con cada intento, con un tope de 2147483647 (default: 1000)
+   */
   retryDelayMs?: number;
   /**
    * Vigencia del TRA (pedido de acceso firmado) en minutos, de 1 a 1440
@@ -112,7 +118,7 @@ export interface ArcaBaseConfig {
   onEvent?: (event: ArcaEvent) => void;
   /** Storage persistente de Tickets de Acceso (ver `TicketStorage`). Recomendado en producción. */
   ticketStorage?: TicketStorage;
-  /** Diferencia entre el reloj de ARCA y el local, en ms (`relojARCA - relojLocal`). Default: 0. */
+  /** Diferencia entre el reloj de ARCA y el local, en ms (`relojARCA - relojLocal`), hasta ±24 horas. Default: 0. */
   clockOffsetMs?: number;
   /** Ajustar automáticamente el reloj si WSAA rechaza el TRA por desfase (default: true). */
   autoClockSkew?: boolean;
@@ -158,11 +164,17 @@ export interface ArcaBaseConfig {
 export type SoapOperationKind = 'consulta' | 'emision';
 
 export interface SoapCallOptions {
-  /** Timeout en milisegundos (default: 30000) */
+  /**
+   * Timeout de cada intento en milisegundos, entero de 1 a 2147483647 (el
+   * máximo de un timer de Node). Default: 30000.
+   */
   timeout?: number;
-  /** Cantidad de reintentos para consultas (default: 1). Se ignora en emisiones. */
+  /** Cantidad de reintentos para consultas, entero de 0 a 2147483647 (default: 1). Se ignora en emisiones. */
   retries?: number;
-  /** Delay base en milisegundos para backoff exponencial (default: 1000) */
+  /**
+   * Delay base en milisegundos para backoff exponencial, entero de 0 a
+   * 2147483647 (default: 1000). Cada espera tiene un tope de 2147483647 ms.
+   */
   retryDelayMs?: number;
   /** Valor del header SOAPAction */
   soapAction?: string;

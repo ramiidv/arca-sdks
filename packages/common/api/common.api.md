@@ -156,7 +156,7 @@ export abstract class ArcaSdkBase<TService extends string = string> {
     protected callOptions(opts?: CallOptions): CallOptions;
     clearAuthCache(): Promise<void>;
     readonly cuit: string;
-    protected endpoint(defaults: EnvEndpoints, override?: string): string;
+    protected endpoint(defaults: ServiceEndpoints, override?: string): string;
     off(event: ArcaEvent['type'], handler: (event: ArcaEvent) => void): this;
     on(event: ArcaEvent['type'], handler: (event: ArcaEvent) => void): this;
     readonly production: boolean;
@@ -403,13 +403,8 @@ export enum DocTipo {
 // @public
 export function ensureArray<T>(val: T | T[] | undefined | null): T[];
 
-// @public
-export interface EnvEndpoints {
-    // (undocumented)
-    production: string;
-    // (undocumented)
-    testing: string;
-}
+// @public @deprecated
+export type EnvEndpoints = ServiceEndpoints;
 
 // @public
 export function extractMethodResult(parsed: Record<string, unknown>, method: string, options?: ExtractMethodResultOptions): Record<string, unknown>;

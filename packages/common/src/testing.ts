@@ -145,11 +145,19 @@ export function mockFetchWith(responder: (request: RecordedRequest) => MockReply
   return Object.assign(fn, { calls }) as MockFetch;
 }
 
-/** Promesa que no se resuelve hasta que se aborta el `signal` del request (para probar timeouts). */
+/**
+ * Promesa que no se resuelve hasta que se aborta el `signal` del request (para
+ * probar timeouts). Si el `signal` ya llega abortado, rechaza enseguida.
+ */
 export function hangingReply(): (request: RecordedRequest) => Promise<Response> {
   return (request) =>
     new Promise((_, reject) => {
-      request.signal?.addEventListener('abort', () => reject(request.signal?.reason), { once: true });
+      const signal = request.signal;
+      if (signal?.aborted) {
+        reject(signal.reason);
+        return;
+      }
+      signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
     });
 }
 

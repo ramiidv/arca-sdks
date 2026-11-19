@@ -170,7 +170,7 @@ export const cuit = (o: { decodeAs?: 'number' | 'string' } = {}): Field => ({
 export const date = (): Field => ({ scalar: { kind: 'date' } });
 /** Fecha `AAAAMMDD` (servicios ASMX como WSFE/WSCDC). Acepta `Date` o string `AAAAMMDD`/`AAAA-MM-DD`. */
 export const date8 = (): Field => ({ scalar: { kind: 'date8' } });
-/** `xsd:dateTime`. Acepta `Date` (hora de Argentina, -03:00) o string ISO-8601 con segundos. */
+/** `xsd:dateTime`. Acepta `Date` (hora de Argentina, -03:00) o string ISO-8601 con segundos (y una fecha que exista). */
 export const datetime = (): Field => ({ scalar: { kind: 'datetime' } });
 export const base64 = (): Field => ({ scalar: { kind: 'base64' } });
 export const obj = (schema: Schema): Field => ({ schema });
@@ -286,13 +286,25 @@ function encodeScalar(v: unknown, s: Scalar, path: string, errors: ValidationErr
         if (Number.isNaN(v.getTime())) return fail('fecha/hora inválida');
         return formatDateTimeAR(v);
       }
-      if (typeof v !== 'string' || !DATETIME_RE.test(v) || Number.isNaN(Date.parse(v))) {
+      // `Date.parse` acepta días inexistentes (`2026-02-30T00:00:00`): la fecha se valida aparte.
+      if (typeof v !== 'string' || !DATETIME_RE.test(v) || Number.isNaN(Date.parse(v)) || !isCalendarDate(v)) {
         return fail('fecha/hora inválida (Date o ISO-8601, ej: 2026-11-01T08:30:00-03:00)');
       }
       return v;
     case 'base64':
       if (typeof v !== 'string') return fail('debe ser un string base64');
       return v;
+  }
+}
+
+/** `true` si la parte `AAAA-MM-DD` de un `xsd:dateTime` es una fecha que existe. */
+function isCalendarDate(datetime: string): boolean {
+  try {
+    formatDate(datetime.slice(0, 10));
+    return true;
+  } catch (e) {
+    if (e instanceof ArcaValidationError) return false;
+    throw e;
   }
 }
 

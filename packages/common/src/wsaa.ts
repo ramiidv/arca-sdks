@@ -4,7 +4,17 @@ import { parseCredentials } from './certificate.js';
 import type { ParsedCredentials } from './certificate.js';
 import { validateEndpoint } from './endpoint.js';
 import { ArcaAuthError, ArcaSoapError, ArcaTicketVigenteError, ArcaValidationError } from './errors.js';
-import { soapCallWith, parseXml, buildXml, extractMethodResult, safeEmit, abortedBeforeSend } from './soap-client.js';
+import {
+  soapCallWith,
+  parseXml,
+  buildXml,
+  extractMethodResult,
+  safeEmit,
+  abortedBeforeSend,
+  localFaultCode,
+  sleep,
+  validateTransportOptions,
+} from './soap-client.js';
 import { normalizeAccessTicket } from './ticket-storage.js';
 import type { AccessTicket, ArcaEvent, CallOptions, LegacyTlsMode, SoapCallOptions, TicketStorage } from './types.js';
 import { WSAA_ENDPOINTS, WSAA_NAMESPACE } from './constants.js';
@@ -74,15 +84,15 @@ export interface WsaaClientConfig {
    * el lapso en que un TRA firmado (CMS) que se filtre sirve para pedir un TA.
    */
   tokenTTLMinutes?: number;
-  /** Timeout en milisegundos (default: 30000) */
+  /** Timeout en milisegundos, entero de 1 a 2147483647 (default: 30000) */
   timeout?: number;
   /**
    * Reintentos del login ante errores de red con certeza de que el request no
-   * se envió (DNS, conexión rechazada; default: 1). Un timeout o un 5xx no se
-   * reintentan: WSAA pudo haber emitido el TA.
+   * se envió (DNS, conexión rechazada; default: 1), entero ≥ 0. Un timeout o
+   * un 5xx no se reintentan: WSAA pudo haber emitido el TA.
    */
   retries?: number;
-  /** Delay base para backoff exponencial en milisegundos (default: 1000) */
+  /** Delay base para backoff exponencial en milisegundos, entero de 0 a 2147483647 (default: 1000) */
   retryDelayMs?: number;
   /** Callback de eventos */
   onEvent?: (event: ArcaEvent) => void;
@@ -94,7 +104,8 @@ export interface WsaaClientConfig {
   ticketStorage?: TicketStorage;
   /**
    * Diferencia entre el reloj de ARCA y el local, en ms (`relojARCA - relojLocal`).
-   * Se aplica al armar el TRA y al evaluar el vencimiento de los tickets. Default: 0.
+   * Se aplica al armar el TRA y al evaluar el vencimiento de los tickets.
+   * Número finito de hasta ±86400000 (24 horas). Default: 0.
    */
   clockOffsetMs?: number;
   /**
@@ -110,7 +121,7 @@ export interface WsaaClientConfig {
    * reloj que persiste después de corregirlo), durante cuántos ms
    * `getAccessTicket` rechaza enseguida con `ArcaAuthError` (`retryable: true`,
    * `cause` = el error original) sin llamar a WSAA, como pide la
-   * especificación. Default: 60000; 0 lo desactiva. No aplica a un TA vigente,
+   * especificación. Default: 60000; 0 lo desactiva (número finito ≥ 0). No aplica a un TA vigente,
    * un abort ni un error de red sin enviar.
    * `clearTicket`/`clearAllTickets`/`resetLoginCooldown` limpian la espera.
    */
@@ -123,6 +134,7 @@ export interface WsaaClientConfig {
    * TA hasta corregir el problema: durante cuántos ms `getAccessTicket`
    * rechaza con `ArcaAuthError` (`retryable: false`) sin llamar a WSAA.
    * Default: `Infinity` (hasta `clearTicket`/`clearAllTickets`/`resetLoginCooldown`); 0 lo desactiva.
+   * Número ≥ 0.
    */
   permanentErrorCooldownMs?: number;
   /**
@@ -130,7 +142,7 @@ export interface WsaaClientConfig {
    * ms `getAccessTicket` rechaza con `ArcaTicketVigenteError` sin llamar a
    * WSAA: un pedido dentro del lapso de retención vuelve a ser rechazado.
    * Default: el lapso del manual de WSAA, 120000 en producción y 600000 en
-   * homologación; 0 lo desactiva.
+   * homologación; 0 lo desactiva (número finito ≥ 0).
    * `clearTicket`/`clearAllTickets`/`resetLoginCooldown` limpian la espera.
    */
   alreadyAuthenticatedCooldownMs?: number;
@@ -190,8 +202,10 @@ export class WsaaClient {
 
   /**
    * @throws ArcaValidationError si el certificado o la clave son inválidos, si
-   *   no se corresponden, si `tokenTTLMinutes` está fuera de rango o si
-   *   `endpoint` no es una URL https.
+   *   no se corresponden, si `tokenTTLMinutes`, `timeout`, `retries`,
+   *   `retryDelayMs`, `maxResponseBytes`, `clockOffsetMs` o alguna de las
+   *   esperas (`*CooldownMs`) están fuera de rango, o si `endpoint` no es una
+   *   URL https.
    */
   constructor(config: WsaaClientConfig) {
     if (config.endpoint !== undefined) validateEndpoint(config.endpoint, 'endpoint');
@@ -220,17 +234,20 @@ export class WsaaClient {
         'tokenTTLMinutes',
       );
     }
+    validateTransportOptions(config);
+    validateClockOffset(config.clockOffsetMs);
+    validateCooldown('loginErrorCooldownMs', config.loginErrorCooldownMs, false);
+    validateCooldown('permanentErrorCooldownMs', config.permanentErrorCooldownMs, true);
+    validateCooldown('alreadyAuthenticatedCooldownMs', config.alreadyAuthenticatedCooldownMs, false);
     this.onEvent = config.onEvent;
     this.#storage = config.ticketStorage;
     this.autoClockSkew = config.autoClockSkew ?? true;
     this.offsetMs = config.clockOffsetMs ?? 0;
-    this.loginErrorCooldownMs = Math.max(0, config.loginErrorCooldownMs ?? DEFAULT_LOGIN_ERROR_COOLDOWN_MS);
-    this.permanentErrorCooldownMs = Math.max(0, config.permanentErrorCooldownMs ?? Infinity);
-    this.alreadyAuthenticatedCooldownMs = Math.max(
-      0,
+    this.loginErrorCooldownMs = config.loginErrorCooldownMs ?? DEFAULT_LOGIN_ERROR_COOLDOWN_MS;
+    this.permanentErrorCooldownMs = config.permanentErrorCooldownMs ?? Infinity;
+    this.alreadyAuthenticatedCooldownMs =
       config.alreadyAuthenticatedCooldownMs ??
-        ALREADY_AUTHENTICATED_COOLDOWN_MS[this.production ? 'production' : 'testing'],
-    );
+      ALREADY_AUTHENTICATED_COOLDOWN_MS[this.production ? 'production' : 'testing'];
     this.soapOpts = {
       timeout: config.timeout,
       retries: config.retries,
@@ -254,7 +271,8 @@ export class WsaaClient {
 
   /**
    * Key con la que se guarda el ticket de `service` en el `ticketStorage`:
-   * `"{entorno}:{huella del certificado}:{servicio}"`.
+   * `"{entorno}:{huella del certificado}:{servicio}"`. La huella depende solo
+   * del certificado (no de `Bag Attributes` ni de la cadena que acompañe al PEM).
    */
   ticketKey(service: string): string {
     return `${this.keyPrefix}:${service}`;
@@ -267,8 +285,10 @@ export class WsaaClient {
    * aborta, porque un login que llega a WSAA y cuya respuesta se pierde deja
    * un TA vigente que no se puede recuperar, y WSAA rechaza los pedidos
    * repetidos durante un lapso de retención (ver `ArcaTicketVigenteError`).
+   * Con un `signal` ya abortado (y sin ticket en memoria) lanza sin iniciar un login.
    *
    * @throws ArcaValidationError si `service` no es un nombre de servicio válido.
+   * @throws ArcaSoapError (`aborted: true`, `uncertain: false`) si se cancela la espera.
    * @throws ArcaAuthError si el login falla (ver `faultCode`, `retryable` y
    *   `cause`), o si el servicio está en espera tras un login fallido.
    * @throws ArcaTicketVigenteError si WSAA indica que ya hay un TA vigente que
@@ -282,11 +302,17 @@ export class WsaaClient {
       return cached;
     }
 
+    // Abortado antes de empezar: no se dispara un login que nadie va a esperar.
+    if (opts?.signal?.aborted) throw abortedBeforeSend('getAccessTicket', opts.signal.reason);
+
     let pending = this.#pendingLogins.get(service);
     if (!pending) {
       pending = this.resolveTicket(service).finally(() => {
         this.#pendingLogins.delete(service);
       });
+      // La promesa compartida puede quedar sin nadie esperándola (todos los
+      // callers cancelaron con su signal): su rechazo no tiene que quedar sin manejar.
+      pending.catch(() => {});
       this.#pendingLogins.set(service, pending);
     }
     return raceWithSignal(pending, opts?.signal, (reason) => abortedBeforeSend('getAccessTicket', reason));
@@ -445,7 +471,7 @@ export class WsaaClient {
   ): Promise<{ ticket: AccessTicket; source: 'memory' | 'storage' } | undefined> {
     const delays = this.#storage ? ALREADY_AUTHENTICATED_REREAD_DELAYS_MS : [];
     for (let i = 0; i < delays.length; i++) {
-      if (delays[i] > 0) await delay(delays[i]);
+      if (delays[i] > 0) await sleep(delays[i]);
       const again = await this.readFromStorage(service);
       if (again && this.isTicketUsable(again)) return { ticket: again, source: 'storage' };
       // Si ya tenemos un ticket utilizable no hace falta esperar más.
@@ -560,12 +586,16 @@ export class WsaaClient {
   }
 
   private parseAccessTicket(xml: string): AccessTicket {
-    const invalid = (msg: string) => new ArcaAuthError(`Access ticket inválido: ${msg}`, { retryable: true });
+    const invalid = (msg: string, cause?: unknown) =>
+      new ArcaAuthError(
+        `Access ticket inválido: ${msg}`,
+        cause !== undefined ? { retryable: true, cause } : { retryable: true },
+      );
     let parsed: Record<string, unknown>;
     try {
       parsed = parseXml(xml, { parseNumbers: false });
-    } catch {
-      throw invalid('XML ilegible');
+    } catch (error) {
+      throw invalid('XML ilegible', error);
     }
     const loginTicketResponse = parsed['loginTicketResponse'] as Record<string, unknown> | undefined;
     if (!loginTicketResponse || typeof loginTicketResponse !== 'object') {
@@ -681,10 +711,17 @@ function environmentLabel(endpoint: string): string {
   return createHash('sha256').update(endpoint).digest('hex').slice(0, 8);
 }
 
-/** Huella corta del certificado: identifica al emisor sin exponer el PEM. */
+/**
+ * Huella corta del certificado: identifica al emisor sin exponer el PEM. Se
+ * calcula sobre el certificado que se usa para firmar (el primer bloque PEM,
+ * en DER), así un PEM con `Bag Attributes`, comentarios o la cadena completa
+ * da la misma huella que el certificado solo. Para que las keys ya guardadas
+ * en un `ticketStorage` sigan sirviendo, se hashea el DER en base64 (sin saltos
+ * de línea): para un PEM simple es el mismo texto que se hasheaba antes.
+ */
 function certFingerprint(pem: string): string {
-  const body = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
-  return createHash('sha256').update(body).digest('hex').slice(0, 16);
+  const der = forge.pem.decode(pem)[0]?.body ?? '';
+  return createHash('sha256').update(forge.util.encode64(der)).digest('hex').slice(0, 16);
 }
 
 function faultText(error: unknown): string {
@@ -722,11 +759,6 @@ const skewRetryFailures = new WeakSet<object>();
 /** Error de red con certeza de que el request no se envió (DNS, conexión rechazada, TLS). */
 function isNotSent(error: ArcaSoapError): boolean {
   return !error.uncertain && !error.aborted && error.statusCode === undefined && error.faultString === undefined;
-}
-
-/** Nombre local de un `faultcode` (`ns1:cms.cert.expired` → `cms.cert.expired`). */
-function localFaultCode(faultCode: string | undefined): string {
-  return faultCode ? faultCode.slice(faultCode.lastIndexOf(':') + 1) : '';
 }
 
 /**
@@ -805,8 +837,32 @@ function validateServiceName(service: string): void {
   }
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/** Valida `clockOffsetMs`: un número finito de hasta 24 horas (en valor absoluto). */
+function validateClockOffset(value: unknown): void {
+  if (value === undefined) return;
+  if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > MAX_AUTO_CLOCK_OFFSET_MS) {
+    throw new ArcaValidationError(
+      `clockOffsetMs inválido: ${String(value)}. Tiene que ser un número de milisegundos entre ` +
+        `-${MAX_AUTO_CLOCK_OFFSET_MS} y ${MAX_AUTO_CLOCK_OFFSET_MS} (24 horas).`,
+      [{ field: 'clockOffsetMs', message: 'debe ser un número finito de hasta 24 horas', value }],
+      'clockOffsetMs',
+    );
+  }
+}
+
+/** Valida una espera (`*CooldownMs`): un número ≥ 0 (`Infinity` solo si `allowInfinity`). */
+function validateCooldown(field: string, value: unknown, allowInfinity: boolean): void {
+  if (value === undefined) return;
+  const ok =
+    typeof value === 'number' && value >= 0 && (Number.isFinite(value) || (allowInfinity && value === Infinity));
+  if (!ok) {
+    const rule = allowInfinity ? 'un número de milisegundos ≥ 0 (o Infinity)' : 'un número finito de milisegundos ≥ 0';
+    throw new ArcaValidationError(
+      `${field} inválido: ${String(value)}. Tiene que ser ${rule}.`,
+      [{ field, message: `debe ser ${rule}`, value }],
+      field,
+    );
+  }
 }
 
 function raceWithSignal<T>(

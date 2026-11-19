@@ -105,6 +105,39 @@ describe('ArcaSdkBase', () => {
     expect(fromOn).toEqual(['request:end']);
   });
 
+  it('un handler de on() que lanza no impide que se llame a los siguientes', async () => {
+    const calls: string[] = [];
+    const sdk = demo({ fetch: mockFetch(DUMMY) });
+    sdk.on('request:end', () => {
+      calls.push('primero');
+      throw new Error('handler roto');
+    });
+    sdk.on('request:end', () => calls.push('segundo'));
+    await expect(sdk.client.dummy()).resolves.toMatchObject({ appserver: 'OK' });
+    expect(calls).toEqual(['primero', 'segundo']);
+  });
+
+  it.each([
+    [{ timeout: Infinity }, 'timeout'],
+    [{ retries: 1.5 }, 'retries'],
+    [{ retryDelayMs: Number.NaN }, 'retryDelayMs'],
+  ])(
+    'valida las opciones de transporte en el constructor (%o), también con un WsaaClient compartido',
+    (extra, field) => {
+      const wsaa = new WsaaClient({ ...testCert() });
+      for (const config of [extra, { ...extra, wsaa }]) {
+        let err: unknown;
+        try {
+          demo(config);
+        } catch (e) {
+          err = e;
+        }
+        expect(err).toBeInstanceOf(ArcaValidationError);
+        expect((err as ArcaValidationError).field).toBe(field);
+      }
+    },
+  );
+
   it('combina el signal global con el de la llamada', async () => {
     const global = new AbortController();
     const sdk = demo({ signal: global.signal, fetch: mockFetch() });
