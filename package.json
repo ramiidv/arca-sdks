@@ -13,9 +13,10 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "clean": "node scripts/clean-dist.mjs --all",
-    "typecheck": "npm run typecheck --workspaces",
+    "typecheck": "npm run typecheck --workspaces && tsc -p tests",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:homologacion": "vitest run --project integration --reporter=default --reporter=./tests/homologacion/reporter.ts",
     "lint": "biome check . && node scripts/check-types-node.mjs",
     "lint:fix": "biome check --write .",
     "lint:pkg": "npm run lint:pkg --workspaces",
