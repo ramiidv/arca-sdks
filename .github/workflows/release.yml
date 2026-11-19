@@ -20,7 +20,7 @@ permissions: {}
 # no hace falta actualizar npm. Si se cambia node-version, mantener npm >= 11.5.1.
 
 jobs:
-  # Mismos checks que un PR (tests en Node 22/24, lint, publint, api:check):
+  # Mismos checks que un PR (tests en Node 22.12/22/24, lint, publint, api:check):
   # no se versiona ni se publica con CI en rojo.
   ci:
     uses: ./.github/workflows/ci.yml

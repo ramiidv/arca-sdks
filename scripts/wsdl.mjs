@@ -2,7 +2,8 @@
 /**
  * Snapshots de los WSDL oficiales de ARCA (y los XSD que importan), guardados
  * en packages/<paquete>/wsdl/. Los tests de contrato comparan los schemas de
- * cada SDK contra estos archivos.
+ * cada SDK contra estos archivos; el de WSAA (common) no tiene test de contrato
+ * y sirve solo para detectar cambios.
  *
  *   node scripts/wsdl.mjs           verifica que los snapshots coincidan con
  *                                   los WSDL publicados (exit 1 si ARCA cambió algo)
@@ -19,7 +20,10 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Paquete → archivo → URL del WSDL. */
+/**
+ * Paquete → archivo → URL del WSDL. Son los endpoints de producción de
+ * packages/<paquete>/src/constants.ts más `?wsdl`: si cambia un endpoint, cambiarlo acá también.
+ */
 const MANIFEST = {
   common: {
     'wsaa.wsdl': 'https://wsaa.afip.gov.ar/ws/services/LoginCms?wsdl',

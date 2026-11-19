@@ -1,43 +1,39 @@
 # Plan de trabajo
 
-Estado al 2026-11-03 y próximos pasos. Actualizar este archivo cuando se cierre
+Estado al 2026-11-19 y próximos pasos. Actualizar este archivo cuando se cierre
 o se agregue algo.
 
 ## Estado actual
 
-Versiones publicadas (2026-11-03, con trusted publishing y provenance):
+Paquetes publicados con trusted publishing y provenance. La versión vigente de
+cada uno está en su `package.json` y su `CHANGELOG.md`.
 
-| Paquete | Versión | Notas |
-|---|---|---|
-| `@ramiidv/arca-common` | 0.9.1 | `ArcaSdkBase`, `SoapServiceClient`, `/schema` (DSL del XSD), `/testing`, QR, certificados, `ArcaRechazoError` |
-| `@ramiidv/arca-facturacion` | 7.0.1 | WSFEv1, WSFEX, CAEA y QR sobre el DSL |
-| `@ramiidv/arca-padron` | 0.9.0 | Constancia, A4, A10, A13, A100 |
-| `@ramiidv/arca-agro` | 0.8.1 | WSCPE (con derivados granarios), WSLPG (liquidación primaria y secundaria) |
-| `@ramiidv/arca-cdc` | 0.8.1 | WSCDC |
-| `@ramiidv/arca-fecred` | 0.8.0 | WSFECRED |
-| `@ramiidv/arca-mtxca` | 0.8.1 | WSMTXCA |
-| `@ramiidv/arca-sire` | 0.7.1 | SIRE C2005 |
-| `@ramiidv/arca-empleados` | 0.6.0 | Genera un TXT, no usa SOAP |
+| Paquete | Notas |
+|---|---|
+| `@ramiidv/arca-common` | `ArcaSdkBase`, `SoapServiceClient`, `/schema` (DSL del XSD), `/testing`, QR, certificados, `ArcaRechazoError` |
+| `@ramiidv/arca-facturacion` | WSFEv1, WSFEX, CAEA y QR sobre el DSL |
+| `@ramiidv/arca-padron` | Constancia, A4, A10, A13, A100 |
+| `@ramiidv/arca-agro` | WSCPE (con derivados granarios), WSLPG (liquidación primaria y secundaria) |
+| `@ramiidv/arca-cdc` | WSCDC |
+| `@ramiidv/arca-fecred` | WSFECRED |
+| `@ramiidv/arca-mtxca` | WSMTXCA |
+| `@ramiidv/arca-sire` | SIRE C2005 |
+| `@ramiidv/arca-empleados` | Genera un TXT, no usa SOAP |
 
 Todos los SDKs con web service extienden `ArcaSdkBase`, así que comparten
 configuración, `wsaa`, `cuit`, `production`, `on`/`off`, `config.wsaa`,
-`config.signal` y `clearAuthCache()`. Todos dependen de `@ramiidv/arca-common`
-^0.9 (los que cambiaron en la última release, de ^0.9.1): para compartir el
-`WsaaClient` hay que actualizarlos juntos.
+`config.signal` y `clearAuthCache()`. Todos dependen de la misma minor de
+`@ramiidv/arca-common` (hoy ^0.10.1): para compartir el `WsaaClient` hay que
+actualizarlos juntos.
 
-La última release (PR #19) corrigió lo que ARCA homologación contradijo:
-alícuotas 5% y 2,5% y reglas 145/162 en mtxca, tablas vacías y eventos de
+Hitos anteriores: la PR #19 corrigió lo que ARCA homologación contradijo
+(alícuotas 5% y 2,5% y reglas 145/162 en mtxca, tablas vacías y eventos de
 código 0 en cdc, faults de autenticación de SIRE, consultas sin resultados en
-facturacion (602/10102) y agro (800), reglas de `liquidacionAutorizar`, y el
-extracto del body en el error de una respuesta 2xx sin SOAP Envelope.
-
-La anterior (PR #16) unificó la API entre los paquetes: Node >= 22.12;
-los rechazos de ARCA (`resultado` R) lanzan `ArcaRechazoError`; clientes de bajo
-nivel con `{ endpoint, transport? }`; `ENDPOINTS` con la misma forma en todos los
-paquetes; `ArcaResponseError` ante una respuesta inválida; `formatServiceErrors`
-para los mensajes de error de ARCA; sin los alias ni las operaciones deprecadas.
-Antes, la PR #15 salió de una revisión contra los manuales vigentes de cada
-servicio.
+facturacion y agro, reglas de `liquidacionAutorizar`); la PR #16 unificó la API
+entre los paquetes (Node >= 22.12, `ArcaRechazoError`, clientes de bajo nivel
+con `{ endpoint, transport? }`, `ENDPOINTS` con la misma forma,
+`ArcaResponseError`, `formatServiceErrors`), y la PR #15 salió de una revisión
+contra los manuales vigentes de cada servicio.
 
 ## Próximos pasos técnicos
 
@@ -58,6 +54,24 @@ servicio.
   los cruces entre los dos) escribe un reporte sin datos del contribuyente;
   cada corrida, propia o reportada en un issue "Reporte de homologación", se
   suma a [HOMOLOGACION.md](HOMOLOGACION.md).
+
+### Pendientes de la auditoría del 2026-11-19
+
+Quedaron para una tanda aparte porque cambian la API pública o reestructuran
+un paquete:
+
+- Mover a common lo que comparten facturacion, mtxca y fecred: `CbteTipo`,
+  `IvaTipo`, `IVA_RATES` (hoy con escalas distintas: 21 en facturacion y 0.21
+  en mtxca), las listas de tipos FCE, `CUIT_NO_CATEGORIZADO`, las opciones de
+  transferencia `SCA`/`ADC` y la fórmula del margen con el que ARCA compara
+  importes (`coincide` en facturacion, `dentroDelMargen` en mtxca).
+- agro: una clase base interna para los clientes de WSCPE y WSLPG (hoy repiten
+  `#request`, `#call`, `#lista` y `dummy`); usar `extractServiceErrors` de
+  common en lugar de `internal.ts`, lo que requiere definir en common qué pasa
+  con los errores sin código (`checkServiceErrors` hoy los ignora), y exponer
+  en common la codificación de CUIT que `cuit0` copia.
+- sire: `SireClient.dummy` arma el sobre a mano para leer el `Header`; se
+  simplifica si `arcaSoapCall` de common expone el header de la respuesta.
 
 ## Cómo publicar
 
