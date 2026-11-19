@@ -1,10 +1,10 @@
-import { ArcaSdkBase, statusOf } from '@ramiidv/arca-common';
+import { ArcaSdkBase, statusOf, validateCuit } from '@ramiidv/arca-common';
 import type { CallOptions } from '@ramiidv/arca-common';
 import { ENDPOINTS, SERVICE_IDS } from './constants.js';
 import { PadronA4Client } from './padron-a4.js';
-import { PadronA5Client } from './padron-a5.js';
+import { PadronA5Client, validarCantidadCuits } from './padron-a5.js';
 import { PadronA10Client } from './padron-a10.js';
-import { PadronA13Client } from './padron-a13.js';
+import { PadronA13Client, normalizarDocumento } from './padron-a13.js';
 import { PadronA100Client } from './padron-a100.js';
 import type {
   ArcaPadronConfig,
@@ -79,12 +79,13 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
    * Si ARCA no puede emitir la constancia (o una parte), la persona vuelve con
    * `errorConstancia` / `errorRegimenGeneral` / `errorMonotributo` (no se lanza).
    * @param cuit - CUIT a consultar (con o sin guiones)
-   * @throws ArcaValidationError si la CUIT es inválida (dígito verificador)
+   * @throws ArcaValidationError si la CUIT es inválida (dígito verificador), antes de pedir el ticket.
    * @throws ArcaPadronServiceError si la CUIT no existe (`reason: 'inexistente'`, sea por
    *   Fault o por `errorConstancia` "No existe persona con ese Id"), o ante otros errores
    *   de negocio (clave inactiva, token no autorizado...).
    */
   async getConstanciaInscripcion(cuit: string | number, call?: CallOptions): Promise<PersonaA5> {
+    validateCuit(cuit); // antes del ticket
     const opts = this.callOptions(call);
     const auth = await this.getAuth('a5', call);
     return this.a5.getPersona(auth, cuit, opts);
@@ -92,12 +93,15 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
 
   /**
    * Constancias de inscripción de hasta 250 CUITs en una llamada
-   * (`getPersonaList_v2`), en el orden de `cuits`. Los problemas de una CUIT no
-   * hacen fallar la consulta: vuelven en su `errorConstancia` (inexistente: "No
-   * existe persona con ese Id"; CUIT inválida: no se envía a ARCA).
-   * @throws ArcaValidationError si `cuits` no tiene entre 1 y 250 elementos.
+   * (`getPersonaList_v2`): una persona por cada elemento de `cuits`, en su orden
+   * (las repetidas se consultan una vez y repiten la misma persona). Los problemas
+   * de una CUIT no hacen fallar la consulta: vuelven en su `errorConstancia`
+   * (inexistente: "No existe persona con ese Id"; CUIT inválida: no se envía a
+   * ARCA; sin respuesta de ARCA: "ARCA no devolvió datos para esta CUIT.").
+   * @throws ArcaValidationError si `cuits` no tiene entre 1 y 250 elementos (antes de pedir el ticket).
    */
   async getConstanciasInscripcion(cuits: Array<string | number>, call?: CallOptions): Promise<ListaPadron<PersonaA5>> {
+    validarCantidadCuits(cuits); // antes del ticket
     const opts = this.callOptions(call);
     const auth = await this.getAuth('a5', call);
     return this.a5.getPersonaList(auth, cuits, opts);
@@ -106,8 +110,10 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
   /**
    * Datos completos de un contribuyente (Padrón A4).
    * @param cuit - CUIT/CUIL a consultar (con o sin guiones)
+   * @throws ArcaValidationError si la CUIT es inválida (antes de pedir el ticket).
    */
   async getPersona(cuit: string | number, call?: CallOptions): Promise<PersonaA4> {
+    validateCuit(cuit); // antes del ticket
     const opts = this.callOptions(call);
     const auth = await this.getAuth('a4', call);
     return this.a4.getPersona(auth, cuit, opts);
@@ -116,8 +122,10 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
   /**
    * Datos básicos de un contribuyente (Padrón A10).
    * @param cuit - CUIT/CUIL a consultar (con o sin guiones)
+   * @throws ArcaValidationError si la CUIT es inválida (antes de pedir el ticket).
    */
   async getPersonaBasic(cuit: string | number, call?: CallOptions): Promise<PersonaA10> {
+    validateCuit(cuit); // antes del ticket
     const opts = this.callOptions(call);
     const auth = await this.getAuth('a10', call);
     return this.a10.getPersona(auth, cuit, opts);
@@ -127,8 +135,10 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
    * Datos básicos de un contribuyente (Padrón A13, `getPersona`). Con la clave
    * inactiva ARCA responde con error (`reason: 'inactiva'`): ver `getPersonaA13V2`.
    * @param cuit - CUIT/CUIL a consultar (con o sin guiones)
+   * @throws ArcaValidationError si la CUIT es inválida (antes de pedir el ticket).
    */
   async getPersonaA13(cuit: string | number, call?: CallOptions): Promise<PersonaA13> {
+    validateCuit(cuit); // antes del ticket
     const opts = this.callOptions(call);
     const auth = await this.getAuth('a13', call);
     return this.a13.getPersona(auth, cuit, opts);
@@ -137,8 +147,10 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
   /**
    * Datos básicos de un contribuyente (Padrón A13, `getPersonaV2`): responde
    * también si la clave está INACTIVA (manual A13 v1.4).
+   * @throws ArcaValidationError si la CUIT es inválida (antes de pedir el ticket).
    */
   async getPersonaA13V2(cuit: string | number, call?: CallOptions): Promise<PersonaA13> {
+    validateCuit(cuit); // antes del ticket
     const opts = this.callOptions(call);
     const auth = await this.getAuth('a13', call);
     return this.a13.getPersonaV2(auth, cuit, opts);
@@ -147,8 +159,10 @@ export class ArcaPadron extends ArcaSdkBase<PadronServicio> {
   /**
    * CUITs/CUILs asociados a un número de documento (Padrón A13).
    * @param documento - Número de documento (DNI); se aceptan puntos y espacios
+   * @throws ArcaValidationError si el documento no tiene entre 1 y 11 dígitos (antes de pedir el ticket).
    */
   async getIdPersonaListByDocumento(documento: string | number, call?: CallOptions): Promise<ListaPadron<string>> {
+    normalizarDocumento(documento); // antes del ticket
     const opts = this.callOptions(call);
     const auth = await this.getAuth('a13', call);
     return this.a13.getIdPersonaListByDocumento(auth, documento, opts);

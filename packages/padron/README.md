@@ -132,7 +132,7 @@ const padron = new ArcaPadron({ cuit, cert, key, wsaa: facturacion.wsaa });
 Todos los métodos aceptan un último parámetro opcional `{ signal }`. Las CUIT se aceptan con o sin
 guiones (`'20-11111111-2'`, `'20111111112'` o `20111111112`): se validan localmente (dígito
 verificador) y se envían normalizadas; una CUIT inválida lanza `ArcaValidationError` sin llamar a
-ARCA (salvo en `getConstanciasInscripcion`, ver abajo).
+ARCA, ni siquiera para pedir el ticket a WSAA (salvo en `getConstanciasInscripcion`, ver abajo).
 
 ## API
 
@@ -177,16 +177,19 @@ constancia.metadata; // { fechaHora, servidor } de la respuesta, si ARCA lo info
 
 ### `getConstanciasInscripcion(cuits): Promise<ListaPadron<PersonaA5>>`
 
-Hasta 250 CUITs (`MAX_PERSONA_LIST`) en una llamada (`getPersonaList_v2`), en el orden de
-`cuits`. Los problemas de una CUIT no hacen fallar la consulta (ARCA informa por clave, manual v4.1
-§3.3.3): vuelven en el `errorConstancia` de su persona.
+Hasta 250 CUITs (`MAX_PERSONA_LIST`) en una llamada (`getPersonaList_v2`). Devuelve una persona por
+cada elemento de `cuits`, en el mismo orden. Los problemas de una CUIT no hacen fallar la consulta (ARCA
+informa por clave, manual v4.1 §3.3.3): vuelven en el `errorConstancia` de su persona.
 
 - CUIT inexistente: `errorConstancia.error = ['No existe persona con ese Id']` (lo informa ARCA).
 - CUIT inválida (formato o dígito verificador): **no se envía a ARCA**; vuelve con `idPersona` igual al
   valor recibido y el motivo en `errorConstancia.error` (`'CUIT inválido: "…". … No se consultó a ARCA.'`).
   Si todas son inválidas, no se llama a ARCA.
-- Persona que ARCA devuelve con datos inválidos: vuelve con el detalle en `errorConstancia` (si trae
-  alguna CUIT; si no, se omite).
+- Persona que ARCA devuelve con datos inválidos: vuelve con el detalle en `errorConstancia`.
+- CUIT de la que ARCA no devuelve datos (o cuya persona no se puede identificar):
+  `errorConstancia.error = ['ARCA no devolvió datos para esta CUIT.']`.
+- CUIT repetida (aunque esté escrita distinto, ej. con guiones): se consulta una sola vez y la misma
+  persona aparece en cada posición.
 
 Una lista vacía o de más de `MAX_PERSONA_LIST` (250) elementos lanza `ArcaValidationError`.
 

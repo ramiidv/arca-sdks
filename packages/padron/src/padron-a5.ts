@@ -85,17 +85,22 @@ export class PadronA5Client extends BasePadronClient {
   /**
    * Constancias de hasta 250 contribuyentes en una llamada (`getPersonaList_v2`).
    *
-   * Los problemas de una CUIT no hacen fallar la consulta: se informan en el
+   * Devuelve una persona por cada elemento de `cuits`, en el mismo orden. Los
+   * problemas de una CUIT no hacen fallar la consulta: se informan en el
    * `errorConstancia` de su persona.
    * - Las claves inexistentes vuelven como ARCA las informa ("No existe persona con ese Id").
    * - Las CUITs inválidas (dígito verificador, formato) no se envían a ARCA: vuelven
    *   con `idPersona` igual al valor recibido y el motivo en `errorConstancia.error`
    *   (`'CUIT inválido: "...". ... No se consultó a ARCA.'`).
    * - Una persona que ARCA devuelve con datos inválidos vuelve con el detalle en
-   *   `errorConstancia` (si se la puede identificar; si no trae ninguna CUIT, se omite).
+   *   `errorConstancia` (si se la puede identificar por su CUIT).
+   * - Una CUIT para la que ARCA no devuelve nada (o una persona que no se puede
+   *   identificar) vuelve con `errorConstancia.error = ['ARCA no devolvió datos para esta CUIT.']`.
+   * - Las CUITs repetidas se consultan una sola vez y se repite la misma persona
+   *   en cada posición.
    *
-   * El resultado sigue el orden de `cuits`. El `metadata` de la respuesta, si vino,
-   * queda en la propiedad `metadata` del array.
+   * Si ARCA devuelve una persona que no se pidió (no debería), va al final. El
+   * `metadata` de la respuesta, si vino, queda en la propiedad `metadata` del array.
    * @throws ArcaValidationError si `cuits` no tiene entre 1 y 250 elementos.
    */
   async getPersonaList(
@@ -104,19 +109,7 @@ export class PadronA5Client extends BasePadronClient {
     opts?: CallOptions,
   ): Promise<ListaPadron<PersonaA5>> {
     const method = 'getPersonaList_v2';
-    if (!Array.isArray(cuits) || cuits.length === 0 || cuits.length > MAX_PERSONA_LIST) {
-      throw new ArcaValidationError(
-        `${method} acepta entre 1 y ${MAX_PERSONA_LIST} CUITs (recibió ${Array.isArray(cuits) ? cuits.length : 0})`,
-        [
-          {
-            field: 'cuits',
-            message: `Entre 1 y ${MAX_PERSONA_LIST} CUITs`,
-            value: Array.isArray(cuits) ? cuits.length : cuits,
-          },
-        ],
-        'cuits',
-      );
-    }
+    validarCantidadCuits(cuits);
 
     // Cada CUIT: normalizada (se consulta) o la persona con el error de validación (no se consulta).
     const claves = cuits.map((c): string | PersonaA5 => {
@@ -127,7 +120,7 @@ export class PadronA5Client extends BasePadronClient {
         return personaConError(String(c ?? ''), `${err.message} No se consultó a ARCA.`);
       }
     });
-    const idPersona = claves.filter((c): c is string => typeof c === 'string');
+    const idPersona = [...new Set(claves.filter((c): c is string => typeof c === 'string'))];
     if (idPersona.length === 0) return claves as PersonaA5[];
 
     const result = await this.call(method, { ...this.authParams(auth), idPersona }, opts);
@@ -137,17 +130,41 @@ export class PadronA5Client extends BasePadronClient {
       .map((raw, i) => personaDeLista(raw, `${path}.persona[${i}]`))
       .filter((p): p is PersonaA5 => p !== undefined);
 
-    // Orden de `cuits`; lo que ARCA devuelva de más (no debería) va al final.
-    const porId = new Map<string, PersonaA5[]>();
-    for (const p of deArca) porId.set(p.idPersona, [...(porId.get(p.idPersona) ?? []), p]);
-    const out: PersonaA5[] = [];
-    for (const c of claves) {
-      const p = typeof c === 'string' ? porId.get(c)?.shift() : c;
-      if (p) out.push(p);
+    // Orden de `cuits` (las repetidas comparten la persona); lo que ARCA devuelva de más va al final.
+    const porId = new Map<string, PersonaA5>();
+    const resto: PersonaA5[] = [];
+    for (const p of deArca) {
+      if (idPersona.includes(p.idPersona) && !porId.has(p.idPersona)) porId.set(p.idPersona, p);
+      else resto.push(p);
     }
-    for (const resto of porId.values()) out.push(...resto);
-    return conMetadata(out, metadata);
+    const out = claves.map((c) =>
+      typeof c === 'string' ? (porId.get(c) ?? personaConError(c, SIN_DATOS_DE_ARCA)) : c,
+    );
+    return conMetadata([...out, ...resto], metadata);
   }
+}
+
+/** Error de `getPersonaList` para una CUIT consultada de la que ARCA no devolvió datos. */
+const SIN_DATOS_DE_ARCA = 'ARCA no devolvió datos para esta CUIT.';
+
+/**
+ * Valida que `cuits` sea un array de 1 a `MAX_PERSONA_LIST` elementos.
+ * @internal Lo usa también `ArcaPadron` antes de pedir el ticket.
+ * @throws ArcaValidationError si no lo es.
+ */
+export function validarCantidadCuits(cuits: unknown): void {
+  if (Array.isArray(cuits) && cuits.length > 0 && cuits.length <= MAX_PERSONA_LIST) return;
+  throw new ArcaValidationError(
+    `getPersonaList_v2 acepta entre 1 y ${MAX_PERSONA_LIST} CUITs (recibió ${Array.isArray(cuits) ? cuits.length : 0})`,
+    [
+      {
+        field: 'cuits',
+        message: `Entre 1 y ${MAX_PERSONA_LIST} CUITs`,
+        value: Array.isArray(cuits) ? cuits.length : cuits,
+      },
+    ],
+    'cuits',
+  );
 }
 
 /** Persona sin datos, con un error en `errorConstancia` (para `getPersonaList_v2`). */
